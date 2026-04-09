@@ -6,6 +6,7 @@ import type { ContentPackCategory, PropConnector } from '../content-packs/types'
 export type DungeonTool = 'move' | 'room' | 'prop'
 export type CameraMode = 'orbit'
 export type CameraPreset = 'perspective' | 'isometric' | 'top-down'
+export type GroundPlane = 'none' | 'black' | 'green'
 export type SelectedAssetIds = Record<ContentPackCategory, string | null>
 export type PaintedCells = Record<string, GridCell>
 
@@ -43,6 +44,7 @@ type DungeonState = DungeonSnapshot & {
   isPaintingStrokeActive: boolean
   sceneLighting: SceneLighting
   showGrid: boolean
+  groundPlane: GroundPlane
   activeCameraMode: CameraPreset
   cameraPreset: CameraPreset | null
   history: DungeonSnapshot[]
@@ -59,6 +61,7 @@ type DungeonState = DungeonSnapshot & {
   setPaintingStrokeActive: (active: boolean) => void
   setSceneLightingIntensity: (intensity: number) => void
   setShowGrid: (show: boolean) => void
+  setGroundPlane: (plane: GroundPlane) => void
   setCameraPreset: (preset: CameraPreset) => void
   clearCameraPreset: () => void
   undo: () => void
@@ -245,6 +248,7 @@ export const useDungeonStore = create<DungeonState>((set, get) => ({
   isPaintingStrokeActive: false,
   sceneLighting: { intensity: 1 },
   showGrid: true,
+  groundPlane: 'none',
   activeCameraMode: 'perspective',
   cameraPreset: null,
   history: [],
@@ -481,6 +485,9 @@ export const useDungeonStore = create<DungeonState>((set, get) => ({
   },
   setShowGrid: (show) => {
     set((state) => ({ ...state, showGrid: show }))
+  },
+  setGroundPlane: (plane) => {
+    set((state) => ({ ...state, groundPlane: plane }))
   },
   setCameraPreset: (preset) => {
     set((state) => ({ ...state, cameraPreset: preset, activeCameraMode: preset }))

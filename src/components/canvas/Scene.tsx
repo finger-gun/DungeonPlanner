@@ -67,6 +67,12 @@ function SceneContent() {
   const placedObjects = useDungeonStore((state) => state.placedObjects)
   const objects = useMemo(() => Object.values(placedObjects), [placedObjects])
   const lightIntensity = useDungeonStore((state) => state.sceneLighting.intensity)
+  const groundPlane = useDungeonStore((state) => state.groundPlane)
+
+  const groundColor =
+    groundPlane === 'black' ? '#0e0e0e' :
+    groundPlane === 'green' ? '#2a4a1a' :
+    null
 
   return (
     <>
@@ -83,6 +89,14 @@ function SceneContent() {
         color="#89dceb"
         position={[-8, 7, -4]}
       />
+
+      {/* Ground plane — rendered at y=-0.01 so the grid helper at y=0.001 stays on top */}
+      {groundColor && (
+        <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.01, 0]} renderOrder={-1}>
+          <planeGeometry args={[500, 500]} />
+          <meshStandardMaterial color={groundColor} roughness={1} metalness={0} />
+        </mesh>
+      )}
 
       <Grid />
       <DungeonRoom />

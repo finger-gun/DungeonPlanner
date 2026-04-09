@@ -1,5 +1,5 @@
-import { Axis3D, Grid, LayoutGrid, Triangle } from 'lucide-react'
-import { useDungeonStore, type CameraPreset } from '../../store/useDungeonStore'
+import { Axis3D, Grid, LayoutGrid, Square, Triangle } from 'lucide-react'
+import { useDungeonStore, type CameraPreset, type GroundPlane } from '../../store/useDungeonStore'
 
 type PresetEntry = {
   id: CameraPreset
@@ -14,11 +14,20 @@ const CAMERA_PRESETS: PresetEntry[] = [
   { id: 'top-down',    label: 'Top Down',    sub: 'Print / TTRPG',  Icon: LayoutGrid },
 ]
 
+type GroundEntry = { id: GroundPlane; label: string; swatch: string }
+const GROUND_OPTIONS: GroundEntry[] = [
+  { id: 'none',  label: 'None',  swatch: 'transparent' },
+  { id: 'black', label: 'Black', swatch: '#0e0e0e' },
+  { id: 'green', label: 'Green', swatch: '#2a4a1a' },
+]
+
 export function MoveToolPanel() {
   const setCameraPreset = useDungeonStore((state) => state.setCameraPreset)
   const activeCameraMode = useDungeonStore((state) => state.activeCameraMode)
   const showGrid = useDungeonStore((state) => state.showGrid)
   const setShowGrid = useDungeonStore((state) => state.setShowGrid)
+  const groundPlane = useDungeonStore((state) => state.groundPlane)
+  const setGroundPlane = useDungeonStore((state) => state.setGroundPlane)
   const sceneLighting = useDungeonStore((state) => state.sceneLighting)
   const setSceneLightingIntensity = useDungeonStore((state) => state.setSceneLightingIntensity)
 
@@ -59,16 +68,18 @@ export function MoveToolPanel() {
           <p className="mt-2 text-[10px] leading-5 text-stone-600">
             {activeCameraMode === 'isometric'
               ? 'Rotation locked · WASD to pan'
-              : 'Rotation locked · WASD to pan · wide FOV'}
+              : 'Rotation locked · WASD to pan · scroll to zoom'}
           </p>
         )}
       </section>
 
-      {/* Grid Toggle */}
+      {/* Viewport */}
       <section>
         <p className="mb-3 text-xs font-semibold uppercase tracking-[0.3em] text-amber-200/70">
           Viewport
         </p>
+
+        {/* Grid toggle */}
         <button
           type="button"
           onClick={() => setShowGrid(!showGrid)}
@@ -86,6 +97,37 @@ export function MoveToolPanel() {
             </p>
           </div>
         </button>
+
+        {/* Ground plane selector */}
+        <div className="mt-2 rounded-2xl border border-stone-800 bg-stone-950/60 px-4 py-3">
+          <div className="mb-2 flex items-center gap-2 text-xs uppercase tracking-[0.22em] text-stone-400">
+            <Square size={12} strokeWidth={1.5} />
+            <span>Ground</span>
+          </div>
+          <div className="grid grid-cols-3 gap-1.5">
+            {GROUND_OPTIONS.map(({ id, label, swatch }) => {
+              const active = groundPlane === id
+              return (
+                <button
+                  key={id}
+                  type="button"
+                  onClick={() => setGroundPlane(id)}
+                  className={`flex flex-col items-center gap-1.5 rounded-xl border py-2 text-[10px] uppercase tracking-[0.15em] transition ${
+                    active
+                      ? 'border-amber-300/40 bg-amber-400/10 text-amber-200'
+                      : 'border-stone-700/60 bg-stone-900/40 text-stone-500 hover:border-stone-600 hover:text-stone-300'
+                  }`}
+                >
+                  <span
+                    className="block size-5 rounded-full border border-stone-600"
+                    style={{ background: swatch === 'transparent' ? 'transparent' : swatch }}
+                  />
+                  {label}
+                </button>
+              )
+            })}
+          </div>
+        </div>
       </section>
 
       {/* Light Rig */}
