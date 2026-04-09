@@ -219,6 +219,16 @@ export function Grid({ size = 120 }: GridProps) {
   }
 
   const isMoveTool = tool === 'move'
+  const activeCameraMode = useDungeonStore((state) => state.activeCameraMode)
+  const isTopDown = activeCameraMode === 'top-down'
+
+  // Show overlay:
+  //   - Top-down view: always, full coverage (radius=10000)
+  //   - Editing tools (room/prop): cursor radius, any view
+  //   - Move tool in perspective/iso: hide (buttons live there; full coverage is confusing)
+  const showOverlay = showGrid && (isTopDown || !isMoveTool)
+  const overlayRadius  = isTopDown ? 10000 : 10
+  const overlayOpacity = isTopDown ? 0.15  : 0.35
 
   return (
     <group>
@@ -239,11 +249,11 @@ export function Grid({ size = 120 }: GridProps) {
         <meshBasicMaterial transparent opacity={0} depthWrite={false} />
       </mesh>
 
-      {showGrid && (
+      {showOverlay && (
         <FloorGridOverlay
           centerRef={mousePosRef}
-          radius={isMoveTool ? 10000 : 10}
-          opacity={isMoveTool ? 0.15 : 0.35}
+          radius={overlayRadius}
+          opacity={overlayOpacity}
         />
       )}
 
