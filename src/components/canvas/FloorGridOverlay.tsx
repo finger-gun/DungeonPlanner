@@ -72,6 +72,7 @@ export function FloorGridOverlay({ centerRef, radius = 3.5, opacity = 0.6 }: Pro
     const mat = new MeshBasicNodeMaterial({
       transparent: true,
       depthWrite: false,
+      depthTest: false,
       side: THREE.DoubleSide,
     })
     // colorNode with alpha in w component — MeshBasicNodeMaterial respects vec4 alpha when transparent
