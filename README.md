@@ -1,84 +1,126 @@
-# DungeonPlanner
+<p align="center">
+  <img src="docs/dungeonplanner.png" alt="DungeonPlanner" width="320" />
+</p>
 
-Web-first dungeon editor scaffold built with Vite, React, TypeScript, React Three Fiber, Zustand, and Tailwind CSS.
+<h1 align="center">DungeonPlanner</h1>
 
-## Run
+<p align="center">
+  A 3D dungeon editor for tabletop RPG players — paint rooms, place props, and share your layout with your party.
+</p>
+
+<p align="center">
+  <img src="https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=white&style=flat-square" />
+  <img src="https://img.shields.io/badge/Three.js-0.182-black?logo=threedotjs&style=flat-square" />
+  <img src="https://img.shields.io/badge/WebGPU-preferred-orange?style=flat-square" />
+  <img src="https://img.shields.io/badge/TypeScript-6-3178C6?logo=typescript&logoColor=white&style=flat-square" />
+  <img src="https://img.shields.io/badge/Tailwind-4-38BDF8?logo=tailwindcss&logoColor=white&style=flat-square" />
+</p>
+
+---
+
+## Features
+
+- 🏰 **Room painter** — click and drag to paint or erase dungeon floor tiles
+- 🪑 **Prop placement** — place wall torches, furniture, and more from a content pack system
+- 🔦 **Real lighting** — props can carry configurable point lights with organic flicker
+- 📷 **Camera presets** — switch between Perspective, Isometric, and Top-Down views with smooth transitions
+- 🎮 **Keyboard controls** — WASD / arrow keys to pan, Q / E to rotate
+- 🟡 **Floor grid overlay** — TSL shader-based grid that reveals around the cursor as you edit
+- 💡 **Scene light rig** — ambient and directional lights with a real-time intensity slider
+- ↩️ **Undo / Redo** — full history for room painting and prop placement
+
+## Tech Stack
+
+| Layer | Technology |
+|---|---|
+| Framework | React 19 + Vite 8 |
+| 3D rendering | React Three Fiber 9, Three.js 0.182 |
+| Renderer | WebGPU (preferred) → WebGL fallback, both with full TSL/NodeMaterial support |
+| Shaders | Three.js Shading Language (TSL) — compiles to WGSL and GLSL |
+| State | Zustand 5 with undo/redo snapshots |
+| Styling | Tailwind CSS 4 |
+| Language | TypeScript 6 |
+| Testing | Vitest + Playwright |
+
+## Getting Started
 
 ```bash
 npm install
 npm run dev
 ```
 
-The dev server usually starts at `http://localhost:5173`.
+The dev server starts at **http://localhost:5173**.
 
-## Verification
+## Usage
 
-After any implementation run, use the full verification command:
+| Tool | What it does |
+|---|---|
+| **Move** (hand icon) | Orbit, pan, zoom the camera. Activate camera presets and adjust the scene light rig. |
+| **Room** (grid icon) | Left-drag to paint floor tiles, right-drag to erase. |
+| **Prop** (torch icon) | Select a prop from the panel, click a floor tile to place it, right-click to remove. |
 
-```bash
-npm run verify
-```
+**Camera presets** (Move tool → right panel):
 
-That sequence runs:
+- **Perspective** — free orbit, great for building
+- **Isometric** — locked true-isometric angle, good for screenshots
+- **Top Down** — overhead fisheye view, ideal for printing battle maps
 
-```bash
-npm run lint
-npm test
-npm run build
-npm run test:e2e
-```
-
-## Headless Playwright Debugging
-
-Playwright is configured to launch Chromium headlessly against the local Vite dev server.
-
-Run the smoke suite with:
-
-```bash
-npm run test:e2e
-```
-
-Useful variants:
-
-```bash
-npm run test:e2e:headed
-npx playwright show-report
-```
-
-Current smoke coverage:
-
-- page loads without page or console errors
-- canvas is visible
-- debug bridge can place and remove snapped objects in headless runs
-- toolbar undo/redo works
-
-Artifacts on failure are retained through Playwright traces, screenshots, and video.
-
-Note:
-
-- Headless Chromium can be unreliable for real GPU-backed canvas interaction.
-- The Playwright suite uses a dev-only `window.__DUNGEON_DEBUG__` bridge for deterministic editor-state validation while still running the real app in a browser.
+**Grid toggle** — shows an amber grid overlay projected over painted floor tiles. In editing tools the grid reveals in a soft circle around the cursor.
 
 ## Project Structure
 
-```text
+```
 src/
-  assets/models/         Raw GLB files
-  components/canvas/     R3F scene, grid, controls, object rendering
-  components/editor/     Sidebar, toolbar, inspector
-  generated/             gltfjsx output target
-  hooks/                 Grid snapping and raycaster helpers
-  store/                 Zustand dungeon editor state
+  components/
+    canvas/       R3F scene, grid, camera, lighting, shader overlays
+    editor/       Toolbar and tool-specific right panels
+  content-packs/  Asset definitions, metadata, light configs
+  hooks/          Grid snapping, raycaster helpers
+  store/          Zustand state — dungeon snapshot, camera, UI
+  assets/models/  GLB model files
 ```
 
-## GLB Workflow
+## Content Packs
 
-Core pack source models currently come from `/Users/roblibob/Projects/models` and are copied into `src/assets/models/core/`.
+Props and floor/wall tiles are defined as **content packs** — plain TypeScript objects that describe the asset path, connector type, and optional light configuration.
 
-Rebuild the core pack and generated JSX wrappers with:
+```ts
+// Example: wall torch with a real flickering point light
+export const propsWallTorchAsset: ContentPackAsset = {
+  id: 'core/props/wall-torch',
+  name: 'Wall Torch',
+  metadata: {
+    connectsTo: 'WALL',
+    light: {
+      color: '#ff9040',
+      intensity: 6,
+      distance: 8,
+      offset: [0, 1.6, 0.25],
+      flicker: true,
+    },
+  },
+}
+```
+
+## Scripts
 
 ```bash
-npm run generate:content-pack:core
+npm run dev          # Start dev server
+npm run build        # Production build
+npm run lint         # ESLint
+npm test             # Vitest unit tests
+npm run test:e2e     # Playwright end-to-end tests
+npm run verify       # lint + test + build + e2e (full CI gate)
 ```
 
-Generated outputs land in `src/generated/content-packs/core/`, and the pack registry is exposed from `src/content-packs/core/`.
+## Roadmap
+
+- [ ] Floor grid overlay radial reveal (TSL shader debugging in progress)
+- [ ] Character token placement with movement range indicator
+- [ ] Export to PNG (Top-Down view)
+- [ ] More content packs (doors, traps, furniture)
+- [ ] Multiplayer / shared sessions
+
+---
+
+<p align="center">Made for TTRPG players who want their dungeon to look as good as it plays.</p>
