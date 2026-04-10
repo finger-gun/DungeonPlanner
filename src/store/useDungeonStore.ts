@@ -348,18 +348,24 @@ function pruneInvalidConnectedProps(
     }
   })
 
-  // Also prune openings whose wall segments are no longer valid boundaries
+  // Also prune openings whose wall segments are no longer valid boundaries.
+  // A segment is valid if: the cell is painted AND the neighbour is either
+  // unpainted (exterior wall) OR painted-but-different-room (inter-room wall).
   const wallOpenings = { ...current.wallOpenings }
   Object.values(wallOpenings).forEach((opening) => {
     const segments = getOpeningSegments(opening.wallKey, opening.width)
     const stillValid = segments.every((segKey) => {
       const parts = segKey.split(':')
       const cell: GridCell = [parseInt(parts[0]), parseInt(parts[1])]
+      const cellRecord = paintedCells[getCellKey(cell)]
+      if (!cellRecord) return false
       const dir = CONNECTOR_DIRECTIONS.find((d) => d.name === parts[2])
-      if (!paintedCells[getCellKey(cell)]) return false
       if (!dir) return false
       const neighbor: GridCell = [cell[0] + dir.delta[0], cell[1] + dir.delta[1]]
-      return !paintedCells[getCellKey(neighbor)]
+      const neighborRecord = paintedCells[getCellKey(neighbor)]
+      // Still a wall boundary: neighbor unpainted OR different room
+      return !neighborRecord ||
+        (cellRecord.roomId ?? null) !== (neighborRecord.roomId ?? null)
     })
     if (!stillValid) delete wallOpenings[opening.id]
   })
