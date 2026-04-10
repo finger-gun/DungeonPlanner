@@ -96,7 +96,7 @@ describe('useDungeonStore history', () => {
     expect(useDungeonStore.getState().tool).toBe('prop')
   })
 
-  it('removes a wall-connected prop when its wall anchor disappears', () => {
+  it('preserves a wall-connected prop when adjacent room is drawn (inter-room wall)', () => {
     useDungeonStore.getState().paintCells([[0, 0]])
 
     const propId = useDungeonStore.getState().placeObject({
@@ -115,7 +115,33 @@ describe('useDungeonStore history', () => {
     expect(propId).toBeTruthy()
     expect(useDungeonStore.getState().occupancy['0:0:north']).toBe(propId)
 
+    // Painting the adjacent cell creates a new room — the wall still exists as
+    // an inter-room boundary, so the prop must be preserved.
     useDungeonStore.getState().paintCells([[0, 1]])
+
+    const state = useDungeonStore.getState()
+    expect(state.occupancy['0:0:north']).toBe(propId)
+    expect(state.placedObjects[propId!]).toBeDefined()
+  })
+
+  it('removes a wall-connected prop when its host cell is erased', () => {
+    useDungeonStore.getState().paintCells([[0, 0]])
+
+    const propId = useDungeonStore.getState().placeObject({
+      type: 'prop',
+      assetId: 'core.props_wall_torch',
+      position: [1, 0, 2],
+      rotation: [0, Math.PI, 0],
+      props: {
+        connector: 'WALL',
+        direction: 'north',
+      },
+      cell: [0, 0],
+      cellKey: '0:0:north',
+    })
+
+    expect(propId).toBeTruthy()
+    useDungeonStore.getState().eraseCells([[0, 0]])
 
     const state = useDungeonStore.getState()
     expect(state.occupancy['0:0:north']).toBeUndefined()

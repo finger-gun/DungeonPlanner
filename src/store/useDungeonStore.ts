@@ -295,10 +295,13 @@ function isPropAnchorValid(
     object.cell[1] + connectorDirection.delta[1],
   ]
 
-  return (
-    object.cellKey === `${cellKey}:${direction}` &&
-    !paintedCells[getCellKey(neighbor)]
-  )
+  if (object.cellKey !== `${cellKey}:${direction}`) return false
+
+  // Valid wall slot: neighbor is unpainted (exterior) OR a different room (inter-room wall)
+  const cellRecord = paintedCells[cellKey]
+  const neighborRecord = paintedCells[getCellKey(neighbor)]
+  if (!neighborRecord) return true
+  return (cellRecord?.roomId ?? null) !== (neighborRecord.roomId ?? null)
 }
 
 /** Returns all wall segment keys covered by an opening anchor + width. */
