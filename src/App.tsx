@@ -61,6 +61,12 @@ function App() {
   const onWindowKeyDown = useEffectEvent((event: KeyboardEvent) => {
     const state = useDungeonStore.getState()
 
+    if (event.key === 'Escape' && state.selection) {
+      event.preventDefault()
+      state.selectObject(null)
+      return
+    }
+
     if (
       (event.key === 'Delete' || event.key === 'Backspace') &&
       state.selection
