@@ -5,6 +5,7 @@ import { propsWallTorchAsset } from './WallTorch'
 import { propsStairCaseUpAsset } from './StairCaseUp'
 import { propsRubbleAsset } from './Rubble'
 import { propsPillarAsset } from './Pillar'
+import { openingDoorWall3Asset } from './DoorWall3'
 
 export const coreContentPack: ContentPack = {
   id: 'core',
@@ -16,5 +17,6 @@ export const coreContentPack: ContentPack = {
     propsStairCaseUpAsset,
     propsRubbleAsset,
     propsPillarAsset,
+    openingDoorWall3Asset,
   ],
 }
