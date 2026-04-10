@@ -7,9 +7,11 @@ export function ScenePanel() {
   const rooms = useDungeonStore((state) => state.rooms)
   const paintedCells = useDungeonStore((state) => state.paintedCells)
   const placedObjects = useDungeonStore((state) => state.placedObjects)
+  const wallOpenings = useDungeonStore((state) => state.wallOpenings)
   const removeRoom = useDungeonStore((state) => state.removeRoom)
   const renameRoom = useDungeonStore((state) => state.renameRoom)
 
+  // Props grouped by roomId
   const propsByRoom = Object.values(placedObjects).reduce<
     Record<string, typeof placedObjects[string][]>
   >((acc, obj) => {
@@ -17,6 +19,19 @@ export function ScenePanel() {
     if (!roomId) return acc
     if (!acc[roomId]) acc[roomId] = []
     acc[roomId].push(obj)
+    return acc
+  }, {})
+
+  // Openings grouped by the roomId of their anchor cell
+  const openingsByRoom = Object.values(wallOpenings).reduce<
+    Record<string, typeof wallOpenings[string][]>
+  >((acc, opening) => {
+    const parts = opening.wallKey.split(':')
+    const cellKey = `${parts[0]}:${parts[1]}`
+    const roomId = paintedCells[cellKey]?.roomId ?? null
+    if (!roomId) return acc
+    if (!acc[roomId]) acc[roomId] = []
+    acc[roomId].push(opening)
     return acc
   }, {})
 
@@ -39,6 +54,7 @@ export function ScenePanel() {
               key={room.id}
               room={room}
               props={propsByRoom[room.id] ?? []}
+              openings={openingsByRoom[room.id] ?? []}
               onRename={(name) => renameRoom(room.id, name)}
               onDelete={() => removeRoom(room.id)}
             />
@@ -56,7 +72,6 @@ function FloorNode({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="rounded-2xl border border-stone-700/60 bg-stone-900/60">
-      {/* Floor header */}
       <button
         type="button"
         onClick={() => setExpanded((v) => !v)}
@@ -70,7 +85,6 @@ function FloorNode({ children }: { children: React.ReactNode }) {
         <span className="text-xs font-semibold text-stone-300">Floor 1</span>
       </button>
 
-      {/* Room list */}
       {expanded && (
         <div className="border-t border-stone-800/60 px-2 pb-2 pt-1.5 flex flex-col gap-1">
           {children}
@@ -85,15 +99,18 @@ function FloorNode({ children }: { children: React.ReactNode }) {
 type RoomNodeProps = {
   room: { id: string; name: string }
   props: { id: string; assetId: string | null; cellKey: string }[]
+  openings: { id: string; assetId: string | null; wallKey: string; width: 1 | 2 | 3 }[]
   onRename: (name: string) => void
   onDelete: () => void
 }
 
-function RoomNode({ room, props, onRename, onDelete }: RoomNodeProps) {
+function RoomNode({ room, props, openings, onRename, onDelete }: RoomNodeProps) {
   const [expanded, setExpanded] = useState(false)
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState(room.name)
   const inputRef = useRef<HTMLInputElement>(null)
+
+  const childCount = props.length + openings.length
 
   function commitEdit() {
     const trimmed = draft.trim()
@@ -105,7 +122,6 @@ function RoomNode({ room, props, onRename, onDelete }: RoomNodeProps) {
   return (
     <div className="rounded-xl border border-stone-800 bg-stone-950/60">
       <div className="flex items-center gap-1.5 px-2 py-1.5">
-        {/* Expand toggle */}
         <button
           type="button"
           onClick={() => setExpanded((v) => !v)}
@@ -118,7 +134,6 @@ function RoomNode({ room, props, onRename, onDelete }: RoomNodeProps) {
           />
         </button>
 
-        {/* Room name / rename input */}
         <div className="min-w-0 flex-1">
           {editing ? (
             <input
@@ -128,10 +143,7 @@ function RoomNode({ room, props, onRename, onDelete }: RoomNodeProps) {
               onBlur={commitEdit}
               onKeyDown={(e) => {
                 if (e.key === 'Enter') commitEdit()
-                if (e.key === 'Escape') {
-                  setDraft(room.name)
-                  setEditing(false)
-                }
+                if (e.key === 'Escape') { setDraft(room.name); setEditing(false) }
               }}
               className="w-full bg-transparent text-xs text-stone-200 outline-none"
               autoFocus
@@ -139,10 +151,7 @@ function RoomNode({ room, props, onRename, onDelete }: RoomNodeProps) {
           ) : (
             <span
               className="block cursor-text truncate text-xs font-medium text-stone-300"
-              onDoubleClick={() => {
-                setDraft(room.name)
-                setEditing(true)
-              }}
+              onDoubleClick={() => { setDraft(room.name); setEditing(true) }}
               title="Double-click to rename"
             >
               {room.name}
@@ -150,12 +159,10 @@ function RoomNode({ room, props, onRename, onDelete }: RoomNodeProps) {
           )}
         </div>
 
-        {/* Prop count badge */}
-        {props.length > 0 && !expanded && (
-          <span className="shrink-0 text-[10px] text-stone-600">{props.length}</span>
+        {childCount > 0 && !expanded && (
+          <span className="shrink-0 text-[10px] text-stone-600">{childCount}</span>
         )}
 
-        {/* Delete */}
         <button
           type="button"
           title="Delete room"
@@ -166,32 +173,50 @@ function RoomNode({ room, props, onRename, onDelete }: RoomNodeProps) {
         </button>
       </div>
 
-      {/* Expanded prop list */}
       {expanded && (
-        <div className="border-t border-stone-800/50 px-3 pb-2 pt-1.5">
-          {props.length === 0 ? (
-            <p className="text-[11px] text-stone-700">No props in this room.</p>
+        <div className="border-t border-stone-800/50 px-3 pb-2 pt-1.5 flex flex-col gap-0.5">
+          {childCount === 0 ? (
+            <p className="text-[11px] text-stone-700">Nothing placed in this room.</p>
           ) : (
-            <div className="flex flex-col gap-0.5">
+            <>
               {props.map((obj) => {
                 const asset = obj.assetId ? getContentPackAssetById(obj.assetId) : null
                 return (
-                  <div
+                  <LeafRow
                     key={obj.id}
-                    className="flex items-center gap-2 rounded px-1.5 py-0.5 text-[11px] text-stone-500"
-                  >
-                    <span className="h-1 w-1 shrink-0 rounded-full bg-stone-700" />
-                    <span className="truncate">{asset?.name ?? 'Unknown'}</span>
-                    <span className="ml-auto shrink-0 font-mono text-[10px] text-stone-700">
-                      {obj.cellKey}
-                    </span>
-                  </div>
+                    label={asset?.name ?? 'Unknown prop'}
+                    detail={obj.cellKey}
+                  />
                 )
               })}
-            </div>
+              {openings.map((opening) => {
+                const asset = opening.assetId ? getContentPackAssetById(opening.assetId) : null
+                const direction = opening.wallKey.split(':')[2]
+                return (
+                  <LeafRow
+                    key={opening.id}
+                    label={asset?.name ?? 'Unknown opening'}
+                    detail={direction}
+                    dim
+                  />
+                )
+              })}
+            </>
           )}
         </div>
       )}
+    </div>
+  )
+}
+
+// ── Leaf row ──────────────────────────────────────────────────────────────────
+
+function LeafRow({ label, detail, dim = false }: { label: string; detail: string; dim?: boolean }) {
+  return (
+    <div className="flex items-center gap-2 rounded px-1.5 py-0.5 text-[11px] text-stone-500">
+      <span className={`h-1 w-1 shrink-0 rounded-full ${dim ? 'bg-stone-800' : 'bg-stone-700'}`} />
+      <span className="truncate">{label}</span>
+      <span className="ml-auto shrink-0 font-mono text-[10px] text-stone-700">{detail}</span>
     </div>
   )
 }
