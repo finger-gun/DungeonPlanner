@@ -16,7 +16,7 @@ import {
   type GridCell,
   type SnappedGridPosition,
 } from '../../hooks/useSnapToGrid'
-import { useDungeonStore, type DungeonTool } from '../../store/useDungeonStore'
+import { useDungeonStore, type DungeonTool, type PaintedCellRecord } from '../../store/useDungeonStore'
 import { triggerBuild } from '../../store/buildAnimations'
 import { FloorGridOverlay } from './FloorGridOverlay'
 
@@ -352,7 +352,7 @@ function HoverPreview({
 
 function filterStrokeCells(
   cells: GridCell[],
-  paintedCells: Record<string, GridCell>,
+  paintedCells: Record<string, PaintedCellRecord>,
   mode: 'paint' | 'erase',
 ) {
   return cells.filter((cell) =>
@@ -385,7 +385,7 @@ const WALL_CONNECTOR_DIRECTIONS: Array<{
 function getPropPlacement(
   asset: ContentPackAsset,
   point: { x: number; y: number; z: number },
-  paintedCells: Record<string, GridCell>,
+  paintedCells: Record<string, PaintedCellRecord>,
 ): PropPlacement | null {
   const snapped = snapWorldPointToGrid(point)
   const connector = asset.metadata?.connectsTo ?? 'FLOOR'

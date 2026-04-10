@@ -69,9 +69,14 @@ export default Scene
 
 function SceneContent() {
   const placedObjects = useDungeonStore((state) => state.placedObjects)
-  const objects = useMemo(() => Object.values(placedObjects), [placedObjects])
+  const layers = useDungeonStore((state) => state.layers)
   const lightIntensity = useDungeonStore((state) => state.sceneLighting.intensity)
   const groundPlane = useDungeonStore((state) => state.groundPlane)
+
+  const objects = useMemo(
+    () => Object.values(placedObjects).filter((obj) => layers[obj.layerId]?.visible !== false),
+    [placedObjects, layers],
+  )
 
   const groundColor =
     groundPlane === 'black' ? '#0e0e0e' :

@@ -37,21 +37,70 @@ const WALL_DIRECTIONS: Array<{
   { direction: 'west', delta: [-1, 0], rotation: [0, Math.PI / 2, 0] },
 ]
 
+type CellGroup = {
+  floorAssetId: string | null
+  wallAssetId: string | null
+  cells: GridCell[]
+}
+
 export function DungeonRoom() {
   const paintedCells = useDungeonStore((state) => state.paintedCells)
-  const floorAssetId = useDungeonStore((state) => state.selectedAssetIds.floor)
-  const wallAssetId = useDungeonStore((state) => state.selectedAssetIds.wall)
-  const cells = useMemo(() => Object.values(paintedCells), [paintedCells])
-  const walls = useMemo(() => deriveRoomWalls(paintedCells), [paintedCells])
+  const layers = useDungeonStore((state) => state.layers)
+  const rooms = useDungeonStore((state) => state.rooms)
+  const globalFloorAssetId = useDungeonStore((state) => state.selectedAssetIds.floor)
+  const globalWallAssetId = useDungeonStore((state) => state.selectedAssetIds.wall)
+
+  // Group visible cells by their effective (floor, wall) asset pair.
+  // Room asset overrides take precedence over the global selection.
+  const cellGroups = useMemo<CellGroup[]>(() => {
+    const groups = new Map<string, CellGroup>()
+
+    Object.values(paintedCells).forEach((record) => {
+      if (layers[record.layerId]?.visible === false) return
+      const room = record.roomId ? rooms[record.roomId] : null
+      const floorAssetId = room?.floorAssetId ?? globalFloorAssetId
+      const wallAssetId = room?.wallAssetId ?? globalWallAssetId
+      const key = `${floorAssetId}||${wallAssetId}`
+      if (!groups.has(key)) groups.set(key, { floorAssetId, wallAssetId, cells: [] })
+      groups.get(key)!.cells.push(record.cell)
+    })
+
+    return Array.from(groups.values())
+  }, [paintedCells, layers, rooms, globalFloorAssetId, globalWallAssetId])
 
   return (
     <>
-      {cells.map((cell) => {
+      {cellGroups.map((group) => (
+        <CellGroupRenderer
+          key={`${group.floorAssetId}||${group.wallAssetId}`}
+          group={group}
+          paintedCells={paintedCells}
+        />
+      ))}
+    </>
+  )
+}
+
+function CellGroupRenderer({
+  group,
+  paintedCells,
+}: {
+  group: CellGroup
+  paintedCells: PaintedCells
+}) {
+  const walls = useMemo(
+    () => deriveRoomWalls(group.cells, paintedCells),
+    [group.cells, paintedCells],
+  )
+
+  return (
+    <>
+      {group.cells.map((cell) => {
         const key = getCellKey(cell)
         return (
           <AnimatedTileGroup key={`floor:${key}`} cellKey={key}>
             <ContentPackInstance
-              assetId={floorAssetId}
+              assetId={group.floorAssetId}
               position={cellToWorldPosition(cell)}
               variant="floor"
               variantKey={key}
@@ -61,12 +110,11 @@ export function DungeonRoom() {
       })}
 
       {walls.map((wall) => {
-        // Wall key is "x:z:direction" — extract the floor cell key "x:z"
         const floorKey = wall.key.split(':').slice(0, 2).join(':')
         return (
           <AnimatedTileGroup key={wall.key} cellKey={floorKey} extraDelay={WALL_EXTRA_DELAY_MS}>
             <ContentPackInstance
-              assetId={wallAssetId}
+              assetId={group.wallAssetId}
               position={wall.position}
               rotation={wall.rotation}
               variant="wall"
@@ -105,15 +153,15 @@ function AnimatedTileGroup({
   return <group ref={groupRef}>{children}</group>
 }
 
-function deriveRoomWalls(paintedCells: PaintedCells): RoomWallInstance[] {
+function deriveRoomWalls(cells: GridCell[], allPaintedCells: PaintedCells): RoomWallInstance[] {
   const walls: RoomWallInstance[] = []
 
-  Object.values(paintedCells).forEach((cell) => {
+  cells.forEach((cell) => {
     const center = cellToWorldPosition(cell)
 
     WALL_DIRECTIONS.forEach(({ direction, delta, rotation }) => {
       const neighbor: GridCell = [cell[0] + delta[0], cell[1] + delta[1]]
-      if (paintedCells[getCellKey(neighbor)]) {
+      if (allPaintedCells[getCellKey(neighbor)]) {
         return
       }
 

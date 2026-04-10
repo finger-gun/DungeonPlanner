@@ -1,14 +1,40 @@
 import { create } from 'zustand'
+import { persist } from 'zustand/middleware'
 import { getDefaultAssetIdByCategory } from '../content-packs/registry'
 import { getCellKey, type GridCell } from '../hooks/useSnapToGrid'
 import type { ContentPackCategory, PropConnector } from '../content-packs/types'
+import { serializeDungeon, deserializeDungeon } from './serialization'
 
 export type DungeonTool = 'move' | 'room' | 'prop'
 export type CameraMode = 'orbit'
 export type CameraPreset = 'perspective' | 'isometric' | 'top-down'
 export type GroundPlane = 'black' | 'green'
 export type SelectedAssetIds = Record<ContentPackCategory, string | null>
-export type PaintedCells = Record<string, GridCell>
+
+export type Layer = {
+  id: string
+  name: string
+  visible: boolean
+  locked: boolean
+}
+
+export type Room = {
+  id: string
+  name: string
+  layerId: string
+  /** null = inherit global floor asset */
+  floorAssetId: string | null
+  /** null = inherit global wall asset */
+  wallAssetId: string | null
+}
+
+export type PaintedCellRecord = {
+  cell: GridCell
+  layerId: string
+  roomId: string | null
+}
+
+export type PaintedCells = Record<string, PaintedCellRecord>
 
 export type DungeonObjectRecord = {
   id: string
@@ -19,6 +45,7 @@ export type DungeonObjectRecord = {
   props: Record<string, unknown>
   cell: GridCell
   cellKey: string
+  layerId: string
 }
 
 type DungeonSnapshot = {
@@ -28,6 +55,10 @@ type DungeonSnapshot = {
   tool: DungeonTool
   selectedAssetIds: SelectedAssetIds
   selection: string | null
+  layers: Record<string, Layer>
+  layerOrder: string[]
+  activeLayerId: string
+  rooms: Record<string, Room>
 }
 
 type PlaceObjectInput = Pick<
@@ -67,6 +98,25 @@ type DungeonState = DungeonSnapshot & {
   undo: () => void
   redo: () => void
   reset: () => void
+  // Layer actions
+  addLayer: (name: string) => string
+  removeLayer: (id: string) => void
+  renameLayer: (id: string, name: string) => void
+  setLayerVisible: (id: string, visible: boolean) => void
+  setLayerLocked: (id: string, locked: boolean) => void
+  setActiveLayer: (id: string) => void
+  // Room actions
+  createRoom: (name: string) => string
+  removeRoom: (id: string) => void
+  renameRoom: (id: string, name: string) => void
+  assignCellsToRoom: (cellKeys: string[], roomId: string | null) => void
+  setRoomFloorAsset: (roomId: string, assetId: string | null) => void
+  setRoomWallAsset: (roomId: string, assetId: string | null) => void
+  // Persistence
+  dungeonName: string
+  setDungeonName: (name: string) => void
+  downloadDungeon: () => void
+  loadDungeon: (json: string) => boolean
 }
 
 type AnchorDirection = 'north' | 'south' | 'east' | 'west'
@@ -82,12 +132,18 @@ const CONNECTOR_DIRECTIONS: Array<{
   { name: 'west', delta: [-1, 0], opposite: 'east' },
 ]
 
+const DEFAULT_LAYER_ID = 'default'
+
+function createDefaultLayer(): Layer {
+  return { id: DEFAULT_LAYER_ID, name: 'Default', visible: true, locked: false }
+}
+
 function cloneSnapshot(snapshot: DungeonSnapshot): DungeonSnapshot {
   return {
     paintedCells: Object.fromEntries(
-      Object.entries(snapshot.paintedCells).map(([key, cell]) => [
+      Object.entries(snapshot.paintedCells).map(([key, record]) => [
         key,
-        [...cell] as GridCell,
+        { cell: [...record.cell] as GridCell, layerId: record.layerId, roomId: record.roomId },
       ]),
     ),
     placedObjects: Object.fromEntries(
@@ -95,7 +151,6 @@ function cloneSnapshot(snapshot: DungeonSnapshot): DungeonSnapshot {
         id,
         {
           ...object,
-          assetId: object.assetId,
           position: [...object.position] as DungeonObjectRecord['position'],
           rotation: [...object.rotation] as DungeonObjectRecord['rotation'],
           cell: [...object.cell] as GridCell,
@@ -107,10 +162,19 @@ function cloneSnapshot(snapshot: DungeonSnapshot): DungeonSnapshot {
     tool: snapshot.tool,
     selectedAssetIds: { ...snapshot.selectedAssetIds },
     selection: snapshot.selection,
+    layers: Object.fromEntries(
+      Object.entries(snapshot.layers).map(([id, layer]) => [id, { ...layer }]),
+    ),
+    layerOrder: [...snapshot.layerOrder],
+    activeLayerId: snapshot.activeLayerId,
+    rooms: Object.fromEntries(
+      Object.entries(snapshot.rooms).map(([id, room]) => [id, { ...room }]),
+    ),
   }
 }
 
 function createEmptySnapshot(): DungeonSnapshot {
+  const defaultLayer = createDefaultLayer()
   return {
     paintedCells: {},
     placedObjects: {},
@@ -122,6 +186,10 @@ function createEmptySnapshot(): DungeonSnapshot {
       prop: getDefaultAssetIdByCategory('prop'),
     },
     selection: null,
+    layers: { [DEFAULT_LAYER_ID]: defaultLayer },
+    layerOrder: [DEFAULT_LAYER_ID],
+    activeLayerId: DEFAULT_LAYER_ID,
+    rooms: {},
   }
 }
 
@@ -242,8 +310,11 @@ function pruneInvalidConnectedProps(
   return { placedObjects, occupancy, selection }
 }
 
-export const useDungeonStore = create<DungeonState>((set, get) => ({
+export const useDungeonStore = create<DungeonState>()(
+  persist(
+    (set, get) => ({
   ...createEmptySnapshot(),
+  dungeonName: 'My Dungeon',
   cameraMode: 'orbit',
   isPaintingStrokeActive: false,
   sceneLighting: { intensity: 1 },
@@ -267,7 +338,11 @@ export const useDungeonStore = create<DungeonState>((set, get) => ({
       const paintedCells = { ...current.paintedCells }
 
       nextCells.forEach((cell) => {
-        paintedCells[getCellKey(cell)] = [...cell] as GridCell
+        paintedCells[getCellKey(cell)] = {
+          cell: [...cell] as GridCell,
+          layerId: current.activeLayerId,
+          roomId: null,
+        }
       })
 
       const {
@@ -310,7 +385,8 @@ export const useDungeonStore = create<DungeonState>((set, get) => ({
 
       const removedCells = nextKeys
         .map((key) => current.paintedCells[key])
-        .filter((cell): cell is GridCell => Boolean(cell))
+        .filter((r): r is PaintedCellRecord => Boolean(r))
+        .map((r) => r.cell)
       const {
         placedObjects,
         occupancy,
@@ -367,6 +443,7 @@ export const useDungeonStore = create<DungeonState>((set, get) => ({
         props: { ...input.props },
         cell: [...input.cell] as GridCell,
         cellKey: input.cellKey,
+        layerId: current.activeLayerId,
       }
       occupancy[input.cellKey] = nextId
 
@@ -540,4 +617,205 @@ export const useDungeonStore = create<DungeonState>((set, get) => ({
       future: [],
     }))
   },
-}))
+
+  // ── Layer actions ──────────────────────────────────────────────────────────
+  addLayer: (name) => {
+    const id = createObjectId()
+    set((current) => {
+      const previousSnapshot = cloneSnapshot(current)
+      return {
+        ...current,
+        layers: { ...current.layers, [id]: { id, name, visible: true, locked: false } },
+        layerOrder: [...current.layerOrder, id],
+        history: [...current.history, previousSnapshot],
+        future: [],
+      }
+    })
+    return id
+  },
+  removeLayer: (id) => {
+    set((current) => {
+      if (Object.keys(current.layers).length <= 1) return current
+      const previousSnapshot = cloneSnapshot(current)
+      const paintedCells = { ...current.paintedCells }
+      Object.entries(paintedCells).forEach(([key, record]) => {
+        if (record.layerId === id) {
+          paintedCells[key] = { ...record, layerId: DEFAULT_LAYER_ID }
+        }
+      })
+      const placedObjects = { ...current.placedObjects }
+      Object.entries(placedObjects).forEach(([objId, obj]) => {
+        if (obj.layerId === id) placedObjects[objId] = { ...obj, layerId: DEFAULT_LAYER_ID }
+      })
+      const rooms = { ...current.rooms }
+      Object.entries(rooms).forEach(([roomId, room]) => {
+        if (room.layerId === id) rooms[roomId] = { ...room, layerId: DEFAULT_LAYER_ID }
+      })
+      const layers = { ...current.layers }
+      delete layers[id]
+      return {
+        ...current,
+        layers,
+        layerOrder: current.layerOrder.filter((lid) => lid !== id),
+        activeLayerId: current.activeLayerId === id ? DEFAULT_LAYER_ID : current.activeLayerId,
+        paintedCells,
+        placedObjects,
+        rooms,
+        history: [...current.history, previousSnapshot],
+        future: [],
+      }
+    })
+  },
+  renameLayer: (id, name) => {
+    set((current) => ({
+      ...current,
+      layers: { ...current.layers, [id]: { ...current.layers[id], name } },
+    }))
+  },
+  setLayerVisible: (id, visible) => {
+    set((current) => ({
+      ...current,
+      layers: { ...current.layers, [id]: { ...current.layers[id], visible } },
+    }))
+  },
+  setLayerLocked: (id, locked) => {
+    set((current) => ({
+      ...current,
+      layers: { ...current.layers, [id]: { ...current.layers[id], locked } },
+    }))
+  },
+  setActiveLayer: (id) => {
+    set((current) => ({ ...current, activeLayerId: id }))
+  },
+
+  // ── Room actions ───────────────────────────────────────────────────────────
+  createRoom: (name) => {
+    const id = createObjectId()
+    set((current) => {
+      const previousSnapshot = cloneSnapshot(current)
+      return {
+        ...current,
+        rooms: {
+          ...current.rooms,
+          [id]: { id, name, layerId: current.activeLayerId, floorAssetId: null, wallAssetId: null },
+        },
+        history: [...current.history, previousSnapshot],
+        future: [],
+      }
+    })
+    return id
+  },
+  removeRoom: (id) => {
+    set((current) => {
+      if (!current.rooms[id]) return current
+      const previousSnapshot = cloneSnapshot(current)
+      const paintedCells = { ...current.paintedCells }
+      Object.entries(paintedCells).forEach(([key, record]) => {
+        if (record.roomId === id) paintedCells[key] = { ...record, roomId: null }
+      })
+      const rooms = { ...current.rooms }
+      delete rooms[id]
+      return {
+        ...current,
+        rooms,
+        paintedCells,
+        history: [...current.history, previousSnapshot],
+        future: [],
+      }
+    })
+  },
+  renameRoom: (id, name) => {
+    set((current) => ({
+      ...current,
+      rooms: { ...current.rooms, [id]: { ...current.rooms[id], name } },
+    }))
+  },
+  assignCellsToRoom: (cellKeys, roomId) => {
+    set((current) => {
+      const previousSnapshot = cloneSnapshot(current)
+      const paintedCells = { ...current.paintedCells }
+      cellKeys.forEach((key) => {
+        if (paintedCells[key]) paintedCells[key] = { ...paintedCells[key], roomId }
+      })
+      return {
+        ...current,
+        paintedCells,
+        history: [...current.history, previousSnapshot],
+        future: [],
+      }
+    })
+  },
+  setRoomFloorAsset: (roomId, assetId) => {
+    set((current) => ({
+      ...current,
+      rooms: { ...current.rooms, [roomId]: { ...current.rooms[roomId], floorAssetId: assetId } },
+    }))
+  },
+  setRoomWallAsset: (roomId, assetId) => {
+    set((current) => ({
+      ...current,
+      rooms: { ...current.rooms, [roomId]: { ...current.rooms[roomId], wallAssetId: assetId } },
+    }))
+  },
+
+  // ── Persistence ────────────────────────────────────────────────────────────
+  setDungeonName: (name) => {
+    set((current) => ({ ...current, dungeonName: name }))
+  },
+  downloadDungeon: () => {
+    const state = get()
+    const json = serializeDungeon({
+      name: state.dungeonName,
+      sceneLighting: state.sceneLighting,
+      groundPlane: state.groundPlane,
+      layers: state.layers,
+      layerOrder: state.layerOrder,
+      activeLayerId: state.activeLayerId,
+      rooms: state.rooms,
+      paintedCells: state.paintedCells,
+      placedObjects: state.placedObjects,
+      occupancy: state.occupancy,
+    })
+    const blob = new Blob([json], { type: 'application/json' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `${state.dungeonName.replace(/[^a-z0-9]/gi, '_')}.dungeon.json`
+    a.click()
+    URL.revokeObjectURL(url)
+  },
+  loadDungeon: (json) => {
+    const parsed = deserializeDungeon(json)
+    if (!parsed) return false
+    set((current) => ({
+      ...current,
+      ...parsed,
+      dungeonName: parsed.name ?? current.dungeonName,
+      isPaintingStrokeActive: false,
+      activeCameraMode: 'perspective',
+      cameraPreset: null,
+      history: [],
+      future: [],
+    }))
+    return true
+  },
+}),
+    {
+      name: 'dungeon-planner-state',
+      // Only persist the dungeon content + scene settings, not transient UI state
+      partialize: (state) => ({
+        dungeonName: state.dungeonName,
+        paintedCells: state.paintedCells,
+        placedObjects: state.placedObjects,
+        occupancy: state.occupancy,
+        layers: state.layers,
+        layerOrder: state.layerOrder,
+        activeLayerId: state.activeLayerId,
+        rooms: state.rooms,
+        sceneLighting: state.sceneLighting,
+        groundPlane: state.groundPlane,
+        selectedAssetIds: state.selectedAssetIds,
+      }),
+    },
+  ),
+)

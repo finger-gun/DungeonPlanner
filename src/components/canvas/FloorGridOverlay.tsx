@@ -30,7 +30,14 @@ type Props = {
 
 export function FloorGridOverlay({ centerRef, radius = 3.5, opacity = 0.6 }: Props) {
   const paintedCells = useDungeonStore((state) => state.paintedCells)
-  const cells = useMemo(() => Object.values(paintedCells), [paintedCells])
+  const layers = useDungeonStore((state) => state.layers)
+  const cells = useMemo(
+    () =>
+      Object.values(paintedCells)
+        .filter((r) => layers[r.layerId]?.visible !== false)
+        .map((r) => r.cell),
+    [paintedCells, layers],
+  )
 
   const meshRef = useRef<THREE.InstancedMesh>(null)
   const dummy = useMemo(() => new THREE.Object3D(), [])

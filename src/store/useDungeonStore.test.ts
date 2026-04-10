@@ -15,7 +15,7 @@ describe('useDungeonStore history', () => {
     let state = useDungeonStore.getState()
     expect(paintedCount).toBe(2)
     expect(Object.keys(state.paintedCells)).toHaveLength(2)
-    expect(state.paintedCells['0:0']).toEqual([0, 0])
+    expect(state.paintedCells['0:0']).toEqual({ cell: [0, 0], layerId: 'default', roomId: null })
 
     state.undo()
     state = useDungeonStore.getState()
@@ -89,7 +89,7 @@ describe('useDungeonStore history', () => {
     expect(useDungeonStore.getState().tool).toBe('prop')
 
     useDungeonStore.getState().undo()
-    expect(useDungeonStore.getState().tool).toBe('room')
+    expect(useDungeonStore.getState().tool).toBe('move')
 
     useDungeonStore.getState().redo()
     expect(useDungeonStore.getState().tool).toBe('prop')

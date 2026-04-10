@@ -4,6 +4,8 @@ import { EditorToolbar } from './components/editor/EditorToolbar'
 import { MoveToolPanel } from './components/editor/MoveToolPanel'
 import { RoomToolPanel } from './components/editor/RoomToolPanel'
 import { PropToolPanel } from './components/editor/PropToolPanel'
+import { LayerPanel } from './components/editor/LayerPanel'
+import { RoomPanel } from './components/editor/RoomPanel'
 import { useDungeonStore } from './store/useDungeonStore'
 import {
   cellToWorldPosition,
@@ -21,13 +23,22 @@ const Scene = lazy(() =>
 function RightPanel() {
   const tool = useDungeonStore((state) => state.tool)
   return (
-    <aside className="overflow-y-auto border-l border-stone-800/80 bg-stone-950/85 p-5 backdrop-blur">
-      <p className="mb-5 text-xs font-semibold uppercase tracking-[0.32em] text-sky-200/75">
-        {tool === 'move' ? 'Scene' : tool === 'room' ? 'Room' : 'Props'}
-      </p>
-      {tool === 'move' && <MoveToolPanel />}
-      {tool === 'room' && <RoomToolPanel />}
-      {tool === 'prop' && <PropToolPanel />}
+    <aside className="flex h-full flex-col overflow-hidden border-l border-stone-800/80 bg-stone-950/85 backdrop-blur">
+      {/* Tool-specific panel */}
+      <div className="flex-1 overflow-y-auto p-5">
+        <p className="mb-5 text-xs font-semibold uppercase tracking-[0.32em] text-sky-200/75">
+          {tool === 'move' ? 'Scene' : tool === 'room' ? 'Room' : 'Props'}
+        </p>
+        {tool === 'move' && <MoveToolPanel />}
+        {tool === 'room' && <RoomToolPanel />}
+        {tool === 'prop' && <PropToolPanel />}
+      </div>
+
+      {/* Layers + Rooms — always visible at the bottom */}
+      <div className="shrink-0 space-y-5 border-t border-stone-800/60 p-5">
+        <LayerPanel />
+        <RoomPanel />
+      </div>
     </aside>
   )
 }
