@@ -9,7 +9,7 @@ import rubble003AssetUrl from '../../assets/models/core/rubble_003.glb'
 import type { ContentPackAsset, ContentPackComponentProps } from '../types'
 
 // Adjust this to compensate for the authored pivot of the prop.
-const PROP_PIVOT_OFFSET = [0, 0, 0] as const
+const PROP_PIVOT_OFFSET = [0, 0.4, 0] as const
 
 const RUBBLE_VARIANT_URLS = [
   rubbleAssetUrl,
