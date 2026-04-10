@@ -179,21 +179,25 @@ function deriveRoomWalls(
   const walls: RoomWallInstance[] = []
 
   cells.forEach((cell) => {
+    const cellKey = getCellKey(cell)
     const center = cellToWorldPosition(cell)
+    const currentRoomId = allPaintedCells[cellKey]?.roomId ?? null
 
     WALL_DIRECTIONS.forEach(({ direction, delta, rotation }) => {
       const neighbor: GridCell = [cell[0] + delta[0], cell[1] + delta[1]]
-      const neighborRecord = allPaintedCells[getCellKey(neighbor)]
+      const neighborKey = getCellKey(neighbor)
+      const neighborRecord = allPaintedCells[neighborKey]
 
-      // Only suppress wall when the neighbor is painted AND belongs to the same room.
-      // Different rooms (or one unassigned) → keep the wall between them.
       if (neighborRecord) {
-        const currentRoomId = allPaintedCells[getCellKey(cell)]?.roomId ?? null
         const neighborRoomId = neighborRecord.roomId ?? null
-        if (currentRoomId === neighborRoomId) return
+        if (currentRoomId === neighborRoomId) return // same room — no wall
+
+        // Different rooms: only the canonical side (lower cell key) owns the wall,
+        // so the boundary wall is rendered exactly once.
+        if (cellKey > neighborKey) return
       }
 
-      const wallKey = `${getCellKey(cell)}:${direction}`
+      const wallKey = `${cellKey}:${direction}`
       if (suppressedWallKeys.has(wallKey)) return
 
       walls.push({
