@@ -59,6 +59,14 @@ function App() {
   )
 
   const onWindowKeyDown = useEffectEvent((event: KeyboardEvent) => {
+    // Don't fire any scene hotkeys while the user is typing in a text field
+    const active = document.activeElement
+    if (
+      active instanceof HTMLInputElement ||
+      active instanceof HTMLTextAreaElement ||
+      (active instanceof HTMLElement && active.isContentEditable)
+    ) return
+
     const state = useDungeonStore.getState()
 
     if (event.key === 'Escape' && state.selection) {

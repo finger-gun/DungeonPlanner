@@ -27,6 +27,12 @@ function KeyboardCameraControls() {
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
+      const active = document.activeElement
+      if (
+        active instanceof HTMLInputElement ||
+        active instanceof HTMLTextAreaElement ||
+        (active instanceof HTMLElement && active.isContentEditable)
+      ) return
       const key = e.key.toLowerCase()
       if (TRACKED_KEYS.has(key)) {
         e.preventDefault()
