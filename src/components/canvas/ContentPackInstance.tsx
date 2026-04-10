@@ -36,7 +36,7 @@ export function ContentPackInstance({
 
   if (!assetPath) {
     return (
-      <group scale={selected ? 1.06 : 1} {...groupProps}>
+      <group {...groupProps}>
         <FallbackMesh selected={selected} variant={variant} receiveShadow={receiveShadow} />
       </group>
     )
@@ -45,7 +45,7 @@ export function ContentPackInstance({
   return (
     <Suspense
       fallback={
-        <group scale={selected ? 1.06 : 1} {...groupProps}>
+        <group {...groupProps}>
           <FallbackMesh selected={selected} variant={variant} receiveShadow={receiveShadow} />
         </group>
       }
@@ -55,14 +55,12 @@ export function ContentPackInstance({
           Component={AssetComponent}
           componentProps={getComponentProps(variantKey)}
           receiveShadow={receiveShadow}
-          scale={selected ? 1.06 : 1}
           {...groupProps}
         />
       ) : (
         <GLTFModel
           assetPath={assetPath}
           receiveShadow={receiveShadow}
-          scale={selected ? 1.06 : 1}
           {...groupProps}
         />
       )}
@@ -151,7 +149,7 @@ function FallbackMesh({
   const yOffset = variant === 'floor' ? 0.03 : variant === 'wall' ? 1.5 : 0
 
   return (
-    <mesh position={[0, yOffset, 0]} scale={selected ? 1.04 : 1} castShadow receiveShadow={receiveShadow}>
+    <mesh position={[0, yOffset, 0]} castShadow receiveShadow={receiveShadow}>
       <boxGeometry args={geometry} />
       <meshStandardMaterial
         color={color}
