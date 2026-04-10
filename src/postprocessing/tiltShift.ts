@@ -2,10 +2,13 @@
 /**
  * Tilt-shift depth of field — custom TSL implementation.
  * Imports only from 'three/tsl' (a proper package export).
+ *
+ * Sampling: use scenePass.getTextureNode() (not convertToTexture) and
+ * sample via .uv(offsetUV) — wrapping a TextureNode inside texture() is wrong.
  */
 import {
-  pass, convertToTexture, screenUV, screenSize,
-  mix, smoothstep, abs, vec2, float, texture,
+  pass, screenUV, screenSize,
+  mix, smoothstep, abs, vec2, float,
   Fn, Loop, property, vec4, uniform,
 } from 'three/tsl'
 import type * as THREE from 'three'
@@ -23,8 +26,9 @@ export function tiltShift(
   camera: THREE.Camera,
   opts: TiltShiftOptions,
 ): any {
-  const scenePass = pass(scene as any, camera as any)
-  const sceneColor = convertToTexture(scenePass)
+  // pass() returns a PassNode; getTextureNode() gives a samplable TextureNode.
+  const scenePass = pass(scene as any, camera as any) as any
+  const sceneColor = scenePass.getTextureNode() as any
 
   const blurWeight = Fn(() => {
     const uv = screenUV as any
@@ -35,14 +39,16 @@ export function tiltShift(
     )
   })
 
+  // Separable 7-tap box blur along a single axis (stepVec = per-pixel offset vector).
   const blur1D = Fn(([stepVec]: any[]) => {
     const uv = screenUV as any
     const acc = property('vec4', 'blur1DAcc')
     acc.assign(vec4(0, 0, 0, 0))
     Loop(7, ({ i }: any) => {
       const offset = (i as any).sub(3).toFloat()
-      const sampleUV = uv.add((vec2(stepVec) as any).mul(offset))
-      acc.addAssign(texture(sceneColor as any, sampleUV).mul(float(1.0 / 7.0)))
+      const sampleUV = uv.add((stepVec as any).mul(offset))
+      // TextureNode must be sampled with .uv(), not via the texture() helper.
+      acc.addAssign(sceneColor.uv(sampleUV).mul(float(1.0 / 7.0)))
     })
     return acc
   })
@@ -62,8 +68,7 @@ export function tiltShift(
   })
 
   const output = Fn(() => {
-    const uv = screenUV as any
-    const sharp = texture(sceneColor as any, uv)
+    const sharp = sceneColor.uv(screenUV as any)
     const blurred = (hBlur() as any).add(vBlur() as any).mul(float(0.5))
     const w = blurWeight()
     return mix(sharp as any, blurred, w as any)

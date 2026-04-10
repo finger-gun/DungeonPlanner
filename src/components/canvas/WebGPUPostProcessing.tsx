@@ -1,49 +1,30 @@
 /**
- * WebGPU-native post-processing: tilt-shift DoF + selection outline.
+ * WebGPU-native post-processing: tilt-shift DoF.
  * Imports only from three/tsl and three/webgpu (proper package exports).
+ *
+ * The selection outline is handled separately by the inverted-hull technique
+ * in ContentPackInstance (always visible regardless of postprocessing state).
+ * toonOutlinePass compositing was removed because ToonOutlinePassNode renders
+ * with a solid background — alphaOver then painted the whole scene dark.
  */
 import { useEffect, useRef } from 'react'
 import { useThree, useFrame } from '@react-three/fiber'
 import * as THREE from 'three/webgpu'
 import { uniform } from 'three/tsl'
 import { tiltShift } from '../../postprocessing/tiltShift'
-import { selectionOutline, alphaOver, SELECTION_OUTLINE_LAYER } from '../../postprocessing/selectionOutline'
 import { useDungeonStore } from '../../store/useDungeonStore'
-import { getRegisteredObject } from './objectRegistry'
-
-export { SELECTION_OUTLINE_LAYER }
 
 export function WebGPUPostProcessing() {
   const { gl: renderer, scene, camera, size } = useThree()
   const postProcessingRef = useRef<THREE.PostProcessing | null>(null)
-  const syncCameraRef = useRef<((src: THREE.Camera) => void) | null>(null)
 
   const focusCenterUniform = useRef(uniform(0.5))
   const focusRangeUniform  = useRef(uniform(0.15))
   const blurRadiusUniform  = useRef(uniform(6))
 
-  const settings  = useDungeonStore((state) => state.postProcessing)
-  const selection = useDungeonStore((state) => state.selection)
+  const settings = useDungeonStore((state) => state.postProcessing)
 
-  // Maintain the selection layer on the selected object's meshes
-  useEffect(() => {
-    // Clear layer 31 from everything first
-    scene.traverse((obj) => {
-      if ((obj as THREE.Mesh).isMesh) {
-        ;(obj as any).layers.disable(SELECTION_OUTLINE_LAYER)
-      }
-    })
-    if (selection) {
-      const group = getRegisteredObject(selection)
-      group?.traverse((obj) => {
-        if ((obj as THREE.Mesh).isMesh) {
-          ;(obj as any).layers.enable(SELECTION_OUTLINE_LAYER)
-        }
-      })
-    }
-  }, [selection, scene])
-
-  // Build / rebuild the TSL pipeline
+  // Build / rebuild the TSL pipeline when renderer/scene/camera/size change
   useEffect(() => {
     if (!renderer || !scene || !camera) return
 
@@ -53,28 +34,21 @@ export function WebGPUPostProcessing() {
       blurRadius:  blurRadiusUniform.current,
     })
 
-    const { node: outlineNode, syncCamera } = selectionOutline(scene, camera)
-    syncCameraRef.current = syncCamera
-
     const postProcessing = new THREE.PostProcessing(
       renderer as unknown as THREE.WebGPURenderer,
     )
-    // Composite: outline pixels over the tilt-shift scene
-    postProcessing.outputNode = alphaOver(tiltShiftNode, outlineNode)
+    postProcessing.outputNode = tiltShiftNode
     postProcessingRef.current = postProcessing
 
     return () => {
       postProcessingRef.current = null
-      syncCameraRef.current = null
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [renderer, scene, camera, size])
 
-  useFrame(({ camera: cam }) => {
+  // Priority=1: R3F skips its own gl.render(); we drive the frame.
+  useFrame(() => {
     if (!postProcessingRef.current) return
-
-    // Keep outline camera in sync with the live render camera
-    syncCameraRef.current?.(cam)
 
     focusCenterUniform.current.value = settings.focusDistance
     focusRangeUniform.current.value  = Math.max(0.02, settings.focalLength / 30)
@@ -85,4 +59,3 @@ export function WebGPUPostProcessing() {
 
   return null
 }
-
