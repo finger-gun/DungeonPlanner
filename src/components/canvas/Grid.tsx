@@ -82,6 +82,12 @@ export function Grid({ size = 120 }: GridProps) {
   useEffect(() => {
     if (tool !== 'prop') return
     function onKeyDown(e: KeyboardEvent) {
+      const active = document.activeElement
+      if (
+        active instanceof HTMLInputElement ||
+        active instanceof HTMLTextAreaElement ||
+        (active instanceof HTMLElement && active.isContentEditable)
+      ) return
       if (e.key === 'r' || e.key === 'R') {
         e.preventDefault()
         setFloorRotationIndex((prev) => (prev + 1) % 4)
