@@ -8,6 +8,7 @@ import { getDefaultAssetIdByCategory } from '../content-packs/registry'
 import type {
   DungeonObjectRecord,
   Layer,
+  OpeningRecord,
   PaintedCellRecord,
   PaintedCells,
   Room,
@@ -15,7 +16,7 @@ import type {
 import type { GridCell } from '../hooks/useSnapToGrid'
 import { getCellKey } from '../hooks/useSnapToGrid'
 
-const CURRENT_VERSION = 1
+const CURRENT_VERSION = 2
 
 // ── Serialized shapes (compact, no redundant keys) ────────────────────────────
 
@@ -48,6 +49,15 @@ export type DungeonFile = {
   rooms: Room[]
   cells: SerializedCell[]
   objects: SerializedObject[]
+  openings: SerializedOpening[]
+}
+
+type SerializedOpening = {
+  id: string
+  assetId: string | null
+  wallKey: string
+  width: 1 | 2 | 3
+  layerId: string
 }
 
 // ── State shape we serialize from / into ─────────────────────────────────────
@@ -62,6 +72,7 @@ export type SerializableState = {
   rooms: Record<string, Room>
   paintedCells: PaintedCells
   placedObjects: Record<string, DungeonObjectRecord>
+  wallOpenings: Record<string, OpeningRecord>
   occupancy: Record<string, string>
 }
 
@@ -93,6 +104,13 @@ export function serializeDungeon(state: SerializableState): string {
       layerId: obj.layerId,
       props: obj.props,
     })),
+    openings: Object.values(state.wallOpenings).map((o) => ({
+      id: o.id,
+      assetId: o.assetId,
+      wallKey: o.wallKey,
+      width: o.width,
+      layerId: o.layerId,
+    })),
   }
   return JSON.stringify(file, null, 2)
 }
@@ -110,11 +128,15 @@ export function deserializeDungeon(json: string): SerializableState | null {
 
   if (!isObject(raw)) return null
 
-  // Future: run migrations here before validating
   const version = typeof raw.version === 'number' ? raw.version : 0
   if (version > CURRENT_VERSION) return null
 
-  return parseFile(raw)
+  // v1 → v2: add empty openings field
+  if (version < 2 && !Array.isArray((raw as Record<string, unknown>).openings)) {
+    raw = { ...(raw as Record<string, unknown>), openings: [] }
+  }
+
+  return parseFile(raw as Record<string, unknown>)
 }
 
 // ── Parsing / validation ──────────────────────────────────────────────────────
@@ -199,6 +221,24 @@ function parseFile(raw: Record<string, unknown>): SerializableState | null {
       occupancy[cellKey] = id
     }
 
+    const wallOpenings: Record<string, OpeningRecord> = {}
+    const openingsArr = Array.isArray(raw.openings) ? (raw.openings as unknown[]) : []
+    for (const o of openingsArr) {
+      if (!isObject(o)) continue
+      const id = requireString(o, 'id')
+      const wallKey = requireString(o, 'wallKey')
+      const rawWidth = o.width
+      const width: 1 | 2 | 3 =
+        rawWidth === 1 || rawWidth === 2 || rawWidth === 3 ? rawWidth : 1
+      wallOpenings[id] = {
+        id,
+        assetId: typeof o.assetId === 'string' ? o.assetId : null,
+        wallKey,
+        width,
+        layerId: typeof o.layerId === 'string' && layers[o.layerId] ? o.layerId : 'default',
+      }
+    }
+
     const sceneLightingRaw = isObject(raw.sceneLighting) ? raw.sceneLighting : {}
     const groundPlane =
       raw.groundPlane === 'black' || raw.groundPlane === 'green' ? raw.groundPlane : 'black'
@@ -216,6 +256,7 @@ function parseFile(raw: Record<string, unknown>): SerializableState | null {
       rooms,
       paintedCells,
       placedObjects,
+      wallOpenings,
       occupancy,
     }
   } catch {

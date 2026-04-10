@@ -4,6 +4,7 @@ import { EditorToolbar } from './components/editor/EditorToolbar'
 import { MoveToolPanel } from './components/editor/MoveToolPanel'
 import { RoomToolPanel } from './components/editor/RoomToolPanel'
 import { PropToolPanel } from './components/editor/PropToolPanel'
+import { OpeningToolPanel } from './components/editor/OpeningToolPanel'
 import { LayerPanel } from './components/editor/LayerPanel'
 import { RoomPanel } from './components/editor/RoomPanel'
 import { useDungeonStore } from './store/useDungeonStore'
@@ -27,11 +28,12 @@ function RightPanel() {
       {/* Tool-specific panel */}
       <div className="flex-1 overflow-y-auto p-5">
         <p className="mb-5 text-xs font-semibold uppercase tracking-[0.32em] text-sky-200/75">
-          {tool === 'move' ? 'Scene' : tool === 'room' ? 'Room' : 'Props'}
+          {tool === 'move' ? 'Scene' : tool === 'room' ? 'Room' : tool === 'opening' ? 'Openings' : 'Props'}
         </p>
         {tool === 'move' && <MoveToolPanel />}
         {tool === 'room' && <RoomToolPanel />}
         {tool === 'prop' && <PropToolPanel />}
+        {tool === 'opening' && <OpeningToolPanel />}
       </div>
 
       {/* Layers + Rooms — always visible at the bottom */}

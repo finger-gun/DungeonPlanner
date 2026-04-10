@@ -16,7 +16,12 @@ import {
   type GridCell,
   type SnappedGridPosition,
 } from '../../hooks/useSnapToGrid'
-import { useDungeonStore, type DungeonTool, type PaintedCellRecord } from '../../store/useDungeonStore'
+import {
+  useDungeonStore,
+  getOpeningSegments,
+  type DungeonTool,
+  type PaintedCellRecord,
+} from '../../store/useDungeonStore'
 import { triggerBuild } from '../../store/buildAnimations'
 import { FloorGridOverlay } from './FloorGridOverlay'
 import { ContentPackInstance } from './ContentPackInstance'
@@ -34,14 +39,21 @@ export function Grid({ size = 120 }: GridProps) {
   const eraseCells = useDungeonStore((state) => state.eraseCells)
   const placeObject = useDungeonStore((state) => state.placeObject)
   const removeObjectAtCell = useDungeonStore((state) => state.removeObjectAtCell)
+  const placeOpening = useDungeonStore((state) => state.placeOpening)
+  const removeOpening = useDungeonStore((state) => state.removeOpening)
+  const wallOpenings = useDungeonStore((state) => state.wallOpenings)
   const setPaintingStrokeActive = useDungeonStore(
     (state) => state.setPaintingStrokeActive,
   )
   const tool = useDungeonStore((state) => state.tool)
   const showGrid = useDungeonStore((state) => state.showGrid)
   const selectedPropAssetId = useDungeonStore((state) => state.selectedAssetIds.prop)
+  const selectedOpeningAssetId = useDungeonStore((state) => state.selectedAssetIds.opening)
   const selectedPropAsset = selectedPropAssetId
     ? getContentPackAssetById(selectedPropAssetId)
+    : null
+  const selectedOpeningAsset = selectedOpeningAssetId
+    ? getContentPackAssetById(selectedOpeningAssetId)
     : null
   const [hoveredCell, setHoveredCell] = useState<SnappedGridPosition | null>(null)
   const [hoveredPoint, setHoveredPoint] = useState<{ x: number; y: number; z: number } | null>(null)
@@ -198,6 +210,33 @@ export function Grid({ size = 120 }: GridProps) {
     setHoveredCell(snapped)
     setHoveredPoint(point)
 
+    if (tool === 'opening') {
+      const openingPlacement = selectedOpeningAsset
+        ? getOpeningPlacement(selectedOpeningAsset, point, paintedCells)
+        : null
+
+      if (event.button === 2) {
+        // Right-click: find and remove an opening whose segments cover this wall key
+        if (openingPlacement) {
+          const hoveredWallKey = `${getCellKey(openingPlacement.cell)}:${openingPlacement.direction}`
+          const hit = Object.values(wallOpenings).find((o) =>
+            getOpeningSegments(o.wallKey, o.width).includes(hoveredWallKey),
+          )
+          if (hit) removeOpening(hit.id)
+        }
+        return
+      }
+
+      if (event.button !== 0 || !openingPlacement || !openingPlacement.valid) return
+
+      placeOpening({
+        assetId: selectedOpeningAssetId,
+        wallKey: `${getCellKey(openingPlacement.cell)}:${openingPlacement.direction}`,
+        width: openingPlacement.width,
+      })
+      return
+    }
+
     if (tool === 'prop') {
       const rawPlacement = selectedPropAsset
         ? getPropPlacement(selectedPropAsset, point, paintedCells)
@@ -314,6 +353,12 @@ export function Grid({ size = 120 }: GridProps) {
               : null
           }
           propAssetId={selectedPropAssetId}
+          openingPlacement={
+            tool === 'opening' && selectedOpeningAsset && hoveredPoint
+              ? getOpeningPlacement(selectedOpeningAsset, hoveredPoint, paintedCells)
+              : null
+          }
+          openingAssetId={selectedOpeningAssetId}
         />
       )}
     </group>
@@ -328,6 +373,8 @@ function HoverPreview({
   tool,
   propPlacement,
   propAssetId,
+  openingPlacement,
+  openingAssetId,
 }: {
   hoveredCell: SnappedGridPosition | null
   hoveredPoint: { x: number; y: number; z: number } | null
@@ -336,6 +383,8 @@ function HoverPreview({
   tool: DungeonTool
   propPlacement: PropPlacement | null
   propAssetId: string | null
+  openingPlacement: OpeningPlacement | null
+  openingAssetId: string | null
 }) {
   if (tool === 'prop') {
     if (!hoveredCell || !hoveredPoint) return null
@@ -348,6 +397,31 @@ function HoverPreview({
         <ContentPackInstance
           assetId={propAssetId}
           variant="prop"
+        />
+      </group>
+    )
+  }
+
+  if (tool === 'opening') {
+    if (!hoveredPoint || !openingPlacement) return null
+
+    const { position, rotation, valid } = openingPlacement
+
+    if (!valid) {
+      // Red fallback box for invalid placements
+      return (
+        <mesh position={position} rotation={rotation}>
+          <boxGeometry args={[GRID_SIZE * 0.2, GRID_SIZE * 0.8, GRID_SIZE * 0.1]} />
+          <meshStandardMaterial color="#f87171" transparent opacity={0.5} />
+        </mesh>
+      )
+    }
+
+    return (
+      <group position={position} rotation={rotation}>
+        <ContentPackInstance
+          assetId={openingAssetId}
+          variant="wall"
         />
       </group>
     )
@@ -470,6 +544,76 @@ function getPropPlacement(
       cellCenter[2] + matchingDirection.delta[1] * (GRID_SIZE * 0.5),
     ],
     rotation: matchingDirection.rotation,
+  }
+}
+
+type OpeningPlacement = {
+  direction: 'north' | 'south' | 'east' | 'west'
+  cell: GridCell
+  width: 1 | 2 | 3
+  position: [number, number, number]
+  rotation: [number, number, number]
+  valid: boolean
+}
+
+function getOpeningPlacement(
+  asset: ContentPackAsset,
+  point: { x: number; y: number; z: number },
+  paintedCells: Record<string, PaintedCellRecord>,
+): OpeningPlacement | null {
+  const snapped = snapWorldPointToGrid(point)
+  if (!paintedCells[snapped.key]) return null
+
+  const cellCenter = cellToWorldPosition(snapped.cell)
+  const localX = point.x - cellCenter[0]
+  const localZ = point.z - cellCenter[2]
+  const rankedDirections = [...WALL_CONNECTOR_DIRECTIONS].sort((a, b) => {
+    const da =
+      Math.abs(localX - a.delta[0] * (GRID_SIZE * 0.5)) +
+      Math.abs(localZ - a.delta[1] * (GRID_SIZE * 0.5))
+    const db =
+      Math.abs(localX - b.delta[0] * (GRID_SIZE * 0.5)) +
+      Math.abs(localZ - b.delta[1] * (GRID_SIZE * 0.5))
+    return da - db
+  })
+
+  // Use the closest wall edge regardless of whether there's a painted neighbor
+  // (opening may be on any wall boundary)
+  const dir = rankedDirections[0]
+  const neighbor: GridCell = [snapped.cell[0] + dir.delta[0], snapped.cell[1] + dir.delta[1]]
+  const isActualWall = !paintedCells[getCellKey(neighbor)]
+
+  const width: 1 | 2 | 3 =
+    asset.metadata?.openingWidth === 2 ? 2 : asset.metadata?.openingWidth === 3 ? 3 : 1
+  const wallKey = `${getCellKey(snapped.cell)}:${dir.name}`
+  const segments = getOpeningSegments(wallKey, width)
+
+  // Validate all segments are actual wall boundaries
+  const valid =
+    isActualWall &&
+    segments.every((segKey) => {
+      const parts = segKey.split(':')
+      const cx = parseInt(parts[0], 10)
+      const cz = parseInt(parts[1], 10)
+      const segDir = WALL_CONNECTOR_DIRECTIONS.find((d) => d.name === parts[2])
+      if (!segDir) return false
+      const cell: GridCell = [cx, cz]
+      if (!paintedCells[getCellKey(cell)]) return false
+      const n: GridCell = [cx + segDir.delta[0], cz + segDir.delta[1]]
+      return !paintedCells[getCellKey(n)]
+    })
+
+  return {
+    direction: dir.name,
+    cell: snapped.cell,
+    width,
+    position: [
+      cellCenter[0] + dir.delta[0] * (GRID_SIZE * 0.5),
+      0,
+      cellCenter[2] + dir.delta[1] * (GRID_SIZE * 0.5),
+    ],
+    rotation: dir.rotation,
+    valid,
   }
 }
 

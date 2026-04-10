@@ -5,7 +5,7 @@ import { getCellKey, type GridCell } from '../hooks/useSnapToGrid'
 import type { ContentPackCategory, PropConnector } from '../content-packs/types'
 import { serializeDungeon, deserializeDungeon } from './serialization'
 
-export type DungeonTool = 'move' | 'room' | 'prop'
+export type DungeonTool = 'move' | 'room' | 'prop' | 'opening'
 export type CameraMode = 'orbit'
 export type CameraPreset = 'perspective' | 'isometric' | 'top-down'
 export type GroundPlane = 'black' | 'green'
@@ -36,6 +36,17 @@ export type PaintedCellRecord = {
 
 export type PaintedCells = Record<string, PaintedCellRecord>
 
+export type OpeningRecord = {
+  id: string
+  assetId: string | null
+  /** Anchor wall segment key — center of the span (format: "x:z:direction") */
+  wallKey: string
+  width: 1 | 2 | 3
+  layerId: string
+}
+
+type PlaceOpeningInput = Pick<OpeningRecord, 'assetId' | 'wallKey' | 'width'>
+
 export type DungeonObjectRecord = {
   id: string
   type: 'prop'
@@ -51,6 +62,7 @@ export type DungeonObjectRecord = {
 type DungeonSnapshot = {
   paintedCells: PaintedCells
   placedObjects: Record<string, DungeonObjectRecord>
+  wallOpenings: Record<string, OpeningRecord>
   occupancy: Record<string, string>
   tool: DungeonTool
   selectedAssetIds: SelectedAssetIds
@@ -112,6 +124,9 @@ type DungeonState = DungeonSnapshot & {
   assignCellsToRoom: (cellKeys: string[], roomId: string | null) => void
   setRoomFloorAsset: (roomId: string, assetId: string | null) => void
   setRoomWallAsset: (roomId: string, assetId: string | null) => void
+  // Opening actions
+  placeOpening: (input: PlaceOpeningInput) => string | null
+  removeOpening: (id: string) => void
   // Persistence
   dungeonName: string
   setDungeonName: (name: string) => void
@@ -158,6 +173,9 @@ function cloneSnapshot(snapshot: DungeonSnapshot): DungeonSnapshot {
         },
       ]),
     ),
+    wallOpenings: Object.fromEntries(
+      Object.entries(snapshot.wallOpenings).map(([id, opening]) => [id, { ...opening }]),
+    ),
     occupancy: { ...snapshot.occupancy },
     tool: snapshot.tool,
     selectedAssetIds: { ...snapshot.selectedAssetIds },
@@ -178,12 +196,14 @@ function createEmptySnapshot(): DungeonSnapshot {
   return {
     paintedCells: {},
     placedObjects: {},
+    wallOpenings: {},
     occupancy: {},
     tool: 'move',
     selectedAssetIds: {
       floor: getDefaultAssetIdByCategory('floor'),
       wall: getDefaultAssetIdByCategory('wall'),
       prop: getDefaultAssetIdByCategory('prop'),
+      opening: getDefaultAssetIdByCategory('opening'),
     },
     selection: null,
     layers: { [DEFAULT_LAYER_ID]: defaultLayer },
@@ -278,8 +298,26 @@ function isPropAnchorValid(
   )
 }
 
+/** Returns all wall segment keys covered by an opening anchor + width. */
+export function getOpeningSegments(wallKey: string, width: 1 | 2 | 3): string[] {
+  if (width === 1) return [wallKey]
+  const parts = wallKey.split(':')
+  const cx = parseInt(parts[0])
+  const cz = parseInt(parts[1])
+  const dir = parts[2]
+  const isNS = dir === 'north' || dir === 'south'
+  const halfLeft = Math.floor((width - 1) / 2)
+  const segments: string[] = []
+  for (let i = -halfLeft; i < -halfLeft + width; i++) {
+    const nx = isNS ? cx + i : cx
+    const nz = isNS ? cz : cz + i
+    segments.push(`${nx}:${nz}:${dir}`)
+  }
+  return segments
+}
+
 function pruneInvalidConnectedProps(
-  current: Pick<DungeonSnapshot, 'placedObjects' | 'occupancy' | 'selection'>,
+  current: Pick<DungeonSnapshot, 'placedObjects' | 'occupancy' | 'selection' | 'wallOpenings'>,
   paintedCells: PaintedCells,
   changedCells: GridCell[],
 ) {
@@ -307,7 +345,23 @@ function pruneInvalidConnectedProps(
     }
   })
 
-  return { placedObjects, occupancy, selection }
+  // Also prune openings whose wall segments are no longer valid boundaries
+  const wallOpenings = { ...current.wallOpenings }
+  Object.values(wallOpenings).forEach((opening) => {
+    const segments = getOpeningSegments(opening.wallKey, opening.width)
+    const stillValid = segments.every((segKey) => {
+      const parts = segKey.split(':')
+      const cell: GridCell = [parseInt(parts[0]), parseInt(parts[1])]
+      const dir = CONNECTOR_DIRECTIONS.find((d) => d.name === parts[2])
+      if (!paintedCells[getCellKey(cell)]) return false
+      if (!dir) return false
+      const neighbor: GridCell = [cell[0] + dir.delta[0], cell[1] + dir.delta[1]]
+      return !paintedCells[getCellKey(neighbor)]
+    })
+    if (!stillValid) delete wallOpenings[opening.id]
+  })
+
+  return { placedObjects, occupancy, selection, wallOpenings }
 }
 
 export const useDungeonStore = create<DungeonState>()(
@@ -349,12 +403,14 @@ export const useDungeonStore = create<DungeonState>()(
         placedObjects,
         occupancy,
         selection,
+        wallOpenings,
       } = pruneInvalidConnectedProps(current, paintedCells, nextCells)
 
       return {
         ...current,
         paintedCells,
         placedObjects,
+        wallOpenings,
         occupancy,
         selection,
         history: [...current.history, previousSnapshot],
@@ -391,12 +447,14 @@ export const useDungeonStore = create<DungeonState>()(
         placedObjects,
         occupancy,
         selection,
+        wallOpenings,
       } = pruneInvalidConnectedProps(current, paintedCells, removedCells)
 
       return {
         ...current,
         paintedCells,
         placedObjects,
+        wallOpenings,
         occupancy,
         selection,
         history: [...current.history, previousSnapshot],
@@ -758,6 +816,51 @@ export const useDungeonStore = create<DungeonState>()(
     }))
   },
 
+  // ── Opening actions ────────────────────────────────────────────────────────
+  placeOpening: (input) => {
+    const id = createObjectId()
+    set((current) => {
+      const previousSnapshot = cloneSnapshot(current)
+      const wallOpenings = { ...current.wallOpenings }
+      // Remove any existing opening whose segments overlap with this one
+      const newSegments = new Set(getOpeningSegments(input.wallKey, input.width))
+      Object.values(wallOpenings).forEach((existing) => {
+        const existingSegments = getOpeningSegments(existing.wallKey, existing.width)
+        if (existingSegments.some((s) => newSegments.has(s))) {
+          delete wallOpenings[existing.id]
+        }
+      })
+      wallOpenings[id] = {
+        id,
+        assetId: input.assetId,
+        wallKey: input.wallKey,
+        width: input.width,
+        layerId: current.activeLayerId,
+      }
+      return {
+        ...current,
+        wallOpenings,
+        history: [...current.history, previousSnapshot],
+        future: [],
+      }
+    })
+    return id
+  },
+  removeOpening: (id) => {
+    set((current) => {
+      if (!current.wallOpenings[id]) return current
+      const previousSnapshot = cloneSnapshot(current)
+      const wallOpenings = { ...current.wallOpenings }
+      delete wallOpenings[id]
+      return {
+        ...current,
+        wallOpenings,
+        history: [...current.history, previousSnapshot],
+        future: [],
+      }
+    })
+  },
+
   // ── Persistence ────────────────────────────────────────────────────────────
   setDungeonName: (name) => {
     set((current) => ({ ...current, dungeonName: name }))
@@ -774,6 +877,7 @@ export const useDungeonStore = create<DungeonState>()(
       rooms: state.rooms,
       paintedCells: state.paintedCells,
       placedObjects: state.placedObjects,
+      wallOpenings: state.wallOpenings,
       occupancy: state.occupancy,
     })
     const blob = new Blob([json], { type: 'application/json' })
@@ -807,6 +911,7 @@ export const useDungeonStore = create<DungeonState>()(
         dungeonName: state.dungeonName,
         paintedCells: state.paintedCells,
         placedObjects: state.placedObjects,
+        wallOpenings: state.wallOpenings,
         occupancy: state.occupancy,
         layers: state.layers,
         layerOrder: state.layerOrder,

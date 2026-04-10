@@ -10,6 +10,8 @@ import {
 } from '../../hooks/useSnapToGrid'
 import {
   useDungeonStore,
+  getOpeningSegments,
+  type OpeningRecord,
   type PaintedCells,
 } from '../../store/useDungeonStore'
 import { getBuildYOffset } from '../../store/buildAnimations'
@@ -47,8 +49,18 @@ export function DungeonRoom() {
   const paintedCells = useDungeonStore((state) => state.paintedCells)
   const layers = useDungeonStore((state) => state.layers)
   const rooms = useDungeonStore((state) => state.rooms)
+  const wallOpenings = useDungeonStore((state) => state.wallOpenings)
   const globalFloorAssetId = useDungeonStore((state) => state.selectedAssetIds.floor)
   const globalWallAssetId = useDungeonStore((state) => state.selectedAssetIds.wall)
+
+  // Pre-compute which wall keys are suppressed by openings
+  const suppressedWallKeys = useMemo(() => {
+    const set = new Set<string>()
+    Object.values(wallOpenings).forEach((opening) => {
+      getOpeningSegments(opening.wallKey, opening.width).forEach((k) => set.add(k))
+    })
+    return set
+  }, [wallOpenings])
 
   // Group visible cells by their effective (floor, wall) asset pair.
   // Room asset overrides take precedence over the global selection.
@@ -75,7 +87,11 @@ export function DungeonRoom() {
           key={`${group.floorAssetId}||${group.wallAssetId}`}
           group={group}
           paintedCells={paintedCells}
+          suppressedWallKeys={suppressedWallKeys}
         />
+      ))}
+      {Object.values(wallOpenings).map((opening) => (
+        <OpeningRenderer key={opening.id} opening={opening} />
       ))}
     </>
   )
@@ -84,13 +100,15 @@ export function DungeonRoom() {
 function CellGroupRenderer({
   group,
   paintedCells,
+  suppressedWallKeys,
 }: {
   group: CellGroup
   paintedCells: PaintedCells
+  suppressedWallKeys: Set<string>
 }) {
   const walls = useMemo(
-    () => deriveRoomWalls(group.cells, paintedCells),
-    [group.cells, paintedCells],
+    () => deriveRoomWalls(group.cells, paintedCells, suppressedWallKeys),
+    [group.cells, paintedCells, suppressedWallKeys],
   )
 
   return (
@@ -153,7 +171,11 @@ function AnimatedTileGroup({
   return <group ref={groupRef}>{children}</group>
 }
 
-function deriveRoomWalls(cells: GridCell[], allPaintedCells: PaintedCells): RoomWallInstance[] {
+function deriveRoomWalls(
+  cells: GridCell[],
+  allPaintedCells: PaintedCells,
+  suppressedWallKeys: Set<string>,
+): RoomWallInstance[] {
   const walls: RoomWallInstance[] = []
 
   cells.forEach((cell) => {
@@ -165,8 +187,11 @@ function deriveRoomWalls(cells: GridCell[], allPaintedCells: PaintedCells): Room
         return
       }
 
+      const wallKey = `${getCellKey(cell)}:${direction}`
+      if (suppressedWallKeys.has(wallKey)) return
+
       walls.push({
-        key: `${getCellKey(cell)}:${direction}`,
+        key: wallKey,
         direction,
         position: [
           center[0] + delta[0] * (GRID_SIZE * 0.5),
@@ -179,4 +204,46 @@ function deriveRoomWalls(cells: GridCell[], allPaintedCells: PaintedCells): Room
   })
 
   return walls
+}
+
+function OpeningRenderer({ opening }: { opening: OpeningRecord }) {
+  const layers = useDungeonStore((state) => state.layers)
+  if (layers[opening.layerId]?.visible === false) return null
+
+  const wallPosition = wallKeyToWorldPosition(opening.wallKey)
+  if (!wallPosition) return null
+
+  return (
+    <ContentPackInstance
+      assetId={opening.assetId}
+      position={wallPosition.position}
+      rotation={wallPosition.rotation}
+      variant="wall"
+    />
+  )
+}
+
+/** Convert a wall key ("x:z:direction") to world position + rotation. */
+function wallKeyToWorldPosition(
+  wallKey: string,
+): { position: [number, number, number]; rotation: [number, number, number] } | null {
+  const parts = wallKey.split(':')
+  if (parts.length !== 3) return null
+  const x = parseInt(parts[0], 10)
+  const z = parseInt(parts[1], 10)
+  const direction = parts[2]
+  if (isNaN(x) || isNaN(z)) return null
+
+  const dir = WALL_DIRECTIONS.find((d) => d.direction === direction)
+  if (!dir) return null
+
+  const center = cellToWorldPosition([x, z])
+  return {
+    position: [
+      center[0] + dir.delta[0] * (GRID_SIZE * 0.5),
+      0,
+      center[2] + dir.delta[1] * (GRID_SIZE * 0.5),
+    ],
+    rotation: dir.rotation,
+  }
 }

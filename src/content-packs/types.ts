@@ -1,7 +1,7 @@
 import type { ComponentType } from 'react'
 import type { JSX } from 'react'
 
-export type ContentPackCategory = 'floor' | 'wall' | 'prop'
+export type ContentPackCategory = 'floor' | 'wall' | 'prop' | 'opening'
 export type ContentPackComponentProps = JSX.IntrinsicElements['group'] & {
   variantKey?: string
 }
@@ -24,6 +24,8 @@ export type ContentPackAssetMetadata = {
   light?: PropLight
   /** Whether this asset's meshes receive shadows. Defaults to true when omitted. */
   receiveShadow?: boolean
+  /** Width in wall segments (1–3). Only meaningful for category='opening'. Default 1. */
+  openingWidth?: 1 | 2 | 3
 }
 
 export type ContentPackAsset = {
