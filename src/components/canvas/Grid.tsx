@@ -674,10 +674,6 @@ function CursorLight({
       intensity={CURSOR_LIGHT_INTENSITY}
       distance={CURSOR_LIGHT_DISTANCE}
       decay={CURSOR_LIGHT_DECAY}
-      castShadow
-      shadow-mapSize={[512, 512]}
-      shadow-camera-near={0.5}
-      shadow-camera-far={CURSOR_LIGHT_DISTANCE}
       visible={false}
     />
   )

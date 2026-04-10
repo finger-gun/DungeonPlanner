@@ -36,7 +36,7 @@ export const propsWallTorchAsset: ContentPackAsset = {
       intensity: 6,
       distance: 8,
       decay: 2,
-      castShadow: true,
+      castShadow: false,
       flicker: true,
       // Offset from the prop's local origin — moves the light up to the flame
       offset: [0, 1.6, 0.25],
