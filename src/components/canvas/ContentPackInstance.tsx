@@ -1,11 +1,36 @@
 import { Suspense, useEffect, useRef, useMemo } from 'react'
-import { useGLTF, Outlines } from '@react-three/drei'
+import { useGLTF } from '@react-three/drei'
 import type { ThreeElements } from '@react-three/fiber'
 import * as THREE from 'three'
 import { getContentPackAssetById } from '../../content-packs/registry'
 import type { ComponentType } from 'react'
 import type { ContentPackComponentProps } from '../../content-packs/types'
 import { GRID_SIZE } from '../../hooks/useSnapToGrid'
+
+const OUTLINE_COLOR = new THREE.Color('#7dd3fc')
+const OUTLINE_SCALE = 1.055
+
+/** Inverted-hull outline: a back-face clone scaled up slightly, rendered
+ *  in a single colour. Works reliably with primitive/GLTF objects. */
+function SelectionOutline({ source }: { source: THREE.Object3D }) {
+  const outline = useMemo(() => {
+    const clone = source.clone(true)
+    clone.traverse((obj) => {
+      if (obj instanceof THREE.Mesh) {
+        obj.material = new THREE.MeshBasicMaterial({
+          color: OUTLINE_COLOR,
+          side: THREE.BackSide,
+          depthWrite: false,
+        })
+        obj.renderOrder = 999
+      }
+    })
+    clone.scale.multiplyScalar(OUTLINE_SCALE)
+    return clone
+  }, [source])
+
+  return <primitive object={outline} />
+}
 
 type ContentPackInstanceVariant = 'floor' | 'wall' | 'prop'
 
@@ -99,7 +124,7 @@ function GLTFModel({
   return (
     <group {...groupProps}>
       <primitive object={scene} />
-      {selected && <Outlines thickness={0.035} color="#7dd3fc" screenspace={false} />}
+      {selected && <SelectionOutline source={scene} />}
     </group>
   )
 }
@@ -130,7 +155,7 @@ function ComponentAsset({
   return (
     <group ref={groupRef} {...groupProps}>
       <Component {...componentProps} />
-      {selected && <Outlines thickness={0.035} color="#7dd3fc" screenspace={false} />}
+      {selected && groupRef.current && <SelectionOutline source={groupRef.current} />}
     </group>
   )
 }
