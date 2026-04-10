@@ -83,10 +83,18 @@ export type SceneLighting = {
   intensity: number // multiplier applied to all scene lights, 0–2
 }
 
+export type PostProcessingSettings = {
+  enabled: boolean
+  focusDistance: number // world units along camera look direction
+  focalLength: number   // blur falloff range in world units
+  bokehScale: number    // artistic bokeh size multiplier
+}
+
 type DungeonState = DungeonSnapshot & {
   cameraMode: CameraMode
   isPaintingStrokeActive: boolean
   sceneLighting: SceneLighting
+  postProcessing: PostProcessingSettings
   showGrid: boolean
   groundPlane: GroundPlane
   activeCameraMode: CameraPreset
@@ -104,6 +112,7 @@ type DungeonState = DungeonSnapshot & {
   setSelectedAsset: (category: ContentPackCategory, assetId: string) => void
   setPaintingStrokeActive: (active: boolean) => void
   setSceneLightingIntensity: (intensity: number) => void
+  setPostProcessing: (settings: Partial<PostProcessingSettings>) => void
   setShowGrid: (show: boolean) => void
   setGroundPlane: (plane: GroundPlane) => void
   setCameraPreset: (preset: CameraPreset) => void
@@ -384,6 +393,7 @@ export const useDungeonStore = create<DungeonState>()(
   cameraMode: 'orbit',
   isPaintingStrokeActive: false,
   sceneLighting: { intensity: 1 },
+  postProcessing: { enabled: false, focusDistance: 8, focalLength: 3, bokehScale: 2 },
   showGrid: true,
   groundPlane: 'black',
   activeCameraMode: 'perspective',
@@ -645,6 +655,9 @@ export const useDungeonStore = create<DungeonState>()(
   },
   setSceneLightingIntensity: (intensity) => {
     set((state) => ({ ...state, sceneLighting: { ...state.sceneLighting, intensity } }))
+  },
+  setPostProcessing: (settings) => {
+    set((state) => ({ ...state, postProcessing: { ...state.postProcessing, ...settings } }))
   },
   setShowGrid: (show) => {
     set((state) => ({ ...state, showGrid: show }))
@@ -917,6 +930,7 @@ export const useDungeonStore = create<DungeonState>()(
     const json = serializeDungeon({
       name: state.dungeonName,
       sceneLighting: state.sceneLighting,
+      postProcessing: state.postProcessing,
       groundPlane: state.groundPlane,
       layers: state.layers,
       layerOrder: state.layerOrder,
@@ -967,6 +981,7 @@ export const useDungeonStore = create<DungeonState>()(
         rooms: state.rooms,
         nextRoomNumber: state.nextRoomNumber,
         sceneLighting: state.sceneLighting,
+        postProcessing: state.postProcessing,
         groundPlane: state.groundPlane,
         selectedAssetIds: state.selectedAssetIds,
       }),

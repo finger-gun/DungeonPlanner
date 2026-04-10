@@ -1,10 +1,11 @@
-import { useRef } from 'react'
+import { useRef, useLayoutEffect } from 'react'
 import { useFrame, type ThreeEvent } from '@react-three/fiber'
-import type { PointLight } from 'three'
+import type { Group, PointLight } from 'three'
 import { useDungeonStore, type DungeonObjectRecord } from '../../store/useDungeonStore'
 import { ContentPackInstance } from './ContentPackInstance'
 import { getContentPackAssetById } from '../../content-packs/registry'
 import type { PropLight } from '../../content-packs/types'
+import { registerObject, unregisterObject } from './objectRegistry'
 
 type DungeonObjectProps = { object: DungeonObjectRecord }
 
@@ -13,6 +14,12 @@ export function DungeonObject({ object }: DungeonObjectProps) {
   const selectObject = useDungeonStore((state) => state.selectObject)
   const removeObject = useDungeonStore((state) => state.removeObject)
   const selected = selection === object.id
+
+  const groupRef = useRef<Group>(null)
+  useLayoutEffect(() => {
+    if (groupRef.current) registerObject(object.id, groupRef.current)
+    return () => unregisterObject(object.id)
+  }, [object.id])
 
   const asset = object.assetId ? getContentPackAssetById(object.assetId) : null
   const light = asset?.metadata?.light
@@ -33,7 +40,7 @@ export function DungeonObject({ object }: DungeonObjectProps) {
   }
 
   return (
-    <group position={object.position} rotation={object.rotation}>
+    <group ref={groupRef} position={object.position} rotation={object.rotation}>
       <ContentPackInstance
         assetId={object.assetId}
         selected={selected}

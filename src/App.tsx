@@ -6,6 +6,7 @@ import { RoomToolPanel } from './components/editor/RoomToolPanel'
 import { PropToolPanel } from './components/editor/PropToolPanel'
 import { OpeningToolPanel } from './components/editor/OpeningToolPanel'
 import { LayerPanel } from './components/editor/LayerPanel'
+import { PostProcessingPanel } from './components/editor/PostProcessingPanel'
 import { ScenePanel } from './components/editor/ScenePanel'
 import { useDungeonStore } from './store/useDungeonStore'
 import {
@@ -41,9 +42,10 @@ function RightPanel() {
         {tool === 'opening' && <OpeningToolPanel />}
       </div>
 
-      {/* Layers — always visible at the bottom */}
-      <div className="shrink-0 border-t border-stone-800/60 p-5">
+      {/* Layers + Lens — always visible at the bottom */}
+      <div className="shrink-0 border-t border-stone-800/60 p-5 flex flex-col gap-6">
         <LayerPanel />
+        <PostProcessingPanel />
       </div>
     </aside>
   )

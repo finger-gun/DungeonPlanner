@@ -16,7 +16,7 @@ import type {
 import type { GridCell } from '../hooks/useSnapToGrid'
 import { getCellKey } from '../hooks/useSnapToGrid'
 
-const CURRENT_VERSION = 3
+const CURRENT_VERSION = 4
 
 // ── Serialized shapes (compact, no redundant keys) ────────────────────────────
 
@@ -42,6 +42,7 @@ export type DungeonFile = {
   version: number
   name: string
   sceneLighting: { intensity: number }
+  postProcessing: { enabled: boolean; focusDistance: number; focalLength: number; bokehScale: number }
   groundPlane: 'black' | 'green'
   layers: Layer[]
   layerOrder: string[]
@@ -66,6 +67,7 @@ type SerializedOpening = {
 export type SerializableState = {
   name?: string
   sceneLighting: { intensity: number }
+  postProcessing: { enabled: boolean; focusDistance: number; focalLength: number; bokehScale: number }
   groundPlane: 'black' | 'green'
   layers: Record<string, Layer>
   layerOrder: string[]
@@ -85,6 +87,7 @@ export function serializeDungeon(state: SerializableState): string {
     version: CURRENT_VERSION,
     name: state.name ?? 'My Dungeon',
     sceneLighting: { intensity: state.sceneLighting.intensity },
+    postProcessing: { ...state.postProcessing },
     groundPlane: state.groundPlane,
     layers: Object.values(state.layers),
     layerOrder: [...state.layerOrder],
@@ -142,6 +145,14 @@ export function deserializeDungeon(json: string): SerializableState | null {
   // v2 → v3: add nextRoomNumber
   if (version < 3 && typeof (raw as Record<string, unknown>).nextRoomNumber !== 'number') {
     raw = { ...(raw as Record<string, unknown>), nextRoomNumber: 1 }
+  }
+
+  // v3 → v4: add postProcessing defaults
+  if (version < 4 && !(raw as Record<string, unknown>).postProcessing) {
+    raw = {
+      ...(raw as Record<string, unknown>),
+      postProcessing: { enabled: false, focusDistance: 8, focalLength: 3, bokehScale: 2 },
+    }
   }
 
   return parseFile(raw as Record<string, unknown>)
@@ -250,12 +261,19 @@ function parseFile(raw: Record<string, unknown>): SerializableState | null {
     const sceneLightingRaw = isObject(raw.sceneLighting) ? raw.sceneLighting : {}
     const groundPlane =
       raw.groundPlane === 'black' || raw.groundPlane === 'green' ? raw.groundPlane : 'black'
+    const ppRaw = isObject(raw.postProcessing) ? raw.postProcessing : {}
 
     return {
       name: typeof raw.name === 'string' ? raw.name : 'My Dungeon',
       sceneLighting: {
         intensity:
           typeof sceneLightingRaw.intensity === 'number' ? sceneLightingRaw.intensity : 1,
+      },
+      postProcessing: {
+        enabled: ppRaw.enabled === true,
+        focusDistance: typeof ppRaw.focusDistance === 'number' ? ppRaw.focusDistance : 8,
+        focalLength: typeof ppRaw.focalLength === 'number' ? ppRaw.focalLength : 3,
+        bokehScale: typeof ppRaw.bokehScale === 'number' ? ppRaw.bokehScale : 2,
       },
       groundPlane,
       layers,

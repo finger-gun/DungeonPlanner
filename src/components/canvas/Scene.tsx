@@ -7,6 +7,7 @@ import { Controls } from './Controls'
 import { CameraPresetManager } from './CameraPresetManager'
 import { DungeonObject } from './DungeonObject'
 import { DungeonRoom } from './DungeonRoom'
+import { WebGPUPostProcessing } from './WebGPUPostProcessing'
 import { useDungeonStore } from '../../store/useDungeonStore'
 
 async function createPreferredRenderer(props: THREE.WebGLRendererParameters) {
@@ -72,6 +73,7 @@ function SceneContent() {
   const layers = useDungeonStore((state) => state.layers)
   const lightIntensity = useDungeonStore((state) => state.sceneLighting.intensity)
   const groundPlane = useDungeonStore((state) => state.groundPlane)
+  const postProcessingEnabled = useDungeonStore((state) => state.postProcessing.enabled)
 
   const objects = useMemo(
     () => Object.values(placedObjects).filter((obj) => layers[obj.layerId]?.visible !== false),
@@ -118,6 +120,8 @@ function SceneContent() {
       {objects.map((object) => (
         <DungeonObject key={object.id} object={object} />
       ))}
+
+      {postProcessingEnabled && <WebGPUPostProcessing />}
 
       <Controls />
       <CameraPresetManager />
