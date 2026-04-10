@@ -1,6 +1,7 @@
-import { useRef, useMemo } from 'react'
+import { useRef, useMemo, useLayoutEffect } from 'react'
 import type { ReactNode } from 'react'
 import { useFrame } from '@react-three/fiber'
+import type { ThreeEvent } from '@react-three/fiber'
 import * as THREE from 'three'
 import {
   GRID_SIZE,
@@ -16,6 +17,7 @@ import {
 } from '../../store/useDungeonStore'
 import { getBuildYOffset } from '../../store/buildAnimations'
 import { ContentPackInstance } from './ContentPackInstance'
+import { registerObject, unregisterObject } from './objectRegistry'
 
 const WALL_EXTRA_DELAY_MS = 70
 
@@ -218,18 +220,37 @@ function deriveRoomWalls(
 
 function OpeningRenderer({ opening }: { opening: OpeningRecord }) {
   const layers = useDungeonStore((state) => state.layers)
+  const selection = useDungeonStore((state) => state.selection)
+  const selectObject = useDungeonStore((state) => state.selectObject)
+  const ppEnabled = useDungeonStore((state) => state.postProcessing.enabled)
+  const selected = selection === opening.id
+
+  const groupRef = useRef<THREE.Group>(null)
+  useLayoutEffect(() => {
+    if (groupRef.current) registerObject(opening.id, groupRef.current)
+    return () => unregisterObject(opening.id)
+  }, [opening.id])
+
   if (layers[opening.layerId]?.visible === false) return null
 
   const wallPosition = wallKeyToWorldPosition(opening.wallKey)
   if (!wallPosition) return null
 
+  function handleClick(e: ThreeEvent<MouseEvent>) {
+    if (!e.altKey) return
+    e.stopPropagation()
+    selectObject(opening.id)
+  }
+
   return (
-    <ContentPackInstance
-      assetId={opening.assetId}
-      position={wallPosition.position}
-      rotation={wallPosition.rotation}
-      variant="wall"
-    />
+    <group ref={groupRef} position={wallPosition.position} rotation={wallPosition.rotation}>
+      <ContentPackInstance
+        assetId={opening.assetId}
+        selected={selected && !ppEnabled}
+        variant="wall"
+        onClick={handleClick}
+      />
+    </group>
   )
 }
 

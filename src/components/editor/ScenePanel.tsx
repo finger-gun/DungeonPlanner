@@ -62,6 +62,7 @@ export function ScenePanel() {
               openings={openingsByRoom[room.id] ?? []}
               selection={selection}
               onSelectProp={(id) => { selectObject(id); setTool('prop') }}
+              onSelectOpening={(id) => { selectObject(id); setTool('opening') }}
               onRename={(name) => renameRoom(room.id, name)}
               onDelete={() => removeRoom(room.id)}
             />
@@ -109,11 +110,12 @@ type RoomNodeProps = {
   openings: { id: string; assetId: string | null; wallKey: string; width: 1 | 2 | 3 }[]
   selection: string | null
   onSelectProp: (id: string) => void
+  onSelectOpening: (id: string) => void
   onRename: (name: string) => void
   onDelete: () => void
 }
 
-function RoomNode({ room, props, openings, selection, onSelectProp, onRename, onDelete }: RoomNodeProps) {
+function RoomNode({ room, props, openings, selection, onSelectProp, onSelectOpening, onRename, onDelete }: RoomNodeProps) {
   const [expanded, setExpanded] = useState(false)
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState(room.name)
@@ -208,7 +210,8 @@ function RoomNode({ room, props, openings, selection, onSelectProp, onRename, on
                     key={opening.id}
                     label={asset?.name ?? 'Unknown opening'}
                     detail={direction}
-                    dim
+                    active={selection === opening.id}
+                    onClick={() => onSelectOpening(opening.id)}
                   />
                 )
               })}
