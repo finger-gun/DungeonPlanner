@@ -27,71 +27,42 @@ export function PostProcessingPanel() {
       </div>
 
       <div className={`flex flex-col gap-3 transition-opacity ${pp.enabled ? 'opacity-100' : 'opacity-40 pointer-events-none'}`}>
-        <SliderRow
-          label="Focus Y"
-          value={pp.focusDistance}
-          min={0}
-          max={1}
-          step={0.01}
-          format={(v) => `${(v * 100).toFixed(0)}%`}
-          onChange={(v) => setPostProcessing({ focusDistance: v })}
-        />
-        <SliderRow
-          label="Band"
-          value={pp.focalLength}
-          min={0.5}
-          max={12}
-          step={0.25}
-          format={(v) => `${v.toFixed(2)}`}
-          onChange={(v) => setPostProcessing({ focalLength: v })}
-        />
-        <SliderRow
-          label="Blur"
-          value={pp.bokehScale}
-          min={0.5}
-          max={6}
-          step={0.25}
-          format={(v) => `${v.toFixed(2)}x`}
-          onChange={(v) => setPostProcessing({ bokehScale: v })}
-        />
-      </div>
+        <div className="rounded-2xl border border-stone-800 bg-stone-950/60 px-4 py-4">
+          <div className="mb-2 flex items-center justify-between">
+            <label className="text-xs uppercase tracking-[0.22em] text-stone-400">Focus Y</label>
+            <span className="text-xs tabular-nums text-stone-300">{(pp.focusDistance * 100).toFixed(0)}%</span>
+          </div>
+          <input
+            type="range" min={0} max={1} step={0.01} value={pp.focusDistance}
+            onChange={(e) => setPostProcessing({ focusDistance: parseFloat(e.target.value) })}
+            className="w-full accent-sky-400"
+          />
+        </div>
 
-      {pp.enabled && (
-        <p className="mt-3 text-[10px] text-stone-600">
-          Focus Distance: world units along camera look direction.
-          Depth: blur falloff range. Bokeh: blur size multiplier.
-        </p>
-      )}
+        <div className="rounded-2xl border border-stone-800 bg-stone-950/60 px-4 py-4">
+          <div className="mb-2 flex items-center justify-between">
+            <label className="text-xs uppercase tracking-[0.22em] text-stone-400">Band</label>
+            <span className="text-xs tabular-nums text-stone-300">{pp.focalLength.toFixed(2)}</span>
+          </div>
+          <input
+            type="range" min={0.5} max={12} step={0.25} value={pp.focalLength}
+            onChange={(e) => setPostProcessing({ focalLength: parseFloat(e.target.value) })}
+            className="w-full accent-sky-400"
+          />
+        </div>
+
+        <div className="rounded-2xl border border-stone-800 bg-stone-950/60 px-4 py-4">
+          <div className="mb-2 flex items-center justify-between">
+            <label className="text-xs uppercase tracking-[0.22em] text-stone-400">Blur</label>
+            <span className="text-xs tabular-nums text-stone-300">{pp.bokehScale.toFixed(2)}x</span>
+          </div>
+          <input
+            type="range" min={0.5} max={6} step={0.25} value={pp.bokehScale}
+            onChange={(e) => setPostProcessing({ bokehScale: parseFloat(e.target.value) })}
+            className="w-full accent-sky-400"
+          />
+        </div>
+      </div>
     </section>
-  )
-}
-
-type SliderRowProps = {
-  label: string
-  value: number
-  min: number
-  max: number
-  step: number
-  format: (v: number) => string
-  onChange: (v: number) => void
-}
-
-function SliderRow({ label, value, min, max, step, format, onChange }: SliderRowProps) {
-  return (
-    <div className="rounded-xl border border-stone-800 bg-stone-950/60 px-3 py-2">
-      <div className="mb-1.5 flex items-center justify-between">
-        <span className="text-[10px] uppercase tracking-[0.2em] text-stone-500">{label}</span>
-        <span className="font-mono text-[10px] text-stone-400">{format(value)}</span>
-      </div>
-      <input
-        type="range"
-        min={min}
-        max={max}
-        step={step}
-        value={value}
-        onChange={(e) => onChange(parseFloat(e.target.value))}
-        className="w-full accent-sky-400"
-      />
-    </div>
   )
 }
