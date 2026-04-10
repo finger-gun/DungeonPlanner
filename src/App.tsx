@@ -6,7 +6,6 @@ import { RoomToolPanel } from './components/editor/RoomToolPanel'
 import { PropToolPanel } from './components/editor/PropToolPanel'
 import { OpeningToolPanel } from './components/editor/OpeningToolPanel'
 import { LayerPanel } from './components/editor/LayerPanel'
-import { PostProcessingPanel } from './components/editor/PostProcessingPanel'
 import { ScenePanel } from './components/editor/ScenePanel'
 import { useDungeonStore } from './store/useDungeonStore'
 import {
@@ -37,7 +36,6 @@ function RightPanel() {
           {tool === 'move' ? 'Camera' : tool === 'room' ? 'Room' : tool === 'opening' ? 'Openings' : 'Props'}
         </p>
         {tool === 'move' && <MoveToolPanel />}
-        {tool === 'move' && <PostProcessingPanel />}
         {tool === 'room' && <RoomToolPanel />}
         {tool === 'prop' && <PropToolPanel />}
         {tool === 'opening' && <OpeningToolPanel />}
