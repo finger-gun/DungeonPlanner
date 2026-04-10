@@ -26,7 +26,7 @@ export function ContentPackInstance({
   const asset = assetId ? getContentPackAssetById(assetId) : null
   const assetPath = asset?.assetUrl
   const AssetComponent = asset?.Component ?? null
-  const castShadow = asset?.metadata?.castShadow !== false
+  const receiveShadow = asset?.metadata?.receiveShadow !== false
 
   useEffect(() => {
     if (assetPath) {
@@ -37,7 +37,7 @@ export function ContentPackInstance({
   if (!assetPath) {
     return (
       <group scale={selected ? 1.06 : 1} {...groupProps}>
-        <FallbackMesh selected={selected} variant={variant} castShadow={castShadow} />
+        <FallbackMesh selected={selected} variant={variant} receiveShadow={receiveShadow} />
       </group>
     )
   }
@@ -46,7 +46,7 @@ export function ContentPackInstance({
     <Suspense
       fallback={
         <group scale={selected ? 1.06 : 1} {...groupProps}>
-          <FallbackMesh selected={selected} variant={variant} castShadow={castShadow} />
+          <FallbackMesh selected={selected} variant={variant} receiveShadow={receiveShadow} />
         </group>
       }
     >
@@ -54,14 +54,14 @@ export function ContentPackInstance({
         <ComponentAsset
           Component={AssetComponent}
           componentProps={getComponentProps(variantKey)}
-          castShadow={castShadow}
+          receiveShadow={receiveShadow}
           scale={selected ? 1.06 : 1}
           {...groupProps}
         />
       ) : (
         <GLTFModel
           assetPath={assetPath}
-          castShadow={castShadow}
+          receiveShadow={receiveShadow}
           scale={selected ? 1.06 : 1}
           {...groupProps}
         />
@@ -76,23 +76,23 @@ function getComponentProps(variantKey?: string): ContentPackComponentProps {
 
 function GLTFModel({
   assetPath,
-  castShadow,
+  receiveShadow,
   ...groupProps
 }: ThreeElements['group'] & {
   assetPath: string
-  castShadow: boolean
+  receiveShadow: boolean
 }) {
   const gltf = useGLTF(assetPath)
   const scene = useMemo(() => {
     const clone = gltf.scene.clone()
     clone.traverse((obj) => {
       if (obj instanceof THREE.Mesh) {
-        obj.castShadow = castShadow
-        obj.receiveShadow = true
+        obj.castShadow = true
+        obj.receiveShadow = receiveShadow
       }
     })
     return clone
-  }, [gltf.scene, castShadow])
+  }, [gltf.scene, receiveShadow])
 
   return (
     <group {...groupProps}>
@@ -104,23 +104,23 @@ function GLTFModel({
 function ComponentAsset({
   Component,
   componentProps,
-  castShadow,
+  receiveShadow,
   ...groupProps
 }: ThreeElements['group'] & {
   Component: ComponentType<ContentPackComponentProps>
   componentProps: ContentPackComponentProps
-  castShadow: boolean
+  receiveShadow: boolean
 }) {
   const groupRef = useRef<THREE.Group>(null)
 
   useEffect(() => {
     groupRef.current?.traverse((obj) => {
       if (obj instanceof THREE.Mesh) {
-        obj.castShadow = castShadow
-        obj.receiveShadow = true
+        obj.castShadow = true
+        obj.receiveShadow = receiveShadow
       }
     })
-  }, [castShadow])
+  }, [receiveShadow])
 
   return (
     <group ref={groupRef} {...groupProps}>
@@ -132,11 +132,11 @@ function ComponentAsset({
 function FallbackMesh({
   selected,
   variant,
-  castShadow,
+  receiveShadow,
 }: {
   selected: boolean
   variant: ContentPackInstanceVariant
-  castShadow: boolean
+  receiveShadow: boolean
 }) {
   const color =
     variant === 'floor' ? '#34d399' : variant === 'wall' ? '#fbbf24' : '#7dd3fc'
@@ -151,7 +151,7 @@ function FallbackMesh({
   const yOffset = variant === 'floor' ? 0.03 : variant === 'wall' ? 1.5 : 0
 
   return (
-    <mesh position={[0, yOffset, 0]} scale={selected ? 1.04 : 1} castShadow={castShadow} receiveShadow>
+    <mesh position={[0, yOffset, 0]} scale={selected ? 1.04 : 1} castShadow receiveShadow={receiveShadow}>
       <boxGeometry args={geometry} />
       <meshStandardMaterial
         color={color}

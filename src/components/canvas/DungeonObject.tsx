@@ -69,6 +69,7 @@ function PropPointLight({ light }: { light: PropLight }) {
       intensity={light.intensity}
       distance={light.distance}
       decay={light.decay ?? 2}
+      castShadow={light.castShadow ?? false}
     />
   )
 }

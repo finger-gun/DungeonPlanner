@@ -15,13 +15,15 @@ export type PropLight = {
   /** Position of the light in local object space (e.g. move up to where a flame would be) */
   offset?: [number, number, number]
   flicker?: boolean
+  /** Whether this light casts shadows. Defaults to false (point light shadows are expensive). */
+  castShadow?: boolean
 }
 
 export type ContentPackAssetMetadata = {
   connectsTo?: PropConnector
   light?: PropLight
-  /** Whether this asset casts shadows. Defaults to true when omitted. */
-  castShadow?: boolean
+  /** Whether this asset's meshes receive shadows. Defaults to true when omitted. */
+  receiveShadow?: boolean
 }
 
 export type ContentPackAsset = {
