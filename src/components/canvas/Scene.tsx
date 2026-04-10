@@ -16,13 +16,29 @@ async function createPreferredRenderer(props: THREE.WebGLRendererParameters) {
 
   const canvas = props.canvas as HTMLCanvasElement | undefined
 
+  // Query the WebGPU adapter for its actual texture-binding limit before
+  // creating the renderer. The WebGPU default (16) is too low for scenes with
+  // many shadow-casting point lights + PBR textures. Modern GPUs support 96+.
+  const requiredLimits: Record<string, number> = {}
+  try {
+    const adapter = await navigator.gpu?.requestAdapter({ powerPreference })
+    if (adapter) {
+      const max = adapter.limits.maxSampledTexturesPerShaderStage
+      // Request the full adapter maximum so shadow maps don't consume all slots
+      requiredLimits.maxSampledTexturesPerShaderStage = max
+    }
+  } catch {
+    // Non-WebGPU environment — limit is irrelevant for the WebGL fallback
+  }
+
   try {
     const renderer = new WebGPURenderer({
       canvas,
       antialias: true,
       alpha: true,
       powerPreference,
-    })
+      requiredLimits,
+    } as ConstructorParameters<typeof WebGPURenderer>[0])
 
     await renderer.init()
     renderer.shadowMap.enabled = true
