@@ -14,6 +14,7 @@ export function DungeonObject({ object }: DungeonObjectProps) {
   const selectObject = useDungeonStore((state) => state.selectObject)
   const removeObject = useDungeonStore((state) => state.removeObject)
   const ppEnabled = useDungeonStore((state) => state.postProcessing.enabled)
+  const tool = useDungeonStore((state) => state.tool)
   const selected = selection === object.id
 
   const groupRef = useRef<Group>(null)
@@ -26,6 +27,11 @@ export function DungeonObject({ object }: DungeonObjectProps) {
   const light = asset?.metadata?.light
 
   function handleClick(event: ThreeEvent<MouseEvent>) {
+    if (tool === 'select') {
+      event.stopPropagation()
+      selectObject(object.id)
+      return
+    }
     if (!event.altKey) return
     event.stopPropagation()
     selectObject(object.id)

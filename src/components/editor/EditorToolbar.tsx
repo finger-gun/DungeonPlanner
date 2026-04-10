@@ -4,6 +4,7 @@ import {
   DoorOpen,
   Download,
   Blocks,
+  MousePointer2,
   Redo2,
   Undo2,
   Upload,
@@ -12,10 +13,11 @@ import {
 import { useDungeonStore, type DungeonTool } from '../../store/useDungeonStore'
 
 const TOOLS: { id: DungeonTool; Icon: React.ComponentType<{ size?: number; strokeWidth?: number }>; label: string }[] = [
-  { id: 'room',    Icon: Blocks,  label: 'Room' },
-  { id: 'prop',    Icon: Box,      label: 'Prop' },
-  { id: 'opening', Icon: DoorOpen, label: 'Opening' },
-  { id: 'move',    Icon: Video,    label: 'Camera' },
+  { id: 'select',  Icon: MousePointer2, label: 'Select' },
+  { id: 'room',    Icon: Blocks,        label: 'Room' },
+  { id: 'prop',    Icon: Box,           label: 'Prop' },
+  { id: 'opening', Icon: DoorOpen,      label: 'Opening' },
+  { id: 'move',    Icon: Video,         label: 'Camera' },
 ]
 
 export function EditorToolbar() {

@@ -231,12 +231,19 @@ function OpeningRenderer({ opening }: { opening: OpeningRecord }) {
     return () => unregisterObject(opening.id)
   }, [opening.id])
 
+  const tool = useDungeonStore((state) => state.tool)
+
   if (layers[opening.layerId]?.visible === false) return null
 
   const wallPosition = wallKeyToWorldPosition(opening.wallKey)
   if (!wallPosition) return null
 
   function handleClick(e: ThreeEvent<MouseEvent>) {
+    if (tool === 'select') {
+      e.stopPropagation()
+      selectObject(opening.id)
+      return
+    }
     if (!e.altKey) return
     e.stopPropagation()
     selectObject(opening.id)

@@ -5,7 +5,7 @@ import { getCellKey, type GridCell } from '../hooks/useSnapToGrid'
 import type { ContentPackCategory, PropConnector } from '../content-packs/types'
 import { serializeDungeon, deserializeDungeon } from './serialization'
 
-export type DungeonTool = 'move' | 'room' | 'prop' | 'opening'
+export type DungeonTool = 'move' | 'room' | 'prop' | 'opening' | 'select'
 export type CameraMode = 'orbit'
 export type CameraPreset = 'perspective' | 'isometric' | 'top-down'
 export type GroundPlane = 'black' | 'green'

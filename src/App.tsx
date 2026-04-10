@@ -5,6 +5,7 @@ import { MoveToolPanel } from './components/editor/MoveToolPanel'
 import { RoomToolPanel } from './components/editor/RoomToolPanel'
 import { PropToolPanel } from './components/editor/PropToolPanel'
 import { OpeningToolPanel } from './components/editor/OpeningToolPanel'
+import { SelectToolPanel } from './components/editor/SelectToolPanel'
 import { LayerPanel } from './components/editor/LayerPanel'
 import { ScenePanel } from './components/editor/ScenePanel'
 import { useDungeonStore } from './store/useDungeonStore'
@@ -33,8 +34,9 @@ function RightPanel() {
       {/* Tool-specific panel */}
       <div className="flex-1 overflow-y-auto p-5">
         <p className="mb-5 text-xs font-semibold uppercase tracking-[0.32em] text-sky-200/75">
-          {tool === 'move' ? 'Camera' : tool === 'room' ? 'Room' : tool === 'opening' ? 'Openings' : 'Props'}
+          {tool === 'select' ? 'Select' : tool === 'move' ? 'Camera' : tool === 'room' ? 'Room' : tool === 'opening' ? 'Openings' : 'Props'}
         </p>
+        {tool === 'select' && <SelectToolPanel />}
         {tool === 'move' && <MoveToolPanel />}
         {tool === 'room' && <RoomToolPanel />}
         {tool === 'prop' && <PropToolPanel />}
@@ -198,7 +200,7 @@ function App() {
             {/* Tool hint overlay */}
             <div className="pointer-events-none absolute left-4 top-4 rounded-2xl border border-amber-300/15 bg-stone-950/78 px-4 py-3 backdrop-blur">
               <p className="text-xs font-semibold uppercase tracking-[0.3em] text-amber-300/80">
-                {tool === 'move' ? 'Camera' : tool === 'room' ? 'Room' : 'Prop'}
+                {tool === 'select' ? 'Select' : tool === 'move' ? 'Camera' : tool === 'room' ? 'Room' : 'Prop'}
               </p>
               <p className="mt-1.5 text-xs text-stone-400">{toolHint}</p>
             </div>
