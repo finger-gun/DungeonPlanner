@@ -92,6 +92,7 @@ function SceneContent() {
   const lightIntensity = useDungeonStore((state) => state.sceneLighting.intensity)
   const groundPlane = useDungeonStore((state) => state.groundPlane)
   const postProcessingEnabled = useDungeonStore((state) => state.postProcessing.enabled)
+  const showGroundPlane = useDungeonStore((state) => state.showGroundPlane)
 
   const objects = useMemo(
     () => Object.values(placedObjects).filter((obj) => layers[obj.layerId]?.visible !== false),
@@ -136,7 +137,7 @@ function SceneContent() {
       />
 
       {/* Ground plane — with holes cut out under each StaircaseDown prop */}
-      <StaircaseHoles staircases={staircasesDown} groundColor={groundColor} />
+      {showGroundPlane && <StaircaseHoles staircases={staircasesDown} groundColor={groundColor} />}
 
       <Grid />
       <DungeonRoom />

@@ -27,6 +27,8 @@ export function MoveToolPanel() {
   const setShowGrid = useDungeonStore((state) => state.setShowGrid)
   const groundPlane = useDungeonStore((state) => state.groundPlane)
   const setGroundPlane = useDungeonStore((state) => state.setGroundPlane)
+  const showGroundPlane = useDungeonStore((state) => state.showGroundPlane)
+  const setShowGroundPlane = useDungeonStore((state) => state.setShowGroundPlane)
   const sceneLighting = useDungeonStore((state) => state.sceneLighting)
   const setSceneLightingIntensity = useDungeonStore((state) => state.setSceneLightingIntensity)
   const pp = useDungeonStore((state) => state.postProcessing)
@@ -101,9 +103,22 @@ export function MoveToolPanel() {
 
         {/* Ground plane selector */}
         <div className="mt-2 rounded-2xl border border-stone-800 bg-stone-950/60 px-4 py-3">
-          <div className="mb-2 flex items-center gap-2 text-xs uppercase tracking-[0.22em] text-stone-400">
-            <Square size={12} strokeWidth={1.5} />
-            <span>Ground</span>
+          <div className="mb-2 flex items-center justify-between">
+            <div className="flex items-center gap-2 text-xs uppercase tracking-[0.22em] text-stone-400">
+              <Square size={12} strokeWidth={1.5} />
+              <span>Ground</span>
+            </div>
+            <button
+              type="button"
+              onClick={() => setShowGroundPlane(!showGroundPlane)}
+              className={`rounded-lg border px-2 py-0.5 text-[10px] uppercase tracking-[0.15em] transition ${
+                showGroundPlane
+                  ? 'border-sky-500/50 bg-sky-900/30 text-sky-300'
+                  : 'border-stone-700/60 bg-stone-900/40 text-stone-500 hover:border-stone-600 hover:text-stone-300'
+              }`}
+            >
+              {showGroundPlane ? 'Visible' : 'Hidden'}
+            </button>
           </div>
           <div className="grid grid-cols-2 gap-1.5">
             {GROUND_OPTIONS.map(({ id, label, swatch }) => {

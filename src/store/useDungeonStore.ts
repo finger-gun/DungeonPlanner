@@ -104,6 +104,7 @@ type DungeonState = DungeonSnapshot & {
   sceneLighting: SceneLighting
   postProcessing: PostProcessingSettings
   showGrid: boolean
+  showGroundPlane: boolean
   groundPlane: GroundPlane
   activeCameraMode: CameraPreset
   cameraPreset: CameraPreset | null
@@ -122,6 +123,7 @@ type DungeonState = DungeonSnapshot & {
   setSceneLightingIntensity: (intensity: number) => void
   setPostProcessing: (settings: Partial<PostProcessingSettings>) => void
   setShowGrid: (show: boolean) => void
+  setShowGroundPlane: (show: boolean) => void
   setGroundPlane: (plane: GroundPlane) => void
   setCameraPreset: (preset: CameraPreset) => void
   clearCameraPreset: () => void
@@ -415,6 +417,7 @@ export const useDungeonStore = create<DungeonState>()(
   sceneLighting: { intensity: 1 },
   postProcessing: { enabled: false, focusDistance: 0.5, focalLength: 3, bokehScale: 2 },
   showGrid: true,
+  showGroundPlane: true,
   groundPlane: 'black',
   activeCameraMode: 'perspective',
   cameraPreset: null,
@@ -692,6 +695,9 @@ export const useDungeonStore = create<DungeonState>()(
   },
   setShowGrid: (show) => {
     set((state) => ({ ...state, showGrid: show }))
+  },
+  setShowGroundPlane: (show) => {
+    set((state) => ({ ...state, showGroundPlane: show }))
   },
   setGroundPlane: (plane) => {
     set((state) => ({ ...state, groundPlane: plane }))
@@ -1187,6 +1193,7 @@ export const useDungeonStore = create<DungeonState>()(
         sceneLighting: state.sceneLighting,
         postProcessing: state.postProcessing,
         groundPlane: state.groundPlane,
+        showGroundPlane: state.showGroundPlane,
         selectedAssetIds: state.selectedAssetIds,
         floors: state.floors,
         floorOrder: state.floorOrder,
