@@ -153,6 +153,7 @@ type DungeonState = DungeonSnapshot & {
   deleteFloor: (id: string) => void
   switchFloor: (id: string) => void
   renameFloor: (id: string, name: string) => void
+  ensureAdjacentFloor: (targetLevel: number, cell: GridCell, opposingAssetId: string, position: [number, number, number], rotation: [number, number, number]) => void
   // Opening actions
   placeOpening: (input: PlaceOpeningInput) => string | null
   removeOpening: (id: string) => void
@@ -588,6 +589,17 @@ export const useDungeonStore = create<DungeonState>()(
         future: [],
       }
     })
+
+    // Auto-create adjacent floor when placing a staircase prop
+    if (input.assetId === 'core.props_staircase_up' || input.assetId === 'core.props_staircase_down') {
+      const updated = get()
+      const currentLevel = updated.floors[updated.activeFloorId]?.level ?? 0
+      const targetLevel = input.assetId === 'core.props_staircase_up' ? currentLevel + 1 : currentLevel - 1
+      const opposingAssetId = input.assetId === 'core.props_staircase_up'
+        ? 'core.props_staircase_down'
+        : 'core.props_staircase_up'
+      get().ensureAdjacentFloor(targetLevel, input.cell, opposingAssetId, input.position, input.rotation)
+    }
 
     return nextId
   },
@@ -1082,7 +1094,52 @@ export const useDungeonStore = create<DungeonState>()(
     }))
   },
 
-  // ── Opening actions ────────────────────────────────────────────────────────
+  ensureAdjacentFloor: (targetLevel, cell, opposingAssetId, position, rotation) => {
+    const state = get()
+    // Do nothing if a floor at this level already exists
+    if (Object.values(state.floors).some((f) => f.level === targetLevel)) return
+
+    const id = createObjectId()
+    const defaultName =
+      targetLevel < 0 ? `Cellar ${Math.abs(targetLevel)}`
+      : targetLevel === 0 ? 'Ground Floor'
+      : `Floor ${targetLevel}`
+
+    const newSnapshot = createEmptySnapshot()
+    const staircaseId = createObjectId()
+    const cellKey = `${getCellKey(cell)}:floor`
+    newSnapshot.placedObjects[staircaseId] = {
+      id: staircaseId,
+      type: 'prop',
+      assetId: opposingAssetId,
+      position: [...position] as [number, number, number],
+      rotation: [...rotation] as [number, number, number],
+      props: { connector: 'FLOOR', direction: null },
+      cell: [...cell] as GridCell,
+      cellKey,
+      layerId: DEFAULT_LAYER_ID,
+    }
+    newSnapshot.occupancy[cellKey] = staircaseId
+
+    set((current) => ({
+      ...current,
+      floors: {
+        ...current.floors,
+        [id]: {
+          id,
+          name: defaultName,
+          level: targetLevel,
+          snapshot: cloneSnapshot(newSnapshot),
+          history: [],
+          future: [],
+        },
+      },
+      floorOrder: [...current.floorOrder, id],
+      // activeFloorId unchanged — user stays on current floor
+    }))
+  },
+
+
   placeOpening: (input) => {
     const id = createObjectId()
     set((current) => {
