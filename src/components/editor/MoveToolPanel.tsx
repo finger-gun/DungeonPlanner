@@ -1,5 +1,5 @@
-import { Axis3D, Grid, LayoutGrid, Square, Triangle } from 'lucide-react'
-import { useDungeonStore, type CameraPreset, type GroundPlane } from '../../store/useDungeonStore'
+import { Axis3D, Gauge, Grid, LayoutGrid, Triangle } from 'lucide-react'
+import { useDungeonStore, type CameraPreset } from '../../store/useDungeonStore'
 
 type PresetEntry = {
   id: CameraPreset
@@ -14,10 +14,11 @@ const CAMERA_PRESETS: PresetEntry[] = [
   { id: 'top-down',    label: 'Top Down',    sub: 'Print / TTRPG',  Icon: LayoutGrid },
 ]
 
-type GroundEntry = { id: GroundPlane; label: string; swatch: string }
-const GROUND_OPTIONS: GroundEntry[] = [
-  { id: 'black', label: 'Black', swatch: '#0e0e0e' },
-  { id: 'green', label: 'Green', swatch: '#2a4a1a' },
+const FPS_OPTIONS: { value: 0 | 30 | 60 | 120; label: string }[] = [
+  { value: 30,  label: '30' },
+  { value: 60,  label: '60' },
+  { value: 120, label: '120' },
+  { value: 0,   label: '∞' },
 ]
 
 export function MoveToolPanel() {
@@ -25,14 +26,12 @@ export function MoveToolPanel() {
   const activeCameraMode = useDungeonStore((state) => state.activeCameraMode)
   const showGrid = useDungeonStore((state) => state.showGrid)
   const setShowGrid = useDungeonStore((state) => state.setShowGrid)
-  const groundPlane = useDungeonStore((state) => state.groundPlane)
-  const setGroundPlane = useDungeonStore((state) => state.setGroundPlane)
-  const showGroundPlane = useDungeonStore((state) => state.showGroundPlane)
-  const setShowGroundPlane = useDungeonStore((state) => state.setShowGroundPlane)
   const sceneLighting = useDungeonStore((state) => state.sceneLighting)
   const setSceneLightingIntensity = useDungeonStore((state) => state.setSceneLightingIntensity)
   const pp = useDungeonStore((state) => state.postProcessing)
   const setPostProcessing = useDungeonStore((state) => state.setPostProcessing)
+  const fpsLimit = useDungeonStore((state) => state.fpsLimit)
+  const setFpsLimit = useDungeonStore((state) => state.setFpsLimit)
 
   return (
     <div className="space-y-4">
@@ -74,6 +73,33 @@ export function MoveToolPanel() {
               : 'Rotation locked · WASD to pan · scroll to zoom'}
           </p>
         )}
+
+        {/* FPS limit */}
+        <div className="mt-3 rounded-2xl border border-stone-800 bg-stone-950/60 px-4 py-3">
+          <div className="mb-2 flex items-center gap-2 text-xs uppercase tracking-[0.22em] text-stone-400">
+            <Gauge size={12} strokeWidth={1.5} />
+            <span>FPS Cap</span>
+          </div>
+          <div className="grid grid-cols-4 gap-1">
+            {FPS_OPTIONS.map(({ value, label }) => {
+              const active = fpsLimit === value
+              return (
+                <button
+                  key={value}
+                  type="button"
+                  onClick={() => setFpsLimit(value)}
+                  className={`rounded-xl border py-1.5 text-xs tabular-nums transition ${
+                    active
+                      ? 'border-amber-300/40 bg-amber-400/10 text-amber-200'
+                      : 'border-stone-700/60 bg-stone-900/40 text-stone-500 hover:border-stone-600 hover:text-stone-300'
+                  }`}
+                >
+                  {label}
+                </button>
+              )
+            })}
+          </div>
+        </div>
       </section>
 
       {/* Viewport */}
@@ -100,50 +126,6 @@ export function MoveToolPanel() {
             </p>
           </div>
         </button>
-
-        {/* Ground plane selector */}
-        <div className="mt-2 rounded-2xl border border-stone-800 bg-stone-950/60 px-4 py-3">
-          <div className="mb-2 flex items-center justify-between">
-            <div className="flex items-center gap-2 text-xs uppercase tracking-[0.22em] text-stone-400">
-              <Square size={12} strokeWidth={1.5} />
-              <span>Ground</span>
-            </div>
-            <button
-              type="button"
-              onClick={() => setShowGroundPlane(!showGroundPlane)}
-              className={`rounded-lg border px-2 py-0.5 text-[10px] uppercase tracking-[0.15em] transition ${
-                showGroundPlane
-                  ? 'border-sky-500/50 bg-sky-900/30 text-sky-300'
-                  : 'border-stone-700/60 bg-stone-900/40 text-stone-500 hover:border-stone-600 hover:text-stone-300'
-              }`}
-            >
-              {showGroundPlane ? 'Visible' : 'Hidden'}
-            </button>
-          </div>
-          <div className="grid grid-cols-2 gap-1.5">
-            {GROUND_OPTIONS.map(({ id, label, swatch }) => {
-              const active = groundPlane === id
-              return (
-                <button
-                  key={id}
-                  type="button"
-                  onClick={() => setGroundPlane(id)}
-                  className={`flex flex-col items-center gap-1.5 rounded-xl border py-2 text-[10px] uppercase tracking-[0.15em] transition ${
-                    active
-                      ? 'border-amber-300/40 bg-amber-400/10 text-amber-200'
-                      : 'border-stone-700/60 bg-stone-900/40 text-stone-500 hover:border-stone-600 hover:text-stone-300'
-                  }`}
-                >
-                  <span
-                    className="block size-5 rounded-full border border-stone-600"
-                    style={{ background: swatch === 'transparent' ? 'transparent' : swatch }}
-                  />
-                  {label}
-                </button>
-              )
-            })}
-          </div>
-        </div>
       </section>
 
       {/* Light Rig */}

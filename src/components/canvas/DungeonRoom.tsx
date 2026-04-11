@@ -15,10 +15,9 @@ import {
   type OpeningRecord,
   type PaintedCells,
 } from '../../store/useDungeonStore'
-import { getBuildYOffset } from '../../store/buildAnimations'
+import { getBuildYOffset, isAnimationActive } from '../../store/buildAnimations'
 import { ContentPackInstance } from './ContentPackInstance'
 import { registerObject, unregisterObject } from './objectRegistry'
-import { getStaircaseDownBlockedCells } from './StaircaseHole'
 
 const WALL_EXTRA_DELAY_MS = 70
 
@@ -33,13 +32,14 @@ type RoomWallInstance = {
 
 const WALL_DIRECTIONS: Array<{
   direction: WallDirection
+  opposite: WallDirection
   delta: GridCell
   rotation: [number, number, number]
 }> = [
-  { direction: 'north', delta: [0, 1], rotation: [0, Math.PI, 0] },
-  { direction: 'south', delta: [0, -1], rotation: [0, 0, 0] },
-  { direction: 'east', delta: [1, 0], rotation: [0, -Math.PI / 2, 0] },
-  { direction: 'west', delta: [-1, 0], rotation: [0, Math.PI / 2, 0] },
+  { direction: 'north', opposite: 'south', delta: [0, 1],  rotation: [0, Math.PI, 0] },
+  { direction: 'south', opposite: 'north', delta: [0, -1], rotation: [0, 0, 0] },
+  { direction: 'east',  opposite: 'west',  delta: [1, 0],  rotation: [0, -Math.PI / 2, 0] },
+  { direction: 'west',  opposite: 'east',  delta: [-1, 0], rotation: [0, Math.PI / 2, 0] },
 ]
 
 type CellGroup = {
@@ -57,24 +57,38 @@ export function DungeonRoom() {
   const globalFloorAssetId = useDungeonStore((state) => state.selectedAssetIds.floor)
   const globalWallAssetId = useDungeonStore((state) => state.selectedAssetIds.wall)
 
-  // Cells blocked by StaircaseDown footprints (no floor tile rendered there)
+  // Floor cells occupied by a StaircaseDown have no floor tile — the staircase
+  // model fills the space and a tile would clip through it.
   const blockedFloorCellKeys = useMemo(() => {
     const set = new Set<string>()
     for (const obj of Object.values(placedObjects)) {
-      if (obj.assetId !== 'core.props_staircase_down') continue
-      const ry = obj.rotation[1] ?? 0
-      for (const [bx, bz] of getStaircaseDownBlockedCells(obj.cell[0], obj.cell[1], ry)) {
-        set.add(`${bx}:${bz}`)
+      if (obj.assetId === 'core.props_staircase_down') {
+        set.add(`${obj.cell[0]}:${obj.cell[1]}`)
       }
     }
     return set
   }, [placedObjects])
 
-  // Pre-compute which wall keys are suppressed by openings
+  // Pre-compute which wall keys are suppressed by openings.
+  // For each segment we add both the stored key AND its mirror (same physical wall
+  // seen from the neighbouring cell), because inter-room walls are always rendered
+  // by the canonical (lower-key) cell — which may be on the other side of the opening.
   const suppressedWallKeys = useMemo(() => {
     const set = new Set<string>()
     Object.values(wallOpenings).forEach((opening) => {
-      getOpeningSegments(opening.wallKey, opening.width).forEach((k) => set.add(k))
+      getOpeningSegments(opening.wallKey, opening.width).forEach((segKey) => {
+        set.add(segKey)
+        // Mirror: the same wall face as seen from the neighbour
+        const parts = segKey.split(':')
+        const cx = parseInt(parts[0], 10)
+        const cz = parseInt(parts[1], 10)
+        const dirEntry = WALL_DIRECTIONS.find((d) => d.direction === parts[2])
+        if (dirEntry) {
+          const nx = cx + dirEntry.delta[0]
+          const nz = cz + dirEntry.delta[1]
+          set.add(`${nx}:${nz}:${dirEntry.opposite}`)
+        }
+      })
     })
     return set
   }, [wallOpenings])
@@ -181,12 +195,17 @@ function AnimatedTileGroup({
   children: ReactNode
 }) {
   const groupRef = useRef<THREE.Group>(null)
+  // Once the animation registry entry is gone and y has settled to 0, stop running.
+  const doneRef = useRef(false)
 
   useFrame(() => {
+    if (doneRef.current) return
     const group = groupRef.current
     if (!group) return
     const y = getBuildYOffset(cellKey, performance.now(), extraDelay)
     if (group.position.y !== y) group.position.y = y
+    // Self-disable once the registry entry is cleaned up and position is at rest
+    if (y === 0 && !isAnimationActive(cellKey)) doneRef.current = true
   })
 
   return <group ref={groupRef}>{children}</group>
@@ -257,6 +276,11 @@ function OpeningRenderer({ opening }: { opening: OpeningRecord }) {
   const wallPosition = wallKeyToWorldPosition(opening.wallKey)
   if (!wallPosition) return null
 
+  // Apply 180° flip when requested (front/back swap)
+  const rotation: [number, number, number] = opening.flipped
+    ? [wallPosition.rotation[0], wallPosition.rotation[1] + Math.PI, wallPosition.rotation[2]]
+    : wallPosition.rotation
+
   function handleClick(e: ThreeEvent<MouseEvent>) {
     if (tool === 'select') {
       e.stopPropagation()
@@ -269,7 +293,7 @@ function OpeningRenderer({ opening }: { opening: OpeningRecord }) {
   }
 
   return (
-    <group ref={groupRef} position={wallPosition.position} rotation={wallPosition.rotation}>
+    <group ref={groupRef} position={wallPosition.position} rotation={rotation}>
       <ContentPackInstance
         assetId={opening.assetId}
         selected={selected && !ppEnabled}

@@ -1,4 +1,4 @@
-import { Suspense, useEffect, useRef, useMemo } from 'react'
+import { Suspense, useEffect, useLayoutEffect, useRef, useMemo, useState } from 'react'
 import { useGLTF } from '@react-three/drei'
 import type { ThreeElements } from '@react-three/fiber'
 import * as THREE from 'three'
@@ -36,9 +36,33 @@ function SelectionOutline({ source }: { source: THREE.Object3D }) {
 
 type ContentPackInstanceVariant = 'floor' | 'wall' | 'prop'
 
+/** Semi-transparent colour overlay — clones the geometry with a translucent material. */
+function TintOverlay({ source, color }: { source: THREE.Object3D; color: string }) {
+  const overlay = useMemo(() => {
+    const mat = new THREE.MeshBasicMaterial({
+      color,
+      transparent: true,
+      opacity: 0.42,
+      depthWrite: false,
+      side: THREE.FrontSide,
+    })
+    const clone = source.clone(true)
+    clone.traverse((obj) => {
+      if (obj instanceof THREE.Mesh) {
+        obj.material = mat
+        obj.renderOrder = 1
+      }
+    })
+    return clone
+  }, [source, color])
+
+  return <primitive object={overlay} />
+}
+
 type ContentPackInstanceProps = ThreeElements['group'] & {
   assetId: string | null
   selected?: boolean
+  tint?: string
   variant: ContentPackInstanceVariant
   variantKey?: string
 }
@@ -46,6 +70,7 @@ type ContentPackInstanceProps = ThreeElements['group'] & {
 export function ContentPackInstance({
   assetId,
   selected = false,
+  tint,
   variant,
   variantKey,
   ...groupProps
@@ -64,7 +89,7 @@ export function ContentPackInstance({
   if (!assetPath) {
     return (
       <group {...groupProps}>
-        <FallbackMesh selected={selected} variant={variant} receiveShadow={receiveShadow} />
+        <FallbackMesh selected={selected} variant={variant} receiveShadow={receiveShadow} tint={tint} />
       </group>
     )
   }
@@ -73,7 +98,7 @@ export function ContentPackInstance({
     <Suspense
       fallback={
         <group {...groupProps}>
-          <FallbackMesh selected={selected} variant={variant} receiveShadow={receiveShadow} />
+          <FallbackMesh selected={selected} variant={variant} receiveShadow={receiveShadow} tint={tint} />
         </group>
       }
     >
@@ -83,6 +108,7 @@ export function ContentPackInstance({
           componentProps={getComponentProps(variantKey)}
           receiveShadow={receiveShadow}
           selected={selected}
+          tint={tint}
           {...groupProps}
         />
       ) : (
@@ -90,6 +116,7 @@ export function ContentPackInstance({
           assetPath={assetPath}
           receiveShadow={receiveShadow}
           selected={selected}
+          tint={tint}
           {...groupProps}
         />
       )}
@@ -105,11 +132,13 @@ function GLTFModel({
   assetPath,
   receiveShadow,
   selected,
+  tint,
   ...groupProps
 }: ThreeElements['group'] & {
   assetPath: string
   receiveShadow: boolean
   selected?: boolean
+  tint?: string
 }) {
   const gltf = useGLTF(assetPath)
   const scene = useMemo(() => {
@@ -127,6 +156,7 @@ function GLTFModel({
     <group {...groupProps}>
       <primitive object={scene} />
       {selected && <SelectionOutline source={scene} />}
+      {tint && <TintOverlay source={scene} color={tint} />}
     </group>
   )
 }
@@ -136,14 +166,22 @@ function ComponentAsset({
   componentProps,
   receiveShadow,
   selected,
+  tint,
   ...groupProps
 }: ThreeElements['group'] & {
   Component: ComponentType<ContentPackComponentProps>
   componentProps: ContentPackComponentProps
   receiveShadow: boolean
   selected?: boolean
+  tint?: string
 }) {
   const groupRef = useRef<THREE.Group>(null)
+  // Track mount so TintOverlay can access groupRef.current after first layout
+  const [mounted, setMounted] = useState(false)
+
+  useLayoutEffect(() => {
+    if (groupRef.current) setMounted(true)
+  }, [])
 
   useEffect(() => {
     groupRef.current?.traverse((obj) => {
@@ -158,21 +196,25 @@ function ComponentAsset({
     <group ref={groupRef} {...groupProps}>
       <Component {...componentProps} />
       {selected && groupRef.current && <SelectionOutline source={groupRef.current} />}
+      {tint && mounted && groupRef.current && <TintOverlay source={groupRef.current} color={tint} />}
     </group>
   )
 }
 
 function FallbackMesh({
   selected,
+  tint,
   variant,
   receiveShadow,
 }: {
   selected: boolean
+  tint?: string
   variant: ContentPackInstanceVariant
   receiveShadow: boolean
 }) {
-  const color =
+  const baseColor =
     variant === 'floor' ? '#34d399' : variant === 'wall' ? '#fbbf24' : '#7dd3fc'
+  const color = tint ?? baseColor
   const emissive =
     variant === 'floor' ? '#059669' : variant === 'wall' ? '#d97706' : '#0ea5e9'
   const geometry =

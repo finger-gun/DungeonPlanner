@@ -22,6 +22,12 @@ const Scene = lazy(() =>
   })),
 )
 
+const FpsOverlay = lazy(() =>
+  import('./components/canvas/FpsCounter').then((module) => ({
+    default: module.FpsOverlay,
+  })),
+)
+
 function RightPanel() {
   const tool = useDungeonStore((state) => state.tool)
   return (
@@ -213,6 +219,10 @@ function App() {
               {formatCount(paintedCellCount, 'room cell')} •{' '}
               {formatCount(propCount, 'prop')}
             </div>
+
+            <Suspense fallback={null}>
+              <FpsOverlay />
+            </Suspense>
           </section>
 
           {/* Right panel */}

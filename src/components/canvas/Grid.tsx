@@ -68,19 +68,25 @@ export function Grid({ size = 120 }: GridProps) {
   const paintedCellsRef = useRef(paintedCells)
   // Rotation index for floor-connected prop placement (0–3, each step = 90°)
   const [floorRotationIndex, setFloorRotationIndex] = useState(0)
+  // Flip toggle for wall-connected openings (false = front, true = back)
+  const [wallFlipped, setWallFlipped] = useState(false)
 
   useEffect(() => {
     paintedCellsRef.current = paintedCells
   }, [paintedCells])
 
-  // Reset rotation when switching prop asset
+  // Reset rotation/flip when switching asset
   useEffect(() => {
     setFloorRotationIndex(0)
-  }, [selectedPropAssetId])
+    setWallFlipped(false)
+  }, [selectedPropAssetId, selectedOpeningAssetId])
 
-  // R key rotates floor-connected props by 90° while in prop tool
+  // R key: rotates floor-connected assets; flips wall-connected openings 180°
   useEffect(() => {
-    if (tool !== 'prop') return
+    const isFloorOpening = tool === 'opening' &&
+      (selectedOpeningAsset?.metadata?.connectsTo ?? 'FLOOR') === 'FLOOR'
+    const isWallOpening = tool === 'opening' && !isFloorOpening
+    if (tool !== 'prop' && !isFloorOpening && !isWallOpening) return
     function onKeyDown(e: KeyboardEvent) {
       const active = document.activeElement
       if (
@@ -90,12 +96,13 @@ export function Grid({ size = 120 }: GridProps) {
       ) return
       if (e.key === 'r' || e.key === 'R') {
         e.preventDefault()
-        setFloorRotationIndex((prev) => (prev + 1) % 4)
+        if (isWallOpening) setWallFlipped((prev) => !prev)
+        else setFloorRotationIndex((prev) => (prev + 1) % 4)
       }
     }
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [tool])
+  }, [tool, selectedOpeningAsset])
 
   // Register non-passive handlers on the canvas so preventDefault() works for
   // context menu suppression and drag-selection prevention
@@ -217,6 +224,33 @@ export function Grid({ size = 120 }: GridProps) {
     setHoveredPoint(point)
 
     if (tool === 'opening') {
+      const isFloorOpening = (selectedOpeningAsset?.metadata?.connectsTo ?? 'FLOOR') === 'FLOOR'
+
+      if (isFloorOpening) {
+        // Stairs and other floor-connected openings use prop-style placement
+        const rawPlacement = selectedOpeningAsset
+          ? getPropPlacement(selectedOpeningAsset, point, paintedCells)
+          : null
+        const propPlacement = applyFloorRotation(rawPlacement, floorRotationIndex * (Math.PI / 2))
+
+        if (event.button === 2) {
+          if (propPlacement) removeObjectAtCell(propPlacement.anchorKey)
+          return
+        }
+        if (event.button !== 0 || !propPlacement) return
+
+        placeObject({
+          type: 'prop',
+          assetId: selectedOpeningAssetId,
+          position: propPlacement.position,
+          rotation: propPlacement.rotation,
+          props: { connector: propPlacement.connector, direction: propPlacement.direction },
+          cell: propPlacement.cell,
+          cellKey: propPlacement.anchorKey,
+        })
+        return
+      }
+
       const openingPlacement = selectedOpeningAsset
         ? getOpeningPlacement(selectedOpeningAsset, point, paintedCells)
         : null
@@ -239,6 +273,7 @@ export function Grid({ size = 120 }: GridProps) {
         assetId: selectedOpeningAssetId,
         wallKey: `${getCellKey(openingPlacement.cell)}:${openingPlacement.direction}`,
         width: openingPlacement.width,
+        flipped: wallFlipped,
       })
       return
     }
@@ -298,13 +333,9 @@ export function Grid({ size = 120 }: GridProps) {
   const activeCameraMode = useDungeonStore((state) => state.activeCameraMode)
   const isTopDown = activeCameraMode === 'top-down'
 
-  // Show overlay:
-  //   - Top-down view: always, full coverage (radius=10000)
-  //   - Editing tools (room/prop): cursor radius, any view
-  //   - Move tool in perspective/iso: hide (buttons live there; full coverage is confusing)
-  const showOverlay = showGrid && (isTopDown || !isMoveTool)
-  const overlayRadius  = isTopDown ? 10000 : 10
-  const overlayOpacity = isTopDown ? 0.08  : 0.04
+  // Unified grid: always shown when showGrid is on.
+  // Cursor reveal radius: huge in top-down (covers whole scene), medium otherwise.
+  const overlayRadius = isTopDown ? 10000 : 10
 
   return (
     <group>
@@ -328,18 +359,11 @@ export function Grid({ size = 120 }: GridProps) {
 
       <CursorLight centerRef={mousePosRef} activeRef={cursorActiveRef} />
 
-      {showOverlay && (
+      {showGrid && (
         <FloorGridOverlay
           centerRef={mousePosRef}
           radius={overlayRadius}
-          opacity={overlayOpacity}
-        />
-      )}
-
-      {showGrid && (
-        <gridHelper
-          args={[size, size / GRID_SIZE, '#50463c', '#2a2621']}
-          position={[0, 0.001, 0]}
+          size={size}
         />
       )}
 
@@ -350,21 +374,47 @@ export function Grid({ size = 120 }: GridProps) {
           previewCells={previewCells}
           strokeMode={strokeMode}
           tool={tool}
-          propPlacement={
-            tool === 'prop' && selectedPropAsset && hoveredPoint
-              ? applyFloorRotation(
-                  getPropPlacement(selectedPropAsset, hoveredPoint, paintedCells),
-                  floorRotationIndex * (Math.PI / 2),
-                )
+          propPlacement={(() => {
+            if (tool === 'prop' && selectedPropAsset && hoveredPoint)
+              return applyFloorRotation(
+                getPropPlacement(selectedPropAsset, hoveredPoint, paintedCells),
+                floorRotationIndex * (Math.PI / 2),
+              )
+            if (
+              tool === 'opening' &&
+              selectedOpeningAsset &&
+              hoveredPoint &&
+              (selectedOpeningAsset.metadata?.connectsTo ?? 'FLOOR') === 'FLOOR'
+            )
+              return applyFloorRotation(
+                getPropPlacement(selectedOpeningAsset, hoveredPoint, paintedCells),
+                floorRotationIndex * (Math.PI / 2),
+              )
+            return null
+          })()}
+          propAssetId={
+            tool === 'prop'
+              ? selectedPropAssetId
+              : tool === 'opening' &&
+                (selectedOpeningAsset?.metadata?.connectsTo ?? 'FLOOR') === 'FLOOR'
+              ? selectedOpeningAssetId
               : null
           }
-          propAssetId={selectedPropAssetId}
           openingPlacement={
-            tool === 'opening' && selectedOpeningAsset && hoveredPoint
+            tool === 'opening' &&
+            selectedOpeningAsset &&
+            hoveredPoint &&
+            (selectedOpeningAsset.metadata?.connectsTo ?? 'FLOOR') !== 'FLOOR'
               ? getOpeningPlacement(selectedOpeningAsset, hoveredPoint, paintedCells)
               : null
           }
-          openingAssetId={selectedOpeningAssetId}
+          openingAssetId={
+            tool === 'opening' &&
+            (selectedOpeningAsset?.metadata?.connectsTo ?? 'FLOOR') !== 'FLOOR'
+              ? selectedOpeningAssetId
+              : null
+          }
+          wallFlipped={wallFlipped}
         />
       )}
     </group>
@@ -381,6 +431,7 @@ function HoverPreview({
   propAssetId,
   openingPlacement,
   openingAssetId,
+  wallFlipped,
 }: {
   hoveredCell: SnappedGridPosition | null
   hoveredPoint: { x: number; y: number; z: number } | null
@@ -391,8 +442,10 @@ function HoverPreview({
   propAssetId: string | null
   openingPlacement: OpeningPlacement | null
   openingAssetId: string | null
+  wallFlipped: boolean
 }) {
-  if (tool === 'prop') {
+  // Prop tool OR floor-connected opening (e.g. stairs) — both use prop-style preview
+  if (tool === 'prop' || (tool === 'opening' && propAssetId)) {
     if (!hoveredCell || !hoveredPoint) return null
 
     const position = propPlacement?.position ?? [hoveredCell.position[0], 0, hoveredCell.position[2]]
@@ -411,15 +464,20 @@ function HoverPreview({
   if (tool === 'opening') {
     if (!hoveredPoint || !openingPlacement) return null
 
-    const { position, rotation, valid } = openingPlacement
+    const { position, valid } = openingPlacement
+    const rotation: [number, number, number] = wallFlipped
+      ? [openingPlacement.rotation[0], openingPlacement.rotation[1] + Math.PI, openingPlacement.rotation[2]]
+      : openingPlacement.rotation
 
     if (!valid) {
-      // Red fallback box for invalid placements
       return (
-        <mesh position={position} rotation={rotation}>
-          <boxGeometry args={[GRID_SIZE * 0.2, GRID_SIZE * 0.8, GRID_SIZE * 0.1]} />
-          <meshBasicMaterial color="#f87171" transparent opacity={0.5} />
-        </mesh>
+        <group position={position} rotation={rotation}>
+          <ContentPackInstance
+            assetId={openingAssetId}
+            variant="wall"
+            tint="#ef4444"
+          />
+        </group>
       )
     }
 

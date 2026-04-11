@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest'
-import { useDungeonStore } from './useDungeonStore'
+import { useDungeonStore, getOpeningSegments } from './useDungeonStore'
 
 describe('useDungeonStore history', () => {
   beforeEach(() => {
@@ -174,3 +174,256 @@ describe('useDungeonStore history', () => {
     expect(state.placedObjects[propId!]).toBeUndefined()
   })
 })
+
+// ── getOpeningSegments ────────────────────────────────────────────────────────
+
+describe('getOpeningSegments', () => {
+  it('returns the key itself for a 1-wide opening', () => {
+    expect(getOpeningSegments('3:2:north', 1)).toEqual(['3:2:north'])
+  })
+
+  it('expands a 3-wide N/S opening along X', () => {
+    // centre cell is 3:2, so segments should be 2:2, 3:2, 4:2
+    expect(getOpeningSegments('3:2:north', 3)).toEqual([
+      '2:2:north',
+      '3:2:north',
+      '4:2:north',
+    ])
+  })
+
+  it('expands a 3-wide E/W opening along Z', () => {
+    expect(getOpeningSegments('3:2:east', 3)).toEqual([
+      '3:1:east',
+      '3:2:east',
+      '3:3:east',
+    ])
+  })
+})
+
+// ── wall openings ─────────────────────────────────────────────────────────────
+
+describe('useDungeonStore wall openings', () => {
+  beforeEach(() => {
+    useDungeonStore.getState().reset()
+  })
+
+  it('places a wall opening and records it', () => {
+    const id = useDungeonStore.getState().placeOpening({
+      assetId: 'core.opening_door_wall_1',
+      wallKey: '0:0:north',
+      width: 1,
+      flipped: false,
+    })
+
+    const state = useDungeonStore.getState()
+    expect(id).toBeTruthy()
+    expect(state.wallOpenings[id!]).toMatchObject({
+      assetId: 'core.opening_door_wall_1',
+      wallKey: '0:0:north',
+      width: 1,
+      flipped: false,
+    })
+  })
+
+  it('placing an overlapping opening replaces the existing one', () => {
+    const first = useDungeonStore.getState().placeOpening({
+      assetId: 'core.opening_door_wall_1',
+      wallKey: '0:0:north',
+      width: 1,
+      flipped: false,
+    })
+
+    const second = useDungeonStore.getState().placeOpening({
+      assetId: 'core.opening_door_wall_1',
+      wallKey: '0:0:north',
+      width: 1,
+      flipped: true,
+    })
+
+    const state = useDungeonStore.getState()
+    expect(state.wallOpenings[first!]).toBeUndefined()
+    expect(state.wallOpenings[second!]).toBeDefined()
+    expect(Object.keys(state.wallOpenings)).toHaveLength(1)
+  })
+
+  it('removes an opening by id', () => {
+    const id = useDungeonStore.getState().placeOpening({
+      assetId: 'core.opening_door_wall_1',
+      wallKey: '1:1:south',
+      width: 1,
+      flipped: false,
+    })
+
+    useDungeonStore.getState().removeOpening(id!)
+    expect(useDungeonStore.getState().wallOpenings[id!]).toBeUndefined()
+  })
+
+  it('undo/redo works for placeOpening', () => {
+    const id = useDungeonStore.getState().placeOpening({
+      assetId: 'core.opening_door_wall_1',
+      wallKey: '0:0:north',
+      width: 1,
+      flipped: false,
+    })
+
+    useDungeonStore.getState().undo()
+    expect(useDungeonStore.getState().wallOpenings[id!]).toBeUndefined()
+
+    useDungeonStore.getState().redo()
+    expect(useDungeonStore.getState().wallOpenings[id!]).toBeDefined()
+  })
+
+  it('undo/redo works for removeOpening', () => {
+    const id = useDungeonStore.getState().placeOpening({
+      assetId: 'core.opening_door_wall_1',
+      wallKey: '0:0:north',
+      width: 1,
+      flipped: false,
+    })
+
+    useDungeonStore.getState().removeOpening(id!)
+    expect(useDungeonStore.getState().wallOpenings[id!]).toBeUndefined()
+
+    useDungeonStore.getState().undo()
+    expect(useDungeonStore.getState().wallOpenings[id!]).toBeDefined()
+  })
+})
+
+// ── floors ───────────────────────────────────────────────────────────────────
+
+describe('useDungeonStore floors', () => {
+  beforeEach(() => {
+    useDungeonStore.getState().newDungeon()
+  })
+
+  it('switchFloor saves active state and restores target snapshot', () => {
+    // Paint cells on the starting floor
+    useDungeonStore.getState().paintCells([[0, 0], [1, 0]])
+
+    const { floorOrder } = useDungeonStore.getState()
+    const groundId = floorOrder[0]
+
+    // Create a second floor manually via ensureAdjacentFloor
+    useDungeonStore.getState().ensureAdjacentFloor(
+      1, [0, 0], 'core.props_staircase_down',
+      [1, 0, 1], [0, 0, 0],
+    )
+
+    const upperFloorId = useDungeonStore.getState().floorOrder.find((id) => id !== groundId)!
+    expect(upperFloorId).toBeTruthy()
+
+    // Switch to upper floor — it should be empty except for the opposing staircase
+    useDungeonStore.getState().switchFloor(upperFloorId)
+    let state = useDungeonStore.getState()
+    expect(state.activeFloorId).toBe(upperFloorId)
+    expect(Object.keys(state.paintedCells)).toHaveLength(0)
+    expect(Object.keys(state.placedObjects)).toHaveLength(1) // opposing staircase
+
+    // Switch back — painted cells should be restored
+    useDungeonStore.getState().switchFloor(groundId)
+    state = useDungeonStore.getState()
+    expect(state.activeFloorId).toBe(groundId)
+    expect(Object.keys(state.paintedCells)).toHaveLength(2)
+  })
+
+  it('ensureAdjacentFloor creates a new floor with the opposing staircase', () => {
+    useDungeonStore.getState().ensureAdjacentFloor(
+      -1, [2, 3], 'core.props_staircase_up',
+      [5, 0, 7], [0, Math.PI, 0],
+    )
+
+    const state = useDungeonStore.getState()
+    const cellar = Object.values(state.floors).find((f) => f.level === -1)
+    expect(cellar).toBeDefined()
+    expect(cellar!.name).toBe('Cellar 1')
+
+    const staircase = Object.values(cellar!.snapshot.placedObjects)[0]
+    expect(staircase).toBeDefined()
+    expect(staircase.assetId).toBe('core.props_staircase_up')
+    expect(staircase.cell).toEqual([2, 3])
+    expect(cellar!.snapshot.occupancy['2:3:floor']).toBe(staircase.id)
+  })
+
+  it('ensureAdjacentFloor injects staircase into an existing inactive floor', () => {
+    // Create a floor at level 1
+    useDungeonStore.getState().ensureAdjacentFloor(
+      1, [0, 0], 'core.props_staircase_down',
+      [1, 0, 1], [0, 0, 0],
+    )
+    const firstId = useDungeonStore.getState().floorOrder.find(
+      (id) => useDungeonStore.getState().floors[id].level === 1,
+    )!
+
+    // Call again for the same level at a different cell
+    useDungeonStore.getState().ensureAdjacentFloor(
+      1, [4, 4], 'core.props_staircase_down',
+      [9, 0, 9], [0, 0, 0],
+    )
+
+    const state = useDungeonStore.getState()
+    // No duplicate floor should be created
+    const level1Floors = Object.values(state.floors).filter((f) => f.level === 1)
+    expect(level1Floors).toHaveLength(1)
+    expect(level1Floors[0].id).toBe(firstId)
+
+    // Both staircases should be in the snapshot
+    const placed = Object.values(level1Floors[0].snapshot.placedObjects)
+    expect(placed).toHaveLength(2)
+  })
+
+  it('ensureAdjacentFloor skips if target cell is already occupied', () => {
+    useDungeonStore.getState().ensureAdjacentFloor(
+      1, [0, 0], 'core.props_staircase_down',
+      [1, 0, 1], [0, 0, 0],
+    )
+    const before = useDungeonStore.getState().floorOrder.length
+
+    // Same cell again — should be a no-op
+    useDungeonStore.getState().ensureAdjacentFloor(
+      1, [0, 0], 'core.props_staircase_down',
+      [1, 0, 1], [0, 0, 0],
+    )
+
+    expect(useDungeonStore.getState().floorOrder).toHaveLength(before)
+    const floor1 = Object.values(useDungeonStore.getState().floors).find((f) => f.level === 1)!
+    expect(Object.keys(floor1.snapshot.placedObjects)).toHaveLength(1)
+  })
+})
+
+// ── newDungeon ────────────────────────────────────────────────────────────────
+
+describe('useDungeonStore newDungeon', () => {
+  beforeEach(() => {
+    useDungeonStore.getState().newDungeon()
+  })
+
+  it('clears all state back to a single empty ground floor', () => {
+    useDungeonStore.getState().paintCells([[0, 0], [1, 0]])
+    useDungeonStore.getState().placeObject({
+      type: 'prop', assetId: 'core.props_wall_torch',
+      position: [1, 0, 1], rotation: [0, 0, 0],
+      props: {}, cell: [0, 0], cellKey: '0:0',
+    })
+    useDungeonStore.getState().placeOpening({
+      assetId: 'core.opening_door_wall_1',
+      wallKey: '0:0:north', width: 1, flipped: false,
+    })
+    useDungeonStore.getState().ensureAdjacentFloor(
+      1, [0, 0], 'core.props_staircase_down',
+      [1, 0, 1], [0, 0, 0],
+    )
+
+    useDungeonStore.getState().newDungeon()
+
+    const state = useDungeonStore.getState()
+    expect(Object.keys(state.paintedCells)).toHaveLength(0)
+    expect(Object.keys(state.placedObjects)).toHaveLength(0)
+    expect(Object.keys(state.wallOpenings)).toHaveLength(0)
+    expect(state.history).toHaveLength(0)
+    expect(state.future).toHaveLength(0)
+    expect(state.floorOrder).toHaveLength(1)
+    expect(state.floors[state.activeFloorId].level).toBe(0)
+    expect(state.dungeonName).toBe('My Dungeon')
+  })
+})
+

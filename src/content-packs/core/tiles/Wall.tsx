@@ -1,13 +1,13 @@
 /* eslint-disable react-refresh/only-export-components */
 import { useMemo } from 'react'
 import { useGLTF } from '@react-three/drei'
-import wallAssetUrl from '../../assets/models/core/wall.glb'
-import wall001AssetUrl from '../../assets/models/core/wall_001.glb'
-import wall002AssetUrl from '../../assets/models/core/wall_002.glb'
-import wall003AssetUrl from '../../assets/models/core/wall_003.glb'
-import wall004AssetUrl from '../../assets/models/core/wall_004.glb'
-import wall005AssetUrl from '../../assets/models/core/wall_005.glb'
-import type { ContentPackAsset, ContentPackComponentProps } from '../types'
+import wallAssetUrl from '../../../assets/models/core/wall.glb'
+import wall001AssetUrl from '../../../assets/models/core/wall_001.glb'
+import wall002AssetUrl from '../../../assets/models/core/wall_002.glb'
+import wall003AssetUrl from '../../../assets/models/core/wall_003.glb'
+import wall004AssetUrl from '../../../assets/models/core/wall_004.glb'
+import wall005AssetUrl from '../../../assets/models/core/wall_005.glb'
+import type { ContentPackAsset, ContentPackComponentProps } from '../../types'
 
 // Adjust this to compensate for the authored pivot of the wall set.
 const WALL_PIVOT_OFFSET = [0, 0, 0] as const

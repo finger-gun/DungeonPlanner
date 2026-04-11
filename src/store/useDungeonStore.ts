@@ -8,7 +8,6 @@ import { serializeDungeon, deserializeDungeon } from './serialization'
 export type DungeonTool = 'move' | 'room' | 'prop' | 'opening' | 'select'
 export type CameraMode = 'orbit'
 export type CameraPreset = 'perspective' | 'isometric' | 'top-down'
-export type GroundPlane = 'black' | 'green'
 export type SelectedAssetIds = Record<ContentPackCategory, string | null>
 
 export type FloorRecord = {
@@ -51,10 +50,12 @@ export type OpeningRecord = {
   /** Anchor wall segment key — center of the span (format: "x:z:direction") */
   wallKey: string
   width: 1 | 2 | 3
+  /** Whether the opening is flipped 180° (front/back swap) */
+  flipped?: boolean
   layerId: string
 }
 
-type PlaceOpeningInput = Pick<OpeningRecord, 'assetId' | 'wallKey' | 'width'>
+type PlaceOpeningInput = Pick<OpeningRecord, 'assetId' | 'wallKey' | 'width' | 'flipped'>
 
 export type DungeonObjectRecord = {
   id: string
@@ -105,8 +106,6 @@ type DungeonState = DungeonSnapshot & {
   sceneLighting: SceneLighting
   postProcessing: PostProcessingSettings
   showGrid: boolean
-  showGroundPlane: boolean
-  groundPlane: GroundPlane
   activeCameraMode: CameraPreset
   cameraPreset: CameraPreset | null
   history: DungeonSnapshot[]
@@ -124,13 +123,14 @@ type DungeonState = DungeonSnapshot & {
   setSceneLightingIntensity: (intensity: number) => void
   setPostProcessing: (settings: Partial<PostProcessingSettings>) => void
   setShowGrid: (show: boolean) => void
-  setShowGroundPlane: (show: boolean) => void
-  setGroundPlane: (plane: GroundPlane) => void
   setCameraPreset: (preset: CameraPreset) => void
   clearCameraPreset: () => void
+  fpsLimit: 0 | 30 | 60 | 120
+  setFpsLimit: (limit: 0 | 30 | 60 | 120) => void
   undo: () => void
   redo: () => void
   reset: () => void
+  newDungeon: () => void
   // Layer actions
   addLayer: (name: string) => string
   removeLayer: (id: string) => void
@@ -419,8 +419,7 @@ export const useDungeonStore = create<DungeonState>()(
   sceneLighting: { intensity: 1 },
   postProcessing: { enabled: false, focusDistance: 0.5, focalLength: 3, bokehScale: 2 },
   showGrid: true,
-  showGroundPlane: true,
-  groundPlane: 'black',
+  fpsLimit: 60 as 0 | 30 | 60 | 120,
   activeCameraMode: 'perspective',
   cameraPreset: null,
   history: [],
@@ -710,11 +709,8 @@ export const useDungeonStore = create<DungeonState>()(
   setShowGrid: (show) => {
     set((state) => ({ ...state, showGrid: show }))
   },
-  setShowGroundPlane: (show) => {
-    set((state) => ({ ...state, showGroundPlane: show }))
-  },
-  setGroundPlane: (plane) => {
-    set((state) => ({ ...state, groundPlane: plane }))
+  setFpsLimit: (limit) => {
+    set((state) => ({ ...state, fpsLimit: limit }))
   },
   setCameraPreset: (preset) => {
     set((state) => ({ ...state, cameraPreset: preset, activeCameraMode: preset }))
@@ -768,7 +764,43 @@ export const useDungeonStore = create<DungeonState>()(
     }))
   },
 
-  // ── Layer actions ──────────────────────────────────────────────────────────
+  newDungeon: () => {
+    const INITIAL_ID = 'floor-1'
+    const fresh = createEmptySnapshot()
+    set({
+      // Snapshot (rooms, cells, objects, etc.)
+      ...fresh,
+      // UI / tool state
+      isPaintingStrokeActive: false,
+      cameraMode: 'orbit',
+      activeCameraMode: 'perspective',
+      cameraPreset: 'perspective', // triggers camera to home position
+      // Settings reset to defaults
+      sceneLighting: { intensity: 1 },
+      postProcessing: { enabled: false, focusDistance: 0.5, focalLength: 3, bokehScale: 2 },
+      showGrid: true,
+      // Undo/redo cleared
+      history: [],
+      future: [],
+      // Floors reset to single ground floor
+      floors: {
+        [INITIAL_ID]: {
+          id: INITIAL_ID,
+          name: 'Ground Floor',
+          level: 0,
+          snapshot: cloneSnapshot(fresh),
+          history: [],
+          future: [],
+        },
+      },
+      floorOrder: [INITIAL_ID],
+      activeFloorId: INITIAL_ID,
+      // Dungeon meta
+      dungeonName: 'My Dungeon',
+    } as unknown as Parameters<typeof set>[0])
+  },
+
+
   addLayer: (name) => {
     const id = createObjectId()
     set((current) => {
@@ -1096,9 +1128,65 @@ export const useDungeonStore = create<DungeonState>()(
 
   ensureAdjacentFloor: (targetLevel, cell, opposingAssetId, position, rotation) => {
     const state = get()
-    // Do nothing if a floor at this level already exists
-    if (Object.values(state.floors).some((f) => f.level === targetLevel)) return
+    const cellKey = `${getCellKey(cell)}:floor`
+    const existingFloor = Object.values(state.floors).find((f) => f.level === targetLevel)
 
+    if (existingFloor) {
+      // Floor already exists — add the opposing staircase if nothing occupies that cell yet.
+      // For the active floor the live state is the source of truth; for others use the snapshot.
+      const isActive = existingFloor.id === state.activeFloorId
+      if (isActive) {
+        if (state.occupancy[cellKey]) return
+        const staircaseId = createObjectId()
+        set((current) => ({
+          ...current,
+          placedObjects: {
+            ...current.placedObjects,
+            [staircaseId]: {
+              id: staircaseId,
+              type: 'prop',
+              assetId: opposingAssetId,
+              position: [...position] as [number, number, number],
+              rotation: [...rotation] as [number, number, number],
+              props: { connector: 'FLOOR', direction: null },
+              cell: [...cell] as GridCell,
+              cellKey,
+              layerId: DEFAULT_LAYER_ID,
+            },
+          },
+          occupancy: { ...current.occupancy, [cellKey]: staircaseId },
+        }))
+      } else {
+        if (existingFloor.snapshot.occupancy[cellKey]) return
+        const staircaseId = createObjectId()
+        const updatedSnapshot = cloneSnapshot(existingFloor.snapshot)
+        updatedSnapshot.placedObjects[staircaseId] = {
+          id: staircaseId,
+          type: 'prop',
+          assetId: opposingAssetId,
+          position: [...position] as [number, number, number],
+          rotation: [...rotation] as [number, number, number],
+          props: { connector: 'FLOOR', direction: null },
+          cell: [...cell] as GridCell,
+          cellKey,
+          layerId: DEFAULT_LAYER_ID,
+        }
+        updatedSnapshot.occupancy[cellKey] = staircaseId
+        set((current) => ({
+          ...current,
+          floors: {
+            ...current.floors,
+            [existingFloor.id]: {
+              ...current.floors[existingFloor.id],
+              snapshot: updatedSnapshot,
+            },
+          },
+        }))
+      }
+      return
+    }
+
+    // Floor doesn't exist yet — create it with the opposing staircase pre-placed.
     const id = createObjectId()
     const defaultName =
       targetLevel < 0 ? `Cellar ${Math.abs(targetLevel)}`
@@ -1107,7 +1195,6 @@ export const useDungeonStore = create<DungeonState>()(
 
     const newSnapshot = createEmptySnapshot()
     const staircaseId = createObjectId()
-    const cellKey = `${getCellKey(cell)}:floor`
     newSnapshot.placedObjects[staircaseId] = {
       id: staircaseId,
       type: 'prop',
@@ -1135,7 +1222,6 @@ export const useDungeonStore = create<DungeonState>()(
         },
       },
       floorOrder: [...current.floorOrder, id],
-      // activeFloorId unchanged — user stays on current floor
     }))
   },
 
@@ -1158,6 +1244,7 @@ export const useDungeonStore = create<DungeonState>()(
         assetId: input.assetId,
         wallKey: input.wallKey,
         width: input.width,
+        flipped: input.flipped ?? false,
         layerId: current.activeLayerId,
       }
       return {
@@ -1204,7 +1291,6 @@ export const useDungeonStore = create<DungeonState>()(
       name: state.dungeonName,
       sceneLighting: state.sceneLighting,
       postProcessing: state.postProcessing,
-      groundPlane: state.groundPlane,
       layers: state.layers,
       layerOrder: state.layerOrder,
       activeLayerId: state.activeLayerId,
@@ -1264,12 +1350,11 @@ export const useDungeonStore = create<DungeonState>()(
         nextRoomNumber: state.nextRoomNumber,
         sceneLighting: state.sceneLighting,
         postProcessing: state.postProcessing,
-        groundPlane: state.groundPlane,
-        showGroundPlane: state.showGroundPlane,
         selectedAssetIds: state.selectedAssetIds,
         floors: state.floors,
         floorOrder: state.floorOrder,
         activeFloorId: state.activeFloorId,
+        fpsLimit: state.fpsLimit,
       }),
     },
   ),

@@ -1,8 +1,8 @@
 /* eslint-disable react-refresh/only-export-components */
 import { useMemo } from 'react'
 import { useGLTF } from '@react-three/drei'
-import propsPillarAssetUrl from '../../assets/models/core/pillar.glb'
-import type { ContentPackAsset, ContentPackComponentProps } from '../types'
+import propsPillarAssetUrl from '../../../assets/models/core/pillar.glb'
+import type { ContentPackAsset, ContentPackComponentProps } from '../../types'
 
 // Adjust this to compensate for the authored pivot of the prop.
 const PROP_PIVOT_OFFSET = [0, 0, 0] as const

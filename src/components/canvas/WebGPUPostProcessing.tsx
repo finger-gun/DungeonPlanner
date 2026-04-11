@@ -28,17 +28,29 @@ export function WebGPUPostProcessing() {
   const settings  = useDungeonStore((state) => state.postProcessing)
   const selection = useDungeonStore((state) => state.selection)
 
-  // Keep layer-31 membership in sync with the current selection
+  // Track previous selection so we can disable layer 31 on it without a full scene.traverse()
+  const prevSelectionRef = useRef<string | null>(null)
+
+  // Keep layer-31 membership in sync with the current selection.
+  // Uses the object registry for O(1) lookup instead of scene.traverse() for O(n).
   useEffect(() => {
-    scene.traverse((obj) => {
-      if ((obj as THREE.Mesh).isMesh) (obj as any).layers.disable(SELECTION_OUTLINE_LAYER)
-    })
-    if (selection) {
-      getRegisteredObject(selection)?.traverse((obj) => {
-        if ((obj as THREE.Mesh).isMesh) (obj as any).layers.enable(SELECTION_OUTLINE_LAYER)
-      })
+    const prev = prevSelectionRef.current
+    if (prev !== selection) {
+      // Disable outline on previously selected object
+      if (prev) {
+        getRegisteredObject(prev)?.traverse((obj) => {
+          if ((obj as THREE.Mesh).isMesh) (obj as any).layers.disable(SELECTION_OUTLINE_LAYER)
+        })
+      }
+      // Enable outline on newly selected object
+      if (selection) {
+        getRegisteredObject(selection)?.traverse((obj) => {
+          if ((obj as THREE.Mesh).isMesh) (obj as any).layers.enable(SELECTION_OUTLINE_LAYER)
+        })
+      }
+      prevSelectionRef.current = selection
     }
-  }, [selection, scene])
+  }, [selection])
 
   // Build / rebuild the TSL pipeline when renderer / scene / camera / size change
   useEffect(() => {
@@ -77,6 +89,13 @@ export function WebGPUPostProcessing() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [renderer, scene, camera, size])
 
+  // Update shader uniforms only when settings actually change — not every frame.
+  useEffect(() => {
+    focusCenterUniform.current.value = settings.focusDistance
+    focusRangeUniform.current.value  = Math.max(0.02, settings.focalLength / 30)
+    blurRadiusUniform.current.value  = settings.bokehScale * 4
+  }, [settings.focusDistance, settings.focalLength, settings.bokehScale])
+
   // Priority=1: R3F skips its own gl.render(); we drive the frame.
   useFrame(({ camera: cam }) => {
     if (!postProcessingRef.current) return
@@ -93,10 +112,6 @@ export function WebGPUPostProcessing() {
       oc.projectionMatrix.copy(src.projectionMatrix)
       oc.projectionMatrixInverse.copy(src.projectionMatrixInverse)
     }
-
-    focusCenterUniform.current.value = settings.focusDistance
-    focusRangeUniform.current.value  = Math.max(0.02, settings.focalLength / 30)
-    blurRadiusUniform.current.value  = settings.bokehScale * 4
 
     postProcessingRef.current.render()
   }, 1)

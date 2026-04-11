@@ -1,7 +1,9 @@
-import { useRef } from 'react'
+import { useRef, useState, useEffect } from 'react'
 import {
   Box,
   DoorOpen,
+  FolderOpen,
+  FilePlus2,
   Download,
   Blocks,
   MousePointer2,
@@ -27,22 +29,6 @@ export function EditorToolbar() {
   const redo = useDungeonStore((state) => state.redo)
   const historyLength = useDungeonStore((state) => state.history.length)
   const futureLength = useDungeonStore((state) => state.future.length)
-  const downloadDungeon = useDungeonStore((state) => state.downloadDungeon)
-  const loadDungeon = useDungeonStore((state) => state.loadDungeon)
-  const fileInputRef = useRef<HTMLInputElement>(null)
-
-  function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0]
-    if (!file) return
-    const reader = new FileReader()
-    reader.onload = (ev) => {
-      const json = ev.target?.result
-      if (typeof json === 'string') loadDungeon(json)
-    }
-    reader.readAsText(file)
-    // Reset so the same file can be loaded again
-    e.target.value = ''
-  }
 
   return (
     <div className="flex h-full flex-col items-center justify-between border-r border-stone-800/80 bg-stone-950/90 py-4 backdrop-blur">
@@ -75,31 +61,9 @@ export function EditorToolbar() {
         </div>
       </div>
 
-      {/* Undo / Redo + Save / Load at bottom */}
+      {/* File menu + Undo/Redo at bottom */}
       <div className="flex flex-col items-center gap-1">
-        <button
-          type="button"
-          title="Download dungeon"
-          onClick={downloadDungeon}
-          className="flex h-10 w-10 items-center justify-center rounded-xl text-stone-500 transition hover:bg-stone-800 hover:text-stone-200"
-        >
-          <Download size={16} strokeWidth={1.5} />
-        </button>
-        <button
-          type="button"
-          title="Load dungeon from file"
-          onClick={() => fileInputRef.current?.click()}
-          className="flex h-10 w-10 items-center justify-center rounded-xl text-stone-500 transition hover:bg-stone-800 hover:text-stone-200"
-        >
-          <Upload size={16} strokeWidth={1.5} />
-        </button>
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept=".json,.dungeon.json"
-          className="hidden"
-          onChange={handleFileChange}
-        />
+        <FileMenuButton />
         <div className="my-1 h-px w-6 bg-stone-800" />
         <button
           type="button"
@@ -123,3 +87,113 @@ export function EditorToolbar() {
     </div>
   )
 }
+
+// ── File menu ─────────────────────────────────────────────────────────────────
+
+function FileMenuButton() {
+  const [open, setOpen] = useState(false)
+  const [confirmNew, setConfirmNew] = useState(false)
+  const menuRef = useRef<HTMLDivElement>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+
+  const downloadDungeon = useDungeonStore((s) => s.downloadDungeon)
+  const loadDungeon = useDungeonStore((s) => s.loadDungeon)
+  const newDungeon = useDungeonStore((s) => s.newDungeon)
+
+  // Close on outside click
+  useEffect(() => {
+    if (!open) return
+    function onDown(e: MouseEvent) {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setOpen(false)
+        setConfirmNew(false)
+      }
+    }
+    document.addEventListener('mousedown', onDown)
+    return () => document.removeEventListener('mousedown', onDown)
+  }, [open])
+
+  function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    const reader = new FileReader()
+    reader.onload = (ev) => {
+      const json = ev.target?.result
+      if (typeof json === 'string') loadDungeon(json)
+    }
+    reader.readAsText(file)
+    e.target.value = ''
+    setOpen(false)
+  }
+
+  function handleNew() {
+    if (!confirmNew) { setConfirmNew(true); return }
+    newDungeon()
+    setOpen(false)
+    setConfirmNew(false)
+  }
+
+  return (
+    <div ref={menuRef} className="relative">
+      <button
+        type="button"
+        title="File"
+        onClick={() => { setOpen((v) => !v); setConfirmNew(false) }}
+        className={`flex h-10 w-10 items-center justify-center rounded-xl transition ${
+          open ? 'bg-stone-800 text-stone-200' : 'text-stone-500 hover:bg-stone-800 hover:text-stone-200'
+        }`}
+      >
+        <FolderOpen size={16} strokeWidth={1.5} />
+      </button>
+
+      {open && (
+        <div className="absolute bottom-0 left-14 z-50 w-44 rounded-2xl border border-stone-700/60 bg-stone-900 py-1.5 shadow-xl">
+          {/* New */}
+          <button
+            type="button"
+            onClick={handleNew}
+            className={`flex w-full items-center gap-3 px-3 py-2 text-left text-sm transition ${
+              confirmNew
+                ? 'bg-red-900/40 text-red-300 hover:bg-red-900/60'
+                : 'text-stone-300 hover:bg-stone-800'
+            }`}
+          >
+            <FilePlus2 size={14} strokeWidth={1.5} className="shrink-0" />
+            {confirmNew ? 'Confirm — clear all?' : 'New Dungeon'}
+          </button>
+
+          <div className="my-1 mx-3 h-px bg-stone-800" />
+
+          {/* Save */}
+          <button
+            type="button"
+            onClick={() => { downloadDungeon(); setOpen(false) }}
+            className="flex w-full items-center gap-3 px-3 py-2 text-left text-sm text-stone-300 transition hover:bg-stone-800"
+          >
+            <Download size={14} strokeWidth={1.5} className="shrink-0" />
+            Save Dungeon
+          </button>
+
+          {/* Load */}
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            className="flex w-full items-center gap-3 px-3 py-2 text-left text-sm text-stone-300 transition hover:bg-stone-800"
+          >
+            <Upload size={14} strokeWidth={1.5} className="shrink-0" />
+            Load Dungeon
+          </button>
+
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".json,.dungeon.json"
+            className="hidden"
+            onChange={handleFileChange}
+          />
+        </div>
+      )}
+    </div>
+  )
+}
+

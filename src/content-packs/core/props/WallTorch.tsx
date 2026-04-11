@@ -1,8 +1,8 @@
 /* eslint-disable react-refresh/only-export-components */
 import { useMemo } from 'react'
 import { useGLTF } from '@react-three/drei'
-import propsWallTorchAssetUrl from '../../assets/models/core/wall_torch.glb'
-import type { ContentPackAsset, ContentPackComponentProps } from '../types'
+import propsWallTorchAssetUrl from '../../../assets/models/core/wall_torch.glb'
+import type { ContentPackAsset, ContentPackComponentProps } from '../../types'
 
 // Adjust this to compensate for the authored pivot of the prop.
 const PROP_PIVOT_OFFSET = [0, 1, 0] as const

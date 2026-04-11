@@ -65,3 +65,8 @@ export function getBuildYOffset(cellKey: string, now: number, extraDelay = 0): n
 export function hasActiveBuildAnimations(): boolean {
   return registry.size > 0
 }
+
+/** True when the given cell still has an active (not yet completed) animation entry. */
+export function isAnimationActive(cellKey: string): boolean {
+  return registry.has(cellKey)
+}

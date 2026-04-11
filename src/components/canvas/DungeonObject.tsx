@@ -1,4 +1,4 @@
-import { useRef, useLayoutEffect } from 'react'
+import { memo, useRef, useLayoutEffect } from 'react'
 import { useFrame, type ThreeEvent } from '@react-three/fiber'
 import type { Group, PointLight } from 'three'
 import { useDungeonStore, type DungeonObjectRecord } from '../../store/useDungeonStore'
@@ -9,7 +9,7 @@ import { registerObject, unregisterObject } from './objectRegistry'
 
 type DungeonObjectProps = { object: DungeonObjectRecord }
 
-export function DungeonObject({ object }: DungeonObjectProps) {
+export const DungeonObject = memo(function DungeonObject({ object }: DungeonObjectProps) {
   const selection = useDungeonStore((state) => state.selection)
   const selectObject = useDungeonStore((state) => state.selectObject)
   const removeObject = useDungeonStore((state) => state.removeObject)
@@ -61,7 +61,7 @@ export function DungeonObject({ object }: DungeonObjectProps) {
       {light && <PropPointLight light={light} />}
     </group>
   )
-}
+})
 
 function PropPointLight({ light }: { light: PropLight }) {
   const ref = useRef<PointLight>(null)

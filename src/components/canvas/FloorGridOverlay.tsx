@@ -3,34 +3,40 @@ import { useFrame } from '@react-three/fiber'
 import * as THREE from 'three'
 import { MeshBasicNodeMaterial } from 'three/webgpu'
 import {
+  abs,
   float,
   fract,
   length,
+  max,
   min,
+  mix,
   positionWorld,
   smoothstep,
   uniform,
   vec2,
+  vec3,
   vec4,
 } from 'three/tsl'
 import { useDungeonStore } from '../../store/useDungeonStore'
 import { GRID_SIZE, cellToWorldPosition } from '../../hooks/useSnapToGrid'
 
+// Just above the tallest floor tile model (~0.244 measured).
+// depthTest:true at this height → test passes on floor tiles AND in empty void,
+// but tall geometry (walls, props) occludes the grid.
+const GRID_Y = 0.270
+
 const MAX_INSTANCES = 4096
-const OVERLAY_Y = 0.26  // just above the tallest floor model geometry (measured max: 0.244)
 
 type Props = {
-  /** XZ world-space cursor position — updated via pointer move */
   centerRef: React.MutableRefObject<THREE.Vector2>
-  /** Reveal radius in world units (use a very large value to show all cells) */
+  size?: number
   radius?: number
-  /** Opacity of grid lines, 0–1 */
-  opacity?: number
 }
 
-export function FloorGridOverlay({ centerRef, radius = 3.5, opacity = 0.6 }: Props) {
+export function FloorGridOverlay({ centerRef, size = 120, radius = 10 }: Props) {
   const paintedCells = useDungeonStore((state) => state.paintedCells)
-  const layers = useDungeonStore((state) => state.layers)
+  const layers       = useDungeonStore((state) => state.layers)
+
   const cells = useMemo(
     () =>
       Object.values(paintedCells)
@@ -39,73 +45,113 @@ export function FloorGridOverlay({ centerRef, radius = 3.5, opacity = 0.6 }: Pro
     [paintedCells, layers],
   )
 
-  const meshRef = useRef<THREE.InstancedMesh>(null)
-  const dummy = useMemo(() => new THREE.Object3D(), [])
+  // ── Base grid material (full-coverage plane) ─────────────────────────────
+  // Dark grid lines everywhere + extra-thick axis lines at X=0 / Z=0.
+  // No cursor glow — that lives on the instanced layer below.
+  const baseMat = useMemo(() => {
+    const gridSizeU  = uniform(GRID_SIZE)
+    const lineWidthU = uniform(0.022)   // fraction of cell size
+    const axisWidthU = uniform(0.09)    // world-space half-width of X=0 / Z=0 lines
 
-  // Flat plane geometry — pre-rotated to lie on the XZ plane
-  const geometry = useMemo(() => {
+    const worldXZ = vec2(positionWorld.x, positionWorld.z)
+
+    // Regular grid lines (edge detection in cell UV space)
+    const cellUV     = fract(worldXZ.div(gridSizeU))
+    const distToEdge = min(cellUV, cellUV.oneMinus())
+    const minDist    = distToEdge.x.min(distToEdge.y)
+    const gridMask   = float(1.0).sub(
+      smoothstep(lineWidthU.mul(float(0.4)), lineWidthU, minDist),
+    )
+
+    // Thick axis lines in world space
+    const onAxisX = float(1.0).sub(
+      smoothstep(axisWidthU.mul(float(0.3)), axisWidthU, abs(positionWorld.x)),
+    )
+    const onAxisZ = float(1.0).sub(
+      smoothstep(axisWidthU.mul(float(0.3)), axisWidthU, abs(positionWorld.z)),
+    )
+    const axisMask = onAxisX.max(onAxisZ)
+
+    // Colors: dim for regular lines, brighter warm for axis
+    const gridColor  = vec3(float(0.165), float(0.149), float(0.129)) // #2a2621
+    const axisColor  = vec3(float(0.28),  float(0.23),  float(0.17))  // lighter warm
+    const lineColor  = mix(gridColor, axisColor, axisMask)
+
+    const gridAlpha  = gridMask.mul(float(0.18))
+    const axisAlpha  = axisMask.mul(float(0.28))
+    const alpha      = max(gridAlpha, axisAlpha)
+
+    const mat = new MeshBasicNodeMaterial({
+      transparent: true,
+      depthWrite:  false,
+      depthTest:   true,
+      side: THREE.DoubleSide,
+    })
+    mat.colorNode = vec4(lineColor.x, lineColor.y, lineColor.z, alpha)
+    return mat
+  }, [])
+
+  // ── Cursor-glow material (instanced, per painted cell) ───────────────────
+  // Warm amber brightening that follows the cursor — only where floor tiles exist.
+  const { glowMat, mousePosU, revealRadiusU } = useMemo(() => {
+    const mPos = uniform(new THREE.Vector2(0, 0))
+    const rRad = uniform(10.0)
+
+    const gridSizeU  = uniform(GRID_SIZE)
+    const lineWidthU = uniform(0.022)
+
+    const worldXZ    = vec2(positionWorld.x, positionWorld.z)
+    const cellUV     = fract(worldXZ.div(gridSizeU))
+    const distToEdge = min(cellUV, cellUV.oneMinus())
+    const minDist    = distToEdge.x.min(distToEdge.y)
+    const gridMask   = float(1.0).sub(
+      smoothstep(lineWidthU.mul(float(0.4)), lineWidthU, minDist),
+    )
+
+    const dist   = length(worldXZ.sub(mPos))
+    const reveal = float(1.0).sub(
+      smoothstep(rRad.mul(float(0.55)), rRad, dist),
+    )
+
+    const nearColor = vec3(float(0.42), float(0.34), float(0.22))
+    const alpha     = gridMask.mul(reveal).mul(float(0.18))
+
+    const mat = new MeshBasicNodeMaterial({
+      transparent: true,
+      depthWrite:  false,
+      depthTest:   true,
+      side: THREE.DoubleSide,
+    })
+    mat.colorNode = vec4(nearColor.x, nearColor.y, nearColor.z, alpha)
+    return { glowMat: mat, mousePosU: mPos, revealRadiusU: rRad }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  useEffect(() => { revealRadiusU.value = radius }, [radius, revealRadiusU])
+
+  // ── Geometry ─────────────────────────────────────────────────────────────
+  const fullGeo = useMemo(() => {
+    const geo = new THREE.PlaneGeometry(size, size)
+    geo.rotateX(-Math.PI / 2)
+    return geo
+  }, [size])
+
+  const cellGeo = useMemo(() => {
     const geo = new THREE.PlaneGeometry(GRID_SIZE, GRID_SIZE)
     geo.rotateX(-Math.PI / 2)
     return geo
   }, [])
 
-  // TSL material — created once, updated via uniforms
-  const { material, mousePosU, revealRadiusU, lineOpacityU } = useMemo(() => {
-    const gridSizeU      = uniform(GRID_SIZE)
-    const lineWidthU     = uniform(0.010)
-    const lineOpacityU_  = uniform(opacity)
-    const mousePosU_     = uniform(new THREE.Vector2(0, 0))
-    const revealRadiusU_ = uniform(radius)
+  // ── Instance matrices for glow tiles ─────────────────────────────────────
+  const meshRef = useRef<THREE.InstancedMesh>(null)
+  const dummy   = useMemo(() => new THREE.Object3D(), [])
 
-    // World-space XZ of this fragment
-    const worldXZ = vec2(positionWorld.x, positionWorld.z)
-
-    // Grid lines: distance from nearest cell edge on each axis
-    const cellUV     = fract(worldXZ.div(gridSizeU))
-    const distToEdge = min(cellUV, cellUV.oneMinus())
-    const minDist    = distToEdge.x.min(distToEdge.y)
-    const onLine     = float(1).sub(
-      smoothstep(lineWidthU, lineWidthU.add(float(0.005)), minDist),
-    )
-
-    // Soft radial reveal around cursor position
-    const mouseDist  = length(worldXZ.sub(mousePosU_))
-    const radialMask = float(1).sub(
-      smoothstep(revealRadiusU_.mul(float(0.7)), revealRadiusU_, mouseDist),
-    )
-
-    const alpha = onLine.mul(radialMask).mul(lineOpacityU_)
-
-    const mat = new MeshBasicNodeMaterial({
-      transparent: true,
-      depthWrite: false,
-      depthTest: true,
-      side: THREE.DoubleSide,
-    })
-    // colorNode with alpha in w component — MeshBasicNodeMaterial respects vec4 alpha when transparent
-    mat.colorNode = vec4(float(0.88), float(0.74), float(0.48), alpha)
-
-    return {
-      material: mat,
-      mousePosU: mousePosU_,
-      revealRadiusU: revealRadiusU_,
-      lineOpacityU: lineOpacityU_,
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
-
-  // Sync prop changes to uniforms
-  useEffect(() => { revealRadiusU.value = radius }, [radius, revealRadiusU])
-  useEffect(() => { lineOpacityU.value = opacity }, [opacity, lineOpacityU])
-
-  // Rebuild instance matrices whenever painted cells change
   useEffect(() => {
     const mesh = meshRef.current
     if (!mesh) return
-
     cells.forEach((cell, i) => {
       const [x, , z] = cellToWorldPosition(cell)
-      dummy.position.set(x, OVERLAY_Y, z)
+      dummy.position.set(x, GRID_Y, z)
       dummy.updateMatrix()
       mesh.setMatrixAt(i, dummy.matrix)
     })
@@ -113,19 +159,27 @@ export function FloorGridOverlay({ centerRef, radius = 3.5, opacity = 0.6 }: Pro
     mesh.instanceMatrix.needsUpdate = true
   }, [cells, dummy])
 
-  // Push cursor position into the shader every frame — zero React overhead
-  useFrame(() => {
-    mousePosU.value.copy(centerRef.current)
-  })
-
-  if (cells.length === 0) return null
+  useFrame(() => { mousePosU.value.copy(centerRef.current) })
 
   return (
-    <instancedMesh
-      ref={meshRef}
-      args={[geometry, material as unknown as THREE.Material, MAX_INSTANCES]}
-      frustumCulled={false}
-      renderOrder={1}
-    />
+    <>
+      {/* Full-coverage base: dark grid + thick axes */}
+      <mesh
+        geometry={fullGeo}
+        material={baseMat as unknown as THREE.Material}
+        position={[0, GRID_Y, 0]}
+        renderOrder={1}
+        frustumCulled={false}
+      />
+      {/* Cursor glow: only on painted floor cells, renders on top of base */}
+      {cells.length > 0 && (
+        <instancedMesh
+          ref={meshRef}
+          args={[cellGeo, glowMat as unknown as THREE.Material, MAX_INSTANCES]}
+          frustumCulled={false}
+          renderOrder={2}
+        />
+      )}
+    </>
   )
 }

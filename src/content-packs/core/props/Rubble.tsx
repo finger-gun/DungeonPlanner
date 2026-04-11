@@ -1,12 +1,12 @@
 /* eslint-disable react-refresh/only-export-components */
 import { useMemo } from 'react'
 import { useGLTF } from '@react-three/drei'
-import rubbleAssetUrl from '../../assets/models/core/rubble.glb'
-import rubble001AssetUrl from '../../assets/models/core/rubble_001.glb'
-import rubble002AssetUrl from '../../assets/models/core/rubble_002.glb'
-import rubble003AssetUrl from '../../assets/models/core/rubble_003.glb'
+import rubbleAssetUrl from '../../../assets/models/core/rubble.glb'
+import rubble001AssetUrl from '../../../assets/models/core/rubble_001.glb'
+import rubble002AssetUrl from '../../../assets/models/core/rubble_002.glb'
+import rubble003AssetUrl from '../../../assets/models/core/rubble_003.glb'
 
-import type { ContentPackAsset, ContentPackComponentProps } from '../types'
+import type { ContentPackAsset, ContentPackComponentProps } from '../../types'
 
 // Adjust this to compensate for the authored pivot of the prop.
 const PROP_PIVOT_OFFSET = [0, 0.4, 0] as const

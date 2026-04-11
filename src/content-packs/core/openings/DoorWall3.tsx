@@ -1,8 +1,8 @@
 /* eslint-disable react-refresh/only-export-components */
 import { useMemo } from 'react'
 import { useGLTF } from '@react-three/drei'
-import doorWall3AssetUrl from '../../assets/models/core/door_wall_3.glb'
-import type { ContentPackAsset, ContentPackComponentProps } from '../types'
+import doorWall3AssetUrl from '../../../assets/models/core/door_wall_3.glb'
+import type { ContentPackAsset, ContentPackComponentProps } from '../../types'
 
 const PROP_PIVOT_OFFSET = [-1, 0, 0] as const
 
@@ -24,11 +24,12 @@ useGLTF.preload(doorWall3AssetUrl)
 export const openingDoorWall3Asset: ContentPackAsset = {
   id: 'core.opening_door_wall_3',
   slug: 'opening_door_wall_3',
-  name: 'Door (3-wide)',
+  name: 'Large door',
   category: 'opening',
   assetUrl: doorWall3AssetUrl,
   Component: OpeningDoorWall3,
   metadata: {
     openingWidth: 3,
+    connectsTo: 'WALL',
   },
 }

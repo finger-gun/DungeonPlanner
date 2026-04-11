@@ -43,6 +43,7 @@ type SerializedOpening = {
   assetId: string | null
   wallKey: string
   width: 1 | 2 | 3
+  flipped: boolean
   layerId: string
 }
 
@@ -65,7 +66,6 @@ export type DungeonFile = {
   name: string
   sceneLighting: { intensity: number }
   postProcessing: { enabled: boolean; focusDistance: number; focalLength: number; bokehScale: number }
-  groundPlane: 'black' | 'green'
   activeFloorId: string
   floorOrder: string[]
   floors: SerializedFloor[]
@@ -77,7 +77,6 @@ export type SerializableState = {
   name?: string
   sceneLighting: { intensity: number }
   postProcessing: { enabled: boolean; focusDistance: number; focalLength: number; bokehScale: number }
-  groundPlane: 'black' | 'green'
   // Active floor working state (flat, for backwards compat)
   layers: Record<string, Layer>
   layerOrder: string[]
@@ -127,7 +126,8 @@ function serializeFloorData(
       cell: obj.cell, cellKey: obj.cellKey, layerId: obj.layerId, props: obj.props,
     })),
     openings: Object.values(snapshot.wallOpenings).map((o) => ({
-      id: o.id, assetId: o.assetId, wallKey: o.wallKey, width: o.width, layerId: o.layerId,
+      id: o.id, assetId: o.assetId, wallKey: o.wallKey, width: o.width,
+      flipped: o.flipped ?? false, layerId: o.layerId,
     })),
     nextRoomNumber: snapshot.nextRoomNumber,
   }
@@ -166,7 +166,6 @@ export function serializeDungeon(state: SerializableState): string {
     name: state.name ?? 'My Dungeon',
     sceneLighting: { intensity: state.sceneLighting.intensity },
     postProcessing: { ...state.postProcessing },
-    groundPlane: state.groundPlane,
     activeFloorId,
     floorOrder,
     floors,
@@ -333,6 +332,7 @@ function parseFloorData(raw: Record<string, unknown>): {
       id,
       assetId: typeof o.assetId === 'string' ? o.assetId : null,
       wallKey, width,
+      flipped: o.flipped === true,
       layerId: typeof o.layerId === 'string' && layers[o.layerId] ? o.layerId : 'default',
     }
   }
@@ -348,8 +348,6 @@ function parseFloorData(raw: Record<string, unknown>): {
 function parseFile(raw: Record<string, unknown>): SerializableState | null {
   try {
     const sceneLightingRaw = isObject(raw.sceneLighting) ? raw.sceneLighting : {}
-    const groundPlane =
-      raw.groundPlane === 'black' || raw.groundPlane === 'green' ? raw.groundPlane : 'black'
     const ppRaw = isObject(raw.postProcessing) ? raw.postProcessing : {}
 
     const floorsArr = Array.isArray(raw.floors) ? (raw.floors as unknown[]) : []
@@ -422,7 +420,6 @@ function parseFile(raw: Record<string, unknown>): SerializableState | null {
         focalLength: typeof ppRaw.focalLength === 'number' ? ppRaw.focalLength : 3,
         bokehScale: typeof ppRaw.bokehScale === 'number' ? ppRaw.bokehScale : 2,
       },
-      groundPlane,
       // Active floor working state (spread into top-level for the store)
       ...activeFloorData,
       floors,

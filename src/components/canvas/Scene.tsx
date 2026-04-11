@@ -1,14 +1,14 @@
-import { Canvas } from '@react-three/fiber'
-import { Suspense, useMemo } from 'react'
+import { Canvas, useThree } from '@react-three/fiber'
+import { Suspense, useEffect, useMemo } from 'react'
 import * as THREE from 'three'
 import { WebGPURenderer } from 'three/webgpu'
+import { FpsMeterNode } from './FpsCounter'
 import { Grid } from './Grid'
 import { Controls } from './Controls'
 import { CameraPresetManager } from './CameraPresetManager'
 import { DungeonObject } from './DungeonObject'
 import { DungeonRoom } from './DungeonRoom'
 import { WebGPUPostProcessing } from './WebGPUPostProcessing'
-import { StaircaseHoles } from './StaircaseHole'
 import { useDungeonStore } from '../../store/useDungeonStore'
 
 async function createPreferredRenderer(props: THREE.WebGLRendererParameters) {
@@ -76,6 +76,7 @@ export function Scene() {
       dpr={[1, 2]}
       camera={{ position: [9, 11, 9], fov: 42, near: 0.1, far: 140 }}
       gl={createPreferredRenderer}
+      frameloop="demand"
     >
       <Suspense fallback={null}>
         {/* Global scene elements — never remount on floor switch */}
@@ -89,31 +90,10 @@ export function Scene() {
 
 export default Scene
 
-/** Camera, controls, lighting, grid, ground plane — shared across all floors. */
+/** Camera, controls, lighting, grid — shared across all floors. */
 function GlobalContent() {
   const lightIntensity = useDungeonStore((state) => state.sceneLighting.intensity)
-  const groundPlane = useDungeonStore((state) => state.groundPlane)
-  const showGroundPlane = useDungeonStore((state) => state.showGroundPlane)
   const postProcessingEnabled = useDungeonStore((state) => state.postProcessing.enabled)
-  const placedObjects = useDungeonStore((state) => state.placedObjects)
-  const floors = useDungeonStore((state) => state.floors)
-  const activeFloorId = useDungeonStore((state) => state.activeFloorId)
-
-  const activeFloorLevel = floors[activeFloorId]?.level ?? 0
-
-  // Ground plane is only relevant at and below ground level (level ≤ 0)
-  const groundPlaneVisible = showGroundPlane && activeFloorLevel <= 0
-
-  const groundColor =
-    groundPlane === 'black' ? '#0e0e0e' : '#2a4a1a'
-
-  const staircasesDown = useMemo(
-    () =>
-      Object.values(placedObjects)
-        .filter((obj) => obj.assetId === 'core.props_staircase_down')
-        .map((obj) => ({ id: obj.id, cell: obj.cell, rotation: obj.rotation })),
-    [placedObjects],
-  )
 
   return (
     <>
@@ -140,11 +120,11 @@ function GlobalContent() {
         position={[-8, 7, -4]}
       />
 
-      {groundPlaneVisible && <StaircaseHoles staircases={staircasesDown} groundColor={groundColor} />}
-
       <Grid />
       <Controls />
       <CameraPresetManager />
+      <FpsMeterNode />
+      <FrameDriver />
       {postProcessingEnabled && <WebGPUPostProcessing />}
     </>
   )
@@ -168,4 +148,48 @@ function FloorContent() {
       ))}
     </>
   )
+}
+
+/**
+ * Drives the demand-mode render loop at the configured FPS cap.
+ * Pauses completely when the browser tab is hidden (Page Visibility API).
+ */
+function FrameDriver() {
+  const { invalidate } = useThree()
+  const fpsLimit = useDungeonStore((state) => state.fpsLimit)
+
+  useEffect(() => {
+    let id: ReturnType<typeof setInterval> | number | undefined
+
+    function start() {
+      if (fpsLimit === 0) {
+        let rafId: number
+        const loop = () => { invalidate(); rafId = requestAnimationFrame(loop) }
+        rafId = requestAnimationFrame(loop)
+        id = rafId
+      } else {
+        id = setInterval(invalidate, 1000 / fpsLimit)
+      }
+    }
+
+    function stop() {
+      if (fpsLimit === 0) cancelAnimationFrame(id as number)
+      else clearInterval(id as ReturnType<typeof setInterval>)
+    }
+
+    function onVisibilityChange() {
+      if (document.hidden) stop()
+      else start()
+    }
+
+    document.addEventListener('visibilitychange', onVisibilityChange)
+    if (!document.hidden) start()
+
+    return () => {
+      stop()
+      document.removeEventListener('visibilitychange', onVisibilityChange)
+    }
+  }, [fpsLimit, invalidate])
+
+  return null
 }
