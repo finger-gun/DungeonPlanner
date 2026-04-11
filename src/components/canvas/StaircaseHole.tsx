@@ -19,9 +19,8 @@ export const STAIRCASE_HOLE_D = 4  // depth  (Z axis)
 
 // Offset of the hole corner relative to the placed cell corner (cx*G, cz*G).
 // Positive = toward +X/+Z, negative = toward -X/-Z.
-// Default: -HOLE_W / -HOLE_D (extends behind/left of placed cell)
-const HOLE_OFFSET_X = -STAIRCASE_HOLE_W
-const HOLE_OFFSET_Z = -STAIRCASE_HOLE_D
+const HOLE_OFFSET_X = 0
+const HOLE_OFFSET_Z = 0
 
 const PIT_DEPTH = 12
 

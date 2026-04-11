@@ -4,7 +4,7 @@ import { useGLTF } from '@react-three/drei'
 import propsStairCaseAssetUrl from '../../assets/models/core/staircase.glb'
 import type { ContentPackAsset, ContentPackComponentProps } from '../types'
 
-// Rotated 180° on Y so the staircase descends in the opposite direction.
+// Same orientation as StaircaseUp — hole and floor-tile skip handled in StaircaseHole.tsx
 const PROP_PIVOT_OFFSET = [-1, -3, -1] as const
 
 export function PropsStairCaseDown(props: ContentPackComponentProps) {
@@ -13,7 +13,7 @@ export function PropsStairCaseDown(props: ContentPackComponentProps) {
 
   return (
     <group position={PROP_PIVOT_OFFSET}>
-      <group rotation={[0, Math.PI, 0]} {...props}>
+      <group rotation={[0, 0, 0]} {...props}>
         <primitive object={scene} />
       </group>
     </group>
