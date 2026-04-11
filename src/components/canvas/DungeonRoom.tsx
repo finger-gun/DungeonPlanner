@@ -18,6 +18,7 @@ import {
 import { getBuildYOffset } from '../../store/buildAnimations'
 import { ContentPackInstance } from './ContentPackInstance'
 import { registerObject, unregisterObject } from './objectRegistry'
+import { getStaircaseDownBlockedCells } from './StaircaseHole'
 
 const WALL_EXTRA_DELAY_MS = 70
 
@@ -52,8 +53,22 @@ export function DungeonRoom() {
   const layers = useDungeonStore((state) => state.layers)
   const rooms = useDungeonStore((state) => state.rooms)
   const wallOpenings = useDungeonStore((state) => state.wallOpenings)
+  const placedObjects = useDungeonStore((state) => state.placedObjects)
   const globalFloorAssetId = useDungeonStore((state) => state.selectedAssetIds.floor)
   const globalWallAssetId = useDungeonStore((state) => state.selectedAssetIds.wall)
+
+  // Cells blocked by StaircaseDown footprints (no floor tile rendered there)
+  const blockedFloorCellKeys = useMemo(() => {
+    const set = new Set<string>()
+    for (const obj of Object.values(placedObjects)) {
+      if (obj.assetId !== 'core.props_staircase_down') continue
+      const ry = obj.rotation[1] ?? 0
+      for (const [bx, bz] of getStaircaseDownBlockedCells(obj.cell[0], obj.cell[1], ry)) {
+        set.add(`${bx}:${bz}`)
+      }
+    }
+    return set
+  }, [placedObjects])
 
   // Pre-compute which wall keys are suppressed by openings
   const suppressedWallKeys = useMemo(() => {
@@ -90,6 +105,7 @@ export function DungeonRoom() {
           group={group}
           paintedCells={paintedCells}
           suppressedWallKeys={suppressedWallKeys}
+          blockedFloorCellKeys={blockedFloorCellKeys}
         />
       ))}
       {Object.values(wallOpenings).map((opening) => (
@@ -103,10 +119,12 @@ function CellGroupRenderer({
   group,
   paintedCells,
   suppressedWallKeys,
+  blockedFloorCellKeys,
 }: {
   group: CellGroup
   paintedCells: PaintedCells
   suppressedWallKeys: Set<string>
+  blockedFloorCellKeys: Set<string>
 }) {
   const walls = useMemo(
     () => deriveRoomWalls(group.cells, paintedCells, suppressedWallKeys),
@@ -117,6 +135,7 @@ function CellGroupRenderer({
     <>
       {group.cells.map((cell) => {
         const key = getCellKey(cell)
+        if (blockedFloorCellKeys.has(key)) return null
         return (
           <AnimatedTileGroup key={`floor:${key}`} cellKey={key}>
             <ContentPackInstance

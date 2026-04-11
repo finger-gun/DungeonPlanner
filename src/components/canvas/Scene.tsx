@@ -8,6 +8,7 @@ import { CameraPresetManager } from './CameraPresetManager'
 import { DungeonObject } from './DungeonObject'
 import { DungeonRoom } from './DungeonRoom'
 import { WebGPUPostProcessing } from './WebGPUPostProcessing'
+import { StaircaseHoles } from './StaircaseHole'
 import { useDungeonStore } from '../../store/useDungeonStore'
 
 async function createPreferredRenderer(props: THREE.WebGLRendererParameters) {
@@ -101,6 +102,14 @@ function SceneContent() {
     groundPlane === 'black' ? '#0e0e0e' :
     /* green */ '#2a4a1a'
 
+  const staircasesDown = useMemo(
+    () =>
+      Object.values(placedObjects)
+        .filter((obj) => obj.assetId === 'core.props_staircase_down')
+        .map((obj) => ({ id: obj.id, cell: obj.cell, rotation: obj.rotation })),
+    [placedObjects],
+  )
+
   return (
     <>
       <color attach="background" args={['#120f0e']} />
@@ -126,11 +135,8 @@ function SceneContent() {
         position={[-8, 7, -4]}
       />
 
-      {/* Ground plane — rendered at y=-0.01 so the grid helper at y=0.001 stays on top */}
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.01, 0]} renderOrder={-1} receiveShadow>
-        <planeGeometry args={[500, 500]} />
-        <meshStandardMaterial color={groundColor} roughness={1} metalness={0} />
-      </mesh>
+      {/* Ground plane — with holes cut out under each StaircaseDown prop */}
+      <StaircaseHoles staircases={staircasesDown} groundColor={groundColor} />
 
       <Grid />
       <DungeonRoom />

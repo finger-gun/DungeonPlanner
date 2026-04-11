@@ -5,7 +5,7 @@ import propsStairCaseAssetUrl from '../../assets/models/core/staircase.glb'
 import type { ContentPackAsset, ContentPackComponentProps } from '../types'
 
 // Rotated 180° on Y so the staircase descends in the opposite direction.
-const PROP_PIVOT_OFFSET = [-1, 0, -1] as const
+const PROP_PIVOT_OFFSET = [-1, -3, -1] as const
 
 export function PropsStairCaseDown(props: ContentPackComponentProps) {
   const gltf = useGLTF(propsStairCaseAssetUrl)
