@@ -84,7 +84,7 @@ export function ScenePanel() {
 // ── Floor tab strip ────────────────────────────────────────────────────────────
 
 type FloorTabStripProps = {
-  floors: Record<string, { id: string; name: string }>
+  floors: Record<string, { id: string; name: string; level: number }>
   floorOrder: string[]
   activeFloorId: string
   onSwitch: (id: string) => void
@@ -144,7 +144,16 @@ function FloorTabStrip({ floors, floorOrder, activeFloorId, onSwitch, onAdd, onD
                 onClick={(e) => e.stopPropagation()}
               />
             ) : (
-              <span className="max-w-[80px] truncate">{floor.name}</span>
+              <span className="flex items-center gap-1">
+                <span
+                  className={`text-[9px] font-bold tabular-nums ${
+                    floor.level > 0 ? 'text-sky-400/70' : floor.level < 0 ? 'text-amber-400/70' : 'text-stone-500'
+                  }`}
+                >
+                  {floor.level > 0 ? `+${floor.level}` : floor.level}
+                </span>
+                <span className="max-w-[72px] truncate">{floor.name}</span>
+              </span>
             )}
             {floorOrder.length > 1 && !isEditing && (
               <button

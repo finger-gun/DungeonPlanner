@@ -49,6 +49,7 @@ type SerializedOpening = {
 type SerializedFloor = {
   id: string
   name: string
+  level: number
   layers: Layer[]
   layerOrder: string[]
   activeLayerId: string
@@ -98,6 +99,7 @@ export type SerializableState = {
 function serializeFloorData(
   id: string,
   name: string,
+  level: number,
   snapshot: {
     layers: Record<string, Layer>
     layerOrder: string[]
@@ -112,6 +114,7 @@ function serializeFloorData(
   return {
     id,
     name,
+    level,
     layers: Object.values(snapshot.layers),
     layerOrder: [...snapshot.layerOrder],
     activeLayerId: snapshot.activeLayerId,
@@ -136,16 +139,14 @@ export function serializeDungeon(state: SerializableState): string {
   const floors: SerializedFloor[] = []
 
   if (state.floors && state.floorOrder) {
-    // Build serialized floors from FloorRecord snapshots
     for (const fid of state.floorOrder) {
       const fr = state.floors[fid]
       if (!fr) continue
-      floors.push(serializeFloorData(fr.id, fr.name, fr.snapshot))
+      floors.push(serializeFloorData(fr.id, fr.name, fr.level ?? 0, fr.snapshot))
     }
   } else {
-    // Single-floor fallback: serialize working state as "Ground Floor"
     const activeFloorId = state.activeFloorId ?? 'floor-1'
-    floors.push(serializeFloorData(activeFloorId, 'Ground Floor', {
+    floors.push(serializeFloorData(activeFloorId, 'Ground Floor', 0, {
       layers: state.layers,
       layerOrder: state.layerOrder,
       activeLayerId: state.activeLayerId,
@@ -217,6 +218,7 @@ export function deserializeDungeon(json: string): SerializableState | null {
       floors: [{
         id: 'floor-1',
         name: 'Ground Floor',
+        level: 0,
         layers: r.layers,
         layerOrder: r.layerOrder,
         activeLayerId: r.activeLayerId,
@@ -366,9 +368,10 @@ function parseFile(raw: Record<string, unknown>): SerializableState | null {
       if (!isObject(f)) continue
       const id = typeof f.id === 'string' ? f.id : 'floor-1'
       const name = typeof f.name === 'string' ? f.name : 'Floor'
+      const level = typeof f.level === 'number' ? f.level : 0
       const data = parseFloorData(f)
       floors[id] = {
-        id, name,
+        id, name, level,
         snapshot: {
           ...data,
           tool: 'move' as const,
@@ -397,7 +400,7 @@ function parseFile(raw: Record<string, unknown>): SerializableState | null {
       activeFloorData = parseFloorData({})
       const fallbackId = 'floor-1'
       floors[fallbackId] = {
-        id: fallbackId, name: 'Ground Floor',
+        id: fallbackId, name: 'Ground Floor', level: 0,
         snapshot: { ...activeFloorData, tool: 'move', selectedAssetIds: {
           floor: getDefaultAssetIdByCategory('floor'),
           wall: getDefaultAssetIdByCategory('wall'),

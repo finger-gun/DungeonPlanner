@@ -14,6 +14,7 @@ export type SelectedAssetIds = Record<ContentPackCategory, string | null>
 export type FloorRecord = {
   id: string
   name: string
+  level: number   // 0 = ground, positive = above ground, negative = cellar/underground
   snapshot: DungeonSnapshot
   history: DungeonSnapshot[]
   future: DungeonSnapshot[]
@@ -427,6 +428,7 @@ export const useDungeonStore = create<DungeonState>()(
     [INITIAL_FLOOR_ID]: {
       id: INITIAL_FLOOR_ID,
       name: 'Ground Floor',
+      level: 0,
       snapshot: cloneSnapshot(initialSnapshot),
       history: [],
       future: [],
@@ -917,8 +919,20 @@ export const useDungeonStore = create<DungeonState>()(
   createFloor: (name) => {
     const state = get()
     const id = createObjectId()
-    const floorNumber = state.floorOrder.length + 1
-    const floorName = typeof name === 'string' && name.trim() ? name.trim() : `Floor ${floorNumber}`
+
+    // Determine new floor level: StaircaseDown on current floor → go down, else go up
+    const hasStaircaseDown = Object.values(state.placedObjects).some(
+      (obj) => obj.assetId === 'core.props_staircase_down',
+    )
+    const currentLevel = state.floors[state.activeFloorId]?.level ?? 0
+    const newLevel = hasStaircaseDown ? currentLevel - 1 : currentLevel + 1
+
+    const defaultName = newLevel < 0
+      ? `Cellar ${Math.abs(newLevel)}`
+      : newLevel === 0
+      ? 'Ground Floor'
+      : `Floor ${newLevel}`
+    const floorName = typeof name === 'string' && name.trim() ? name.trim() : defaultName
 
     // Save current working state back to the active floor record
     const updatedCurrentFloor: FloorRecord = {
@@ -966,6 +980,7 @@ export const useDungeonStore = create<DungeonState>()(
     const newFloor: FloorRecord = {
       id,
       name: floorName,
+      level: newLevel,
       snapshot: cloneSnapshot(newSnapshot),
       history: [],
       future: [],

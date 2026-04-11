@@ -96,6 +96,13 @@ function GlobalContent() {
   const showGroundPlane = useDungeonStore((state) => state.showGroundPlane)
   const postProcessingEnabled = useDungeonStore((state) => state.postProcessing.enabled)
   const placedObjects = useDungeonStore((state) => state.placedObjects)
+  const floors = useDungeonStore((state) => state.floors)
+  const activeFloorId = useDungeonStore((state) => state.activeFloorId)
+
+  const activeFloorLevel = floors[activeFloorId]?.level ?? 0
+
+  // Ground plane is only relevant at and below ground level (level ≤ 0)
+  const groundPlaneVisible = showGroundPlane && activeFloorLevel <= 0
 
   const groundColor =
     groundPlane === 'black' ? '#0e0e0e' : '#2a4a1a'
@@ -133,7 +140,7 @@ function GlobalContent() {
         position={[-8, 7, -4]}
       />
 
-      {showGroundPlane && <StaircaseHoles staircases={staircasesDown} groundColor={groundColor} />}
+      {groundPlaneVisible && <StaircaseHoles staircases={staircasesDown} groundColor={groundColor} />}
 
       <Grid />
       <Controls />
