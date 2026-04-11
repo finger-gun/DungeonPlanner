@@ -68,6 +68,7 @@ async function createPreferredRenderer(props: THREE.WebGLRendererParameters) {
 }
 
 export function Scene() {
+  const activeFloorId = useDungeonStore((state) => state.activeFloorId)
   return (
     <Canvas
       shadows
@@ -76,7 +77,7 @@ export function Scene() {
       gl={createPreferredRenderer}
     >
       <Suspense fallback={null}>
-        <SceneContent />
+        <SceneContent key={activeFloorId} />
       </Suspense>
     </Canvas>
   )

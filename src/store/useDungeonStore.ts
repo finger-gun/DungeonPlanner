@@ -11,6 +11,14 @@ export type CameraPreset = 'perspective' | 'isometric' | 'top-down'
 export type GroundPlane = 'black' | 'green'
 export type SelectedAssetIds = Record<ContentPackCategory, string | null>
 
+export type FloorRecord = {
+  id: string
+  name: string
+  snapshot: DungeonSnapshot
+  history: DungeonSnapshot[]
+  future: DungeonSnapshot[]
+}
+
 export type Layer = {
   id: string
   name: string
@@ -134,6 +142,14 @@ type DungeonState = DungeonSnapshot & {
   assignCellsToRoom: (cellKeys: string[], roomId: string | null) => void
   setRoomFloorAsset: (roomId: string, assetId: string | null) => void
   setRoomWallAsset: (roomId: string, assetId: string | null) => void
+  // Floor actions
+  floors: Record<string, FloorRecord>
+  floorOrder: string[]
+  activeFloorId: string
+  createFloor: (name?: string) => string
+  deleteFloor: (id: string) => void
+  switchFloor: (id: string) => void
+  renameFloor: (id: string, name: string) => void
   // Opening actions
   placeOpening: (input: PlaceOpeningInput) => string | null
   removeOpening: (id: string) => void
@@ -387,8 +403,12 @@ function pruneInvalidConnectedProps(
 
 export const useDungeonStore = create<DungeonState>()(
   persist(
-    (set, get) => ({
-  ...createEmptySnapshot(),
+    (set, get) => {
+  const INITIAL_FLOOR_ID = 'floor-1'
+  const initialSnapshot = createEmptySnapshot()
+
+  return ({
+  ...initialSnapshot,
   dungeonName: 'My Dungeon',
   cameraMode: 'orbit',
   isPaintingStrokeActive: false,
@@ -400,6 +420,17 @@ export const useDungeonStore = create<DungeonState>()(
   cameraPreset: null,
   history: [],
   future: [],
+  floors: {
+    [INITIAL_FLOOR_ID]: {
+      id: INITIAL_FLOOR_ID,
+      name: 'Ground Floor',
+      snapshot: cloneSnapshot(initialSnapshot),
+      history: [],
+      future: [],
+    },
+  },
+  floorOrder: [INITIAL_FLOOR_ID],
+  activeFloorId: INITIAL_FLOOR_ID,
   paintCells: (cells) => {
     const state = get()
     const nextCells = cells.filter((cell) => !state.paintedCells[getCellKey(cell)])
@@ -876,6 +907,160 @@ export const useDungeonStore = create<DungeonState>()(
     }))
   },
 
+  // ── Floor actions ──────────────────────────────────────────────────────────
+  createFloor: (name) => {
+    const state = get()
+    const id = createObjectId()
+    const floorNumber = state.floorOrder.length + 1
+    const floorName = name ?? `Floor ${floorNumber}`
+
+    // Save current working state back to the active floor record
+    const updatedCurrentFloor: FloorRecord = {
+      ...state.floors[state.activeFloorId],
+      snapshot: cloneSnapshot(state),
+      history: [...state.history],
+      future: [...state.future],
+    }
+
+    // Find a staircase prop on the current floor to seed the new floor
+    const staircaseDown = Object.values(state.placedObjects).find(
+      (obj) => obj.assetId === 'core.props_staircase_down',
+    )
+    const staircaseUp = Object.values(state.placedObjects).find(
+      (obj) => obj.assetId === 'core.props_staircase_up',
+    )
+    const staircaseOnCurrentFloor = staircaseDown ?? staircaseUp
+
+    // Build an initial snapshot for the new floor
+    const newSnapshot = createEmptySnapshot()
+
+    if (staircaseOnCurrentFloor) {
+      // Place opposing staircase on new floor at same grid cell
+      const opposingAssetId =
+        staircaseOnCurrentFloor.assetId === 'core.props_staircase_down'
+          ? 'core.props_staircase_up'
+          : 'core.props_staircase_down'
+      const staircaseId = createObjectId()
+      const cell = staircaseOnCurrentFloor.cell
+      const cellKey = `${getCellKey(cell)}:floor`
+      newSnapshot.placedObjects[staircaseId] = {
+        id: staircaseId,
+        type: 'prop',
+        assetId: opposingAssetId,
+        position: staircaseOnCurrentFloor.position,
+        rotation: staircaseOnCurrentFloor.rotation,
+        props: { connector: 'FLOOR', direction: null },
+        cell,
+        cellKey,
+        layerId: DEFAULT_LAYER_ID,
+      }
+      newSnapshot.occupancy[cellKey] = staircaseId
+    }
+
+    const newFloor: FloorRecord = {
+      id,
+      name: floorName,
+      snapshot: cloneSnapshot(newSnapshot),
+      history: [],
+      future: [],
+    }
+
+    set((current) => ({
+      ...current,
+      // Activate new floor
+      ...newSnapshot,
+      history: [],
+      future: [],
+      activeFloorId: id,
+      floorOrder: [...current.floorOrder, id],
+      floors: {
+        ...current.floors,
+        [state.activeFloorId]: updatedCurrentFloor,
+        [id]: newFloor,
+      },
+    }))
+
+    return id
+  },
+
+  deleteFloor: (id) => {
+    const state = get()
+    if (state.floorOrder.length <= 1) return
+
+    const newOrder = state.floorOrder.filter((fid) => fid !== id)
+    const newFloors = { ...state.floors }
+    delete newFloors[id]
+
+    // If deleting the active floor, switch to the first remaining
+    if (state.activeFloorId === id) {
+      const targetId = newOrder[0]
+      const target = newFloors[targetId]
+
+      // Save current floor back (we're about to discard it but keep others consistent)
+      set((current) => ({
+        ...current,
+        ...cloneSnapshot(target.snapshot),
+        history: [...target.history],
+        future: [...target.future],
+        activeFloorId: targetId,
+        floorOrder: newOrder,
+        floors: newFloors,
+      }))
+    } else {
+      // Save current working state into the active floor record first
+      const updatedCurrentFloor: FloorRecord = {
+        ...state.floors[state.activeFloorId],
+        snapshot: cloneSnapshot(state),
+        history: [...state.history],
+        future: [...state.future],
+      }
+      set((current) => ({
+        ...current,
+        activeFloorId: current.activeFloorId,
+        floorOrder: newOrder,
+        floors: { ...newFloors, [state.activeFloorId]: updatedCurrentFloor },
+      }))
+    }
+  },
+
+  switchFloor: (id) => {
+    const state = get()
+    if (id === state.activeFloorId) return
+    const target = state.floors[id]
+    if (!target) return
+
+    // Save current working state back to the active floor record
+    const updatedCurrentFloor: FloorRecord = {
+      ...state.floors[state.activeFloorId],
+      snapshot: cloneSnapshot(state),
+      history: [...state.history],
+      future: [...state.future],
+    }
+
+    set((current) => ({
+      ...current,
+      ...cloneSnapshot(target.snapshot),
+      history: [...target.history],
+      future: [...target.future],
+      selection: null,
+      activeFloorId: id,
+      floors: {
+        ...current.floors,
+        [state.activeFloorId]: updatedCurrentFloor,
+      },
+    }))
+  },
+
+  renameFloor: (id, name) => {
+    set((current) => ({
+      ...current,
+      floors: {
+        ...current.floors,
+        [id]: { ...current.floors[id], name },
+      },
+    }))
+  },
+
   // ── Opening actions ────────────────────────────────────────────────────────
   placeOpening: (input) => {
     const id = createObjectId()
@@ -927,6 +1112,16 @@ export const useDungeonStore = create<DungeonState>()(
   },
   downloadDungeon: () => {
     const state = get()
+    // Save current working state into the active floor record before serialising
+    const floorsWithCurrent = {
+      ...state.floors,
+      [state.activeFloorId]: {
+        ...state.floors[state.activeFloorId],
+        snapshot: cloneSnapshot(state),
+        history: [...state.history],
+        future: [...state.future],
+      },
+    }
     const json = serializeDungeon({
       name: state.dungeonName,
       sceneLighting: state.sceneLighting,
@@ -941,6 +1136,9 @@ export const useDungeonStore = create<DungeonState>()(
       wallOpenings: state.wallOpenings,
       occupancy: state.occupancy,
       nextRoomNumber: state.nextRoomNumber,
+      floors: floorsWithCurrent,
+      floorOrder: state.floorOrder,
+      activeFloorId: state.activeFloorId,
     })
     const blob = new Blob([json], { type: 'application/json' })
     const url = URL.createObjectURL(blob)
@@ -953,6 +1151,9 @@ export const useDungeonStore = create<DungeonState>()(
   loadDungeon: (json) => {
     const parsed = deserializeDungeon(json)
     if (!parsed) return false
+    const floors = parsed.floors ?? {}
+    const floorOrder = parsed.floorOrder ?? Object.keys(floors)
+    const activeFloorId = parsed.activeFloorId ?? floorOrder[0] ?? 'floor-1'
     set((current) => ({
       ...current,
       ...parsed,
@@ -962,10 +1163,13 @@ export const useDungeonStore = create<DungeonState>()(
       cameraPreset: null,
       history: [],
       future: [],
+      floors,
+      floorOrder,
+      activeFloorId,
     }))
     return true
   },
-}),
+  })},
     {
       name: 'dungeon-planner-state',
       // Only persist the dungeon content + scene settings, not transient UI state
@@ -984,6 +1188,9 @@ export const useDungeonStore = create<DungeonState>()(
         postProcessing: state.postProcessing,
         groundPlane: state.groundPlane,
         selectedAssetIds: state.selectedAssetIds,
+        floors: state.floors,
+        floorOrder: state.floorOrder,
+        activeFloorId: state.activeFloorId,
       }),
     },
   ),

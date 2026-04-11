@@ -3,6 +3,7 @@ import { floorAsset } from './Floor'
 import { wallAsset } from './Wall'
 import { propsWallTorchAsset } from './WallTorch'
 import { propsStairCaseUpAsset } from './StairCaseUp'
+import { propsStairCaseDownAsset } from './StairCaseDown'
 import { propsRubbleAsset } from './Rubble'
 import { propsPillarAsset } from './Pillar'
 import { propsPillarWallAsset } from './PillarWall'
@@ -17,6 +18,7 @@ export const coreContentPack: ContentPack = {
     wallAsset,
     propsWallTorchAsset,
     propsStairCaseUpAsset,
+    propsStairCaseDownAsset,
     propsRubbleAsset,
     propsPillarAsset,
     propsPillarWallAsset,

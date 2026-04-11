@@ -1,5 +1,5 @@
 import { useState, useRef } from 'react'
-import { ChevronRight, Trash2 } from 'lucide-react'
+import { ChevronRight, Plus, Trash2 } from 'lucide-react'
 import { useDungeonStore } from '../../store/useDungeonStore'
 import { getContentPackAssetById } from '../../content-packs/registry'
 
@@ -13,12 +13,18 @@ export function ScenePanel() {
   const setTool = useDungeonStore((state) => state.setTool)
   const removeRoom = useDungeonStore((state) => state.removeRoom)
   const renameRoom = useDungeonStore((state) => state.renameRoom)
+  const floors = useDungeonStore((state) => state.floors)
+  const floorOrder = useDungeonStore((state) => state.floorOrder)
+  const activeFloorId = useDungeonStore((state) => state.activeFloorId)
+  const createFloor = useDungeonStore((state) => state.createFloor)
+  const deleteFloor = useDungeonStore((state) => state.deleteFloor)
+  const switchFloor = useDungeonStore((state) => state.switchFloor)
+  const renameFloor = useDungeonStore((state) => state.renameFloor)
 
   // Props grouped by roomId
   const propsByRoom = Object.values(placedObjects).reduce<
     Record<string, typeof placedObjects[string][]>
   >((acc, obj) => {
-    // obj.cellKey is e.g. "0:0:north" — look up by the bare cell position key
     const posCellKey = `${obj.cell[0]}:${obj.cell[1]}`
     const roomId = paintedCells[posCellKey]?.roomId ?? null
     if (!roomId) return acc
@@ -48,38 +54,140 @@ export function ScenePanel() {
         Scene
       </p>
 
-      <FloorNode>
-        {roomList.length === 0 ? (
-          <p className="py-1 pl-1 text-[11px] text-stone-600">
-            Draw rooms to populate the floor.
-          </p>
-        ) : (
-          roomList.map((room) => (
-            <RoomNode
-              key={room.id}
-              room={room}
-              props={propsByRoom[room.id] ?? []}
-              openings={openingsByRoom[room.id] ?? []}
-              selection={selection}
-              onSelectProp={(id) => { selectObject(id); setTool('prop') }}
-              onSelectOpening={(id) => { selectObject(id); setTool('opening') }}
-              onRename={(name) => renameRoom(room.id, name)}
-              onDelete={() => removeRoom(room.id)}
-            />
-          ))
-        )}
-      </FloorNode>
+      {/* Floor tab strip */}
+      <FloorTabStrip
+        floors={floors}
+        floorOrder={floorOrder}
+        activeFloorId={activeFloorId}
+        onSwitch={switchFloor}
+        onAdd={createFloor}
+        onDelete={deleteFloor}
+        onRename={renameFloor}
+      />
+
+      <div className="mt-2 rounded-2xl border border-stone-700/60 bg-stone-900/60">
+        <RoomList
+          roomList={roomList}
+          propsByRoom={propsByRoom}
+          openingsByRoom={openingsByRoom}
+          selection={selection}
+          onSelectProp={(id) => { selectObject(id); setTool('prop') }}
+          onSelectOpening={(id) => { selectObject(id); setTool('opening') }}
+          onRename={(id, name) => renameRoom(id, name)}
+          onDelete={(id) => removeRoom(id)}
+        />
+      </div>
     </section>
   )
 }
 
-// ── Floor node ────────────────────────────────────────────────────────────────
+// ── Floor tab strip ────────────────────────────────────────────────────────────
 
-function FloorNode({ children }: { children: React.ReactNode }) {
-  const [expanded, setExpanded] = useState(true)
+type FloorTabStripProps = {
+  floors: Record<string, { id: string; name: string }>
+  floorOrder: string[]
+  activeFloorId: string
+  onSwitch: (id: string) => void
+  onAdd: () => void
+  onDelete: (id: string) => void
+  onRename: (id: string, name: string) => void
+}
+
+function FloorTabStrip({ floors, floorOrder, activeFloorId, onSwitch, onAdd, onDelete, onRename }: FloorTabStripProps) {
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [draft, setDraft] = useState('')
+  const inputRef = useRef<HTMLInputElement>(null)
+
+  function startEdit(id: string, currentName: string) {
+    setEditingId(id)
+    setDraft(currentName)
+    setTimeout(() => inputRef.current?.select(), 0)
+  }
+
+  function commitEdit() {
+    if (editingId) {
+      const trimmed = draft.trim()
+      if (trimmed) onRename(editingId, trimmed)
+    }
+    setEditingId(null)
+  }
 
   return (
-    <div className="rounded-2xl border border-stone-700/60 bg-stone-900/60">
+    <div className="flex items-center gap-1 overflow-x-auto pb-0.5">
+      {floorOrder.map((id) => {
+        const floor = floors[id]
+        if (!floor) return null
+        const isActive = id === activeFloorId
+        const isEditing = editingId === id
+        return (
+          <div
+            key={id}
+            className={`group relative flex shrink-0 items-center rounded-lg border px-2.5 py-1 text-[11px] transition-colors ${
+              isActive
+                ? 'border-sky-500/60 bg-sky-900/40 text-sky-200'
+                : 'border-stone-700/60 bg-stone-900/50 text-stone-400 hover:border-stone-600 hover:text-stone-200 cursor-pointer'
+            }`}
+            onClick={() => !isActive && !isEditing && onSwitch(id)}
+            onDoubleClick={() => startEdit(id, floor.name)}
+          >
+            {isEditing ? (
+              <input
+                ref={inputRef}
+                value={draft}
+                onChange={(e) => setDraft(e.target.value)}
+                onBlur={commitEdit}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') commitEdit()
+                  else if (e.key === 'Escape') setEditingId(null)
+                }}
+                className="w-20 bg-transparent text-[11px] text-sky-200 outline-none"
+                onClick={(e) => e.stopPropagation()}
+              />
+            ) : (
+              <span className="max-w-[80px] truncate">{floor.name}</span>
+            )}
+            {floorOrder.length > 1 && !isEditing && (
+              <button
+                type="button"
+                onClick={(e) => { e.stopPropagation(); onDelete(id) }}
+                className="ml-1 hidden text-stone-500 hover:text-red-400 group-hover:inline-flex"
+                title="Delete floor"
+              >
+                <Trash2 size={10} />
+              </button>
+            )}
+          </div>
+        )
+      })}
+      <button
+        type="button"
+        onClick={onAdd}
+        className="flex shrink-0 items-center justify-center rounded-lg border border-stone-700/60 bg-stone-900/50 p-1 text-stone-400 hover:border-stone-500 hover:text-stone-200 transition-colors"
+        title="Add floor"
+      >
+        <Plus size={12} />
+      </button>
+    </div>
+  )
+}
+
+// ── Room list ─────────────────────────────────────────────────────────────────
+
+type RoomListProps = {
+  roomList: { id: string; name: string }[]
+  propsByRoom: Record<string, { id: string; assetId: string | null; cellKey: string }[]>
+  openingsByRoom: Record<string, { id: string; assetId: string | null; wallKey: string; width: 1 | 2 | 3 }[]>
+  selection: string | null
+  onSelectProp: (id: string) => void
+  onSelectOpening: (id: string) => void
+  onRename: (id: string, name: string) => void
+  onDelete: (id: string) => void
+}
+
+function RoomList({ roomList, propsByRoom, openingsByRoom, selection, onSelectProp, onSelectOpening, onRename, onDelete }: RoomListProps) {
+  const [expanded, setExpanded] = useState(true)
+  return (
+    <>
       <button
         type="button"
         onClick={() => setExpanded((v) => !v)}
@@ -90,15 +198,32 @@ function FloorNode({ children }: { children: React.ReactNode }) {
           strokeWidth={2}
           className={`shrink-0 text-stone-400 transition-transform ${expanded ? 'rotate-90' : ''}`}
         />
-        <span className="text-xs font-semibold text-stone-300">Floor 1</span>
+        <span className="text-xs font-semibold text-stone-300">Rooms</span>
       </button>
-
       {expanded && (
         <div className="border-t border-stone-800/60 px-2 pb-2 pt-1.5 flex flex-col gap-1">
-          {children}
+          {roomList.length === 0 ? (
+            <p className="py-1 pl-1 text-[11px] text-stone-600">
+              Draw rooms to populate the floor.
+            </p>
+          ) : (
+            roomList.map((room) => (
+              <RoomNode
+                key={room.id}
+                room={room}
+                props={propsByRoom[room.id] ?? []}
+                openings={openingsByRoom[room.id] ?? []}
+                selection={selection}
+                onSelectProp={onSelectProp}
+                onSelectOpening={onSelectOpening}
+                onRename={(name) => onRename(room.id, name)}
+                onDelete={() => onDelete(room.id)}
+              />
+            ))
+          )}
         </div>
       )}
-    </div>
+    </>
   )
 }
 
