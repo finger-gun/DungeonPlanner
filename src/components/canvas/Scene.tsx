@@ -14,6 +14,8 @@ import { useDungeonStore, type DungeonObjectRecord } from '../../store/useDungeo
 import { usePlayVisibility } from './playVisibility'
 import { ContentPackInstance } from './ContentPackInstance'
 import { cellToWorldPosition, getCellKey, snapWorldPointToGrid, type GridCell } from '../../hooks/useSnapToGrid'
+import { PlayVisibilityMask } from './PlayVisibilityMask'
+import { PlayVisibilityDebugRays } from './PlayVisibilityDebugRays'
 
 async function createPreferredRenderer(props: THREE.WebGLRendererParameters) {
   const powerPreference =
@@ -163,6 +165,8 @@ function FloorContent({ startY = 0 }: { startY?: number }) {
   const occupancy = useDungeonStore((state) => state.occupancy)
   const layers = useDungeonStore((state) => state.layers)
   const tool = useDungeonStore((state) => state.tool)
+  const showLosDebugMask = useDungeonStore((state) => state.showLosDebugMask)
+  const showLosDebugRays = useDungeonStore((state) => state.showLosDebugRays)
   const moveObject = useDungeonStore((state) => state.moveObject)
   const selectObject = useDungeonStore((state) => state.selectObject)
   const setObjectDragActive = useDungeonStore((state) => state.setObjectDragActive)
@@ -303,6 +307,13 @@ function FloorContent({ startY = 0 }: { startY?: number }) {
   return (
     <group ref={groupRef} position={[0, startY, 0]}>
       <DungeonRoom visibility={visibility} />
+      {visibility.active && visibility.mask && (
+        <>
+          <PlayVisibilityMask mask={visibility.mask} />
+          {showLosDebugMask && <PlayVisibilityMask mask={visibility.mask} mode="debug" />}
+          {showLosDebugRays && <PlayVisibilityDebugRays mask={visibility.mask} />}
+        </>
+      )}
       {objects.map((object) => (
         dragState?.objectId === object.id ? null : (
           <DungeonObject

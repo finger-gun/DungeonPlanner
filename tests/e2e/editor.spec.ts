@@ -201,6 +201,71 @@ test.describe('Dungeon editor smoke flow', () => {
     await expect(page.getByText('Play', { exact: true })).toBeVisible()
   })
 
+  test('play mode can reset previously revealed cells', async ({ page }) => {
+    await page.goto('/')
+    await waitForDebugBridge(page)
+
+    await page.evaluate(() => {
+      const state = window.__DUNGEON_DEBUG__?.getSnapshot() as {
+        paintCells: (cells: Array<[number, number]>) => number
+        mergeExploredCells: (cellKeys: string[]) => void
+      }
+
+      state.paintCells([[0, 0], [1, 0]])
+      state.mergeExploredCells(['0:0', '1:0'])
+    })
+
+    await page.getByRole('button', { name: 'Play' }).click()
+    await page.evaluate(() => {
+      window.dispatchEvent(new KeyboardEvent('keydown', {
+        key: 'F12',
+        ctrlKey: true,
+        shiftKey: true,
+        bubbles: true,
+      }))
+    })
+
+    await expect(page.getByTestId('debug-visibility-panel')).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Reset reveal' })).toBeEnabled()
+    await page.getByRole('button', { name: 'Reset reveal' }).click()
+
+    await page.waitForFunction(() => {
+      const snapshot = window.__DUNGEON_DEBUG__?.getSnapshot() as {
+        exploredCells?: Record<string, true>
+      } | undefined
+
+      return Object.keys(snapshot?.exploredCells ?? {}).length === 0
+    })
+  })
+
+  test('debug visibility panel toggles LOS overlays', async ({ page }) => {
+    await page.goto('/')
+    await waitForDebugBridge(page)
+
+    await page.evaluate(() => {
+      window.dispatchEvent(new KeyboardEvent('keydown', {
+        key: 'F12',
+        ctrlKey: true,
+        shiftKey: true,
+        bubbles: true,
+      }))
+    })
+
+    await expect(page.getByTestId('debug-visibility-panel')).toBeVisible()
+
+    await page.getByRole('button', { name: 'Render LoS rays On' }).click()
+    await page.getByRole('button', { name: 'Render LoS mask On' }).click()
+
+    await page.waitForFunction(() => {
+      const snapshot = window.__DUNGEON_DEBUG__?.getSnapshot() as {
+        showLosDebugMask?: boolean
+        showLosDebugRays?: boolean
+      } | undefined
+
+      return snapshot?.showLosDebugMask === false && snapshot?.showLosDebugRays === false
+    })
+  })
+
   test('play mode lets you drag a player to another cell', async ({ page }) => {
     await page.goto('/')
     await waitForDebugBridge(page)

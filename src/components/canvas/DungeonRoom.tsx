@@ -161,7 +161,7 @@ function CellGroupRenderer({
               position={cellToWorldPosition(cell)}
               variant="floor"
               variantKey={key}
-              visibility={visibility.getCellVisibility(key)}
+              visibility={visibility.mask ? 'visible' : visibility.getCellVisibility(key)}
             />
           </AnimatedTileGroup>
         )

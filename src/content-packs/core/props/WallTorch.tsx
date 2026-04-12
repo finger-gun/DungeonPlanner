@@ -33,13 +33,13 @@ export const propsWallTorchAsset: ContentPackAsset = {
     connectsTo: 'WALL',
     light: {
       color: '#ff9040',
-      intensity: 6,
-      distance: 8,
-      decay: 2,
+      intensity: 5,
+      distance: 10,
+      decay: 1,
       castShadow: false,
       flicker: true,
       // Offset from the prop's local origin — moves the light up to the flame
-      offset: [0, 1.6, 0.25],
+      offset: [0, 2, 1],
     },
   },
 }

@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest'
-import { computeVisibleCellKeys, isVisiblePlayerOrigin } from './playVisibility'
+import {
+  buildPortalLookup,
+  castVisibilityMaskRay,
+  computeVisibilitySamples,
+  computeVisibleCellKeys,
+  isVisiblePlayerOrigin,
+} from './playVisibility'
 import type { OpeningRecord, PaintedCells } from '../../store/useDungeonStore'
 
 function makeCells(entries: Array<{ cell: [number, number]; roomId?: string | null }>): PaintedCells {
@@ -145,6 +151,88 @@ describe('computeVisibleCellKeys', () => {
     expect(computeVisibleCellKeys(paintedCells, {}, [[0, 0], [4, 0]], 1)).toEqual(
       expect.arrayContaining(['0:0', '1:0', '4:0', '5:0']),
     )
+  })
+})
+
+describe('castVisibilityMaskRay', () => {
+  it('passes straight through a doorway portal', () => {
+    const paintedCells = makeCells([
+      { cell: [0, 0], roomId: 'room-a' },
+      { cell: [1, 0], roomId: 'room-b' },
+    ])
+
+    const wallOpenings: Record<string, OpeningRecord> = {
+      'open-1': {
+        id: 'open-1',
+        assetId: 'core.opening_door_wall_1',
+        wallKey: '0:0:east',
+        width: 1,
+        flipped: false,
+        layerId: 'default',
+      },
+    }
+
+    const point = castVisibilityMaskRay([0, 0], 0, paintedCells, wallOpenings, 3)
+    expect(point[0]).toBeGreaterThan(2.5)
+  })
+
+  it('clips rays that hit the closed part of a door wall', () => {
+    const paintedCells = makeCells([
+      { cell: [0, 0], roomId: 'room-a' },
+      { cell: [1, 0], roomId: 'room-b' },
+    ])
+
+    const wallOpenings: Record<string, OpeningRecord> = {
+      'open-1': {
+        id: 'open-1',
+        assetId: 'core.opening_door_wall_1',
+        wallKey: '0:0:east',
+        width: 1,
+        flipped: false,
+        layerId: 'default',
+      },
+    }
+
+    const point = castVisibilityMaskRay([0, 0], Math.PI / 4, paintedCells, wallOpenings, 3)
+    expect(point[0]).toBeLessThan(2.05)
+  })
+})
+
+describe('computeVisibilitySamples', () => {
+  it('normalizes doorway edge angles before sorting around the east-facing seam', () => {
+    const paintedCells = makeCells([
+      { cell: [0, 0], roomId: 'room-a' },
+      { cell: [1, 0], roomId: 'room-b' },
+    ])
+
+    const wallOpenings: Record<string, OpeningRecord> = {
+      eastDoor: {
+        id: 'east-door',
+        assetId: 'core.opening_door_wall_1',
+        wallKey: '0:0:east',
+        width: 1,
+        flipped: false,
+        layerId: 'default',
+      },
+    }
+
+    const samples = computeVisibilitySamples(
+      [0, 0],
+      paintedCells,
+      buildPortalLookup(wallOpenings),
+      new Set(),
+      4,
+    )
+
+    expect(samples.length).toBeGreaterThan(0)
+    samples.forEach((sample) => {
+      expect(sample.angle).toBeGreaterThanOrEqual(0)
+      expect(sample.angle).toBeLessThan(Math.PI * 2)
+    })
+
+    for (let index = 1; index < samples.length; index += 1) {
+      expect(samples[index - 1]!.angle).toBeLessThanOrEqual(samples[index]!.angle)
+    }
   })
 })
 

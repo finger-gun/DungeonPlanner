@@ -126,6 +126,20 @@ describe('useDungeonStore history', () => {
     expect(state.placedObjects[firstId!]?.cell).toEqual([0, 0])
   })
 
+  it('clears explored cells without changing painted cells', () => {
+    const state = useDungeonStore.getState()
+    state.paintCells([[0, 0], [1, 0]])
+    state.mergeExploredCells(['0:0', '1:0'])
+
+    expect(Object.keys(useDungeonStore.getState().exploredCells)).toHaveLength(2)
+
+    useDungeonStore.getState().clearExploredCells()
+
+    const nextState = useDungeonStore.getState()
+    expect(nextState.exploredCells).toEqual({})
+    expect(Object.keys(nextState.paintedCells)).toHaveLength(2)
+  })
+
   it('replaces the existing prop in a cell and supports undo/redo', () => {
     useDungeonStore.getState().placeObject({
       type: 'prop',

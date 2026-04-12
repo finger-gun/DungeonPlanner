@@ -112,6 +112,8 @@ type DungeonState = DungeonSnapshot & {
   sceneLighting: SceneLighting
   postProcessing: PostProcessingSettings
   showGrid: boolean
+  showLosDebugMask: boolean
+  showLosDebugRays: boolean
   activeCameraMode: CameraPreset
   cameraPreset: CameraPreset | null
   history: DungeonSnapshot[]
@@ -121,6 +123,7 @@ type DungeonState = DungeonSnapshot & {
   placeObject: (input: PlaceObjectInput) => string | null
   moveObject: (id: string, input: MoveObjectInput) => boolean
   mergeExploredCells: (cellKeys: string[]) => void
+  clearExploredCells: () => void
   removeObject: (id: string) => void
   removeObjectAtCell: (cellKey: string) => void
   removeSelectedObject: () => void
@@ -133,6 +136,8 @@ type DungeonState = DungeonSnapshot & {
   setSceneLightingIntensity: (intensity: number) => void
   setPostProcessing: (settings: Partial<PostProcessingSettings>) => void
   setShowGrid: (show: boolean) => void
+  setShowLosDebugMask: (show: boolean) => void
+  setShowLosDebugRays: (show: boolean) => void
   setCameraPreset: (preset: CameraPreset) => void
   clearCameraPreset: () => void
   fpsLimit: 0 | 30 | 60 | 120
@@ -433,6 +438,8 @@ export const useDungeonStore = create<DungeonState>()(
   sceneLighting: { intensity: 1 },
   postProcessing: { enabled: false, focusDistance: 0.5, focalLength: 3, bokehScale: 2 },
   showGrid: true,
+  showLosDebugMask: true,
+  showLosDebugRays: true,
   fpsLimit: 60 as 0 | 30 | 60 | 120,
   activeCameraMode: 'perspective',
   cameraPreset: null,
@@ -705,6 +712,18 @@ export const useDungeonStore = create<DungeonState>()(
       }
     })
   },
+  clearExploredCells: () => {
+    set((current) => {
+      if (Object.keys(current.exploredCells).length === 0) {
+        return current
+      }
+
+      return {
+        ...current,
+        exploredCells: {},
+      }
+    })
+  },
   removeObject: (id) => {
     const state = get()
     const object = state.placedObjects[id]
@@ -879,6 +898,12 @@ export const useDungeonStore = create<DungeonState>()(
   setShowGrid: (show) => {
     set((state) => ({ ...state, showGrid: show }))
   },
+  setShowLosDebugMask: (show) => {
+    set((state) => ({ ...state, showLosDebugMask: show }))
+  },
+  setShowLosDebugRays: (show) => {
+    set((state) => ({ ...state, showLosDebugRays: show }))
+  },
   setFpsLimit: (limit) => {
     set((state) => ({ ...state, fpsLimit: limit }))
   },
@@ -947,11 +972,13 @@ export const useDungeonStore = create<DungeonState>()(
        cameraMode: 'orbit',
       activeCameraMode: 'perspective',
       cameraPreset: 'perspective', // triggers camera to home position
-      // Settings reset to defaults
-      sceneLighting: { intensity: 1 },
-      postProcessing: { enabled: false, focusDistance: 0.5, focalLength: 3, bokehScale: 2 },
-      showGrid: true,
-      // Undo/redo cleared
+       // Settings reset to defaults
+       sceneLighting: { intensity: 1 },
+       postProcessing: { enabled: false, focusDistance: 0.5, focalLength: 3, bokehScale: 2 },
+       showGrid: true,
+       showLosDebugMask: true,
+       showLosDebugRays: true,
+       // Undo/redo cleared
       history: [],
       future: [],
       // Floors reset to single ground floor

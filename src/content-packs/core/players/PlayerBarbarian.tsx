@@ -30,14 +30,6 @@ export const playerBarbarianAsset: ContentPackAsset = {
   assetUrl: playerBarbarianAssetUrl,
   Component: PlayerBarbarian,
   metadata: {
-    connectsTo: 'FLOOR',
-    light: {
-      color: '#ffe6b8',
-      intensity: 3.5,
-      distance: 7,
-      decay: 2,
-      castShadow: false,
-      offset: [0, 1.4, 0],
-    },
+    connectsTo: 'FLOOR'
   },
 }
