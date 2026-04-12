@@ -1,44 +1,41 @@
 import { defineConfig } from 'vitest/config'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
+import path from 'path'
 
 export default defineConfig({
   // When deploying to a subfolder on GitHub Pages, set VITE_BASE_PATH=/dungeonplanner/
   base: process.env.VITE_BASE_PATH ?? '/',
   assetsInclude: ['**/*.glb'],
   plugins: [react(), tailwindcss()],
+  resolve: {
+    alias: {
+      // three/webgpu and three/tsl pre-built files (three.webgpu.js, three.tsl.js)
+      // contain a debug import to https://greggman.github.io/... which crashes
+      // in LAN-only environments without internet access.  Redirect to the
+      // source files which are identical but without that debug side-effect.
+      'three/webgpu': path.resolve('./node_modules/three/src/Three.WebGPU.js'),
+      'three/tsl':    path.resolve('./node_modules/three/src/Three.TSL.js'),
+    },
+  },
   build: {
-    chunkSizeWarningLimit: 2500,
+    target: 'esnext',
+    chunkSizeWarningLimit: 4000,
     rollupOptions: {
       output: {
         manualChunks(id) {
-          if (id.includes('node_modules/react')) {
+          if (id.includes('node_modules/react') || id.includes('node_modules/react-dom') || id.includes('node_modules/scheduler')) {
             return 'react'
           }
-
-          // Keep three + fiber + drei in ONE chunk so Rollup can resolve
-          // Three.js WebGPU/TSL circular-dependency init order correctly.
-          // Splitting them caused "LT is undefined" crashes in the prod build.
-          if (
-            id.includes('node_modules/three') ||
-            id.includes('@react-three/fiber') ||
-            id.includes('@react-three/drei') ||
-            id.includes('node_modules/three-stdlib')
-          ) {
-            return 'three'
-          }
-
           if (
             id.includes('@react-three/rapier') ||
             id.includes('@dimforge/rapier3d-compat')
           ) {
             return 'rapier'
           }
-
           if (id.includes('node_modules/zustand')) {
             return 'state'
           }
-
           return undefined
         },
       },
