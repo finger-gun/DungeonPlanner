@@ -46,38 +46,46 @@ export function MultiplayerProvider({ children }: { children: ReactNode }) {
         setConnected(true)
         setRoom(room, room.sessionId)
 
-        // ── Initial entity sync ──────────────────────────────────────────
-        // room.state.entities may not be hydrated yet on first join;
-        // onAdd listeners below will fill in entities as patches arrive.
-        const snapshot: Record<string, ReturnType<typeof entityToSnapshot>> = {}
-        try {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          ;(room.state.entities as any)?.forEach?.((e: Entity, id: string) => {
+        // ── Entity listeners — deferred until first state patch ───────────
+        // The Colyseus client SDK receives room.state asynchronously via a
+        // binary patch AFTER joinOrCreate resolves.  Until that first patch
+        // arrives, room.state is a plain empty object and room.state.entities
+        // is undefined.  We use onStateChange.once to defer wiring up
+        // onAdd/onRemove until the MapSchema is actually present.
+        function attachEntityListeners(state: DungeonState) {
+          const entities = (state as any).entities
+          if (!entities?.onAdd) return   // schema not yet a MapSchema — skip
+
+          // Snapshot any entities that already exist in the initial state
+          const snapshot: Record<string, ReturnType<typeof entityToSnapshot>> = {}
+          entities.forEach((e: Entity, id: string) => {
             snapshot[id] = entityToSnapshot(e)
           })
-        } catch {
-          // State not yet hydrated — ignore, onAdd will populate entities
+          setEntities(snapshot)
+
+          entities.onAdd((entity: any, id: string) => {
+            updateEntity(id, entityToSnapshot(entity as Entity))
+            entity.listen('worldX', (v: number) => updateEntity(id, { worldX: v }))
+            entity.listen('worldZ', (v: number) => updateEntity(id, { worldZ: v }))
+            entity.listen('cellX',  (v: number) => updateEntity(id, { cellX: v }))
+            entity.listen('cellZ',  (v: number) => updateEntity(id, { cellZ: v }))
+            entity.listen('name',   (v: string) => updateEntity(id, { name: v }))
+            entity.listen('visibleToPlayers', (v: boolean) => updateEntity(id, { visibleToPlayers: v }))
+            entity.listen('movementRange', (v: number) => updateEntity(id, { movementRange: v }))
+          })
+
+          entities.onRemove((_entity: any, id: string) => {
+            removeEntity(id)
+          })
         }
-        setEntities(snapshot)
 
-        // ── Entity change listeners ──────────────────────────────────────
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        ;(room.state.entities as any).onAdd((entity: any, id: string) => {
-          updateEntity(id, entityToSnapshot(entity as Entity))
-          // Track individual field changes for smooth lerp
-          entity.listen('worldX', (v: number) => updateEntity(id, { worldX: v }))
-          entity.listen('worldZ', (v: number) => updateEntity(id, { worldZ: v }))
-          entity.listen('cellX',  (v: number) => updateEntity(id, { cellX: v }))
-          entity.listen('cellZ',  (v: number) => updateEntity(id, { cellZ: v }))
-          entity.listen('name',   (v: string) => updateEntity(id, { name: v }))
-          entity.listen('visibleToPlayers', (v: boolean) => updateEntity(id, { visibleToPlayers: v }))
-          entity.listen('movementRange', (v: number) => updateEntity(id, { movementRange: v }))
-        })
-
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        ;(room.state.entities as any).onRemove((_entity: any, id: string) => {
-          removeEntity(id)
-        })
+        // If state is already hydrated (reconnect / fast server), wire up now.
+        // Otherwise wait for the first state patch.
+        if ((room.state as any)?.entities?.onAdd) {
+          attachEntityListeners(room.state)
+        } else {
+          room.onStateChange.once((state: DungeonState) => attachEntityListeners(state))
+        }
 
         // ── Map sync (full state from DM) ────────────────────────────────
         room.onMessage<string>('mapSync', (json: string) => {
