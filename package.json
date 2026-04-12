@@ -17,11 +17,9 @@
     "verify": "npm run lint && npm test && npm run build && npm run test:e2e",
     "server": "cd server && npm run dev",
     "server:start": "npm run build && cd server && npm start",
-    "server:install": "cd server && npm install --legacy-peer-deps"
+    "server:install": "cd server && npm install"
   },
   "dependencies": {
-    "@colyseus/react": "^0.1.14",
-    "@colyseus/sdk": "^0.17.39",
     "@react-three/drei": "^10.7.7",
     "@react-three/fiber": "^9.5.0",
     "@react-three/rapier": "^2.2.0",
