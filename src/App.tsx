@@ -1,5 +1,4 @@
-import { Suspense, lazy, useEffect, useEffectEvent, Component } from 'react'
-import type { ReactNode, ErrorInfo } from 'react'
+import { Suspense, lazy, useEffect, useEffectEvent } from 'react'
 import { overlayDomRef } from './components/canvas/floorTransition'
 import { getDefaultAssetIdByCategory } from './content-packs/registry'
 import { EditorToolbar } from './components/editor/EditorToolbar'
@@ -259,55 +258,9 @@ function App() {
 export default function AppRoot() {
   return (
     <MultiplayerProvider>
-      <WebGPUGate>
-        <App />
-      </WebGPUGate>
+      <App />
     </MultiplayerProvider>
   )
-}
-
-/** Catches Three.js / WebGPU initialisation crashes and shows a friendly message. */
-class WebGPUGate extends Component<{ children: ReactNode }, { crashed: boolean }> {
-  constructor(props: { children: ReactNode }) {
-    super(props)
-    this.state = { crashed: false }
-  }
-
-  static getDerivedStateFromError() {
-    return { crashed: true }
-  }
-
-  componentDidCatch(error: Error, info: ErrorInfo) {
-    console.error('[WebGPUGate] Render error:', error, info)
-  }
-
-  render() {
-    const webGPUSupported = typeof navigator !== 'undefined' && 'gpu' in navigator
-    if (this.state.crashed || !webGPUSupported) {
-      return (
-        <div className="flex h-screen flex-col items-center justify-center gap-6 bg-stone-950 text-stone-100 p-8 text-center">
-          <div className="text-4xl">⚠️</div>
-          <h1 className="text-xl font-semibold text-amber-300">WebGPU required</h1>
-          <p className="max-w-sm text-sm text-stone-400 leading-relaxed">
-            DungeonPlanner uses WebGPU for rendering, which your browser doesn't support yet.
-          </p>
-          <p className="max-w-sm text-sm text-stone-500 leading-relaxed">
-            Please open this page in <span className="text-stone-300 font-medium">Google Chrome</span> or{' '}
-            <span className="text-stone-300 font-medium">Microsoft Edge</span> (version 113 or newer).
-          </p>
-          <a
-            href="https://www.google.com/chrome/"
-            target="_blank"
-            rel="noreferrer"
-            className="rounded-2xl bg-amber-400/15 border border-amber-400/30 px-5 py-2.5 text-sm font-medium text-amber-300 hover:bg-amber-400/25 transition"
-          >
-            Download Chrome
-          </a>
-        </div>
-      )
-    }
-    return this.props.children
-  }
 }
 
 function formatCount(count: number, singular: string) {
