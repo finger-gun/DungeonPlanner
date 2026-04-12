@@ -20,6 +20,9 @@ export class Entity extends Schema {
 }
 
 export class DungeonState extends Schema {
+  /** Session ID of the DM — stored so server LoS logic can identify DM clients */
+  @type('string') dmSessionId: string = ''
+
   /** Map of entity ID → Entity */
   @type({ map: Entity }) entities = new MapSchema<Entity>()
 

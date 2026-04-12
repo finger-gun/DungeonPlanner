@@ -10,11 +10,16 @@ type PlaceToken   = { id: string; type: 'PLAYER' | 'NPC'; cellX: number; cellZ: 
 type RemoveToken  = { entityId: string }
 type ToggleVisible = { entityId: string; visible: boolean }
 
-export class DungeonRoom extends Room<DungeonState> {
+export class DungeonRoom extends Room {
   maxClients = 16
 
   // Track which sessionId has the DM role
   private dmSessionId: string | null = null
+
+  // Typed accessor for the room state
+  private get ds(): DungeonState {
+    return this.state as DungeonState
+  }
 
   onCreate(_options: unknown) {
     this.setState(new DungeonState())
@@ -26,7 +31,7 @@ export class DungeonRoom extends Room<DungeonState> {
       if (!this.isDM(client)) return
       try {
         JSON.parse(json) // validate it's parseable
-        this.state.mapJson = json
+        this.ds.mapJson = json
         // Broadcast to players (not back to DM who sent it)
         this.broadcast('mapSync', json, { except: client })
       } catch {
@@ -38,7 +43,7 @@ export class DungeonRoom extends Room<DungeonState> {
     // (simple v1 approach: full re-sync on every DM edit)
     this.onMessage<string>('mapUpdate', (client, json) => {
       if (!this.isDM(client)) return
-      this.state.mapJson = json
+      this.ds.mapJson = json
       this.broadcast('mapSync', json, { except: client })
     })
 
@@ -55,23 +60,23 @@ export class DungeonRoom extends Room<DungeonState> {
       entity.name            = msg.name
       entity.assetId         = msg.assetId
       entity.visibleToPlayers = true
-      this.state.entities.set(entity.id, entity)
+      this.ds.entities.set(entity.id, entity)
     })
 
     this.onMessage<RemoveToken>('removeToken', (client, msg) => {
       if (!this.isDM(client)) return
-      this.state.entities.delete(msg.entityId)
+      this.ds.entities.delete(msg.entityId)
     })
 
     this.onMessage<ToggleVisible>('toggleVisible', (client, msg) => {
       if (!this.isDM(client)) return
-      const entity = this.state.entities.get(msg.entityId)
+      const entity = this.ds.entities.get(msg.entityId)
       if (entity) entity.visibleToPlayers = msg.visible
     })
 
     // ── Movement ─────────────────────────────────────────────────────────────
     this.onMessage<MoveRequest>('requestMove', (client, msg) => {
-      const entity = this.state.entities.get(msg.entityId)
+      const entity = this.ds.entities.get(msg.entityId)
       if (!entity) return
       if (entity.type === 'NPC' && !this.isDM(client)) return // players can't move NPCs
 
@@ -87,20 +92,22 @@ export class DungeonRoom extends Room<DungeonState> {
       }
 
       this.applyMove(entity, msg.targetCell)
+      this.broadcastLoSFilter()
     })
 
     this.onMessage<ForceMove>('forceMoveEntity', (client, msg) => {
       if (!this.isDM(client)) return
-      const entity = this.state.entities.get(msg.entityId)
+      const entity = this.ds.entities.get(msg.entityId)
       if (!entity) return
       this.applyMove(entity, msg.targetCell)
+      this.broadcastLoSFilter()
     })
 
     // DM can update entity properties (name, movementRange, etc.)
     this.onMessage<{ entityId: string; patch: Partial<{ name: string; movementRange: number; type: 'PLAYER' | 'NPC' }> }>(
       'patchEntity', (client, msg) => {
         if (!this.isDM(client)) return
-        const entity = this.state.entities.get(msg.entityId)
+        const entity = this.ds.entities.get(msg.entityId)
         if (!entity) return
         if (msg.patch.name        !== undefined) entity.name          = msg.patch.name
         if (msg.patch.movementRange !== undefined) entity.movementRange = msg.patch.movementRange
@@ -109,8 +116,9 @@ export class DungeonRoom extends Room<DungeonState> {
     )
   }
 
-  onAuth(client: Client, _options: unknown, request: { socket: { remoteAddress: string } }) {
-    const ip = request.socket.remoteAddress ?? ''
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  onAuth(client: Client, _options: unknown, context: any) {
+    const ip: string = context?.socket?.remoteAddress ?? context?.request?.socket?.remoteAddress ?? ''
     const role: ClientRole =
       ip === '127.0.0.1' || ip === '::1' || ip === '::ffff:127.0.0.1'
         ? 'dm'
@@ -119,6 +127,7 @@ export class DungeonRoom extends Room<DungeonState> {
     // First DM wins; subsequent localhost connections are still DM (e.g. multiple windows)
     if (role === 'dm' && this.dmSessionId === null) {
       this.dmSessionId = client.sessionId
+      this.ds.dmSessionId = client.sessionId
     }
 
     return { role }
@@ -128,8 +137,8 @@ export class DungeonRoom extends Room<DungeonState> {
     console.log(`[DungeonRoom] ${auth.role} joined: ${client.sessionId}`)
 
     // Send current map state to the joining client
-    if (this.state.mapJson) {
-      client.send('mapSync', this.state.mapJson)
+    if (this.ds.mapJson) {
+      client.send('mapSync', this.ds.mapJson)
     }
   }
 
@@ -145,7 +154,37 @@ export class DungeonRoom extends Room<DungeonState> {
     console.log('[DungeonRoom] room disposed')
   }
 
-  // ── Private helpers ────────────────────────────────────────────────────────
+  /**
+   * Send per-client LoS visibility snapshots after entity moves.
+   * Tells each player client which NPC IDs are currently visible to them,
+   * so they can hide tokens that exit their LoS.
+   */
+  private broadcastLoSFilter() {
+    const LOS_RADIUS = 10
+    const players = Array.from(this.ds.entities.values()).filter(
+      (e) => e.type === 'PLAYER',
+    )
+
+    // Build visible NPC set (any PLAYER within LOS_RADIUS)
+    const visibleNpcIds = new Set<string>()
+    for (const [id, entity] of this.ds.entities) {
+      if (entity.type !== 'NPC' || !entity.visibleToPlayers) continue
+      for (const player of players) {
+        const dx = player.cellX - entity.cellX
+        const dz = player.cellZ - entity.cellZ
+        if (dx * dx + dz * dz <= LOS_RADIUS * LOS_RADIUS) {
+          visibleNpcIds.add(id)
+          break
+        }
+      }
+    }
+
+    // Broadcast visible NPC list to all non-DM clients
+    for (const client of this.clients) {
+      if (this.isDM(client)) continue
+      client.send('losUpdate', { visibleNpcIds: Array.from(visibleNpcIds) })
+    }
+  }
 
   private isDM(client: Client): boolean {
     return client.sessionId === this.dmSessionId
@@ -165,7 +204,7 @@ export class DungeonRoom extends Room<DungeonState> {
    */
   private getWallGrid(): (x: number, z: number) => boolean {
     try {
-      const file = JSON.parse(this.state.mapJson) as {
+      const file = JSON.parse(this.ds.mapJson) as {
         floors: Array<{ id: string; cells: Array<{ x: number; z: number }> }>
         activeFloorId: string
       }

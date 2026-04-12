@@ -78,6 +78,20 @@ export function MultiplayerProvider({ children }: { children: ReactNode }) {
           if (!ok) console.warn('[MultiplayerProvider] mapSync: failed to load dungeon JSON')
         })
 
+        // ── LoS update (server tells players which NPCs are visible) ─────
+        room.onMessage<{ visibleNpcIds: string[] }>('losUpdate', ({ visibleNpcIds }) => {
+          const visible = new Set(visibleNpcIds)
+          const { entities, updateEntity } = useMultiplayerStore.getState()
+          for (const [id, entity] of Object.entries(entities)) {
+            if (entity.type === 'NPC') {
+              const shouldBeVisible = visible.has(id)
+              if (entity.visibleToPlayers !== shouldBeVisible) {
+                updateEntity(id, { visibleToPlayers: shouldBeVisible })
+              }
+            }
+          }
+        })
+
         room.onError((code: number, message?: string) => {
           console.error('[MultiplayerProvider] room error', code, message)
           setConnected(false)
