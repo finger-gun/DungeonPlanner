@@ -14,9 +14,12 @@ import {
 import type { DungeonState, Entity } from './colyseusTypes'
 import { useDungeonStore } from '../store/useDungeonStore'
 
+// Mirror the page protocol: https → wss (required when server runs with certs),
+// http → ws.  This also avoids mixed-content blocks when the page is HTTPS.
+const wsProtocol = window.location.protocol === 'https:' ? 'wss' : 'ws'
 const COLYSEUS_ENDPOINT =
   import.meta.env.VITE_COLYSEUS_URL ??
-  `ws://${window.location.hostname}:2567`
+  `${wsProtocol}://${window.location.hostname}:2567`
 
 /** True when the page was loaded from the server itself (DM role) */
 function isLocalhost(): boolean {
