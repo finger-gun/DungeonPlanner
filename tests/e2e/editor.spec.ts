@@ -253,8 +253,8 @@ test.describe('Dungeon editor smoke flow', () => {
 
     await expect(page.getByTestId('debug-visibility-panel')).toBeVisible()
 
-    await page.getByRole('button', { name: 'Render LoS rays On' }).click()
-    await page.getByRole('button', { name: 'Render LoS mask On' }).click()
+    await page.getByRole('button', { name: 'Render LoS rays Off' }).click()
+    await page.getByRole('button', { name: 'Render LoS mask Off' }).click()
 
     await page.waitForFunction(() => {
       const snapshot = window.__DUNGEON_DEBUG__?.getSnapshot() as {
@@ -262,7 +262,7 @@ test.describe('Dungeon editor smoke flow', () => {
         showLosDebugRays?: boolean
       } | undefined
 
-      return snapshot?.showLosDebugMask === false && snapshot?.showLosDebugRays === false
+      return snapshot?.showLosDebugMask === true && snapshot?.showLosDebugRays === true
     })
   })
 
