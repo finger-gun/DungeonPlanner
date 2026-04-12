@@ -10,12 +10,13 @@ export default defineConfig({
   plugins: [react(), tailwindcss()],
   resolve: {
     alias: {
-      // three/webgpu and three/tsl pre-built files (three.webgpu.js, three.tsl.js)
-      // contain a debug import to https://greggman.github.io/... which crashes
-      // in LAN-only environments without internet access.  Redirect to the
-      // source files which are identical but without that debug side-effect.
+      // three.webgpu.js and three.tsl.js (pre-built) contain a debug import
+      // to https://greggman.github.io/... that crashes in LAN-only sessions.
+      // Alias all three entrypoints to source so Rollup resolves them as one
+      // module identity — avoids the "Light node not found" split-instance bug.
       'three/webgpu': path.resolve('./node_modules/three/src/Three.WebGPU.js'),
       'three/tsl':    path.resolve('./node_modules/three/src/Three.TSL.js'),
+      'three':        path.resolve('./node_modules/three/src/Three.js'),
     },
   },
   build: {
