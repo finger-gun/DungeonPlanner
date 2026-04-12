@@ -1,6 +1,8 @@
 import express from 'express'
 import cors from 'cors'
-import { createServer } from 'http'
+import { createServer as createHttpServer } from 'http'
+import { createServer as createHttpsServer } from 'https'
+import { readFileSync, existsSync } from 'fs'
 import { Server } from 'colyseus'
 import { WebSocketTransport } from '@colyseus/ws-transport'
 import { networkInterfaces } from 'os'
@@ -18,13 +20,9 @@ const app = express()
 // same-host production case. Colyseus WebSocket handshake also uses HTTP.
 app.use(cors({
   origin: (origin, cb) => {
-    // Allow requests with no origin (e.g. same-origin prod, curl), or any
-    // localhost / 127.0.0.1 origin (Vite dev server on any port).
-    if (!origin || /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)) {
-      cb(null, true)
-    } else {
-      cb(null, true) // allow all LAN origins — users run on a local network
-    }
+    // Allow requests with no origin (same-origin prod, curl) or any
+    // localhost / LAN origin over http or https.
+    cb(null, true)
   },
   credentials: true,
 }))
@@ -41,8 +39,20 @@ app.get('*', (_req, res) => {
   res.sendFile(path.join(distPath, 'index.html'))
 })
 
-// ── HTTP + Colyseus server ────────────────────────────────────────────────────
-const httpServer = createServer(app)
+// ── HTTP / HTTPS + Colyseus server ───────────────────────────────────────────
+// WebGPU requires a secure context — plain http:// on a LAN IP won't expose
+// navigator.gpu and the renderer crashes.  If mkcert certs exist next to this
+// file we start HTTPS; otherwise fall back to HTTP (localhost only works fine).
+const certDir = path.resolve(__dirname, '..', 'certs')
+const certFile = path.join(certDir, 'cert.pem')
+const keyFile  = path.join(certDir, 'key.pem')
+const hasCerts = existsSync(certFile) && existsSync(keyFile)
+
+const httpServer = hasCerts
+  ? createHttpsServer({ cert: readFileSync(certFile), key: readFileSync(keyFile) }, app)
+  : createHttpServer(app)
+
+const protocol = hasCerts ? 'https' : 'http'
 
 const gameServer = new Server({
   transport: new WebSocketTransport({
@@ -58,12 +68,17 @@ gameServer.listen(PORT).then(() => {
   const lanIp = getLanIp()
 
   console.log('')
-  console.log('  ╔══════════════════════════════════════╗')
-  console.log('  ║      DungeonPlanner — Server         ║')
-  console.log('  ╠══════════════════════════════════════╣')
-  console.log(`  ║  DM (you):  http://localhost:${PORT}   ║`)
-  console.log(`  ║  Players:   http://${lanIp}:${PORT}  ║`)
-  console.log('  ╚══════════════════════════════════════╝')
+  console.log('  ╔════════════════════════════════════════╗')
+  console.log('  ║       DungeonPlanner — Server          ║')
+  console.log('  ╠════════════════════════════════════════╣')
+  console.log(`  ║  DM (you):  ${protocol}://localhost:${PORT}      ║`)
+  console.log(`  ║  Players:   ${protocol}://${lanIp}:${PORT}   ║`)
+  if (!hasCerts) {
+    console.log('  ╠════════════════════════════════════════╣')
+    console.log('  ║  ⚠  Running HTTP — WebGPU needs HTTPS  ║')
+    console.log('  ║  Run scripts/setup-certs.sh to fix it  ║')
+  }
+  console.log('  ╚════════════════════════════════════════╝')
   console.log('')
   console.log('  Share the Players URL with your group.')
   console.log('  Press Ctrl+C to stop the server.')

@@ -37,3 +37,4 @@ Thumbs.db
 # Testing
 playwright-report
 test-results
+server/certs/
