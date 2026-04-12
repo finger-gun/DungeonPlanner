@@ -16,19 +16,16 @@ export default defineConfig({
             return 'react'
           }
 
-          if (id.includes('node_modules/three')) {
-            return 'three'
-          }
-
-          if (id.includes('@react-three/fiber')) {
-            return 'fiber'
-          }
-
+          // Keep three + fiber + drei in ONE chunk so Rollup can resolve
+          // Three.js WebGPU/TSL circular-dependency init order correctly.
+          // Splitting them caused "LT is undefined" crashes in the prod build.
           if (
+            id.includes('node_modules/three') ||
+            id.includes('@react-three/fiber') ||
             id.includes('@react-three/drei') ||
             id.includes('node_modules/three-stdlib')
           ) {
-            return 'drei'
+            return 'three'
           }
 
           if (
