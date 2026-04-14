@@ -863,6 +863,8 @@ export const useDungeonStore = create<DungeonState>()(
     set((current) => ({
       ...current,
       tool,
+      cameraPreset: tool === 'room' ? 'top-down' : current.cameraPreset,
+      activeCameraMode: tool === 'room' ? 'top-down' : current.activeCameraMode,
       history: [...current.history, previousSnapshot],
       future: [],
     }))

@@ -1,4 +1,4 @@
-import { Canvas, useFrame, useThree } from '@react-three/fiber'
+import { Canvas, useFrame, useThree, type ThreeEvent } from '@react-three/fiber'
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import * as THREE from 'three'
 import { WebGPURenderer } from 'three/webgpu'
@@ -13,9 +13,10 @@ import { WebGPUPostProcessing } from './WebGPUPostProcessing'
 import { useDungeonStore, type DungeonObjectRecord } from '../../store/useDungeonStore'
 import { usePlayVisibility } from './playVisibility'
 import { ContentPackInstance } from './ContentPackInstance'
-import { cellToWorldPosition, getCellKey, snapWorldPointToGrid, type GridCell } from '../../hooks/useSnapToGrid'
+import { getCellKey, snapWorldPointToGrid } from '../../hooks/useSnapToGrid'
 import { PlayVisibilityMask } from './PlayVisibilityMask'
 import { PlayVisibilityDebugRays } from './PlayVisibilityDebugRays'
+import { createPlayDragState, updatePlayDragState, type PlayDragState } from './playDrag'
 
 async function createPreferredRenderer(props: THREE.WebGLRendererParameters) {
   const powerPreference =
@@ -204,21 +205,16 @@ function FloorContent({ startY = 0 }: { startY?: number }) {
     invalidate()
   }, [invalidate, setObjectDragActive])
 
-  const startDrag = useCallback((object: DungeonObjectRecord) => {
+  const startDrag = useCallback((object: DungeonObjectRecord, event: ThreeEvent<PointerEvent>) => {
     if (tool !== 'play' || object.type !== 'player') {
       return
     }
 
-    const position = cellToWorldPosition(object.cell)
-    const nextState: PlayDragState = {
-      objectId: object.id,
-      assetId: object.assetId,
-      rotation: object.rotation,
-      positionY: object.position[1],
-      cell: object.cell,
-      position: [position[0], object.position[1], position[2]],
-      valid: true,
-    }
+    const pointerPoint = event.ray.intersectPlane(
+      new THREE.Plane(new THREE.Vector3(0, 1, 0), 0),
+      new THREE.Vector3(),
+    )
+    const nextState = createPlayDragState(object, pointerPoint)
 
     selectObject(object.id)
     setDragState(nextState)
@@ -253,20 +249,20 @@ function FloorContent({ startY = 0 }: { startY?: number }) {
         return
       }
 
-      const snapped = snapWorldPointToGrid(point)
+      const current = dragStateRef.current
+      if (!current) {
+        return
+      }
+
+      const nextDisplayX = point.x + current.grabOffset[0]
+      const nextDisplayZ = point.z + current.grabOffset[1]
+      const snapped = snapWorldPointToGrid({ x: nextDisplayX, y: point.y, z: nextDisplayZ })
       const targetKey = getCellKey(snapped.cell)
       const anchorKey = `${targetKey}:floor`
       const occupantId = occupancy[anchorKey]
-      const valid = Boolean(paintedCells[targetKey]) && (!occupantId || occupantId === dragStateRef.current?.objectId)
-      const targetPosition = cellToWorldPosition(snapped.cell)
 
       setDragState((current) => current
-        ? {
-            ...current,
-            cell: snapped.cell,
-            position: [targetPosition[0], current.positionY, targetPosition[2]],
-            valid,
-          }
+        ? updatePlayDragState(current, point, Boolean(paintedCells[targetKey]), occupantId)
         : current)
       invalidate()
     }
@@ -325,7 +321,7 @@ function FloorContent({ startY = 0 }: { startY?: number }) {
         )
       ))}
       {dragState && (
-        <group position={dragState.position} rotation={dragState.rotation}>
+        <group position={dragState.displayPosition} rotation={dragState.rotation}>
           <ContentPackInstance
             assetId={dragState.assetId}
             selected
@@ -337,16 +333,6 @@ function FloorContent({ startY = 0 }: { startY?: number }) {
       )}
     </group>
   )
-}
-
-type PlayDragState = {
-  objectId: string
-  assetId: string | null
-  rotation: [number, number, number]
-  positionY: number
-  cell: GridCell
-  position: [number, number, number]
-  valid: boolean
 }
 
 /**

@@ -11,7 +11,7 @@ import type { PlayVisibility } from './playVisibility'
 type DungeonObjectProps = {
   object: DungeonObjectRecord
   visibility: PlayVisibility
-  onPlayDragStart?: (object: DungeonObjectRecord) => void
+  onPlayDragStart?: (object: DungeonObjectRecord, event: ThreeEvent<PointerEvent>) => void
 }
 
 export const DungeonObject = memo(function DungeonObject({
@@ -64,7 +64,7 @@ export const DungeonObject = memo(function DungeonObject({
 
     event.stopPropagation()
     selectObject(object.id)
-    onPlayDragStart?.(object)
+    onPlayDragStart?.(object, event)
   }
 
   function handleContextMenu(event: ThreeEvent<PointerEvent>) {

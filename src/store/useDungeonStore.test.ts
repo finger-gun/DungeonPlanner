@@ -221,6 +221,15 @@ describe('useDungeonStore history', () => {
     expect(useDungeonStore.getState().tool).toBe('prop')
   })
 
+  it('switches to top-down view when entering room mode', () => {
+    useDungeonStore.getState().setTool('room')
+
+    const state = useDungeonStore.getState()
+    expect(state.tool).toBe('room')
+    expect(state.cameraPreset).toBe('top-down')
+    expect(state.activeCameraMode).toBe('top-down')
+  })
+
   it('preserves a wall-connected prop when adjacent room is drawn (inter-room wall)', () => {
     useDungeonStore.getState().paintCells([[0, 0]])
 
