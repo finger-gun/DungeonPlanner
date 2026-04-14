@@ -5,6 +5,14 @@ import { getCellKey, type GridCell } from '../hooks/useSnapToGrid'
 import type { ContentPackCategory, PropConnector } from '../content-packs/types'
 import { serializeDungeon, deserializeDungeon } from './serialization'
 import { getOpeningSegments } from './openingSegments'
+import {
+  getRoomBounds,
+  getRoomCellKeysInBounds,
+  getResizedRoomCellsForRun,
+  remapOpeningForRoomResize,
+  type RoomBoundaryRun,
+  type RoomBounds,
+} from './roomResize'
 
 export { getOpeningSegments } from './openingSegments'
 
@@ -112,6 +120,8 @@ type DungeonState = DungeonSnapshot & {
   cameraMode: CameraMode
   isPaintingStrokeActive: boolean
   isObjectDragActive: boolean
+  isRoomResizeHandleActive: boolean
+  selectedRoomId: string | null
   sceneLighting: SceneLighting
   postProcessing: PostProcessingSettings
   showGrid: boolean
@@ -131,9 +141,13 @@ type DungeonState = DungeonSnapshot & {
   removeObject: (id: string) => void
   removeObjectAtCell: (cellKey: string) => void
   removeSelectedObject: () => void
+  removeSelectedRoom: () => void
   rotateSelection: () => void
+  clearSelection: () => void
   selectObject: (id: string | null) => void
   setTool: (tool: DungeonTool) => void
+  selectRoom: (id: string | null) => void
+  setRoomResizeHandleActive: (active: boolean) => void
   setSelectedAsset: (category: ContentPackCategory, assetId: string) => void
   setPaintingStrokeActive: (active: boolean) => void
   setObjectDragActive: (active: boolean) => void
@@ -162,6 +176,8 @@ type DungeonState = DungeonSnapshot & {
   removeRoom: (id: string) => void
   renameRoom: (id: string, name: string) => void
   assignCellsToRoom: (cellKeys: string[], roomId: string | null) => void
+  resizeRoom: (roomId: string, bounds: RoomBounds) => boolean
+  resizeRoomByBoundaryRun: (roomId: string, run: RoomBoundaryRun, boundary: number) => boolean
   setRoomFloorAsset: (roomId: string, assetId: string | null) => void
   setRoomWallAsset: (roomId: string, assetId: string | null) => void
   // Floor actions
@@ -421,6 +437,8 @@ export const useDungeonStore = create<DungeonState>()(
   cameraMode: 'orbit',
   isPaintingStrokeActive: false,
   isObjectDragActive: false,
+  isRoomResizeHandleActive: false,
+  selectedRoomId: null,
   sceneLighting: { intensity: 1 },
   postProcessing: { enabled: false, focusDistance: 0.5, focalLength: 3, bokehScale: 2 },
   showGrid: true,
@@ -790,6 +808,15 @@ export const useDungeonStore = create<DungeonState>()(
 
     get().removeObject(selection)
   },
+  removeSelectedRoom: () => {
+    const selectedRoomId = get().selectedRoomId
+
+    if (!selectedRoomId) {
+      return
+    }
+
+    get().removeRoom(selectedRoomId)
+  },
   rotateSelection: () => {
     const state = get()
     const selection = state.selection
@@ -845,6 +872,17 @@ export const useDungeonStore = create<DungeonState>()(
       future: [],
     }))
   },
+  clearSelection: () => {
+    set((state) => (
+      state.selection === null && state.selectedRoomId === null
+        ? state
+        : {
+            ...state,
+            selection: null,
+            selectedRoomId: null,
+          }
+    ))
+  },
   selectObject: (id) => {
     set((state) => ({
       ...state,
@@ -863,11 +901,26 @@ export const useDungeonStore = create<DungeonState>()(
     set((current) => ({
       ...current,
       tool,
+      isRoomResizeHandleActive: tool === 'room' ? current.isRoomResizeHandleActive : false,
       cameraPreset: tool === 'room' ? 'top-down' : current.cameraPreset,
       activeCameraMode: tool === 'room' ? 'top-down' : current.activeCameraMode,
       history: [...current.history, previousSnapshot],
       future: [],
     }))
+  },
+  selectRoom: (id) => {
+    set((current) => ({
+      ...current,
+      selectedRoomId: id,
+    }))
+  },
+  setRoomResizeHandleActive: (active) => {
+    set((current) => current.isRoomResizeHandleActive === active
+      ? current
+      : {
+          ...current,
+          isRoomResizeHandleActive: active,
+        })
   },
   setSelectedAsset: (category, assetId) => {
     const state = get()
@@ -976,6 +1029,7 @@ export const useDungeonStore = create<DungeonState>()(
         ...createEmptySnapshot(),
         isPaintingStrokeActive: false,
         isObjectDragActive: false,
+        selectedRoomId: null,
         activeCameraMode: 'perspective',
         cameraPreset: null,
         history: [],
@@ -989,10 +1043,11 @@ export const useDungeonStore = create<DungeonState>()(
     set({
       // Snapshot (rooms, cells, objects, etc.)
        ...fresh,
-       // UI / tool state
-       isPaintingStrokeActive: false,
-       isObjectDragActive: false,
-       cameraMode: 'orbit',
+        // UI / tool state
+        isPaintingStrokeActive: false,
+        isObjectDragActive: false,
+        selectedRoomId: null,
+        cameraMode: 'orbit',
       activeCameraMode: 'perspective',
       cameraPreset: 'perspective', // triggers camera to home position
        // Settings reset to defaults
@@ -1142,6 +1197,7 @@ export const useDungeonStore = create<DungeonState>()(
         wallOpenings,
         occupancy,
         selection,
+        selectedRoomId: current.selectedRoomId === id ? null : current.selectedRoomId,
         history: [...current.history, previousSnapshot],
         future: [],
       }
@@ -1167,6 +1223,176 @@ export const useDungeonStore = create<DungeonState>()(
         future: [],
       }
     })
+  },
+  resizeRoom: (roomId, bounds) => {
+    const state = get()
+    const room = state.rooms[roomId]
+    const oldBounds = getRoomBounds(roomId, state.paintedCells)
+    if (!room) {
+      return false
+    }
+    if (!oldBounds) {
+      return false
+    }
+
+    const targetKeys = new Set(getRoomCellKeysInBounds(bounds))
+    for (const key of targetKeys) {
+      const record = state.paintedCells[key]
+      if (record && record.roomId !== roomId) {
+        return false
+      }
+    }
+
+    const currentRoomKeys = Object.entries(state.paintedCells)
+      .filter(([, record]) => record.roomId === roomId)
+      .map(([key]) => key)
+
+    const unchanged =
+      currentRoomKeys.length === targetKeys.size &&
+      currentRoomKeys.every((key) => targetKeys.has(key))
+    if (unchanged) {
+      return true
+    }
+
+    const previousSnapshot = cloneSnapshot(state)
+
+    set((current) => {
+      const currentRoom = current.rooms[roomId]
+      if (!currentRoom) {
+        return current
+      }
+
+      const paintedCells = { ...current.paintedCells }
+      const changedCells: GridCell[] = []
+
+      Object.entries(current.paintedCells).forEach(([key, record]) => {
+        if (record.roomId === roomId && !targetKeys.has(key)) {
+          changedCells.push(record.cell)
+          delete paintedCells[key]
+        }
+      })
+
+      targetKeys.forEach((key) => {
+        if (paintedCells[key]) {
+          return
+        }
+
+        const [x, z] = key.split(':').map((value) => parseInt(value, 10))
+        const cell: GridCell = [x, z]
+        changedCells.push(cell)
+        paintedCells[key] = {
+          cell,
+          layerId: currentRoom.layerId,
+          roomId,
+        }
+      })
+
+      const remappedWallOpenings = Object.fromEntries(
+        Object.entries(current.wallOpenings).flatMap(([openingId, opening]) => {
+          const remapped = remapOpeningForRoomResize(
+            opening,
+            roomId,
+            oldBounds,
+            bounds,
+            current.paintedCells,
+          )
+          return remapped ? [[openingId, remapped] as const] : []
+        }),
+      )
+
+      const { placedObjects, occupancy, selection, wallOpenings } =
+        pruneInvalidConnectedProps(
+          { ...current, wallOpenings: remappedWallOpenings },
+          paintedCells,
+          changedCells,
+        )
+
+      return {
+        ...current,
+        paintedCells,
+        placedObjects,
+        wallOpenings,
+        occupancy,
+        selection,
+        history: [...current.history, previousSnapshot],
+        future: [],
+      }
+    })
+
+    return true
+  },
+  resizeRoomByBoundaryRun: (roomId, run, boundary) => {
+    const state = get()
+    const room = state.rooms[roomId]
+    if (!room) {
+      return false
+    }
+
+    const targetCells = getResizedRoomCellsForRun(roomId, state.paintedCells, run, boundary)
+    if (!targetCells) {
+      return false
+    }
+
+    const targetKeys = new Set(targetCells.map((cell) => getCellKey(cell)))
+    const currentRoomKeys = Object.entries(state.paintedCells)
+      .filter(([, record]) => record.roomId === roomId)
+      .map(([key]) => key)
+
+    const unchanged =
+      currentRoomKeys.length === targetKeys.size &&
+      currentRoomKeys.every((key) => targetKeys.has(key))
+    if (unchanged) {
+      return true
+    }
+
+    const previousSnapshot = cloneSnapshot(state)
+
+    set((current) => {
+      const currentRoom = current.rooms[roomId]
+      if (!currentRoom) {
+        return current
+      }
+
+      const paintedCells = { ...current.paintedCells }
+      const changedCells: GridCell[] = []
+
+      Object.entries(current.paintedCells).forEach(([key, record]) => {
+        if (record.roomId === roomId && !targetKeys.has(key)) {
+          changedCells.push(record.cell)
+          delete paintedCells[key]
+        }
+      })
+
+      targetCells.forEach((cell) => {
+        const key = getCellKey(cell)
+        if (paintedCells[key]) {
+          return
+        }
+
+        changedCells.push(cell)
+        paintedCells[key] = {
+          cell,
+          layerId: currentRoom.layerId,
+          roomId,
+        }
+      })
+
+      const { placedObjects, occupancy, selection, wallOpenings } =
+        pruneInvalidConnectedProps(current, paintedCells, changedCells)
+
+      return {
+        ...current,
+        paintedCells,
+        placedObjects,
+        wallOpenings,
+        occupancy,
+        selection,
+        history: [...current.history, previousSnapshot],
+        future: [],
+      }
+    })
+
+    return true
   },
   setRoomFloorAsset: (roomId, assetId) => {
     set((current) => ({
@@ -1258,6 +1484,7 @@ export const useDungeonStore = create<DungeonState>()(
       ...newSnapshot,
       history: [],
       future: [],
+      selectedRoomId: null,
       activeFloorId: id,
       floorOrder: [...current.floorOrder, id],
       floors: {
@@ -1289,6 +1516,7 @@ export const useDungeonStore = create<DungeonState>()(
         ...cloneSnapshot(target.snapshot),
         history: [...target.history],
         future: [...target.future],
+        selectedRoomId: null,
         activeFloorId: targetId,
         floorOrder: newOrder,
         floors: newFloors,
@@ -1303,6 +1531,7 @@ export const useDungeonStore = create<DungeonState>()(
       }
       set((current) => ({
         ...current,
+        selectedRoomId: null,
         activeFloorId: current.activeFloorId,
         floorOrder: newOrder,
         floors: { ...newFloors, [state.activeFloorId]: updatedCurrentFloor },
@@ -1330,6 +1559,7 @@ export const useDungeonStore = create<DungeonState>()(
       history: [...target.history],
       future: [...target.future],
       selection: null,
+      selectedRoomId: null,
       activeFloorId: id,
       floors: {
         ...current.floors,
@@ -1545,10 +1775,11 @@ export const useDungeonStore = create<DungeonState>()(
       ...current,
       ...parsed,
       dungeonName: parsed.name ?? current.dungeonName,
-      isPaintingStrokeActive: false,
-      isObjectDragActive: false,
-      activeCameraMode: 'perspective',
-      cameraPreset: null,
+        isPaintingStrokeActive: false,
+        isObjectDragActive: false,
+        selectedRoomId: null,
+        activeCameraMode: 'perspective',
+        cameraPreset: null,
       history: [],
       future: [],
       floors,

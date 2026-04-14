@@ -1,8 +1,8 @@
 /* eslint-disable react-refresh/only-export-components */
 import { useMemo } from 'react'
 import { useGLTF } from '@react-three/drei'
-import propsWallTorchAssetUrl from '../../../assets/models/exports/torch_001.glb'
-import propsWallTorchUnlitAssetUrl from '../../../assets/models/exports/torch.glb'
+import propsWallTorchAssetUrl from '../../../assets/models/core/torch.glb'
+import propsWallTorchLitAssetUrl from '../../../assets/models/core/tortch_lit.glb'
 import type { ContentPackAsset, ContentPackComponentProps } from '../../types'
 
 // Adjust this to compensate for the authored pivot of the prop.
@@ -20,7 +20,7 @@ const TORCH_LIGHT = {
 
 export function PropsWallTorch({ objectProps, ...props }: ContentPackComponentProps) {
   const lit = objectProps?.lit !== false
-  const gltf = useGLTF(lit ? propsWallTorchAssetUrl : propsWallTorchUnlitAssetUrl)
+  const gltf = useGLTF(lit ? propsWallTorchLitAssetUrl : propsWallTorchAssetUrl)
   const scene = useMemo(() => gltf.scene.clone(), [gltf.scene])
 
   return (
@@ -33,7 +33,7 @@ export function PropsWallTorch({ objectProps, ...props }: ContentPackComponentPr
 }
 
 useGLTF.preload(propsWallTorchAssetUrl)
-useGLTF.preload(propsWallTorchUnlitAssetUrl)
+useGLTF.preload(propsWallTorchLitAssetUrl)
 
 export const propsWallTorchAsset: ContentPackAsset = {
   id: 'core.props_wall_torch',

@@ -25,6 +25,7 @@ import { getOpeningSegments } from '../../store/openingSegments'
 import { triggerBuild } from '../../store/buildAnimations'
 import { FloorGridOverlay } from './FloorGridOverlay'
 import { ContentPackInstance } from './ContentPackInstance'
+import { getRoomPreviewCells } from './gridPreview'
 import { getGridOverlayRadius, isPassiveGridMode, shouldRenderGridOverlay } from './gridMode'
 
 type GridProps = {
@@ -47,6 +48,8 @@ export function Grid({ size = 120, playMode = false }: GridProps) {
   const setPaintingStrokeActive = useDungeonStore(
     (state) => state.setPaintingStrokeActive,
   )
+  const isRoomResizeHandleActive = useDungeonStore((state) => state.isRoomResizeHandleActive)
+  const selectRoom = useDungeonStore((state) => state.selectRoom)
   const tool = useDungeonStore((state) => state.tool)
   const showGrid = useDungeonStore((state) => state.showGrid)
   const selectedPropAssetId = useDungeonStore((state) => state.selectedAssetIds.prop)
@@ -138,20 +141,24 @@ export function Grid({ size = 120, playMode = false }: GridProps) {
   }
 
   const previewCells = useMemo(() => {
-    if (tool !== 'room') {
-      return []
-    }
-
-    if (strokeStartCell && strokeCurrentCell && strokeMode) {
-      return filterStrokeCells(
-        getRectangleCells(strokeStartCell, strokeCurrentCell),
-        paintedCells,
-        strokeMode,
-      )
-    }
-
-    return hoveredCell ? [hoveredCell.cell] : []
-  }, [hoveredCell, paintedCells, strokeCurrentCell, strokeMode, strokeStartCell, tool])
+    return getRoomPreviewCells({
+      hoveredCell,
+      paintedCells,
+      strokeCurrentCell,
+      strokeMode,
+      strokeStartCell,
+      suppressRoomPreview: isRoomResizeHandleActive,
+      tool,
+    })
+  }, [
+    hoveredCell,
+    isRoomResizeHandleActive,
+    paintedCells,
+    strokeCurrentCell,
+    strokeMode,
+    strokeStartCell,
+    tool,
+  ])
 
   const commitStroke = useEffectEvent(() => {
     if (tool !== 'room') {
@@ -318,6 +325,19 @@ export function Grid({ size = 120, playMode = false }: GridProps) {
         cellKey: propPlacement.anchorKey,
       })
       return
+    }
+
+    if (tool === 'room') {
+      const hoveredRoomId = paintedCells[getCellKey(snapped.cell)]?.roomId ?? null
+
+      if (event.button === 0 && hoveredRoomId) {
+        selectRoom(hoveredRoomId)
+        return
+      }
+
+      if (event.button === 0 && !hoveredRoomId) {
+        selectRoom(null)
+      }
     }
 
     if (event.button !== 0 && event.button !== 2) {

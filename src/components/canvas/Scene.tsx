@@ -17,6 +17,7 @@ import { getCellKey, snapWorldPointToGrid } from '../../hooks/useSnapToGrid'
 import { PlayVisibilityMask } from './PlayVisibilityMask'
 import { PlayVisibilityDebugRays } from './PlayVisibilityDebugRays'
 import { createPlayDragState, updatePlayDragState, type PlayDragState } from './playDrag'
+import { RoomResizeOverlay } from './RoomResizeOverlay'
 
 async function createPreferredRenderer(props: THREE.WebGLRendererParameters) {
   const powerPreference =
@@ -303,6 +304,7 @@ function FloorContent({ startY = 0 }: { startY?: number }) {
   return (
     <group ref={groupRef} position={[0, startY, 0]}>
       <DungeonRoom visibility={visibility} />
+      <RoomResizeOverlay />
       {visibility.active && visibility.mask && (
         <>
           <PlayVisibilityMask mask={visibility.mask} />

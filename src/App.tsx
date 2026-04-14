@@ -109,9 +109,18 @@ function App() {
 
     const state = useDungeonStore.getState()
 
-    if (event.key === 'Escape' && state.selection) {
+    if (event.key === 'Escape' && (state.selection || state.selectedRoomId)) {
       event.preventDefault()
-      state.selectObject(null)
+      state.clearSelection()
+      return
+    }
+
+    if (
+      (event.key === 'Delete' || event.key === 'Backspace') &&
+      state.selectedRoomId
+    ) {
+      event.preventDefault()
+      state.removeSelectedRoom()
       return
     }
 
@@ -231,7 +240,7 @@ function App() {
       : tool === 'move'
       ? 'WASD / arrows to pan · Q/E to rotate'
       : tool === 'room'
-        ? 'Left-drag to build · right-drag to erase'
+        ? 'Click room to select · drag room edges to resize · rectangular rooms also show corner handles · left-drag empty space to build · right-drag to erase'
         : 'Click to place · R to rotate · right-click to remove · Alt+click to inspect'
 
   return (

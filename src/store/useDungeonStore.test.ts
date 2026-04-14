@@ -64,6 +64,60 @@ describe('useDungeonStore history', () => {
     expect(state.placedObjects[placedId!]?.type).toBe('player')
   })
 
+  it('removes the selected room', () => {
+    useDungeonStore.getState().paintCells([[0, 0], [1, 0]])
+    const roomId = useDungeonStore.getState().paintedCells['0:0'].roomId
+
+    expect(roomId).toBeTruthy()
+
+    useDungeonStore.getState().selectRoom(roomId)
+    useDungeonStore.getState().removeSelectedRoom()
+
+    const state = useDungeonStore.getState()
+    expect(state.rooms[roomId!]).toBeUndefined()
+    expect(state.selectedRoomId).toBeNull()
+    expect(state.paintedCells['0:0']).toBeUndefined()
+    expect(state.paintedCells['1:0']).toBeUndefined()
+  })
+
+  it('clears both object and room selection', () => {
+    useDungeonStore.getState().paintCells([[0, 0]])
+    const roomId = useDungeonStore.getState().paintedCells['0:0'].roomId
+    const placedId = useDungeonStore.getState().placeObject({
+      type: 'prop',
+      assetId: 'core.props_wall_torch',
+      position: [1, 0.45, 1],
+      rotation: [0, 0, 0],
+      props: {},
+      cell: [0, 0],
+      cellKey: '0:0',
+    })
+
+    useDungeonStore.getState().selectRoom(roomId)
+    useDungeonStore.getState().selectObject(placedId)
+    useDungeonStore.getState().clearSelection()
+
+    const state = useDungeonStore.getState()
+    expect(state.selection).toBeNull()
+    expect(state.selectedRoomId).toBeNull()
+  })
+
+  it('resizes a non-rectangular room by dragging a boundary run', () => {
+    useDungeonStore.getState().paintCells([[0, 0], [1, 0], [0, 1]])
+    const roomId = useDungeonStore.getState().paintedCells['0:0'].roomId
+
+    const resized = useDungeonStore.getState().resizeRoomByBoundaryRun(
+      roomId!,
+      { direction: 'north', line: 1, start: 1, end: 1 },
+      2,
+    )
+
+    const state = useDungeonStore.getState()
+    expect(resized).toBe(true)
+    expect(state.paintedCells['1:1']?.roomId).toBe(roomId)
+    expect(state.selectedRoomId).toBeNull()
+  })
+
   it('updates object props and records the change in history', () => {
     useDungeonStore.getState().paintCells([[0, 0]])
 
@@ -228,6 +282,88 @@ describe('useDungeonStore history', () => {
     expect(state.tool).toBe('room')
     expect(state.cameraPreset).toBe('top-down')
     expect(state.activeCameraMode).toBe('top-down')
+  })
+
+  it('resizes a selected room footprint on the grid', () => {
+    useDungeonStore.getState().paintCells([[0, 0], [1, 0]])
+    const roomId = useDungeonStore.getState().paintedCells['0:0'].roomId
+
+    expect(roomId).toBeTruthy()
+
+    useDungeonStore.getState().selectRoom(roomId)
+    const resized = useDungeonStore.getState().resizeRoom(roomId!, {
+      minX: 0,
+      maxX: 1,
+      minZ: 0,
+      maxZ: 1,
+    })
+
+    const state = useDungeonStore.getState()
+    expect(resized).toBe(true)
+    expect(state.selectedRoomId).toBe(roomId)
+    expect(state.paintedCells['0:1']?.roomId).toBe(roomId)
+    expect(state.paintedCells['1:1']?.roomId).toBe(roomId)
+  })
+
+  it('does not resize a room into another room', () => {
+    useDungeonStore.getState().paintCells([[0, 0]])
+    const firstRoomId = useDungeonStore.getState().paintedCells['0:0'].roomId
+    useDungeonStore.getState().paintCells([[1, 0]])
+    const secondRoomId = useDungeonStore.getState().paintedCells['1:0'].roomId
+
+    const resized = useDungeonStore.getState().resizeRoom(firstRoomId!, {
+      minX: 0,
+      maxX: 1,
+      minZ: 0,
+      maxZ: 0,
+    })
+
+    expect(firstRoomId).toBeTruthy()
+    expect(secondRoomId).toBeTruthy()
+    expect(resized).toBe(false)
+    expect(useDungeonStore.getState().paintedCells['1:0']?.roomId).toBe(secondRoomId)
+  })
+
+  it('keeps an opening on a resized room edge when the boundary still exists', () => {
+    useDungeonStore.getState().paintCells([[0, 0], [1, 0]])
+    const roomId = useDungeonStore.getState().paintedCells['0:0'].roomId
+    const openingId = useDungeonStore.getState().placeOpening({
+      assetId: 'core.opening_door_wall_1',
+      wallKey: '0:0:north',
+      width: 1,
+      flipped: false,
+    })
+
+    const resized = useDungeonStore.getState().resizeRoom(roomId!, {
+      minX: 0,
+      maxX: 1,
+      minZ: 0,
+      maxZ: 1,
+    })
+
+    expect(resized).toBe(true)
+    expect(useDungeonStore.getState().wallOpenings[openingId!]?.wallKey).toBe('0:1:north')
+  })
+
+  it('removes a wide opening when the resized wall is too short', () => {
+    useDungeonStore.getState().paintCells([[0, 0], [1, 0], [2, 0]])
+    const roomId = useDungeonStore.getState().paintedCells['0:0'].roomId
+    const openingId = useDungeonStore.getState().placeOpening({
+      assetId: 'core.opening_door_wall_3',
+      wallKey: '1:0:north',
+      width: 3,
+      flipped: false,
+    })
+
+    const resized = useDungeonStore.getState().resizeRoom(roomId!, {
+      minX: 0,
+      maxX: 1,
+      minZ: 0,
+      maxZ: 0,
+    })
+
+    expect(resized).toBe(true)
+    expect(useDungeonStore.getState().wallOpenings[openingId!]).toBeUndefined()
   })
 
   it('preserves a wall-connected prop when adjacent room is drawn (inter-room wall)', () => {
