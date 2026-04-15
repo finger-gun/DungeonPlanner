@@ -15,6 +15,7 @@ export type PlayDragState = {
   displayPosition: [number, number, number]
   grabOffset: [number, number]
   valid: boolean
+  animationState: 'pickup' | 'holding'
 }
 
 type DragObjectSnapshot = {
@@ -44,6 +45,7 @@ export function createPlayDragState(
     displayPosition: [object.position[0], object.position[1], object.position[2]],
     grabOffset,
     valid: true,
+    animationState: 'pickup',
   }
 }
 

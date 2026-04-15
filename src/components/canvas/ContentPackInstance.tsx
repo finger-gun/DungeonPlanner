@@ -81,6 +81,8 @@ function TintOverlay({
 type ContentPackInstanceProps = ThreeElements['group'] & {
   assetId: string | null
   selected?: boolean
+  poseSelected?: boolean
+  playerAnimationState?: 'default' | 'selected' | 'pickup' | 'holding' | 'release'
   tint?: string
   tintOpacity?: number
   overlayOnly?: boolean
@@ -93,6 +95,8 @@ type ContentPackInstanceProps = ThreeElements['group'] & {
 export function ContentPackInstance({
   assetId,
   selected = false,
+  poseSelected = false,
+  playerAnimationState = poseSelected ? 'selected' : 'default',
   tint,
   tintOpacity,
   overlayOnly = false,
@@ -146,11 +150,16 @@ export function ContentPackInstance({
       }
     >
       {AssetComponent ? (
-        <ComponentAsset
-          Component={AssetComponent}
-          componentProps={getComponentProps(variantKey, objectProps)}
-          receiveShadow={receiveShadow}
-          selected={selected}
+          <ComponentAsset
+            Component={AssetComponent}
+            componentProps={getComponentProps(
+              variantKey,
+              objectProps,
+              poseSelected,
+              playerAnimationState,
+            )}
+            receiveShadow={receiveShadow}
+            selected={selected}
           tint={tint}
           tintOpacity={tintOpacity}
           overlayOnly={overlayOnly}
@@ -177,10 +186,14 @@ export function ContentPackInstance({
 function getComponentProps(
   variantKey?: string,
   objectProps?: Record<string, unknown>,
+  poseSelected?: boolean,
+  playerAnimationState?: 'default' | 'selected' | 'pickup' | 'holding' | 'release',
 ): ContentPackComponentProps {
   return {
     ...(variantKey ? { variantKey } : {}),
     ...(objectProps ? { objectProps } : {}),
+    ...(poseSelected ? { poseSelected } : {}),
+    ...(playerAnimationState ? { playerAnimationState } : {}),
   }
 }
 

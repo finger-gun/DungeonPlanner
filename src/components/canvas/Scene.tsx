@@ -8,6 +8,7 @@ import { Controls } from './Controls'
 import { FloorTransitionController } from './FloorTransitionController'
 import { CameraPresetManager } from './CameraPresetManager'
 import { DungeonObject } from './DungeonObject'
+import { PlayerSelectionRing } from './DungeonObject'
 import { DungeonRoom } from './DungeonRoom'
 import { WebGPUPostProcessing } from './WebGPUPostProcessing'
 import { useDungeonStore, type DungeonObjectRecord } from '../../store/useDungeonStore'
@@ -18,7 +19,9 @@ import { PlayVisibilityMask } from './PlayVisibilityMask'
 import { PlayVisibilityDebugRays } from './PlayVisibilityDebugRays'
 import { createPlayDragState, updatePlayDragState, type PlayDragState } from './playDrag'
 import { RoomResizeOverlay } from './RoomResizeOverlay'
+import { getEffectiveFloorViewMode } from './floorViewMode'
 import type { DungeonRoomData } from './DungeonRoom'
+import { PLAYER_ANIMATION_MS } from '../../content-packs/core/players/playerAnimation'
 
 const FLOOR_HEIGHT_UNIT = 3
 
@@ -91,6 +94,8 @@ export function Scene() {
   const activeFloorId = useDungeonStore((state) => state.activeFloorId)
   const floors        = useDungeonStore((state) => state.floors)
   const floorViewMode = useDungeonStore((state) => state.floorViewMode)
+  const tool          = useDungeonStore((state) => state.tool)
+  const effectiveFloorViewMode = getEffectiveFloorViewMode(floorViewMode, tool)
 
   // Track previous floor so we can compute direction before FloorContent remounts.
   // Mutating a ref during render is intentional here — it runs in the same cycle
@@ -122,7 +127,7 @@ export function Scene() {
         {/* Global scene elements — never remount on floor switch */}
         <GlobalContent />
         {/* Floor-specific content — remounts when active floor changes */}
-        {floorViewMode === 'scene' ? (
+        {effectiveFloorViewMode === 'scene' ? (
           <SceneOverviewContent />
         ) : (
           <FloorContent key={activeFloorId} startY={floorAnimStartY.current} />
@@ -140,6 +145,7 @@ function GlobalContent() {
   const postProcessingEnabled = useDungeonStore((state) => state.postProcessing.enabled)
   const tool = useDungeonStore((state) => state.tool)
   const floorViewMode = useDungeonStore((state) => state.floorViewMode)
+  const effectiveFloorViewMode = getEffectiveFloorViewMode(floorViewMode, tool)
 
   return (
     <>
@@ -166,7 +172,7 @@ function GlobalContent() {
         position={[-8, 7, -4]}
       />
 
-      {floorViewMode === 'active' && <Grid playMode={tool === 'play'} />}
+      {effectiveFloorViewMode === 'active' && <Grid playMode={tool === 'play'} />}
       <Controls />
       <FloorTransitionController />
       <CameraPresetManager />
@@ -283,6 +289,7 @@ function FloorContent({ startY = 0 }: { startY?: number }) {
   const selectObject = useDungeonStore((state) => state.selectObject)
   const setObjectDragActive = useDungeonStore((state) => state.setObjectDragActive)
   const visibility = usePlayVisibility()
+  const [releaseAnimationIds, setReleaseAnimationIds] = useState<Record<string, true>>({})
 
   const objects = useMemo(
     () => Object.values(placedObjects).filter((obj) => layers[obj.layerId]?.visible !== false),
@@ -308,6 +315,23 @@ function FloorContent({ startY = 0 }: { startY?: number }) {
   useEffect(() => {
     dragStateRef.current = dragState
   }, [dragState])
+
+  useEffect(() => {
+    if (!dragState || dragState.animationState !== 'pickup') {
+      return
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      setDragState((current) =>
+        current && current.animationState === 'pickup'
+          ? { ...current, animationState: 'holding' }
+          : current,
+      )
+      invalidate()
+    }, PLAYER_ANIMATION_MS.pickup)
+
+    return () => window.clearTimeout(timeoutId)
+  }, [dragState?.animationState, dragState?.objectId, invalidate])
 
   const stopDrag = useCallback(() => {
     setDragState(null)
@@ -390,6 +414,19 @@ function FloorContent({ startY = 0 }: { startY?: number }) {
           cell: current.cell,
           cellKey: `${getCellKey(current.cell)}:floor`,
         })
+        setReleaseAnimationIds((existing) => ({ ...existing, [current.objectId]: true }))
+        window.setTimeout(() => {
+          setReleaseAnimationIds((existing) => {
+            if (!existing[current.objectId]) {
+              return existing
+            }
+
+            const next = { ...existing }
+            delete next[current.objectId]
+            return next
+          })
+          invalidate()
+        }, PLAYER_ANIMATION_MS.release)
       }
       stopDrag()
     }
@@ -429,6 +466,7 @@ function FloorContent({ startY = 0 }: { startY?: number }) {
             object={object}
             visibility={visibility}
             onPlayDragStart={startDrag}
+            playerAnimationState={releaseAnimationIds[object.id] ? 'release' : undefined}
           />
         )
       ))}
@@ -436,11 +474,11 @@ function FloorContent({ startY = 0 }: { startY?: number }) {
         <group position={dragState.displayPosition} rotation={dragState.rotation}>
           <ContentPackInstance
             assetId={dragState.assetId}
-            selected
-            tint={dragState.valid ? '#22c55e' : '#ef4444'}
+            playerAnimationState={dragState.animationState}
             variant="prop"
             visibility="visible"
           />
+          <PlayerSelectionRing color={dragState.valid ? '#22c55e' : '#ef4444'} />
         </group>
       )}
     </group>

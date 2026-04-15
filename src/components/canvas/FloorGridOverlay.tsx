@@ -20,10 +20,7 @@ import {
 import { useDungeonStore } from '../../store/useDungeonStore'
 import { GRID_SIZE, cellToWorldPosition } from '../../hooks/useSnapToGrid'
 
-// Just above the tallest floor tile model (~0.244 measured).
-// depthTest:true at this height → test passes on floor tiles AND in empty void,
-// but tall geometry (walls, props) occludes the grid.
-const GRID_Y = 0.270
+const GRID_Y = 0
 
 const MAX_INSTANCES = 4096
 

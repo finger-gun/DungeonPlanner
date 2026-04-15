@@ -1,8 +1,8 @@
 import { Suspense, useEffect, useMemo, useRef } from 'react'
-import type { RefObject } from 'react'
 import { Canvas, useThree } from '@react-three/fiber'
 import { OrthographicCamera, useGLTF } from '@react-three/drei'
 import * as THREE from 'three'
+import { SkeletonUtils } from 'three-stdlib'
 import { getThumbnailLayout } from './thumbnail/thumbnailLayout'
 
 function getRenderableBounds(root: THREE.Object3D) {
@@ -47,20 +47,17 @@ declare global {
 
 function ThumbnailModel({
   assetUrl,
-  cameraRef,
 }: {
   assetUrl: string
-  cameraRef: RefObject<THREE.OrthographicCamera | null>
 }) {
   const gltf = useGLTF(assetUrl)
-  const scene = useMemo(() => gltf.scene.clone(), [gltf.scene])
+  const scene = useMemo(() => SkeletonUtils.clone(gltf.scene), [gltf.scene])
   const groupRef = useRef<THREE.Group>(null)
-  const { invalidate, size } = useThree()
+  const { camera, invalidate, size } = useThree()
 
   useEffect(() => {
     const group = groupRef.current
-    const camera = cameraRef.current
-    if (!group || !camera) {
+    if (!group || !(camera instanceof THREE.OrthographicCamera)) {
       return
     }
 
@@ -94,7 +91,7 @@ function ThumbnailModel({
       window.cancelAnimationFrame(frame)
       window.cancelAnimationFrame(settleFrame)
     }
-  }, [cameraRef, invalidate, scene, size.height, size.width])
+  }, [camera, invalidate, scene, size.height, size.width])
 
   return (
     <group ref={groupRef}>
@@ -104,19 +101,16 @@ function ThumbnailModel({
 }
 
 function ThumbnailViewport({ assetUrl }: { assetUrl: string }) {
-  const cameraRef = useRef<THREE.OrthographicCamera>(null)
-
   return (
     <Canvas
       data-testid="thumbnail-canvas"
       gl={{ alpha: true, antialias: true, preserveDrawingBuffer: true }}
       dpr={1}
-    >
-      <OrthographicCamera
-        ref={cameraRef}
-        makeDefault
-        position={[3, 2, 3]}
-        left={-1}
+      >
+        <OrthographicCamera
+          makeDefault
+          position={[3, 2, 3]}
+          left={-1}
         right={1}
         top={1}
         bottom={-1}
@@ -126,7 +120,7 @@ function ThumbnailViewport({ assetUrl }: { assetUrl: string }) {
       <directionalLight position={[6, 8, 6]} intensity={2.2} />
       <directionalLight position={[-4, 5, 3]} intensity={0.8} />
       <Suspense fallback={null}>
-        <ThumbnailModel assetUrl={assetUrl} cameraRef={cameraRef} />
+        <ThumbnailModel assetUrl={assetUrl} />
       </Suspense>
     </Canvas>
   )

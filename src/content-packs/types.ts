@@ -5,6 +5,8 @@ export type ContentPackCategory = 'floor' | 'wall' | 'prop' | 'opening' | 'playe
 export type ContentPackComponentProps = JSX.IntrinsicElements['group'] & {
   variantKey?: string
   objectProps?: Record<string, unknown>
+  poseSelected?: boolean
+  playerAnimationState?: 'default' | 'selected' | 'pickup' | 'holding' | 'release'
 }
 export type PropConnector = 'FLOOR' | 'WALL' | 'WALLFLOOR'
 

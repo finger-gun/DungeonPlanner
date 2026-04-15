@@ -1,5 +1,6 @@
-import { memo, useRef, useLayoutEffect } from 'react'
+import { memo, useMemo, useRef, useLayoutEffect } from 'react'
 import { useFrame, type ThreeEvent } from '@react-three/fiber'
+import * as THREE from 'three'
 import type { Group, PointLight } from 'three'
 import { useDungeonStore, type DungeonObjectRecord } from '../../store/useDungeonStore'
 import { ContentPackInstance } from './ContentPackInstance'
@@ -12,12 +13,14 @@ type DungeonObjectProps = {
   object: DungeonObjectRecord
   visibility: PlayVisibility
   onPlayDragStart?: (object: DungeonObjectRecord, event: ThreeEvent<PointerEvent>) => void
+  playerAnimationState?: 'default' | 'selected' | 'pickup' | 'holding' | 'release'
 }
 
 export const DungeonObject = memo(function DungeonObject({
   object,
   visibility,
   onPlayDragStart,
+  playerAnimationState,
 }: DungeonObjectProps) {
   const selection = useDungeonStore((state) => state.selection)
   const selectObject = useDungeonStore((state) => state.selectObject)
@@ -76,15 +79,16 @@ export const DungeonObject = memo(function DungeonObject({
     removeObject(object.id)
   }
 
-  // When Lens (postprocessing) is on, the depth-based outline pass handles
-  // selection highlight — hide the inverted-hull to avoid double outlines.
-  const showHullOutline = selected && !ppEnabled
+  const showHullOutline = selected && !ppEnabled && object.type !== 'player'
+  const showPlayerSelectionRing = selected && object.type === 'player'
 
   return (
     <group ref={groupRef} position={object.position} rotation={object.rotation}>
       <ContentPackInstance
         assetId={object.assetId}
         selected={showHullOutline}
+        poseSelected={false}
+        playerAnimationState={playerAnimationState ?? 'default'}
         variantKey={object.cellKey}
         objectProps={object.props}
         visibility={visibilityState}
@@ -94,10 +98,33 @@ export const DungeonObject = memo(function DungeonObject({
         onContextMenu={handleContextMenu}
         variant="prop"
       />
+      {showPlayerSelectionRing && <PlayerSelectionRing />}
       {light && visibilityState === 'visible' && <PropPointLight light={light} />}
     </group>
   )
 })
+
+export function PlayerSelectionRing({ color = '#22c55e' }: { color?: string }) {
+  const geometry = useMemo(() => new THREE.RingGeometry(0.32, 0.44, 48), [])
+
+  return (
+    <mesh
+      geometry={geometry}
+      rotation={[-Math.PI / 2, 0, 0]}
+      position={[0, 0.02, 0]}
+      renderOrder={3}
+    >
+      <meshBasicMaterial
+        color={color}
+        transparent
+        opacity={0.85}
+        depthWrite={false}
+        polygonOffset
+        polygonOffsetFactor={-1}
+      />
+    </mesh>
+  )
+}
 
 function PropPointLight({ light }: { light: PropLight }) {
   const ref = useRef<PointLight>(null)

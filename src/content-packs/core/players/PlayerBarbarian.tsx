@@ -1,37 +1,24 @@
 /* eslint-disable react-refresh/only-export-components */
-import { useMemo } from 'react'
-import { useGLTF } from '@react-three/drei'
-import { SkeletonUtils } from 'three-stdlib'
 import playerBarbarianAssetUrl from '../../../assets/models/core/player-barbarian.glb'
 import playerBarbarianThumbnailUrl from '../../../assets/models/core/player-barbarian.png'
-import type { ContentPackAsset, ContentPackComponentProps } from '../../types'
-
-const PLAYER_PIVOT_OFFSET = [0, 0, 0] as const
+import type { ContentPackComponentProps } from '../../types'
+import {
+  AnimatedRigMediumPlayer,
+  createRigMediumPlayerAsset,
+  preloadAnimatedRigMediumPlayer,
+} from './AnimatedRigMediumPlayer'
 
 export function PlayerBarbarian(props: ContentPackComponentProps) {
-  const gltf = useGLTF(playerBarbarianAssetUrl)
-  const scene = useMemo(() => SkeletonUtils.clone(gltf.scene), [gltf.scene])
-
-  return (
-    <group position={PLAYER_PIVOT_OFFSET}>
-      <group {...props}>
-        <primitive object={scene} />
-      </group>
-    </group>
-  )
+  return <AnimatedRigMediumPlayer assetUrl={playerBarbarianAssetUrl} {...props} />
 }
 
-useGLTF.preload(playerBarbarianAssetUrl)
+preloadAnimatedRigMediumPlayer(playerBarbarianAssetUrl)
 
-export const playerBarbarianAsset: ContentPackAsset = {
+export const playerBarbarianAsset = createRigMediumPlayerAsset({
   id: 'core.player_barbarian',
   slug: 'player_barbarian',
   name: 'Barbarian',
-  category: 'player',
   assetUrl: playerBarbarianAssetUrl,
   thumbnailUrl: playerBarbarianThumbnailUrl,
   Component: PlayerBarbarian,
-  metadata: {
-    connectsTo: 'FLOOR'
-  },
-}
+})

@@ -16,6 +16,14 @@ describe('content pack registry', () => {
     })
   })
 
+  it('registers the rest of the core animated player roster', () => {
+    expect(getContentPackAssetById('core.player_knight')?.name).toBe('Knight')
+    expect(getContentPackAssetById('core.player_mage')?.name).toBe('Mage')
+    expect(getContentPackAssetById('core.player_ranger')?.name).toBe('Ranger')
+    expect(getContentPackAssetById('core.player_rogue')?.name).toBe('Rogue')
+    expect(getContentPackAssetById('core.player_rogue_hooded')?.name).toBe('Rogue (Hooded)')
+  })
+
   it('keeps pillar and rubble props non-blocking for LOS', () => {
     expect(getContentPackAssetById('core.props_pillar')?.metadata?.blocksLineOfSight).toBe(false)
     expect(getContentPackAssetById('core.props_rubble')?.metadata?.blocksLineOfSight).toBe(false)

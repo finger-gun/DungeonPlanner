@@ -12,7 +12,7 @@ import floor007AssetUrl from '../../../assets/models/core/floor_007.glb'
 import type { ContentPackAsset, ContentPackComponentProps } from '../../types'
 
 // Adjust this to compensate for the authored pivot of the floor set.
-const FLOOR_PIVOT_OFFSET = [-1, 0, 1] as const
+const FLOOR_PIVOT_OFFSET = [-1, -0.22, 1] as const
 
 const FLOOR_VARIANT_URLS = [
   floorAssetUrl,
