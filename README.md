@@ -13,12 +13,18 @@
   <img src="https://img.shields.io/badge/Three.js-0.182-black?logo=threedotjs&style=flat-square" />
   <img src="https://img.shields.io/badge/TypeScript-6-3178C6?logo=typescript&logoColor=white&style=flat-square" />
   <img src="https://img.shields.io/badge/Tailwind-4-38BDF8?logo=tailwindcss&logoColor=white&style=flat-square" />
+  <a href="https://github.com/finger-gun/DungeonPlanner/actions/workflows/ci.yml">
+    <img src="https://github.com/finger-gun/DungeonPlanner/actions/workflows/ci.yml/badge.svg" alt="CI status" />
+  </a>
+  <a href="https://github.com/finger-gun/DungeonPlanner/actions/workflows/codeql.yml">
+    <img src="https://github.com/finger-gun/DungeonPlanner/actions/workflows/codeql.yml/badge.svg" alt="CodeQL status" />
+  </a>
 </p>
 
 ---
 
 ## Demo
-https://roblibob.github.io/dungeonplanner
+https://dungeonplanner.fingergun.dev/
 
 ## Features
 
@@ -47,8 +53,8 @@ https://roblibob.github.io/dungeonplanner
 ## Getting Started
 
 ```bash
-npm install
-npm run dev
+pnpm install
+pnpm run dev
 ```
 
 The dev server starts at **http://localhost:5173**.
@@ -107,12 +113,16 @@ export const propsWallTorchAsset: ContentPackAsset = {
 ## Scripts
 
 ```bash
-npm run dev          # Start dev server
-npm run build        # Production build
-npm run lint         # ESLint
-npm test             # Vitest unit tests
-npm run test:e2e     # Playwright end-to-end tests
-npm run verify       # lint + test + build + e2e (full CI gate)
+pnpm run dev          # Start app dev server
+pnpm run server       # Start multiplayer server dev mode
+pnpm run dev:full     # Start app + server with Turborepo
+pnpm run build        # Build app (TypeScript + Vite)
+pnpm run build:all    # Build all workspace packages with Turborepo
+pnpm run lint         # ESLint (app)
+pnpm run lint:all     # Lint across workspace (Turborepo)
+pnpm run test         # Vitest unit tests (app)
+pnpm run test:e2e     # Playwright end-to-end tests (app)
+pnpm run verify       # lint + test + build + e2e (full CI gate)
 ```
 
 ## Roadmap

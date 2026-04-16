@@ -1,60 +1,66 @@
-name: Deploy to GitHub Pages
+name: Deploy static site to AWS
 
 on:
+  push:
+    branches:
+      - main
   workflow_dispatch:
-    inputs:
-      message:
-        description: "Optional deploy message"
-        required: false
-        default: ""
+
+permissions:
+  id-token: write
+  contents: read
+
+concurrency:
+  group: deploy-dungeonplanner-production
+  cancel-in-progress: true
 
 jobs:
-  build-and-deploy:
+  deploy:
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-
+    env:
+      AWS_REGION: eu-north-1
+      S3_BUCKET: dungeonplanner.fingergun.dev-eu-north-1
+      CLOUDFRONT_DISTRIBUTION_ID: E3U9MGNZ370J2M
     steps:
-      - name: Checkout DungeonPlanner
+      - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.18.2
 
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
           node-version: 24
-          cache: npm
+          cache: pnpm
 
       - name: Install dependencies
-        run: npm ci
+        run: pnpm install --frozen-lockfile
 
       - name: Build
-        run: npm run build
-        env:
-          VITE_BASE_PATH: /dungeonplanner/
+        run: pnpm turbo run build --filter=dungeonplanner
 
-      - name: Checkout roblibob.github.io
-        uses: actions/checkout@v4
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
         with:
-          repository: roblibob/roblibob.github.io
-          token: ${{ secrets.PAGES_DEPLOY_TOKEN }}
-          path: pages-repo
+          role-to-assume: arn:aws:iam::785092168067:role/github-actions-fingergun-web-deploy
+          role-session-name: github-actions-dungeonplanner-deploy
+          aws-region: ${{ env.AWS_REGION }}
 
-      - name: Sync build output into dungeonplanner/
+      - name: Upload static files to S3
         run: |
-          rm -rf pages-repo/dungeonplanner
-          mkdir -p pages-repo/dungeonplanner
-          cp -r dist/. pages-repo/dungeonplanner/
+          aws s3 sync dist/ "s3://${S3_BUCKET}" \
+            --delete \
+            --exclude "*.html"
+          aws s3 sync dist/ "s3://${S3_BUCKET}" \
+            --exclude "*" \
+            --include "*.html" \
+            --cache-control "no-cache, no-store, must-revalidate"
 
-      - name: Commit and push
+      - name: Invalidate CloudFront cache
         run: |
-          cd pages-repo
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add dungeonplanner/
-          DEPLOY_MSG="Deploy DungeonPlanner"
-          if [ -n "${{ github.event.inputs.message }}" ]; then
-            DEPLOY_MSG="$DEPLOY_MSG — ${{ github.event.inputs.message }}"
-          fi
-          DEPLOY_MSG="$DEPLOY_MSG ($(date -u '+%Y-%m-%d %H:%M UTC'), ${{ github.sha }})"
-          git diff --cached --quiet || git commit -m "$DEPLOY_MSG"
-          git push
+          aws cloudfront create-invalidation \
+            --distribution-id "${CLOUDFRONT_DISTRIBUTION_ID}" \
+            --paths "/*"
