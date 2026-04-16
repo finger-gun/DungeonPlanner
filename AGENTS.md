@@ -2,12 +2,22 @@
 
 Guidelines for AI coding agents working in this codebase.
 
+## Product Vision
+
+- DungeonPlanner is a **fast, visual 3D prep tool** for tabletop RPG encounters.
+- Prioritize **editing speed, clarity, and reliability** over novelty.
+- Keep UX focused on:
+  - quick dungeon layout creation
+  - readable scene presentation for players
+  - smooth camera/navigation and predictable tool behavior
+
 ## Stack
 
 - **React + React Three Fiber** for rendering — prefer R3F primitives over raw Three.js imperative code.
 - **Three.js WebGPURenderer** — use TSL (Three Shading Language) for custom materials, not GLSL.
 - **Zustand** for state — all dungeon state lives in `src/store/useDungeonStore.ts`. Add actions there, never mutate state outside the store.
 - **Tailwind CSS** — styling only via utility classes, no inline styles except dynamic values (e.g. `style={{ opacity }}`).
+- **Monorepo tooling** — `pnpm` workspaces + `turbo`.
 
 ## Commands
 
@@ -26,6 +36,12 @@ pnpm run test:e2e     # Playwright e2e tests
 
 Always run `pnpm run build` after changes to catch TypeScript errors before committing.
 
+## CI and Deployment
+
+- CI workflow: `.github/workflows/ci.yml` (PR validation: tests + build)
+- Code scanning: `.github/workflows/codeql.yml`
+- Production deploy: `.github/workflows/deploy-pages.yml` (AWS S3 + CloudFront for `dungeonplanner.fingergun.dev`)
+
 ## Architecture
 
 - `src/store/useDungeonStore.ts` — single source of truth: rooms, cells, floors, openings, props, settings.
@@ -33,6 +49,7 @@ Always run `pnpm run build` after changes to catch TypeScript errors before comm
 - `src/components/editor/` — React UI panels rendered outside the canvas (DOM).
 - `src/content-packs/core/` — asset definitions. Each asset exports `metadata` with `category`, `connectsTo`, `lightConfig`, etc.
 - `src/store/serialization.ts` — save/load format. Bump `CURRENT_VERSION` and add a migration when the format changes.
+- `server/` — multiplayer/backend package (`dungeonplanner-server`).
 
 ## Key Conventions
 
@@ -45,6 +62,7 @@ Always run `pnpm run build` after changes to catch TypeScript errors before comm
 ## Tests
 - Always write test to cover new functionality.
 - When you touch old code that doesn't have tests, improve the coverage.
+- Prefer existing test commands (`pnpm run test`, `pnpm run test:e2e`, `pnpm run verify`) over ad-hoc scripts.
 
 ## Commits
 - Never push to remote unless explicitly asked.
