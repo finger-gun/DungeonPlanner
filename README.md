@@ -9,7 +9,9 @@
 </p>
 
 <p align="center">
-  <a href="https://demo.dungeonplanner.com/">Live App</a>
+  <a href="https://dungeonplanner.com/">Website</a>
+  ·
+  <a href="https://demo.dungeonplanner.com/">Demo</a>
   ·
   <a href="https://docs.dungeonplanner.com/">Docs</a>
   ·
@@ -48,7 +50,7 @@ DungeonPlanner is built for fast encounter prep: paint rooms, place interactive 
 
 ## Quick Start for Players
 
-1. Open **https://demo.dungeonplanner.com/**.
+1. Open the demo at **https://demo.dungeonplanner.com/**.
 2. Use the **Room** tool to paint your layout.
 3. Use the **Prop** tool to place doors, torches, and objects.
 4. Switch camera mode from the Move panel depending on prep or presentation.

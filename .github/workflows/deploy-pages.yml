@@ -93,10 +93,14 @@ jobs:
             --delete \
             --exclude "docs" \
             --exclude "docs/*" \
+            --exclude "web" \
+            --exclude "web/*" \
             --exclude "*.html"
           aws s3 sync dist/ "s3://${S3_BUCKET}" \
             --exclude "docs" \
             --exclude "docs/*" \
+            --exclude "web" \
+            --exclude "web/*" \
             --exclude "*" \
             --include "*.html" \
             --cache-control "no-cache, no-store, must-revalidate"
