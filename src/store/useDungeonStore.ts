@@ -3,6 +3,14 @@ import { persist } from 'zustand/middleware'
 import { getDefaultAssetIdByCategory } from '../content-packs/registry'
 import { getCellKey, type GridCell } from '../hooks/useSnapToGrid'
 import type { ContentPackCategory, PropConnector } from '../content-packs/types'
+import { createGeneratedCharacterAssetId, syncGeneratedCharacterAssets } from '../content-packs/runtimeRegistry'
+import {
+  createDefaultGeneratedCharacterInput,
+  normalizeGeneratedCharacterRecord,
+  type CreateGeneratedCharacterInput,
+  type GeneratedCharacterRecord,
+  type UpdateGeneratedCharacterInput,
+} from '../generated-characters/types'
 import { serializeDungeon, deserializeDungeon } from './serialization'
 import { getOpeningSegments } from './openingSegments'
 import {
@@ -16,10 +24,14 @@ import {
 
 export { getOpeningSegments } from './openingSegments'
 
-export type DungeonTool = 'move' | 'room' | 'prop' | 'opening' | 'select' | 'play'
+export type DungeonTool = 'move' | 'room' | 'prop' | 'character' | 'opening' | 'select' | 'play'
 export type CameraMode = 'orbit'
 export type CameraPreset = 'perspective' | 'isometric' | 'top-down'
 export type SelectedAssetIds = Record<ContentPackCategory, string | null>
+export type CharacterSheetState = {
+  open: boolean
+  assetId: string | null
+}
 
 export type FloorRecord = {
   id: string
@@ -111,8 +123,8 @@ export type SceneLighting = {
 
 export type PostProcessingSettings = {
   enabled: boolean
-  focusDistance: number // world units along camera look direction
-  focalLength: number   // blur falloff range in world units
+  focusDistance: number // 0–1 screen-Y used to sample the focus line
+  focalLength: number   // depth tolerance around the sampled focus depth
   bokehScale: number    // artistic bokeh size multiplier
 }
 
@@ -133,6 +145,8 @@ type DungeonState = DungeonSnapshot & {
   showLosDebugMask: boolean
   showLosDebugRays: boolean
   floorViewMode: FloorViewMode
+  generatedCharacters: Record<string, GeneratedCharacterRecord>
+  characterSheet: CharacterSheetState
   activeCameraMode: CameraPreset
   cameraPreset: CameraPreset | null
   history: DungeonSnapshot[]
@@ -165,6 +179,12 @@ type DungeonState = DungeonSnapshot & {
   setShowLosDebugMask: (show: boolean) => void
   setShowLosDebugRays: (show: boolean) => void
   setFloorViewMode: (mode: FloorViewMode) => void
+  createGeneratedCharacter: (input: CreateGeneratedCharacterInput) => string
+  createGeneratedCharacterDraft: () => string
+  updateGeneratedCharacter: (assetId: string, input: UpdateGeneratedCharacterInput) => boolean
+  removeGeneratedCharacter: (assetId: string) => boolean
+  openCharacterSheet: (assetId: string) => void
+  closeCharacterSheet: () => void
   setCameraPreset: (preset: CameraPreset) => void
   clearCameraPreset: () => void
   fpsLimit: 0 | 30 | 60 | 120
@@ -268,6 +288,22 @@ function cloneSnapshot(snapshot: DungeonSnapshot): DungeonSnapshot {
   }
 }
 
+function isGeneratedCharacterInUse(
+  assetId: string,
+  state: Pick<DungeonState, 'placedObjects' | 'floors' | 'activeFloorId'>,
+) {
+  if (Object.values(state.placedObjects).some((object) => object.assetId === assetId)) {
+    return true
+  }
+
+  return Object.values(state.floors).some((floor) => {
+    if (floor.id === state.activeFloorId) {
+      return false
+    }
+    return Object.values(floor.snapshot.placedObjects).some((object) => object.assetId === assetId)
+  })
+}
+
 function createEmptySnapshot(): DungeonSnapshot {
   const defaultLayer = createDefaultLayer()
   return {
@@ -295,6 +331,21 @@ function createEmptySnapshot(): DungeonSnapshot {
 
 function createObjectId() {
   return crypto.randomUUID()
+}
+
+function normalizeGeneratedCharacters(
+  characters: Record<string, Partial<GeneratedCharacterRecord>> | undefined,
+) {
+  if (!characters) {
+    return {}
+  }
+
+  return Object.fromEntries(
+    Object.entries(characters).map(([assetId, record]) => [
+      assetId,
+      normalizeGeneratedCharacterRecord(assetId, record ?? {}),
+    ]),
+  ) as Record<string, GeneratedCharacterRecord>
 }
 
 function addOpeningRecord(
@@ -484,6 +535,11 @@ export const useDungeonStore = create<DungeonState>()(
   showLosDebugMask: false,
   showLosDebugRays: false,
   floorViewMode: 'active' as FloorViewMode,
+  generatedCharacters: {},
+  characterSheet: {
+    open: false,
+    assetId: null,
+  },
   fpsLimit: 60 as 0 | 30 | 60 | 120,
   activeCameraMode: 'perspective',
   cameraPreset: null,
@@ -1039,6 +1095,114 @@ export const useDungeonStore = create<DungeonState>()(
   setFloorViewMode: (mode) => {
     set((state) => (state.floorViewMode === mode ? state : { ...state, floorViewMode: mode }))
   },
+  createGeneratedCharacter: (input) => {
+    const recordId = createObjectId()
+    const assetId = createGeneratedCharacterAssetId(recordId)
+    const timestamp = new Date().toISOString()
+    const nextRecord = normalizeGeneratedCharacterRecord(assetId, {
+      ...createDefaultGeneratedCharacterInput(),
+      ...input,
+      assetId,
+      createdAt: timestamp,
+      updatedAt: timestamp,
+    })
+
+    set((current) => ({
+      ...current,
+      generatedCharacters: {
+        ...current.generatedCharacters,
+        [assetId]: nextRecord,
+      },
+    }))
+    syncGeneratedCharacterAssets(get().generatedCharacters)
+    return assetId
+  },
+  createGeneratedCharacterDraft: () => {
+    return get().createGeneratedCharacter(createDefaultGeneratedCharacterInput())
+  },
+  updateGeneratedCharacter: (assetId, input) => {
+    const state = get()
+    const existing = state.generatedCharacters[assetId]
+    if (!existing) {
+      return false
+    }
+
+    const nextRecord = normalizeGeneratedCharacterRecord(assetId, {
+      ...existing,
+      ...input,
+      assetId,
+      createdAt: existing.createdAt,
+      updatedAt: new Date().toISOString(),
+    })
+
+    set((current) => ({
+      ...current,
+      generatedCharacters: {
+        ...current.generatedCharacters,
+        [assetId]: nextRecord,
+      },
+    }))
+    syncGeneratedCharacterAssets(get().generatedCharacters)
+    return true
+  },
+  removeGeneratedCharacter: (assetId) => {
+    const state = get()
+    if (!state.generatedCharacters[assetId]) {
+      return true
+    }
+    if (isGeneratedCharacterInUse(assetId, state)) {
+      return false
+    }
+
+    set((current) => {
+      const generatedCharacters = { ...current.generatedCharacters }
+      delete generatedCharacters[assetId]
+      return {
+        ...current,
+        generatedCharacters,
+        characterSheet: current.characterSheet.assetId === assetId
+          ? { open: false, assetId: null }
+          : current.characterSheet,
+        selectedAssetIds: {
+          ...current.selectedAssetIds,
+          ...(current.selectedAssetIds.prop === assetId
+            ? {
+                prop: getDefaultAssetIdByCategory('prop'),
+              }
+            : {}),
+          ...(current.selectedAssetIds.player === assetId
+            ? {
+                player: getDefaultAssetIdByCategory('player'),
+              }
+            : {}),
+        },
+      }
+    })
+    syncGeneratedCharacterAssets(get().generatedCharacters)
+    return true
+  },
+  openCharacterSheet: (assetId) => {
+    set((state) => ({
+      ...state,
+      characterSheet: {
+        open: true,
+        assetId,
+      },
+    }))
+  },
+  closeCharacterSheet: () => {
+    set((state) => (
+      state.characterSheet.open
+        ? {
+            ...state,
+            characterSheet: {
+              open: false,
+              assetId: null,
+            },
+          }
+        : state
+    ))
+  },
   setFpsLimit: (limit) => {
     set((state) => ({ ...state, fpsLimit: limit }))
   },
@@ -1090,6 +1254,7 @@ export const useDungeonStore = create<DungeonState>()(
         isObjectDragActive: false,
         selectedRoomId: null,
         floorViewMode: 'active',
+        characterSheet: { open: false, assetId: null },
         activeCameraMode: 'perspective',
         cameraPreset: null,
         history: [],
@@ -1109,6 +1274,7 @@ export const useDungeonStore = create<DungeonState>()(
         selectedRoomId: null,
         cameraMode: 'orbit',
       floorViewMode: 'active',
+      characterSheet: { open: false, assetId: null },
       activeCameraMode: 'perspective',
       cameraPreset: 'perspective', // triggers camera to home position
        // Settings reset to defaults
@@ -1842,13 +2008,15 @@ export const useDungeonStore = create<DungeonState>()(
     const floors = parsed.floors ?? {}
     const floorOrder = parsed.floorOrder ?? Object.keys(floors)
     const activeFloorId = parsed.activeFloorId ?? floorOrder[0] ?? 'floor-1'
-    set((current) => ({
-      ...current,
-      ...parsed,
-      dungeonName: parsed.name ?? current.dungeonName,
-        isPaintingStrokeActive: false,
-        isObjectDragActive: false,
-        selectedRoomId: null,
+      set((current) => ({
+        ...current,
+        ...parsed,
+        dungeonName: parsed.name ?? current.dungeonName,
+        generatedCharacters: normalizeGeneratedCharacters(current.generatedCharacters),
+        characterSheet: { open: false, assetId: null },
+         isPaintingStrokeActive: false,
+         isObjectDragActive: false,
+         selectedRoomId: null,
         floorViewMode: 'active',
         activeCameraMode: 'perspective',
         cameraPreset: null,
@@ -1879,11 +2047,23 @@ export const useDungeonStore = create<DungeonState>()(
         sceneLighting: state.sceneLighting,
         postProcessing: state.postProcessing,
         selectedAssetIds: state.selectedAssetIds,
+        generatedCharacters: state.generatedCharacters,
         floors: state.floors,
         floorOrder: state.floorOrder,
         activeFloorId: state.activeFloorId,
         fpsLimit: state.fpsLimit,
       }),
+      onRehydrateStorage: () => (state) => {
+        if (!state) {
+          syncGeneratedCharacterAssets({})
+          return
+        }
+
+        state.generatedCharacters = normalizeGeneratedCharacters(
+          state.generatedCharacters as Record<string, Partial<GeneratedCharacterRecord>> | undefined,
+        )
+        syncGeneratedCharacterAssets(state.generatedCharacters)
+      },
     },
   ),
 )

@@ -1,8 +1,6 @@
 import { useEffect, useEffectEvent, useMemo, useRef, useState } from 'react'
-import type { MutableRefObject } from 'react'
 import type { ThreeEvent } from '@react-three/fiber'
-import { useFrame, useThree } from '@react-three/fiber'
-import * as THREE from 'three'
+import { useThree } from '@react-three/fiber'
 import { getContentPackAssetById } from '../../content-packs/registry'
 import type { ContentPackAsset, PropConnector } from '../../content-packs/types'
 import { useRaycaster } from '../../hooks/useRaycaster'
@@ -28,7 +26,7 @@ import { triggerBuild } from '../../store/buildAnimations'
 import { FloorGridOverlay } from './FloorGridOverlay'
 import { ContentPackInstance } from './ContentPackInstance'
 import { getRoomPreviewCells } from './gridPreview'
-import { getGridOverlayRadius, isPassiveGridMode, shouldRenderGridOverlay } from './gridMode'
+import { isPassiveGridMode, shouldRenderGridOverlay } from './gridMode'
 import { extendOpenPassageBrush } from './openPassageBrush'
 import { getOpeningToolMode } from './openingToolMode'
 
@@ -59,12 +57,16 @@ export function Grid({ size = 120, playMode = false }: GridProps) {
   const tool = useDungeonStore((state) => state.tool)
   const showGrid = useDungeonStore((state) => state.showGrid)
   const selectedPropAssetId = useDungeonStore((state) => state.selectedAssetIds.prop)
+  const selectedCharacterAssetId = useDungeonStore((state) => state.selectedAssetIds.player)
   const selectedOpeningAssetId = useDungeonStore((state) => state.selectedAssetIds.opening)
   const globalWallAssetId = useDungeonStore((state) => state.selectedAssetIds.wall)
   const wallConnectionMode = useDungeonStore((state) => state.wallConnectionMode)
   const selection = useDungeonStore((state) => state.selection)
   const selectedPropAsset = selectedPropAssetId
     ? getContentPackAssetById(selectedPropAssetId)
+    : null
+  const selectedCharacterAsset = selectedCharacterAssetId
+    ? getContentPackAssetById(selectedCharacterAssetId)
     : null
   const selectedOpeningAsset = selectedOpeningAssetId
     ? getContentPackAssetById(selectedOpeningAssetId)
@@ -75,8 +77,6 @@ export function Grid({ size = 120, playMode = false }: GridProps) {
   )
   const [hoveredCell, setHoveredCell] = useState<SnappedGridPosition | null>(null)
   const [hoveredPoint, setHoveredPoint] = useState<{ x: number; y: number; z: number } | null>(null)
-  const mousePosRef = useRef(new THREE.Vector2())
-  const cursorActiveRef = useRef(false)
   const [strokeMode, setStrokeMode] = useState<'paint' | 'erase' | null>(null)
   const [strokeStartCell, setStrokeStartCell] = useState<GridCell | null>(null)
   const [strokeCurrentCell, setStrokeCurrentCell] = useState<GridCell | null>(null)
@@ -88,7 +88,7 @@ export function Grid({ size = 120, playMode = false }: GridProps) {
   const openPassageBrushActiveRef = useRef(false)
   const openPassageBrushWallKeysRef = useRef<string[]>([])
   const paintedCellsRef = useRef(paintedCells)
-  const placementOrientationKey = `${selectedPropAssetId ?? ''}:${selectedOpeningAssetId ?? ''}:${wallConnectionMode}`
+  const placementOrientationKey = `${selectedPropAssetId ?? ''}:${selectedCharacterAssetId ?? ''}:${selectedOpeningAssetId ?? ''}:${wallConnectionMode}`
   const [placementOrientation, setPlacementOrientation] = useState({
     key: placementOrientationKey,
     floorRotationIndex: 0,
@@ -111,7 +111,7 @@ export function Grid({ size = 120, playMode = false }: GridProps) {
   useEffect(() => {
     const isFloorOpening = tool === 'opening' && openingToolMode === 'floor-asset'
     const isWallOpening = tool === 'opening' && wallConnectionMode === 'door' && !isFloorOpening
-    if (selection || (tool !== 'prop' && !isFloorOpening && !isWallOpening)) return
+    if (selection || (tool !== 'prop' && tool !== 'character' && !isFloorOpening && !isWallOpening)) return
     function onKeyDown(e: KeyboardEvent) {
       const active = document.activeElement
       if (
@@ -263,8 +263,6 @@ export function Grid({ size = 120, playMode = false }: GridProps) {
     const snapped = snap(point)
     setHoveredCell(snapped)
     setHoveredPoint(point)
-    mousePosRef.current.set(point.x, point.z)
-    cursorActiveRef.current = true
 
     if (tool === 'room' && strokeModeRef.current) {
       updateStrokeState(
@@ -276,11 +274,7 @@ export function Grid({ size = 120, playMode = false }: GridProps) {
 
   }
 
-  function updateCursorPosOnly(event: ThreeEvent<PointerEvent>) {
-    const point = raycaster.pointOnPlane(event)
-    mousePosRef.current.set(point.x, point.z)
-    cursorActiveRef.current = true
-  }
+  function updateCursorPosOnly() {}
 
   function placeOpenPassageWall(wallKey: string | null) {
     const nextWallKeys = extendOpenPassageBrush(
@@ -369,9 +363,11 @@ export function Grid({ size = 120, playMode = false }: GridProps) {
       return
     }
 
-    if (tool === 'prop') {
-      const rawPlacement = selectedPropAsset
-        ? getPropPlacement(selectedPropAsset, point, paintedCells)
+    if (tool === 'prop' || tool === 'character') {
+      const activeAsset = tool === 'character' ? selectedCharacterAsset : selectedPropAsset
+      const activeAssetId = tool === 'character' ? selectedCharacterAssetId : selectedPropAssetId
+      const rawPlacement = activeAsset
+        ? getPropPlacement(activeAsset, point, paintedCells)
         : null
       const propPlacement = applyFloorRotation(rawPlacement, floorRotationIndex * (Math.PI / 2))
 
@@ -390,11 +386,13 @@ export function Grid({ size = 120, playMode = false }: GridProps) {
         return
       }
 
-      const objectType = selectedPropAsset?.category === 'player' ? 'player' : 'prop'
+      const normalizedObjectType = tool === 'character' || activeAsset?.category === 'player'
+        ? 'player'
+        : 'prop'
 
       placeObject({
-        type: objectType,
-        assetId: selectedPropAssetId,
+        type: normalizedObjectType,
+        assetId: activeAssetId,
         position: propPlacement.position,
         rotation: propPlacement.rotation,
         props: {
@@ -436,8 +434,6 @@ export function Grid({ size = 120, playMode = false }: GridProps) {
   }
 
   const isNavigationTool = isPassiveGridMode(tool, playMode)
-  const activeCameraMode = useDungeonStore((state) => state.activeCameraMode)
-  const overlayRadius = getGridOverlayRadius(activeCameraMode, playMode)
   const renderGridOverlay = shouldRenderGridOverlay(showGrid, playMode)
   const wallConnectionPlacement = useMemo(
     () => tool === 'opening' && hoveredPoint
@@ -480,7 +476,6 @@ export function Grid({ size = 120, playMode = false }: GridProps) {
         rotation={[-Math.PI / 2, 0, 0]}
         onPointerMove={isNavigationTool ? updateCursorPosOnly : updateHoveredCell}
         onPointerOut={() => {
-          cursorActiveRef.current = false
           if (!isNavigationTool && !strokeModeRef.current && !openPassageBrushActiveRef.current) {
             setHoveredCell(null)
             setHoveredPoint(null)
@@ -512,12 +507,8 @@ export function Grid({ size = 120, playMode = false }: GridProps) {
         />
       )}
 
-      <CursorLight centerRef={mousePosRef} activeRef={cursorActiveRef} />
-
       {renderGridOverlay && (
         <FloorGridOverlay
-          centerRef={mousePosRef}
-          radius={overlayRadius}
           size={size}
           showBase={!playMode}
         />
@@ -536,6 +527,11 @@ export function Grid({ size = 120, playMode = false }: GridProps) {
                 getPropPlacement(selectedPropAsset, hoveredPoint, paintedCells),
                 floorRotationIndex * (Math.PI / 2),
               )
+            if (tool === 'character' && selectedCharacterAsset && hoveredPoint)
+              return applyFloorRotation(
+                getPropPlacement(selectedCharacterAsset, hoveredPoint, paintedCells),
+                floorRotationIndex * (Math.PI / 2),
+              )
             if (
               tool === 'opening' &&
               selectedOpeningAsset &&
@@ -551,9 +547,11 @@ export function Grid({ size = 120, playMode = false }: GridProps) {
           propAssetId={
             tool === 'prop'
               ? selectedPropAssetId
+              : tool === 'character'
+                ? selectedCharacterAssetId
               : tool === 'opening' &&
                  openingToolMode === 'floor-asset'
-               ? selectedOpeningAssetId
+                ? selectedOpeningAssetId
                : null
           }
           openingPlacement={
@@ -621,7 +619,7 @@ function HoverPreview({
   globalWallAssetId: string | null
 }) {
   // Prop tool OR floor-connected opening (e.g. stairs) — both use prop-style preview
-  if (tool === 'prop' || (tool === 'opening' && propAssetId)) {
+  if (tool === 'prop' || tool === 'character' || (tool === 'opening' && propAssetId)) {
     if (!hoveredCell || !hoveredPoint) return null
 
     const position = propPlacement?.position ?? [hoveredCell.position[0], 0, hoveredCell.position[2]]
@@ -1178,57 +1176,5 @@ function OpenPassageHitTargets({
         </mesh>
       ))}
     </group>
-  )
-}
-
-// ─── Cursor follow light ───────────────────────────────────────────────────
-
-const CURSOR_LIGHT_HEIGHT   = 3.0    // world units above the floor
-const CURSOR_LIGHT_COLOR    = '#ff9040'
-const CURSOR_LIGHT_INTENSITY = 10
-const CURSOR_LIGHT_DISTANCE  = 22
-const CURSOR_LIGHT_DECAY     = 1.8
-
-function CursorLight({
-  centerRef,
-  activeRef,
-}: {
-  centerRef: MutableRefObject<THREE.Vector2>
-  activeRef: MutableRefObject<boolean>
-}) {
-  const lightRef = useRef<THREE.PointLight>(null)
-
-  useFrame(({ clock }) => {
-    const light = lightRef.current
-    if (!light) return
-
-    // Smoothly snap visibility
-    light.visible = activeRef.current
-
-    // Follow cursor XZ
-    light.position.set(centerRef.current.x, CURSOR_LIGHT_HEIGHT, centerRef.current.y)
-
-    // Organic flicker — three layered sin waves
-    const t = clock.elapsedTime
-    const noise =
-      Math.sin(t * 11.3) * 0.12 +
-      Math.sin(t *  7.1) * 0.09 +
-      Math.sin(t * 23.7) * 0.05
-    light.intensity = CURSOR_LIGHT_INTENSITY * (1 + noise)
-  })
-
-  return (
-    <pointLight
-      ref={lightRef}
-      color={CURSOR_LIGHT_COLOR}
-      intensity={CURSOR_LIGHT_INTENSITY}
-      distance={CURSOR_LIGHT_DISTANCE}
-      decay={CURSOR_LIGHT_DECAY}
-      castShadow
-      shadow-mapSize={[512, 512]}
-      shadow-camera-near={0.5}
-      shadow-camera-far={CURSOR_LIGHT_DISTANCE}
-      visible={false}
-    />
   )
 }

@@ -109,7 +109,7 @@ describe('serializeDungeon / deserializeDungeon roundtrip', () => {
     state.floors!['floor-1'].snapshot.placedObjects['obj-player'] = {
       id: 'obj-player',
       type: 'player',
-      assetId: 'core.player_barbarian',
+      assetId: 'generated.player.test',
       position: [1, 0, 1],
       rotation: [0, 0, 0],
       props: {},
@@ -121,7 +121,7 @@ describe('serializeDungeon / deserializeDungeon roundtrip', () => {
     const result = deserializeDungeon(serializeDungeon(state))
     expect(result).not.toBeNull()
     const objects = result!.placedObjects ?? result!.floors?.['floor-1']?.snapshot?.placedObjects
-    expect(objects?.['obj-player']).toMatchObject({ assetId: 'core.player_barbarian', type: 'player' })
+    expect(objects?.['obj-player']).toMatchObject({ assetId: 'generated.player.test', type: 'player' })
   })
 
   it('preserves wall openings with flipped flag', () => {

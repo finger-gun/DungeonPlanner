@@ -10,6 +10,7 @@ import { useThree, useFrame } from '@react-three/fiber'
 import * as THREE from 'three/webgpu'
 import { uniform } from 'three/tsl'
 import { tiltShift } from '../../postprocessing/tiltShift'
+import { depthFocusRangeFromFocalLength } from '../../postprocessing/tiltShiftMath'
 import { selectionOutline, alphaOver, SELECTION_OUTLINE_LAYER } from '../../postprocessing/selectionOutline'
 import { useDungeonStore } from '../../store/useDungeonStore'
 import { getRegisteredObject } from './objectRegistry'
@@ -92,7 +93,7 @@ export function WebGPUPostProcessing() {
   // Update shader uniforms only when settings actually change — not every frame.
   useEffect(() => {
     focusCenterUniform.current.value = settings.focusDistance
-    focusRangeUniform.current.value  = Math.max(0.02, settings.focalLength / 30)
+    focusRangeUniform.current.value  = depthFocusRangeFromFocalLength(settings.focalLength)
     blurRadiusUniform.current.value  = settings.bokehScale * 4
   }, [settings.focusDistance, settings.focalLength, settings.bokehScale])
 

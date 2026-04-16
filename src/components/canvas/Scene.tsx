@@ -21,9 +21,12 @@ import { createPlayDragState, updatePlayDragState, type PlayDragState } from './
 import { RoomResizeOverlay } from './RoomResizeOverlay'
 import { getEffectiveFloorViewMode } from './floorViewMode'
 import type { DungeonRoomData } from './DungeonRoom'
-import { PLAYER_ANIMATION_MS } from '../../content-packs/core/players/playerAnimation'
 
 const FLOOR_HEIGHT_UNIT = 3
+const PLAYER_ANIMATION_MS = {
+  pickup: 520,
+  release: 520,
+} as const
 
 const ALWAYS_VISIBLE: ReturnType<typeof usePlayVisibility> = {
   active: false,

@@ -127,9 +127,9 @@ export function MoveToolPanel() {
         </div>
         <div className={`rounded-2xl border border-stone-800 bg-stone-950/60 px-4 py-4 flex flex-col gap-4 transition-opacity ${pp.enabled ? 'opacity-100' : 'opacity-40 pointer-events-none'}`}>
           {([
-            { label: 'Focus Y', value: pp.focusDistance, min: 0,   max: 1,  step: 0.01, fmt: (v: number) => `${(v*100).toFixed(0)}%`, key: 'focusDistance' as const },
-            { label: 'Band',    value: pp.focalLength,   min: 0.5, max: 12, step: 0.25, fmt: (v: number) => v.toFixed(2),              key: 'focalLength'   as const },
-            { label: 'Blur',    value: pp.bokehScale,    min: 0.5, max: 6,  step: 0.25, fmt: (v: number) => `${v.toFixed(2)}x`,       key: 'bokehScale'    as const },
+            { label: 'Focus Line', value: pp.focusDistance, min: 0,   max: 1,  step: 0.01, fmt: (v: number) => `${(v*100).toFixed(0)}%`, key: 'focusDistance' as const },
+            { label: 'Depth Range', value: pp.focalLength, min: 0.5, max: 12, step: 0.25, fmt: (v: number) => v.toFixed(2),             key: 'focalLength'   as const },
+            { label: 'Blur',       value: pp.bokehScale,  min: 0.5, max: 6,  step: 0.25, fmt: (v: number) => `${v.toFixed(2)}x`,      key: 'bokehScale'    as const },
           ]).map(({ label, value, min, max, step, fmt, key }) => (
             <div key={key}>
               <div className="mb-2 flex items-center justify-between">

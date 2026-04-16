@@ -7,10 +7,12 @@ import { CameraDropdown } from './components/editor/CameraDropdown'
 import { MoveToolPanel } from './components/editor/MoveToolPanel'
 import { RoomToolPanel } from './components/editor/RoomToolPanel'
 import { PropToolPanel } from './components/editor/PropToolPanel'
+import { CharacterToolPanel } from './components/editor/CharacterToolPanel'
 import { OpeningToolPanel } from './components/editor/OpeningToolPanel'
 import { SelectToolPanel } from './components/editor/SelectToolPanel'
 import { LayerPanel } from './components/editor/LayerPanel'
 import { ScenePanel } from './components/editor/ScenePanel'
+import { CharacterSheetOverlay } from './components/editor/CharacterSheetOverlay'
 import { getDebugCameraPose, projectDebugWorldPoint } from './components/canvas/debugCameraBridge'
 import { useDungeonStore } from './store/useDungeonStore'
 import {
@@ -54,6 +56,8 @@ function RightPanel() {
                 ? 'Settings'
                 : tool === 'room'
                   ? 'Room'
+                  : tool === 'character'
+                    ? 'Characters'
                   : tool === 'opening'
                     ? 'Connections'
                     : 'Props'}
@@ -62,6 +66,7 @@ function RightPanel() {
         {tool === 'select' && <SelectToolPanel />}
         {tool === 'move' && <MoveToolPanel />}
         {tool === 'room' && <RoomToolPanel />}
+        {tool === 'character' && <CharacterToolPanel />}
         {tool === 'prop' && <PropToolPanel />}
         {tool === 'opening' && <OpeningToolPanel />}
       </div>
@@ -172,14 +177,15 @@ function App() {
       getSnapshot: () => useDungeonStore.getState(),
       placeAtCell: (cell: GridCell, tool = 'room') => {
         const state = useDungeonStore.getState()
-        if (tool === 'prop') {
+        if (tool === 'prop' || tool === 'character') {
           const position = cellToWorldPosition(cell)
-          const assetId =
-            state.selectedAssetIds.prop ?? getDefaultAssetIdByCategory('prop')
+          const assetId = tool === 'character'
+            ? state.selectedAssetIds.player ?? getDefaultAssetIdByCategory('player')
+            : state.selectedAssetIds.prop ?? getDefaultAssetIdByCategory('prop')
           const asset = assetId ? getContentPackAssetById(assetId) : null
 
           return state.placeObject({
-            type: asset?.category === 'player' ? 'player' : 'prop',
+            type: tool === 'character' || asset?.category === 'player' ? 'player' : 'prop',
             assetId,
             position: [position[0], 0.45, position[2]],
             rotation: [0, 0, 0],
@@ -202,7 +208,7 @@ function App() {
           .eraseCells(getRectangleCells(startCell, endCell))
       },
       removeAtCell: (cell: GridCell, tool = 'room') => {
-        if (tool === 'prop') {
+        if (tool === 'prop' || tool === 'character') {
           useDungeonStore.getState().removeObjectAtCell(getCellKey(cell))
           return
         }
@@ -240,8 +246,10 @@ function App() {
       ? 'Drag characters to move them'
       : tool === 'move'
       ? 'Application settings and viewport controls'
-      : tool === 'room'
-        ? 'Click room to select · drag room edges to resize · rectangular rooms also show corner handles · left-drag empty space to build · right-drag to erase'
+        : tool === 'room'
+          ? 'Click room to select · drag room edges to resize · rectangular rooms also show corner handles · left-drag empty space to build · right-drag to erase'
+        : tool === 'character'
+          ? 'Select a character to place · click a room cell to place it · use Edit to reopen the character sheet'
         : tool === 'opening'
           ? 'Choose Wall, Door, or Open passage · click shared walls to connect rooms'
         : 'Click to place · R to rotate · right-click to remove · Alt+click to inspect'
@@ -272,6 +280,8 @@ function App() {
               <Scene />
             </Suspense>
 
+            {!isPlayMode && <CharacterSheetOverlay />}
+
             <CameraDropdown />
 
             {/* Floor-switch transition overlay — opacity driven imperatively by FloorTransitionController */}
@@ -290,6 +300,8 @@ function App() {
                     ? 'Select'
                   : tool === 'move'
                       ? 'Settings'
+                      : tool === 'character'
+                        ? 'Characters'
                       : tool === 'room'
                         ? 'Room'
                         : tool === 'opening'

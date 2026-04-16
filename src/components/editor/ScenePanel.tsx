@@ -2,6 +2,7 @@ import { useState, useRef, useMemo } from 'react'
 import { ChevronRight, Trash2 } from 'lucide-react'
 import { useDungeonStore, type FloorRecord } from '../../store/useDungeonStore'
 import { getContentPackAssetById } from '../../content-packs/registry'
+import { isGeneratedCharacterAssetId } from '../../content-packs/runtimeRegistry'
 import { requestFloorTransition } from '../canvas/floorTransition'
 import type { PaintedCells } from '../../store/useDungeonStore'
 
@@ -108,7 +109,9 @@ export function ScenePanel() {
               onSelectProp={(id) => {
                 if (floorViewMode !== 'scene' && !isEditingFloor) requestFloorTransition(floorId)
                 selectObject(id)
-                setTool('prop')
+                const assetId = data.placedObjects[id]?.assetId
+                const asset = assetId ? getContentPackAssetById(assetId) : null
+                setTool(asset?.category === 'player' || isGeneratedCharacterAssetId(asset?.id) ? 'character' : 'prop')
               }}
               onSelectOpening={(id) => {
                 if (floorViewMode !== 'scene' && !isEditingFloor) requestFloorTransition(floorId)

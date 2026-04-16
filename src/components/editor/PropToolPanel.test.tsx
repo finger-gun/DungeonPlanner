@@ -12,13 +12,12 @@ describe('PropToolPanel', () => {
     cleanup()
   })
 
-  it('renders the prop catalog with grouped thumbnail cards', () => {
+  it('renders the prop catalog without the character generator UI', () => {
     render(<PropToolPanel />)
 
     expect(screen.getByText('Catalogue')).toBeInTheDocument()
-    expect(screen.getByText('Characters')).toBeInTheDocument()
     expect(screen.getByText('Props')).toBeInTheDocument()
-    expect(screen.getByAltText('Barbarian thumbnail')).toBeInTheDocument()
+    expect(screen.queryByText('Characters')).not.toBeInTheDocument()
     expect(screen.getByAltText('Barrel thumbnail')).toBeInTheDocument()
   })
 

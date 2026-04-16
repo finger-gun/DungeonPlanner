@@ -112,12 +112,12 @@ export function ContentPackInstance({
   const receiveShadow = asset?.metadata?.receiveShadow !== false
 
   useEffect(() => {
-    if (assetPath) {
+    if (assetPath && !AssetComponent) {
       useGLTF.preload(assetPath)
     }
-  }, [assetPath])
+  }, [AssetComponent, assetPath])
 
-  if (!assetPath) {
+  if (!assetPath && !AssetComponent) {
     return (
       <group {...groupProps}>
         <FallbackMesh
@@ -150,25 +150,25 @@ export function ContentPackInstance({
       }
     >
       {AssetComponent ? (
-          <ComponentAsset
-            Component={AssetComponent}
-            componentProps={getComponentProps(
-              variantKey,
-              objectProps,
-              poseSelected,
-              playerAnimationState,
-            )}
-            receiveShadow={receiveShadow}
-            selected={selected}
-          tint={tint}
-          tintOpacity={tintOpacity}
-          overlayOnly={overlayOnly}
+        <ComponentAsset
+          Component={AssetComponent}
+          componentProps={getComponentProps(
+            variantKey,
+            objectProps,
+            poseSelected,
+            playerAnimationState,
+          )}
+          receiveShadow={receiveShadow}
+          selected={selected}
+           tint={tint}
+           tintOpacity={tintOpacity}
+           overlayOnly={overlayOnly}
           visibility={visibility}
           {...groupProps}
         />
       ) : (
         <GLTFModel
-          assetPath={assetPath}
+          assetPath={assetPath!}
           receiveShadow={receiveShadow}
           selected={selected}
           tint={tint}

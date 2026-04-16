@@ -5,7 +5,7 @@ describe('playDrag', () => {
   it('keeps the grabbed player under the cursor while snapping the drop target', () => {
     const drag = createPlayDragState({
       id: 'player-1',
-      assetId: 'core.player_barbarian',
+      assetId: 'generated.player.test',
       rotation: [0, 0, 0],
       position: [1, 0, 1],
       cell: [0, 0],
@@ -22,7 +22,7 @@ describe('playDrag', () => {
   it('marks the dragged player invalid when the target cell is blocked', () => {
     const drag = createPlayDragState({
       id: 'player-1',
-      assetId: 'core.player_barbarian',
+      assetId: 'generated.player.test',
       rotation: [0, 0, 0],
       position: [1, 0, 1],
       cell: [0, 0],

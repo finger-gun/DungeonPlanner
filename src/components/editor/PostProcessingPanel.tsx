@@ -29,7 +29,7 @@ export function PostProcessingPanel() {
       <div className={`flex flex-col gap-3 transition-opacity ${pp.enabled ? 'opacity-100' : 'opacity-40 pointer-events-none'}`}>
         <div className="rounded-2xl border border-stone-800 bg-stone-950/60 px-4 py-4">
           <div className="mb-2 flex items-center justify-between">
-            <label className="text-xs uppercase tracking-[0.22em] text-stone-400">Focus Y</label>
+            <label className="text-xs uppercase tracking-[0.22em] text-stone-400">Focus Line</label>
             <span className="text-xs tabular-nums text-stone-300">{(pp.focusDistance * 100).toFixed(0)}%</span>
           </div>
           <input
@@ -41,7 +41,7 @@ export function PostProcessingPanel() {
 
         <div className="rounded-2xl border border-stone-800 bg-stone-950/60 px-4 py-4">
           <div className="mb-2 flex items-center justify-between">
-            <label className="text-xs uppercase tracking-[0.22em] text-stone-400">Band</label>
+            <label className="text-xs uppercase tracking-[0.22em] text-stone-400">Depth Range</label>
             <span className="text-xs tabular-nums text-stone-300">{pp.focalLength.toFixed(2)}</span>
           </div>
           <input

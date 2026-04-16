@@ -12,6 +12,7 @@ import {
   Settings,
   Undo2,
   Upload,
+  Users,
 } from 'lucide-react'
 import { useDungeonStore, type DungeonTool } from '../../store/useDungeonStore'
 
@@ -19,6 +20,7 @@ const TOOLS: { id: DungeonTool; Icon: React.ComponentType<{ size?: number; strok
   { id: 'play',    Icon: Joystick,      label: 'Play' },
   { id: 'select',  Icon: MousePointer2, label: 'Select' },
   { id: 'room',    Icon: Blocks,        label: 'Room' },
+  { id: 'character', Icon: Users,       label: 'Character' },
   { id: 'prop',    Icon: Box,           label: 'Prop' },
   { id: 'opening', Icon: DoorOpen,      label: 'Opening' },
 ]

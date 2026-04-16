@@ -38,7 +38,7 @@ export type ContentPackAsset = {
   slug: string
   name: string
   category: ContentPackCategory
-  assetUrl: string
+  assetUrl?: string
   thumbnailUrl?: string
   Component: ComponentType<ContentPackComponentProps>
   metadata?: ContentPackAssetMetadata

@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react'
 import type { ContentPackAsset } from '../../content-packs/types'
 
 export type AssetCatalogSection = {
@@ -10,6 +11,7 @@ export function AssetCatalog({
   sections,
   isSelected,
   onSelect,
+  renderActions,
   getBadgeLabel = (asset, active) => (active ? 'Selected' : asset.category),
   getBadgeClassName = (asset, active) => {
     if (active) {
@@ -28,6 +30,7 @@ export function AssetCatalog({
   sections: AssetCatalogSection[]
   isSelected: (asset: ContentPackAsset) => boolean
   onSelect: (asset: ContentPackAsset) => void
+  renderActions?: (asset: ContentPackAsset) => ReactNode
   getBadgeLabel?: (asset: ContentPackAsset, active: boolean) => string
   getBadgeClassName?: (asset: ContentPackAsset, active: boolean) => string
   getDescription?: (asset: ContentPackAsset) => string
@@ -52,11 +55,12 @@ export function AssetCatalog({
                     asset={asset}
                     active={active}
                     onSelect={() => onSelect(asset)}
-                    badgeLabel={getBadgeLabel(asset, active)}
-                    badgeClassName={getBadgeClassName(asset, active)}
-                    description={getDescription(asset)}
-                  />
-                )
+                     badgeLabel={getBadgeLabel(asset, active)}
+                     badgeClassName={getBadgeClassName(asset, active)}
+                     description={getDescription(asset)}
+                     actions={renderActions?.(asset)}
+                   />
+                 )
               })}
             </div>
           </div>
@@ -73,6 +77,7 @@ function CatalogCard({
   badgeLabel,
   badgeClassName,
   description,
+  actions,
 }: {
   asset: ContentPackAsset
   active: boolean
@@ -80,41 +85,47 @@ function CatalogCard({
   badgeLabel: string
   badgeClassName: string
   description: string
+  actions?: ReactNode
 }) {
   return (
-    <button
-      type="button"
-      onClick={onSelect}
-      aria-pressed={active}
-      className={`overflow-hidden rounded-2xl border text-left transition ${
+    <div
+      className={`overflow-hidden rounded-2xl border transition ${
         active
           ? 'border-teal-300/35 bg-teal-400/10 shadow-[0_0_0_1px_rgba(94,234,212,0.12)]'
-          : 'border-stone-800 bg-stone-950/60 hover:border-stone-700'
+          : 'border-stone-800 bg-stone-950/60'
       }`}
     >
-      <div className="aspect-square border-b border-stone-800/80 bg-stone-900/80">
-        {asset.thumbnailUrl ? (
-          <img
-            src={asset.thumbnailUrl}
-            alt={`${asset.name} thumbnail`}
-            className="h-full w-full object-contain"
-            loading="lazy"
-          />
-        ) : (
-          <div className="flex h-full w-full items-center justify-center text-[10px] uppercase tracking-[0.24em] text-stone-600">
-            No preview
-          </div>
-        )}
-      </div>
-      <div className="space-y-1 px-3 py-3">
-        <div className="flex items-start justify-between gap-2">
-          <span className="text-sm font-medium text-stone-100">{asset.name}</span>
-          <span className={`rounded-full px-2 py-0.5 text-[9px] uppercase tracking-[0.2em] ${badgeClassName}`}>
-            {badgeLabel}
-          </span>
+      <button
+        type="button"
+        onClick={onSelect}
+        aria-pressed={active}
+        className={`block w-full text-left transition ${active ? '' : 'hover:border-stone-700'}`}
+      >
+        <div className="aspect-square border-b border-stone-800/80 bg-stone-900/80">
+          {asset.thumbnailUrl ? (
+            <img
+              src={asset.thumbnailUrl}
+              alt={`${asset.name} thumbnail`}
+              className="h-full w-full object-contain"
+              loading="lazy"
+            />
+          ) : (
+            <div className="flex h-full w-full items-center justify-center text-[10px] uppercase tracking-[0.24em] text-stone-600">
+              No preview
+            </div>
+          )}
         </div>
-        <p className="text-[11px] text-stone-500">{description}</p>
-      </div>
-    </button>
+        <div className="space-y-1 px-3 py-3">
+          <div className="flex items-start justify-between gap-2">
+            <span className="text-sm font-medium text-stone-100">{asset.name}</span>
+            <span className={`rounded-full px-2 py-0.5 text-[9px] uppercase tracking-[0.2em] ${badgeClassName}`}>
+              {badgeLabel}
+            </span>
+          </div>
+          <p className="text-[11px] text-stone-500">{description}</p>
+        </div>
+      </button>
+      {actions ? <div className="px-3 pb-3">{actions}</div> : null}
+    </div>
   )
 }

@@ -11,20 +11,14 @@ export function PropToolPanel() {
   )
   const removeSelectedObject = useDungeonStore((state) => state.removeSelectedObject)
   const propAssets = getContentPackAssetsByCategory('prop')
-  const playerAssets = getContentPackAssetsByCategory('player')
   const selectedAsset = selectedObject?.assetId
     ? getContentPackAssetById(selectedObject.assetId)
     : null
-  const isCharacterSelection = selectedObject?.type === 'player' || selectedAsset?.category === 'player'
-  const catalogSections = [
-    { title: 'Characters', assets: playerAssets },
-    { title: 'Props', assets: propAssets },
-  ]
 
   return (
     <div className="space-y-4">
       <AssetCatalog
-        sections={catalogSections}
+        sections={[{ title: 'Props', assets: propAssets }]}
         isSelected={(asset) => selectedAssetIds.prop === asset.id}
         onSelect={(asset) => setSelectedAsset('prop', asset.id)}
       />
@@ -35,11 +29,10 @@ export function PropToolPanel() {
         <p>Hold <kbd>Alt</kbd> + click to inspect.</p>
       </section>
 
-      {/* Inline inspector when a prop is selected */}
-      {selectedObject && (
+      {selectedObject?.type === 'prop' && (
         <section>
           <p className="mb-3 text-xs font-semibold uppercase tracking-[0.3em] text-sky-200/70">
-            {isCharacterSelection ? 'Selected Character' : 'Selected Prop'}
+            Selected Prop
           </p>
           <div className="rounded-2xl border border-stone-800 bg-stone-900/80 p-4">
             <div className="mb-3 flex items-start justify-between gap-3">

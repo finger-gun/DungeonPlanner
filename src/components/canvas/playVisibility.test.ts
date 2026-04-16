@@ -343,7 +343,7 @@ describe('isVisiblePlayerOrigin', () => {
         {
           id: 'player-1',
           type: 'player',
-          assetId: 'core.player_barbarian',
+          assetId: 'generated.player.test',
           position: [1, 0, 1],
           rotation: [0, 0, 0],
           cell: [0, 0],

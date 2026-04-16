@@ -1,10 +1,33 @@
 import { beforeEach, describe, expect, it } from 'vitest'
+import { getContentPackAssetById } from '../content-packs/registry'
 import { useDungeonStore } from './useDungeonStore'
 import { getOpeningSegments } from './openingSegments'
+
+const TEST_IMAGE_DATA_URL =
+  'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4////fwAJ+wP9KobjigAAAABJRU5ErkJggg=='
+
+function createTestGeneratedCharacter(name = 'Generated Test Player') {
+  return useDungeonStore.getState().createGeneratedCharacter({
+    storageId: `${name.toLowerCase().replace(/\s+/g, '-')}-storage`,
+    name,
+    kind: 'player',
+    size: 'M',
+    prompt: `${name} on white`,
+    model: 'x/z-image-turbo',
+    originalImageUrl: TEST_IMAGE_DATA_URL,
+    processedImageUrl: TEST_IMAGE_DATA_URL,
+    thumbnailUrl: TEST_IMAGE_DATA_URL,
+    width: 300,
+    height: 600,
+  })
+}
 
 describe('useDungeonStore history', () => {
   beforeEach(() => {
     useDungeonStore.getState().reset()
+    Object.keys(useDungeonStore.getState().generatedCharacters).forEach((assetId) => {
+      useDungeonStore.getState().removeGeneratedCharacter(assetId)
+    })
   })
 
   it('paints room cells and supports undo/redo', () => {
@@ -47,9 +70,10 @@ describe('useDungeonStore history', () => {
   })
 
   it('places a player into a snapped cell and keeps its player type', () => {
+    const assetId = createTestGeneratedCharacter('Generated Barbarian')
     const placedId = useDungeonStore.getState().placeObject({
       type: 'player',
-      assetId: 'core.player_barbarian',
+      assetId,
       position: [1, 0, 1],
       rotation: [0, 0, 0],
       props: {},
@@ -149,10 +173,11 @@ describe('useDungeonStore history', () => {
 
   it('moves a player to another painted floor cell without changing its id', () => {
     useDungeonStore.getState().paintCells([[0, 0], [1, 0]])
+    const assetId = createTestGeneratedCharacter('Generated Mover')
 
     const placedId = useDungeonStore.getState().placeObject({
       type: 'player',
-      assetId: 'core.player_barbarian',
+      assetId,
       position: [1, 0, 1],
       rotation: [0, 0, 0],
       props: { connector: 'FLOOR', direction: null },
@@ -176,10 +201,11 @@ describe('useDungeonStore history', () => {
 
   it('does not move a player onto an occupied floor cell', () => {
     useDungeonStore.getState().paintCells([[0, 0], [1, 0]])
+    const assetId = createTestGeneratedCharacter('Generated Occupant')
 
     const firstId = useDungeonStore.getState().placeObject({
       type: 'player',
-      assetId: 'core.player_barbarian',
+      assetId,
       position: [1, 0, 1],
       rotation: [0, 0, 0],
       props: { connector: 'FLOOR', direction: null },
@@ -189,7 +215,7 @@ describe('useDungeonStore history', () => {
 
     const secondId = useDungeonStore.getState().placeObject({
       type: 'player',
-      assetId: 'core.player_barbarian',
+      assetId,
       position: [3, 0, 1],
       rotation: [0, 0, 0],
       props: { connector: 'FLOOR', direction: null },
@@ -208,6 +234,61 @@ describe('useDungeonStore history', () => {
     expect(state.occupancy['0:0:floor']).toBe(firstId)
     expect(state.occupancy['1:0:floor']).toBe(secondId)
     expect(state.placedObjects[firstId!]?.cell).toEqual([0, 0])
+  })
+
+  it('creates generated character assets that appear in the registry', () => {
+    const assetId = useDungeonStore.getState().createGeneratedCharacter({
+      storageId: 'storage-barbarian',
+      name: 'Generated Barbarian',
+      kind: 'player',
+      prompt: 'A barbarian standee on white',
+      model: 'x/z-image-turbo',
+      size: 'M',
+      originalImageUrl: TEST_IMAGE_DATA_URL,
+      processedImageUrl: TEST_IMAGE_DATA_URL,
+      thumbnailUrl: TEST_IMAGE_DATA_URL,
+      width: 300,
+      height: 600,
+    })
+
+    expect(assetId).toBeTruthy()
+    expect(useDungeonStore.getState().generatedCharacters[assetId!]?.name).toBe('Generated Barbarian')
+    expect(getContentPackAssetById(assetId!)).toMatchObject({
+      id: assetId,
+      category: 'player',
+      name: 'Generated Barbarian',
+    })
+  })
+
+  it('does not remove a generated character that is already placed', () => {
+    useDungeonStore.getState().paintCells([[0, 0]])
+
+    const assetId = useDungeonStore.getState().createGeneratedCharacter({
+      storageId: 'storage-wizard',
+      name: 'Generated Wizard',
+      kind: 'player',
+      prompt: 'A wizard standee on white',
+      model: 'x/z-image-turbo',
+      size: 'M',
+      originalImageUrl: TEST_IMAGE_DATA_URL,
+      processedImageUrl: TEST_IMAGE_DATA_URL,
+      thumbnailUrl: TEST_IMAGE_DATA_URL,
+      width: 300,
+      height: 600,
+    })
+
+    useDungeonStore.getState().placeObject({
+      type: 'player',
+      assetId,
+      position: [1, 0, 1],
+      rotation: [0, 0, 0],
+      props: { connector: 'FLOOR', direction: null },
+      cell: [0, 0],
+      cellKey: '0:0:floor',
+    })
+
+    expect(useDungeonStore.getState().removeGeneratedCharacter(assetId!)).toBe(false)
+    expect(useDungeonStore.getState().generatedCharacters[assetId!]).toBeTruthy()
   })
 
   it('clears explored cells without changing painted cells', () => {
@@ -445,9 +526,10 @@ describe('useDungeonStore history', () => {
   })
 
   it('rotates a selected floor object by 90 degrees', () => {
+    const assetId = createTestGeneratedCharacter('Generated Rotator')
     const placedId = useDungeonStore.getState().placeObject({
       type: 'player',
-      assetId: 'core.player_barbarian',
+      assetId,
       position: [1, 0, 1],
       rotation: [0, 0, 0],
       props: {
