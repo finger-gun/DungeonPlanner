@@ -14,10 +14,10 @@
   <img src="https://img.shields.io/badge/TypeScript-6-3178C6?logo=typescript&logoColor=white&style=flat-square" />
   <img src="https://img.shields.io/badge/Tailwind-4-38BDF8?logo=tailwindcss&logoColor=white&style=flat-square" />
   <a href="https://github.com/finger-gun/DungeonPlanner/actions/workflows/ci.yml">
-    <img src="https://github.com/finger-gun/DungeonPlanner/actions/workflows/ci.yml/badge.svg" alt="CI status" />
+    <img src="https://github.com/finger-gun/DungeonPlanner/actions/workflows/test.yml/badge.svg" alt="Test status" />
   </a>
-  <a href="https://github.com/finger-gun/DungeonPlanner/actions/workflows/codeql.yml">
-    <img src="https://github.com/finger-gun/DungeonPlanner/actions/workflows/codeql.yml/badge.svg" alt="CodeQL status" />
+    <a href="https://github.com/finger-gun/DungeonPlanner/actions/workflows/github-code-scanning/codeql">
+    <img src="https://github.com/finger-gun/DungeonPlanner/actions/workflows/github-code-scanning/codeql/badge.svg" alt="CodeQL status" />
   </a>
 </p>
 
