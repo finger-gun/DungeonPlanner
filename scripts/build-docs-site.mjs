@@ -38,7 +38,6 @@ const docsIndexHtml = `<!doctype html>
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <base href="/docs/" />
     <title>DungeonPlanner Docs</title>
     <meta name="description" content="DungeonPlanner documentation for players, game masters, and developers." />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
@@ -62,10 +61,8 @@ const docsIndexHtml = `<!doctype html>
       window.$docsify = {
         name: 'DungeonPlanner Docs',
         repo: 'https://github.com/finger-gun/DungeonPlanner',
-        basePath: '/docs/',
         loadSidebar: '_sidebar.md',
         homepage: 'index.md',
-        relativePath: true,
         auto2top: true,
         maxLevel: 3,
         subMaxLevel: 2,

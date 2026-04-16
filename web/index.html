@@ -3,64 +3,175 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>DungeonPlanner</title>
+    <title>DungeonPlanner — 3D Dungeon Editor for TTRPG</title>
     <meta
       name="description"
-      content="DungeonPlanner is a modern 3D dungeon editor for tabletop sessions."
+      content="DungeonPlanner is a modern 3D dungeon editor for tabletop RPG sessions. Build dungeons fast, present them beautifully, run better sessions."
+    />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700;900&family=Inter:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
     />
     <link rel="stylesheet" href="./styles.css" />
   </head>
   <body>
-    <div class="page">
-      <header class="site-header">
+
+    <!-- ─── NAV ─── -->
+    <header class="site-header">
+      <div class="header-inner">
         <a class="brand" href="#">
-          <span class="brand-mark">DungeonPlanner</span>
+          <svg class="brand-icon" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
+          DungeonPlanner
         </a>
         <nav class="header-nav" aria-label="Main navigation">
-          <a href="http://demo.dungeonplanner.com/" target="_blank" rel="noreferrer">Demo</a>
-          <a href="http://docs.dungeonplanner.com/" target="_blank" rel="noreferrer">Docs</a>
-          <a class="with-icon" href="https://github.com/finger-gun/DungeonPlanner" target="_blank" rel="noreferrer">
+          <a href="https://demo.dungeonplanner.com/" target="_blank" rel="noreferrer">Demo</a>
+          <a href="https://docs.dungeonplanner.com/" target="_blank" rel="noreferrer">Docs</a>
+          <a class="nav-gh" href="https://github.com/finger-gun/DungeonPlanner" target="_blank" rel="noreferrer">
             <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-              <path
-                fill="currentColor"
-                d="M12 2C6.48 2 2 6.59 2 12.25c0 4.53 2.87 8.37 6.84 9.72.5.1.68-.22.68-.49 0-.24-.01-1.04-.01-1.89-2.78.62-3.37-1.22-3.37-1.22-.46-1.2-1.12-1.52-1.12-1.52-.92-.64.07-.63.07-.63 1.01.08 1.55 1.08 1.55 1.08.91 1.6 2.38 1.14 2.96.87.09-.68.36-1.14.65-1.4-2.22-.26-4.56-1.14-4.56-5.09 0-1.12.39-2.03 1.03-2.74-.1-.26-.45-1.31.1-2.73 0 0 .85-.28 2.78 1.05a9.33 9.33 0 0 1 5.06 0c1.93-1.33 2.78-1.05 2.78-1.05.55 1.42.2 2.47.1 2.73.64.71 1.03 1.62 1.03 2.74 0 3.96-2.34 4.83-4.57 5.08.37.33.7.97.7 1.96 0 1.42-.01 2.57-.01 2.92 0 .27.18.59.69.49A10.25 10.25 0 0 0 22 12.25C22 6.59 17.52 2 12 2Z"
-              />
+              <path fill="currentColor" d="M12 2C6.48 2 2 6.59 2 12.25c0 4.53 2.87 8.37 6.84 9.72.5.1.68-.22.68-.49 0-.24-.01-1.04-.01-1.89-2.78.62-3.37-1.22-3.37-1.22-.46-1.2-1.12-1.52-1.12-1.52-.92-.64.07-.63.07-.63 1.01.08 1.55 1.08 1.55 1.08.91 1.6 2.38 1.14 2.96.87.09-.68.36-1.14.65-1.4-2.22-.26-4.56-1.14-4.56-5.09 0-1.12.39-2.03 1.03-2.74-.1-.26-.45-1.31.1-2.73 0 0 .85-.28 2.78 1.05a9.33 9.33 0 0 1 5.06 0c1.93-1.33 2.78-1.05 2.78-1.05.55 1.42.2 2.47.1 2.73.64.71 1.03 1.62 1.03 2.74 0 3.96-2.34 4.83-4.57 5.08.37.33.7.97.7 1.96 0 1.42-.01 2.57-.01 2.92 0 .27.18.59.69.49A10.25 10.25 0 0 0 22 12.25C22 6.59 17.52 2 12 2Z"/>
             </svg>
             GitHub
           </a>
         </nav>
-      </header>
+      </div>
+    </header>
 
-      <main class="card">
-        <section class="copy">
-          <p class="eyebrow">DungeonPlanner</p>
-          <h1>A modern 3D dungeon editor for tabletop sessions.</h1>
-          <p class="lead">
-            Build faster. Present cleaner. Run better sessions.
-          </p>
-          <p class="soon">Coming soon...</p>
+    <!-- ─── HERO ─── -->
+    <section class="hero">
+      <div class="hero-glow" aria-hidden="true"></div>
+      <div class="hero-content">
+        <img class="hero-logo" src="./dungeonplanner.png" alt="DungeonPlanner pixel-art logo" />
+        <h1>Build Dungeons.<br />Run <em>Epic</em> Sessions.</h1>
+        <p class="hero-sub">
+          A modern 3D dungeon editor made for game masters who want their maps
+          to look as good as they play.
+        </p>
+        <div class="hero-actions">
+          <a class="btn btn-primary" href="https://demo.dungeonplanner.com/" target="_blank" rel="noreferrer">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M8 5v14l11-7z"/></svg>
+            Try the Demo
+          </a>
+          <a class="btn btn-secondary" href="https://docs.dungeonplanner.com/" target="_blank" rel="noreferrer">
+            Read the Docs
+          </a>
+        </div>
+        <p class="hero-note">Free &amp; open source · No sign-up required</p>
+      </div>
 
-          <nav class="links" aria-label="Primary links">
-            <a href="http://demo.dungeonplanner.com/" target="_blank" rel="noreferrer">Open Demo</a>
-            <a href="http://docs.dungeonplanner.com/" target="_blank" rel="noreferrer">Read Docs</a>
-          </nav>
+      <!-- decorative dice -->
+      <svg class="deco deco-d20" viewBox="0 0 100 100" aria-hidden="true">
+        <polygon points="50,5 95,35 80,90 20,90 5,35" fill="none" stroke="currentColor" stroke-width="1.5"/>
+        <line x1="50" y1="5" x2="20" y2="90" stroke="currentColor" stroke-width="1"/>
+        <line x1="50" y1="5" x2="80" y2="90" stroke="currentColor" stroke-width="1"/>
+        <line x1="5" y1="35" x2="80" y2="90" stroke="currentColor" stroke-width="1"/>
+        <line x1="95" y1="35" x2="20" y2="90" stroke="currentColor" stroke-width="1"/>
+        <line x1="5" y1="35" x2="95" y2="35" stroke="currentColor" stroke-width="1"/>
+      </svg>
+      <svg class="deco deco-d20-sm" viewBox="0 0 100 100" aria-hidden="true">
+        <polygon points="50,5 95,35 80,90 20,90 5,35" fill="none" stroke="currentColor" stroke-width="2"/>
+      </svg>
+    </section>
 
-          <footer class="footer">
-            <p><b>Made for TTRPG players who want their dungeon to look as good as it plays.</b></p>
-            <p>
-              Made with ❤️ in Skåne. A
-              <a href="https://fingergun.dev/" target="_blank" rel="noreferrer">Finger Gun</a>
-              project, making nothing into something.
-            </p>
-          </footer>
-        </section>
+    <!-- ─── FEATURES ─── -->
+    <section class="features">
+      <h2 class="section-title">Why DungeonPlanner?</h2>
+      <div class="features-grid">
 
-        <section class="screens" aria-label="DungeonPlanner screenshots">
-          <img class="logo" src="./dungeonplanner.png" alt="DungeonPlanner logo" />
-          <img src="./screen1.png" alt="DungeonPlanner editor screenshot one" />
-          <img src="./screen2.png" alt="DungeonPlanner editor screenshot two" />
-        </section>
-      </main>
-    </div>
+        <article class="feat-card">
+          <div class="feat-icon">
+            <!-- grid / build icon -->
+            <svg viewBox="0 0 24 24"><path fill="currentColor" d="M3 3h8v8H3V3zm10 0h8v8h-8V3zM3 13h8v8H3v-8zm10 0h8v8h-8v-8z"/></svg>
+          </div>
+          <h3>Tile-Based Building</h3>
+          <p>Snap rooms together on a grid. Walls, doors, stairs — everything clicks into place. Build a full dungeon in minutes.</p>
+        </article>
+
+        <article class="feat-card">
+          <div class="feat-icon">
+            <!-- 3D cube icon -->
+            <svg viewBox="0 0 24 24"><path fill="currentColor" d="M12 2L2 7v10l10 5 10-5V7L12 2zm0 2.2L19.4 7.5 12 11 4.6 7.5 12 4.2zM4 9l7.5 3.8V20L4 16.3V9zm9.5 11v-7.2L21 9v7.3l-7.5 3.7z"/></svg>
+          </div>
+          <h3>Real-Time 3D</h3>
+          <p>See your dungeon come alive in full 3D with dynamic lighting, atmospheric fog, and smooth camera controls.</p>
+        </article>
+
+        <article class="feat-card">
+          <div class="feat-icon">
+            <!-- layers / floors icon -->
+            <svg viewBox="0 0 24 24"><path fill="currentColor" d="M12 2L2 7l10 5 10-5-10-5zm-8.5 9L12 16l8.5-5-1.5-.86L12 14.1 4.99 10.14 3.5 11zm0 4L12 20l8.5-5-1.5-.86L12 18.1 4.99 14.14 3.5 15z"/></svg>
+          </div>
+          <h3>Multi-Floor Dungeons</h3>
+          <p>Stack floors above and below. Cellars, towers, catacombs — your vertical designs stay connected and navigable.</p>
+        </article>
+
+        <article class="feat-card">
+          <div class="feat-icon">
+            <!-- sword / prop icon -->
+            <svg viewBox="0 0 24 24"><path fill="currentColor" d="M14.12 4l1.83 1.83-6.19 6.18-2.12-2.12L14.12 4zM3.29 16.12l1.41-1.41 2.83 2.83-1.42 1.41a1 1 0 0 1-1.41 0l-1.41-1.42a1 1 0 0 1 0-1.41zM20.59 2l1.41 1.41-9.17 9.17-1.42-1.41L20.59 2z"/></svg>
+          </div>
+          <h3>Props &amp; Furnishing</h3>
+          <p>Place torches, chests, barrels, altars and more. Each asset snaps to walls or floors exactly where it belongs.</p>
+        </article>
+
+        <article class="feat-card">
+          <div class="feat-icon">
+            <!-- save / export icon -->
+            <svg viewBox="0 0 24 24"><path fill="currentColor" d="M17 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V7l-4-4zm-5 16a3 3 0 1 1 0-6 3 3 0 0 1 0 6zm3-10H5V5h10v4z"/></svg>
+          </div>
+          <h3>Save &amp; Share</h3>
+          <p>Export your dungeon as a portable JSON file. Load it back anytime, share with your party, or build a library of maps.</p>
+        </article>
+
+        <article class="feat-card">
+          <div class="feat-icon">
+            <!-- open source icon -->
+            <svg viewBox="0 0 24 24"><path fill="currentColor" d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm0 18a8 8 0 0 1-7.74-6h3.49a4.5 4.5 0 0 0 8.5 0h3.49A8 8 0 0 1 12 20zm4.5-8a4.5 4.5 0 1 0-9 0H4.26a8 8 0 0 1 15.48 0H16.5z"/></svg>
+          </div>
+          <h3>Open Source</h3>
+          <p>Free forever. MIT licensed. Hack on it, extend it, make it yours. Contributions welcome.</p>
+        </article>
+
+      </div>
+    </section>
+
+    <!-- ─── SCREENSHOTS ─── -->
+    <section class="showcase">
+      <h2 class="section-title">See It In Action</h2>
+      <div class="showcase-grid">
+        <figure class="showcase-frame">
+          <img src="./screen1.png" alt="DungeonPlanner editor — 3D dungeon view with tile palette" />
+        </figure>
+        <figure class="showcase-frame">
+          <img src="./screen2.png" alt="DungeonPlanner editor — multi-room layout with props" />
+        </figure>
+      </div>
+    </section>
+
+    <!-- ─── CTA ─── -->
+    <section class="cta">
+      <div class="cta-inner">
+        <h2>Ready to Roll?</h2>
+        <p>Jump into the editor and start building your first dungeon — no account needed.</p>
+        <a class="btn btn-primary btn-lg" href="https://demo.dungeonplanner.com/" target="_blank" rel="noreferrer">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M8 5v14l11-7z"/></svg>
+          Launch DungeonPlanner
+        </a>
+      </div>
+    </section>
+
+    <!-- ─── FOOTER ─── -->
+    <footer class="site-footer">
+      <div class="footer-inner">
+        <p class="footer-tagline">Made for TTRPG players who want their dungeon to look as good as it plays.</p>
+        <p class="footer-credit">
+          Made with ❤️ in Skåne. A
+          <a href="https://fingergun.dev/" target="_blank" rel="noreferrer">Finger Gun</a>
+          project, making nothing into something.
+        </p>
+      </div>
+    </footer>
+
   </body>
 </html>

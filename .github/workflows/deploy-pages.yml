@@ -20,6 +20,7 @@ jobs:
     env:
       AWS_REGION: eu-north-1
       S3_BUCKET: demo.dungeonplanner.com-eu-north-1
+      WEB_PREFIX: web
       CLOUDFRONT_DISTRIBUTION_ID: E3U9MGNZ370J2M
     steps:
       - name: Checkout
@@ -61,6 +62,13 @@ jobs:
           # Make /docs resolve directly in CloudFront/S3 origin mode.
           aws s3 cp dist/docs/index.html "s3://${S3_BUCKET}/docs" \
             --content-type "text/html" \
+            --cache-control "no-cache, no-store, must-revalidate"
+          aws s3 sync web/ "s3://${S3_BUCKET}/${WEB_PREFIX}/" \
+            --delete \
+            --exclude "*.html"
+          aws s3 sync web/ "s3://${S3_BUCKET}/${WEB_PREFIX}/" \
+            --exclude "*" \
+            --include "*.html" \
             --cache-control "no-cache, no-store, must-revalidate"
 
       - name: Invalidate CloudFront cache
