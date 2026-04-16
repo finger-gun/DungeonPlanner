@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { Pencil, Trash2 } from 'lucide-react'
 import { getContentPackAssetById, getContentPackAssetsByCategory } from '../../content-packs/registry'
 import { isGeneratedCharacterAssetId } from '../../content-packs/runtimeRegistry'
 import { deleteGeneratedCharacterAssets } from '../../generated-characters/api'
@@ -121,23 +122,27 @@ export function CharacterToolPanel() {
             <div className="flex gap-2">
               <button
                 type="button"
+                aria-label={`Edit ${record.name || 'character'}`}
+                title="Edit character"
                 onClick={(event) => {
                   event.stopPropagation()
                   openCharacterSheet(asset.id)
                 }}
-                className="rounded-full border border-sky-300/30 bg-sky-400/10 px-2 py-1 text-[10px] uppercase tracking-[0.2em] text-sky-100 transition hover:border-sky-200/50 hover:bg-sky-400/15"
+                className="flex h-7 w-7 items-center justify-center rounded-full border border-sky-300/30 bg-sky-400/10 text-sky-100 transition hover:border-sky-200/50 hover:bg-sky-400/15"
               >
-                Edit
+                <Pencil size={12} strokeWidth={1.9} />
               </button>
               <button
                 type="button"
+                aria-label={`Delete ${record.name || 'character'}`}
+                title="Delete character"
                 onClick={(event) => {
                   event.stopPropagation()
                   void handleDeleteGeneratedCharacter(asset.id)
                 }}
-                className="rounded-full border border-rose-400/30 bg-rose-500/10 px-2 py-1 text-[10px] uppercase tracking-[0.2em] text-rose-200 transition hover:border-rose-300/60 hover:bg-rose-500/20"
+                className="flex h-7 w-7 items-center justify-center rounded-full border border-rose-400/30 bg-rose-500/10 text-rose-200 transition hover:border-rose-300/60 hover:bg-rose-500/20"
               >
-                Delete
+                <Trash2 size={12} strokeWidth={1.9} />
               </button>
             </div>
           )

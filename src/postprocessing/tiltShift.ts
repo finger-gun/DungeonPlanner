@@ -8,16 +8,18 @@
  */
 import {
   pass, screenUV, screenSize,
-  mix, smoothstep, abs, vec2, float,
+  mix, smoothstep, abs, vec2, float, linearDepth, min, step,
   Fn, Loop, property, vec4, uniform,
 } from 'three/tsl'
 import type * as THREE from 'three'
+import { TILT_SHIFT_FOCUS_SAMPLE_XS } from './tiltShiftMath'
 
 type TSLNode = ReturnType<typeof uniform>
+export { depthFocusRangeFromFocalLength, TILT_SHIFT_FOCUS_SAMPLE_XS } from './tiltShiftMath'
 
 export type TiltShiftOptions = {
-  focusCenter: TSLNode  // 0–1 screen-Y of focus band centre
-  focusRange: TSLNode   // half-width of sharp zone
+  focusCenter: TSLNode  // 0–1 screen-Y used to sample the focus line
+  focusRange: TSLNode   // linear-depth tolerance around the sampled focus depth
   blurRadius: TSLNode   // max blur in pixels
 }
 
@@ -29,14 +31,38 @@ export function tiltShift(
   // pass() returns a PassNode; getTextureNode() gives a samplable TextureNode.
   const scenePass = pass(scene as any, camera as any) as any
   const sceneColor = scenePass.getTextureNode() as any
+  const sceneDepth = scenePass.getTextureNode('depth') as any
 
-  const blurWeight = Fn(() => {
+  const bandBlurWeight = Fn(() => {
     const uv = screenUV as any
     return smoothstep(
       opts.focusRange as any,
-      (opts.focusRange as any).add(float(0.2)),
+      (opts.focusRange as any).add(float(0.12)),
       abs((uv.y as any).sub(opts.focusCenter as any)),
     )
+  })
+
+  const focusDepth = Fn(() => {
+    const focusY = opts.focusCenter as any
+    const depthLeft = linearDepth(sceneDepth.uv(vec2(float(TILT_SHIFT_FOCUS_SAMPLE_XS[0]), focusY)).r)
+    const depthCenter = linearDepth(sceneDepth.uv(vec2(float(TILT_SHIFT_FOCUS_SAMPLE_XS[1]), focusY)).r)
+    const depthRight = linearDepth(sceneDepth.uv(vec2(float(TILT_SHIFT_FOCUS_SAMPLE_XS[2]), focusY)).r)
+
+    return min(depthLeft, min(depthCenter, depthRight))
+  })
+
+  const blurWeight = Fn(() => {
+    const uv = screenUV as any
+    const currentDepth = linearDepth(sceneDepth.uv(uv).r)
+    const focusDepthValue = focusDepth()
+    const depthWeight = smoothstep(
+      opts.focusRange as any,
+      (opts.focusRange as any).add(float(0.08)),
+      abs((currentDepth as any).sub(focusDepthValue)),
+    )
+    const focusHasGeometry = float(1.0).sub(step(float(0.9995), focusDepthValue))
+
+    return mix(bandBlurWeight(), depthWeight, focusHasGeometry)
   })
 
   // Separable 7-tap box blur along a single axis (stepVec = per-pixel offset vector).

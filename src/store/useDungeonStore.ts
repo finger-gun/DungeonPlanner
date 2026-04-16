@@ -123,8 +123,8 @@ export type SceneLighting = {
 
 export type PostProcessingSettings = {
   enabled: boolean
-  focusDistance: number // world units along camera look direction
-  focalLength: number   // blur falloff range in world units
+  focusDistance: number // 0–1 screen-Y used to sample the focus line
+  focalLength: number   // depth tolerance around the sampled focus depth
   bokehScale: number    // artistic bokeh size multiplier
 }
 

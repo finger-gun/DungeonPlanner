@@ -7,9 +7,9 @@ import {
 } from './types'
 
 const BASE_CHARACTER_SYSTEM_PROMPT = [
-  'Create a fantasy tabletop character illustration for a printed standee.',
+  'Create a fantasy tabletop character illustration sticker design with a white border.',
   'The subject must be centered, clearly readable, and fully visible from head to toe.',
-  'Use a clean plain white or background with no scenery, no environment, no floor, and no framing elements.',
+  'Use a clear green screen background with no scenery, no environment, no floor, no shadows, and no framing elements.',
   'Keep the edge strong and uncluttered.',
   'Use polished fantasy concept art / book illustration styling with crisp edges and even lighting.',
   'Avoid cropped limbs, extra characters, speech bubbles, UI elements, text, logos, watermarks, and heavy atmospheric effects.',

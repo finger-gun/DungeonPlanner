@@ -58,7 +58,7 @@ describe('CharacterToolPanel', () => {
 
     render(<CharacterToolPanel />)
 
-    fireEvent.click(screen.getByRole('button', { name: /generated ranger/i }))
+    fireEvent.click(screen.getByAltText('Generated Ranger thumbnail').closest('button')!)
 
     expect(useDungeonStore.getState().selectedAssetIds.player).toBe(assetId)
   })
