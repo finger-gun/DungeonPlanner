@@ -1,0 +1,42 @@
+schema: spec-driven
+
+context: |
+  Product: DungeonPlanner
+  Vision:
+    DungeonPlanner is a modern 3D tabletop RPG encounter planner focused on speed, clarity, and reliability.
+    Core user value is quick map authoring (paint + place + iterate) and smooth presentation for play sessions.
+
+  Primary users:
+    - Game Masters preparing encounters quickly
+    - Players/viewers consuming readable scene layouts
+
+  Technical stack:
+    - Frontend: React 19 + Vite + TypeScript
+    - 3D: React Three Fiber + Three.js (WebGPU-first, WebGL fallback), TSL shaders
+    - State: Zustand
+    - Styling: Tailwind CSS
+    - Testing: Vitest + Playwright
+    - Repo tooling: pnpm workspaces + Turborepo
+    - Backend package: server/ (Colyseus + Express)
+
+  Key architecture and conventions:
+    - Single source of truth for dungeon editing state: src/store/useDungeonStore.ts
+    - Asset metadata and content packs live under src/content-packs/
+    - Wall assets and floor assets follow metadata.connectsTo conventions
+    - Serialization changes require versioning/migration updates
+    - Prefer behavior-safe changes that preserve editing flow and UX consistency
+
+rules:
+  proposal:
+    - Start with problem framing and expected player/GM impact.
+    - Include explicit in-scope and out-of-scope sections.
+    - Describe UX implications (editing speed, readability, camera/tool behavior).
+    - Call out migration or compatibility risks when touching serialized data.
+  tasks:
+    - Break work into small, verifiable steps mapped to user value.
+    - Include both app and server package impacts when relevant.
+    - Include testing tasks using existing commands (pnpm run test, pnpm run build, pnpm run verify as needed).
+  spec:
+    - Define acceptance criteria in user-observable terms.
+    - Specify constraints that protect core workflows (painting, placement, visibility, floor transitions).
+    - Prefer incremental changes over broad rewrites unless justified by clear product value.
