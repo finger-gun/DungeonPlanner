@@ -12,15 +12,19 @@ Guidelines for AI coding agents working in this codebase.
 ## Commands
 
 ```bash
-npm run dev           # start dev server
-npm run build         # TypeScript check + Vite build (run before committing)
-npm run lint          # ESLint
-npm run verify        # lint + unit tests + build + e2e (full gate)
-npm run test          # Vitest unit tests
-npm run test:e2e      # Playwright e2e tests
+pnpm run dev          # start app dev server
+pnpm run server       # start multiplayer server dev mode
+pnpm run dev:full     # start app + server with Turborepo
+pnpm run build        # TypeScript check + Vite build (run before committing)
+pnpm run build:all    # build all workspace packages with Turborepo
+pnpm run lint         # ESLint (app)
+pnpm run lint:all     # lint across workspace (Turborepo)
+pnpm run verify       # lint + unit tests + build + e2e (full gate)
+pnpm run test         # Vitest unit tests
+pnpm run test:e2e     # Playwright e2e tests
 ```
 
-Always run `npm run build` after changes to catch TypeScript errors before committing.
+Always run `pnpm run build` after changes to catch TypeScript errors before committing.
 
 ## Architecture
 

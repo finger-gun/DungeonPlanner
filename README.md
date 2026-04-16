@@ -47,8 +47,8 @@ https://roblibob.github.io/dungeonplanner
 ## Getting Started
 
 ```bash
-npm install
-npm run dev
+pnpm install
+pnpm run dev
 ```
 
 The dev server starts at **http://localhost:5173**.
@@ -107,12 +107,16 @@ export const propsWallTorchAsset: ContentPackAsset = {
 ## Scripts
 
 ```bash
-npm run dev          # Start dev server
-npm run build        # Production build
-npm run lint         # ESLint
-npm test             # Vitest unit tests
-npm run test:e2e     # Playwright end-to-end tests
-npm run verify       # lint + test + build + e2e (full CI gate)
+pnpm run dev          # Start app dev server
+pnpm run server       # Start multiplayer server dev mode
+pnpm run dev:full     # Start app + server with Turborepo
+pnpm run build        # Build app (TypeScript + Vite)
+pnpm run build:all    # Build all workspace packages with Turborepo
+pnpm run lint         # ESLint (app)
+pnpm run lint:all     # Lint across workspace (Turborepo)
+pnpm run test         # Vitest unit tests (app)
+pnpm run test:e2e     # Playwright end-to-end tests (app)
+pnpm run verify       # lint + test + build + e2e (full CI gate)
 ```
 
 ## Roadmap
