@@ -40,7 +40,7 @@ Always run `pnpm run build` after changes to catch TypeScript errors before comm
 
 - CI workflow: `.github/workflows/ci.yml` (PR validation: tests + build)
 - Code scanning: `.github/workflows/codeql.yml`
-- Production deploy: `.github/workflows/deploy-pages.yml` (AWS S3 + CloudFront for `dungeonplanner.fingergun.dev`)
+- Production deploy: `.github/workflows/deploy-pages.yml` (AWS S3 + CloudFront for `demo.dungeonplanner.com` and `docs.dungeonplanner.com`)
 
 ## Architecture
 

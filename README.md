@@ -9,7 +9,9 @@
 </p>
 
 <p align="center">
-  <a href="https://dungeonplanner.fingergun.dev/">Live App</a>
+  <a href="https://demo.dungeonplanner.com/">Live App</a>
+  ·
+  <a href="https://docs.dungeonplanner.com/">Docs</a>
   ·
   <a href="#quick-start-for-players">Quick Start</a>
   ·
@@ -46,7 +48,7 @@ DungeonPlanner is built for fast encounter prep: paint rooms, place interactive 
 
 ## Quick Start for Players
 
-1. Open **https://dungeonplanner.fingergun.dev/**.
+1. Open **https://demo.dungeonplanner.com/**.
 2. Use the **Room** tool to paint your layout.
 3. Use the **Prop** tool to place doors, torches, and objects.
 4. Switch camera mode from the Move panel depending on prep or presentation.
@@ -78,6 +80,44 @@ pnpm run lint         # lint app
 pnpm run verify       # lint + test + build + e2e
 ```
 
+## Usage
+
+| Tool | What it does |
+|---|---|
+| **Move** (hand icon) | Orbit, pan, zoom the camera. Activate camera presets and adjust the scene light rig. |
+| **Room** (grid icon) | Left-drag to paint floor tiles, right-drag to erase. |
+| **Prop** (torch icon) | Select a prop from the panel, click a floor tile to place it, right-click to remove. |
+
+**Camera presets** (Move tool → right panel):
+
+- **Perspective** — free orbit, great for building
+- **Isometric** — locked true-isometric angle, good for screenshots
+- **Top Down** — overhead fisheye view, ideal for printing battle maps
+
+**Grid toggle** — shows an amber grid overlay projected over painted floor tiles. In editing tools the grid reveals in a soft circle around the cursor.
+
+## Content Packs
+
+Props and floor/wall tiles are defined as content packs — plain TypeScript objects that describe the asset path, connector type, and optional light configuration.
+
+```ts
+// Example: wall torch with a real flickering point light
+export const propsWallTorchAsset: ContentPackAsset = {
+  id: 'core/props/wall-torch',
+  name: 'Wall Torch',
+  metadata: {
+    connectsTo: 'WALL',
+    light: {
+      color: '#ff9040',
+      intensity: 6,
+      distance: 8,
+      offset: [0, 1.6, 0.25],
+      flicker: true,
+    },
+  },
+}
+```
+
 ## Project Structure
 
 ```txt
@@ -100,6 +140,14 @@ server/                 # multiplayer/backend package
 | Language | TypeScript |
 | Testing | Vitest + Playwright |
 | Monorepo tooling | pnpm + Turborepo |
+
+## Roadmap
+
+- [ ] Floor grid overlay radial reveal (TSL shader debugging in progress)
+- [ ] Character token placement with movement range indicator
+- [ ] Export to PNG (Top-Down view)
+- [ ] More content packs (doors, traps, furniture)
+- [ ] Multiplayer / shared sessions
 
 ## Contributing
 
