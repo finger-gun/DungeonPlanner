@@ -145,7 +145,6 @@ export default Scene
 /** Camera, controls, lighting, grid — shared across all floors. */
 function GlobalContent() {
   const lightIntensity = useDungeonStore((state) => state.sceneLighting.intensity)
-  const postProcessingEnabled = useDungeonStore((state) => state.postProcessing.enabled)
   const tool = useDungeonStore((state) => state.tool)
   const floorViewMode = useDungeonStore((state) => state.floorViewMode)
   const effectiveFloorViewMode = getEffectiveFloorViewMode(floorViewMode, tool)
@@ -181,7 +180,6 @@ function GlobalContent() {
       <CameraPresetManager />
       <FpsMeterNode />
       <FrameDriver />
-      {postProcessingEnabled && <WebGPUPostProcessing />}
     </>
   )
 }
@@ -197,6 +195,7 @@ function SceneOverviewContent() {
   const floors = useDungeonStore((state) => state.floors)
   const floorOrder = useDungeonStore((state) => state.floorOrder)
   const activeFloorId = useDungeonStore((state) => state.activeFloorId)
+  const postProcessingEnabled = useDungeonStore((state) => state.postProcessing.enabled)
   const paintedCells = useDungeonStore((state) => state.paintedCells)
   const layers = useDungeonStore((state) => state.layers)
   const rooms = useDungeonStore((state) => state.rooms)
@@ -265,6 +264,7 @@ function SceneOverviewContent() {
 
   return (
     <>
+      {postProcessingEnabled && <WebGPUPostProcessing />}
       {floorEntries.map((entry) => (
         <group key={entry.id} position={[0, entry.level * FLOOR_HEIGHT_UNIT, 0]}>
           <DungeonRoom data={entry.data} visibility={ALWAYS_VISIBLE} enableBuildAnimation={false} />
@@ -291,6 +291,7 @@ function FloorContent({ startY = 0 }: { startY?: number }) {
   const moveObject = useDungeonStore((state) => state.moveObject)
   const selectObject = useDungeonStore((state) => state.selectObject)
   const setObjectDragActive = useDungeonStore((state) => state.setObjectDragActive)
+  const postProcessingEnabled = useDungeonStore((state) => state.postProcessing.enabled)
   const visibility = usePlayVisibility()
   const [releaseAnimationIds, setReleaseAnimationIds] = useState<Record<string, true>>({})
 
@@ -453,11 +454,13 @@ function FloorContent({ startY = 0 }: { startY?: number }) {
 
   return (
     <group ref={groupRef} position={[0, startY, 0]}>
+      {(postProcessingEnabled || (visibility.active && visibility.mask !== null)) && (
+        <WebGPUPostProcessing lineOfSightActive={visibility.active && visibility.mask !== null} />
+      )}
       <DungeonRoom visibility={visibility} />
       <RoomResizeOverlay />
       {visibility.active && visibility.mask && (
         <>
-          <PlayVisibilityMask mask={visibility.mask} />
           {showLosDebugMask && <PlayVisibilityMask mask={visibility.mask} mode="debug" />}
           {showLosDebugRays && <PlayVisibilityDebugRays mask={visibility.mask} />}
         </>

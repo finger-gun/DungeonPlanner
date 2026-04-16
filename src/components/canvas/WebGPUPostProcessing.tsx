@@ -8,19 +8,31 @@
 import { useEffect, useRef } from 'react'
 import { useThree, useFrame } from '@react-three/fiber'
 import * as THREE from 'three/webgpu'
-import { uniform } from 'three/tsl'
+import { pass, uniform } from 'three/tsl'
 import { tiltShift } from '../../postprocessing/tiltShift'
 import { depthFocusRangeFromFocalLength } from '../../postprocessing/tiltShiftMath'
 import { selectionOutline, alphaOver, SELECTION_OUTLINE_LAYER } from '../../postprocessing/selectionOutline'
+import {
+  EXPLORED_MEMORY_MASK_LAYER,
+  applyLineOfSightMask,
+  geometryLayerMask,
+  LINE_OF_SIGHT_MASK_LAYER,
+} from '../../postprocessing/lineOfSightMask'
 import { useDungeonStore } from '../../store/useDungeonStore'
 import { getRegisteredObject } from './objectRegistry'
 
 export { SELECTION_OUTLINE_LAYER }
 
-export function WebGPUPostProcessing() {
+export function WebGPUPostProcessing({
+  lineOfSightActive = false,
+}: {
+  lineOfSightActive?: boolean
+}) {
   const { gl: renderer, scene, camera, size } = useThree()
   const postProcessingRef = useRef<THREE.PostProcessing | null>(null)
   const outlineCameraRef  = useRef<THREE.Camera | null>(null)
+  const visibleLosCameraRef = useRef<THREE.Camera | null>(null)
+  const exploredLosCameraRef = useRef<THREE.Camera | null>(null)
 
   const focusCenterUniform = useRef(uniform(0.5))
   const focusRangeUniform  = useRef(uniform(0.15))
@@ -57,25 +69,51 @@ export function WebGPUPostProcessing() {
   useEffect(() => {
     if (!renderer || !scene || !camera) return
 
+    const baseScenePass = pass(scene as any, camera as any) as any
+    const baseSceneDepth = baseScenePass.getTextureNode('depth') as any
+    let outputNode = settings.enabled
+      ? tiltShift(scene, camera, {
+          focusCenter: focusCenterUniform.current,
+          focusRange: focusRangeUniform.current,
+          blurRadius: blurRadiusUniform.current,
+        })
+      : baseScenePass.getTextureNode()
+
     // Clone camera restricted to layer 31 for the selection outline pass
     const outlineCamera = (camera as any).clone() as THREE.Camera
     ;(outlineCamera as any).layers.disableAll()
     ;(outlineCamera as any).layers.enable(SELECTION_OUTLINE_LAYER)
     outlineCameraRef.current = outlineCamera
 
-    const tiltShiftNode = tiltShift(scene, camera, {
-      focusCenter: focusCenterUniform.current,
-      focusRange:  focusRangeUniform.current,
-      blurRadius:  blurRadiusUniform.current,
-    })
+    if (settings.enabled) {
+      outputNode = alphaOver(outputNode, selectionOutline(scene, outlineCamera))
+    }
 
-    const outlineNode = selectionOutline(scene, outlineCamera)
+    if (lineOfSightActive) {
+      const visibleLosCamera = (camera as any).clone() as THREE.Camera
+      ;(visibleLosCamera as any).layers.disableAll()
+      ;(visibleLosCamera as any).layers.enable(LINE_OF_SIGHT_MASK_LAYER)
+      visibleLosCameraRef.current = visibleLosCamera
+
+      const exploredLosCamera = (camera as any).clone() as THREE.Camera
+      ;(exploredLosCamera as any).layers.disableAll()
+      ;(exploredLosCamera as any).layers.enable(EXPLORED_MEMORY_MASK_LAYER)
+      exploredLosCameraRef.current = exploredLosCamera
+
+      outputNode = applyLineOfSightMask(
+        outputNode,
+        geometryLayerMask(scene, visibleLosCamera, baseSceneDepth),
+        geometryLayerMask(scene, exploredLosCamera, baseSceneDepth),
+      )
+    } else {
+      visibleLosCameraRef.current = null
+      exploredLosCameraRef.current = null
+    }
 
     const postProcessing = new THREE.PostProcessing(
       renderer as unknown as THREE.WebGPURenderer,
     )
-    // Depth-based outline is transparent where no edge → safe to alphaOver
-    postProcessing.outputNode = alphaOver(tiltShiftNode, outlineNode)
+    postProcessing.outputNode = outputNode
     postProcessingRef.current = postProcessing
 
     // Pre-warm all material pipelines currently in the scene so Three.js
@@ -86,9 +124,11 @@ export function WebGPUPostProcessing() {
     return () => {
       postProcessingRef.current = null
       outlineCameraRef.current  = null
+      visibleLosCameraRef.current = null
+      exploredLosCameraRef.current = null
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [renderer, scene, camera, size])
+  }, [camera, lineOfSightActive, renderer, scene, settings.enabled, size])
 
   // Update shader uniforms only when settings actually change — not every frame.
   useEffect(() => {
@@ -112,6 +152,30 @@ export function WebGPUPostProcessing() {
       if (src.matrixWorldInverse) oc.matrixWorldInverse.copy(src.matrixWorldInverse)
       oc.projectionMatrix.copy(src.projectionMatrix)
       oc.projectionMatrixInverse.copy(src.projectionMatrixInverse)
+    }
+
+    const visibleCamera = visibleLosCameraRef.current as any
+    if (visibleCamera) {
+      const src = cam as any
+      visibleCamera.position.copy(src.position)
+      visibleCamera.quaternion.copy(src.quaternion)
+      visibleCamera.matrix.copy(src.matrix)
+      visibleCamera.matrixWorld.copy(src.matrixWorld)
+      if (src.matrixWorldInverse) visibleCamera.matrixWorldInverse.copy(src.matrixWorldInverse)
+      visibleCamera.projectionMatrix.copy(src.projectionMatrix)
+      visibleCamera.projectionMatrixInverse.copy(src.projectionMatrixInverse)
+    }
+
+    const exploredCamera = exploredLosCameraRef.current as any
+    if (exploredCamera) {
+      const src = cam as any
+      exploredCamera.position.copy(src.position)
+      exploredCamera.quaternion.copy(src.quaternion)
+      exploredCamera.matrix.copy(src.matrix)
+      exploredCamera.matrixWorld.copy(src.matrixWorld)
+      if (src.matrixWorldInverse) exploredCamera.matrixWorldInverse.copy(src.matrixWorldInverse)
+      exploredCamera.projectionMatrix.copy(src.projectionMatrix)
+      exploredCamera.projectionMatrixInverse.copy(src.projectionMatrixInverse)
     }
 
     postProcessingRef.current.render()

@@ -10,6 +10,7 @@ import type { PlayVisibility } from './playVisibility'
 import { ProjectedGroundDecal } from './ProjectedGroundDecal'
 import { DEFAULT_GENERATED_CHARACTER_SIZE } from '../../generated-characters/types'
 import { getGeneratedCharacterIndicatorSize } from '../../generated-characters/rendering'
+import { shouldRenderLineOfSightLight } from './losRendering'
 
 type DungeonObjectProps = {
   object: DungeonObjectRecord
@@ -32,6 +33,7 @@ export const DungeonObject = memo(function DungeonObject({
   const tool = useDungeonStore((state) => state.tool)
   const selected = selection === object.id
   const visibilityState = visibility.getObjectVisibility(object)
+  const useLineOfSightPostMask = visibility.active && visibility.mask !== null
 
   const groupRef = useRef<Group>(null)
   useLayoutEffect(() => {
@@ -94,6 +96,7 @@ export const DungeonObject = memo(function DungeonObject({
         variantKey={object.cellKey}
         objectProps={object.props}
         visibility={visibilityState}
+        useLineOfSightPostMask={useLineOfSightPostMask}
         userData={{ objectId: object.id }}
         onPointerDown={handlePointerDown}
         onClick={handleClick}
@@ -101,7 +104,9 @@ export const DungeonObject = memo(function DungeonObject({
         variant="prop"
       />
       {showPlayerSelectionRing && <PlayerSelectionRing assetId={object.assetId} />}
-      {light && visibilityState === 'visible' && <PropPointLight light={light} />}
+      {light && shouldRenderLineOfSightLight(visibilityState, useLineOfSightPostMask) && (
+        <PropPointLight light={light} />
+      )}
     </group>
   )
 })

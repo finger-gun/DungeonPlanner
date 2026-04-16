@@ -8,6 +8,11 @@ import type { ComponentType } from 'react'
 import type { ContentPackComponentProps } from '../../content-packs/types'
 import { GRID_SIZE } from '../../hooks/useSnapToGrid'
 import type { PlayVisibilityState } from './playVisibility'
+import {
+  EXPLORED_MEMORY_MASK_LAYER,
+  LINE_OF_SIGHT_MASK_LAYER,
+} from '../../postprocessing/lineOfSightMask'
+import { shouldRenderLineOfSightGeometry } from './losRendering'
 
 /** Inverted-hull outline: a slightly scaled-up back-face clone with a
  *  bright emissive rim material. Works with any geometry/GLTF. */
@@ -87,6 +92,7 @@ type ContentPackInstanceProps = ThreeElements['group'] & {
   tintOpacity?: number
   overlayOnly?: boolean
   visibility?: PlayVisibilityState
+  useLineOfSightPostMask?: boolean
   variant: ContentPackInstanceVariant
   variantKey?: string
   objectProps?: Record<string, unknown>
@@ -101,6 +107,7 @@ export function ContentPackInstance({
   tintOpacity,
   overlayOnly = false,
   visibility = 'visible',
+  useLineOfSightPostMask = false,
   variant,
   variantKey,
   objectProps,
@@ -128,6 +135,7 @@ export function ContentPackInstance({
           tintOpacity={tintOpacity}
           overlayOnly={overlayOnly}
           visibility={visibility}
+          useLineOfSightPostMask={useLineOfSightPostMask}
         />
       </group>
     )
@@ -145,6 +153,7 @@ export function ContentPackInstance({
             tintOpacity={tintOpacity}
             overlayOnly={overlayOnly}
             visibility={visibility}
+            useLineOfSightPostMask={useLineOfSightPostMask}
           />
         </group>
       }
@@ -162,11 +171,12 @@ export function ContentPackInstance({
           selected={selected}
            tint={tint}
            tintOpacity={tintOpacity}
-           overlayOnly={overlayOnly}
-          visibility={visibility}
-          {...groupProps}
-        />
-      ) : (
+             overlayOnly={overlayOnly}
+             visibility={visibility}
+             useLineOfSightPostMask={useLineOfSightPostMask}
+             {...groupProps}
+         />
+       ) : (
         <GLTFModel
           assetPath={assetPath!}
           receiveShadow={receiveShadow}
@@ -175,6 +185,7 @@ export function ContentPackInstance({
           tintOpacity={tintOpacity}
           overlayOnly={overlayOnly}
           visibility={visibility}
+          useLineOfSightPostMask={useLineOfSightPostMask}
           variantKey={variantKey}
           {...groupProps}
         />
@@ -205,6 +216,7 @@ function GLTFModel({
   tintOpacity,
   overlayOnly,
   visibility,
+  useLineOfSightPostMask = false,
   variantKey,
   ...groupProps
 }: ThreeElements['group'] & {
@@ -215,6 +227,7 @@ function GLTFModel({
   tintOpacity?: number
   overlayOnly?: boolean
   visibility?: PlayVisibilityState
+  useLineOfSightPostMask?: boolean
   variantKey?: string
 }) {
   const gltf = useGLTF(assetPath)
@@ -229,11 +242,18 @@ function GLTFModel({
     return clone
   }, [gltf.scene, receiveShadow])
 
+  useEffect(() => {
+    setLosLayers(scene, visibility ?? 'visible')
+  }, [scene, visibility])
+
+  const shouldRenderBase =
+    !overlayOnly && shouldRenderLineOfSightGeometry(visibility ?? 'visible', useLineOfSightPostMask)
+
   return (
     <group {...groupProps}>
-      {!overlayOnly && <primitive object={scene} />}
-      {!overlayOnly && selected && <SelectionOutline source={scene} />}
-      {tint && (
+      {shouldRenderBase && <primitive object={scene} />}
+      {shouldRenderBase && selected && <SelectionOutline source={scene} />}
+      {tint && shouldRenderBase && (
         <TintOverlay
           source={scene}
           color={tint}
@@ -241,7 +261,7 @@ function GLTFModel({
           refreshKey={variantKey ?? assetPath}
         />
       )}
-      {!overlayOnly && visibility !== 'visible' && (
+      {!overlayOnly && !useLineOfSightPostMask && visibility !== 'visible' && (
         <TintOverlay
           source={scene}
           color="#050609"
@@ -261,6 +281,7 @@ function ComponentAsset({
   tintOpacity,
   overlayOnly,
   visibility,
+  useLineOfSightPostMask = false,
   ...groupProps
 }: ThreeElements['group'] & {
   Component: ComponentType<ContentPackComponentProps>
@@ -271,6 +292,7 @@ function ComponentAsset({
   tintOpacity?: number
   overlayOnly?: boolean
   visibility?: PlayVisibilityState
+  useLineOfSightPostMask?: boolean
 }) {
   const contentRef = useRef<THREE.Group>(null)
   const [overlaySource, setOverlaySource] = useState<THREE.Group | null>(null)
@@ -290,13 +312,22 @@ function ComponentAsset({
     })
   }, [receiveShadow])
 
+  useEffect(() => {
+    if (contentRef.current) {
+      setLosLayers(contentRef.current, visibility ?? 'visible')
+    }
+  }, [visibility])
+
+  const shouldRenderBase =
+    !overlayOnly && shouldRenderLineOfSightGeometry(visibility ?? 'visible', useLineOfSightPostMask)
+
   return (
     <group {...groupProps}>
-      <group ref={contentRef} visible={!overlayOnly}>
+      <group ref={contentRef} visible={shouldRenderBase}>
         <Component {...componentProps} />
       </group>
-      {!overlayOnly && selected && overlaySource && <SelectionOutline source={overlaySource} />}
-      {tint && overlaySource && (
+      {shouldRenderBase && selected && overlaySource && <SelectionOutline source={overlaySource} />}
+      {tint && overlaySource && shouldRenderBase && (
         <TintOverlay
           source={overlaySource}
           color={tint}
@@ -304,7 +335,7 @@ function ComponentAsset({
           refreshKey={componentProps.variantKey}
         />
       )}
-      {!overlayOnly && visibility !== 'visible' && overlaySource && (
+      {!overlayOnly && !useLineOfSightPostMask && visibility !== 'visible' && overlaySource && (
         <TintOverlay
           source={overlaySource}
           color="#050609"
@@ -337,6 +368,7 @@ function FallbackMesh({
   variant,
   receiveShadow,
   visibility = 'visible',
+  useLineOfSightPostMask = false,
 }: {
   selected: boolean
   tint?: string
@@ -345,6 +377,7 @@ function FallbackMesh({
   variant: ContentPackInstanceVariant
   receiveShadow: boolean
   visibility?: PlayVisibilityState
+  useLineOfSightPostMask?: boolean
 }) {
   const baseColor =
     variant === 'floor' ? '#34d399' : variant === 'wall' ? '#fbbf24' : '#7dd3fc'
@@ -358,10 +391,32 @@ function FallbackMesh({
         ? ([GRID_SIZE * 0.96, 3, GRID_SIZE * 0.12] as const)
         : ([0.5, 0.9, 0.5] as const)
   const yOffset = variant === 'floor' ? 0.03 : variant === 'wall' ? 1.5 : 0
-  const opacity = visibility === 'hidden' ? 0.08 : visibility === 'explored' ? 0.45 : 1
+  const opacity = useLineOfSightPostMask
+    ? 1
+    : visibility === 'hidden'
+      ? 0.08
+      : visibility === 'explored'
+        ? 0.45
+        : 1
+  const meshRef = useRef<THREE.Mesh>(null)
+
+  useEffect(() => {
+    if (meshRef.current) {
+      setLosLayers(meshRef.current, visibility)
+    }
+  }, [visibility])
+
+  if (!overlayOnly && !shouldRenderLineOfSightGeometry(visibility, useLineOfSightPostMask)) {
+    return null
+  }
 
   return (
-    <mesh position={[0, yOffset, 0]} castShadow={!overlayOnly} receiveShadow={!overlayOnly && receiveShadow}>
+    <mesh
+      ref={meshRef}
+      position={[0, yOffset, 0]}
+      castShadow={!overlayOnly}
+      receiveShadow={!overlayOnly && receiveShadow}
+    >
       <boxGeometry args={geometry} />
       {overlayOnly ? (
         <meshBasicMaterial
@@ -383,4 +438,21 @@ function FallbackMesh({
       )}
     </mesh>
   )
+}
+
+function setLosLayers(object: THREE.Object3D, visibility: PlayVisibilityState) {
+  object.traverse((child) => {
+    if (!(child instanceof THREE.Mesh)) {
+      return
+    }
+
+    child.layers.disable(LINE_OF_SIGHT_MASK_LAYER)
+    child.layers.disable(EXPLORED_MEMORY_MASK_LAYER)
+
+    if (visibility === 'visible') {
+      child.layers.enable(LINE_OF_SIGHT_MASK_LAYER)
+    } else if (visibility === 'explored') {
+      child.layers.enable(EXPLORED_MEMORY_MASK_LAYER)
+    }
+  })
 }

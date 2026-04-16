@@ -201,6 +201,7 @@ function CellGroupRenderer({
     () => deriveRoomWalls(group.cells, paintedCells, suppressedWallKeys),
     [group.cells, paintedCells, suppressedWallKeys],
   )
+  const useLineOfSightPostMask = visibility.active && visibility.mask !== null
 
   return (
     <>
@@ -221,7 +222,8 @@ function CellGroupRenderer({
               position={cellToWorldPosition(cell)}
               variant="floor"
               variantKey={key}
-              visibility={visibility.mask ? 'visible' : visibility.getCellVisibility(key)}
+              visibility={visibility.getCellVisibility(key)}
+              useLineOfSightPostMask={useLineOfSightPostMask}
             />
           </AnimatedTileGroup>
         )
@@ -243,6 +245,7 @@ function CellGroupRenderer({
               variant="wall"
               variantKey={wall.key}
               visibility={visibility.getWallVisibility(wall.key)}
+              useLineOfSightPostMask={useLineOfSightPostMask}
             />
           </AnimatedTileGroup>
         )
@@ -425,6 +428,8 @@ function OpeningRenderer({
   const selectObject = useDungeonStore((state) => state.selectObject)
   const ppEnabled = useDungeonStore((state) => state.postProcessing.enabled)
   const selected = selection === opening.id
+  const useLineOfSightPostMask = visibility.active && visibility.mask !== null
+  const wallVisibility = visibility.getWallVisibility(opening.wallKey)
 
   const groupRef = useRef<THREE.Group>(null)
   useLayoutEffect(() => {
@@ -466,7 +471,8 @@ function OpeningRenderer({
           assetId={opening.assetId}
           selected={selected && !ppEnabled}
           variant="wall"
-          visibility={visibility.getWallVisibility(opening.wallKey)}
+          visibility={wallVisibility}
+          useLineOfSightPostMask={useLineOfSightPostMask}
           onClick={handleClick}
         />
       ) : (
