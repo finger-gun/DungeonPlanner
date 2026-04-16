@@ -144,6 +144,7 @@ type DungeonState = DungeonSnapshot & {
   showGrid: boolean
   showLosDebugMask: boolean
   showLosDebugRays: boolean
+  showProjectionDebugMesh: boolean
   floorViewMode: FloorViewMode
   generatedCharacters: Record<string, GeneratedCharacterRecord>
   characterSheet: CharacterSheetState
@@ -178,6 +179,7 @@ type DungeonState = DungeonSnapshot & {
   setShowGrid: (show: boolean) => void
   setShowLosDebugMask: (show: boolean) => void
   setShowLosDebugRays: (show: boolean) => void
+  setShowProjectionDebugMesh: (show: boolean) => void
   setFloorViewMode: (mode: FloorViewMode) => void
   createGeneratedCharacter: (input: CreateGeneratedCharacterInput) => string
   createGeneratedCharacterDraft: () => string
@@ -534,6 +536,7 @@ export const useDungeonStore = create<DungeonState>()(
   showGrid: true,
   showLosDebugMask: false,
   showLosDebugRays: false,
+  showProjectionDebugMesh: false,
   floorViewMode: 'active' as FloorViewMode,
   generatedCharacters: {},
   characterSheet: {
@@ -1092,6 +1095,9 @@ export const useDungeonStore = create<DungeonState>()(
   setShowLosDebugRays: (show) => {
     set((state) => ({ ...state, showLosDebugRays: show }))
   },
+  setShowProjectionDebugMesh: (show) => {
+    set((state) => ({ ...state, showProjectionDebugMesh: show }))
+  },
   setFloorViewMode: (mode) => {
     set((state) => (state.floorViewMode === mode ? state : { ...state, floorViewMode: mode }))
   },
@@ -1279,11 +1285,12 @@ export const useDungeonStore = create<DungeonState>()(
       cameraPreset: 'perspective', // triggers camera to home position
        // Settings reset to defaults
        sceneLighting: { intensity: 1 },
-       postProcessing: { enabled: false, focusDistance: 0.5, focalLength: 3, bokehScale: 2 },
-       showGrid: true,
-       showLosDebugMask: false,
-       showLosDebugRays: false,
-       // Undo/redo cleared
+        postProcessing: { enabled: false, focusDistance: 0.5, focalLength: 3, bokehScale: 2 },
+        showGrid: true,
+        showLosDebugMask: false,
+        showLosDebugRays: false,
+        showProjectionDebugMesh: false,
+        // Undo/redo cleared
       history: [],
       future: [],
       // Floors reset to single ground floor

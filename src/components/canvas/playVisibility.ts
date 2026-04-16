@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import * as THREE from 'three'
 import { getContentPackAssetById } from '../../content-packs/registry'
 import { GRID_SIZE, getCellKey, type GridCell } from '../../hooks/useSnapToGrid'
@@ -6,6 +6,8 @@ import { getOpeningSegments } from '../../store/openingSegments'
 import { useDungeonStore, type OpeningRecord, type PaintedCells } from '../../store/useDungeonStore'
 import type { DungeonObjectRecord, Layer } from '../../store/useDungeonStore'
 import { getRegisteredObject, useObjectRegistryVersion } from './objectRegistry'
+import { isGeneratedCharacterAssetId } from '../../content-packs/runtimeRegistry'
+import type { GeneratedCharacterRecord } from '../../generated-characters/types'
 
 const PLAYER_VISION_RANGE = 8
 const MASK_BASE_SAMPLE_COUNT = 1024
@@ -50,17 +52,12 @@ type PlayVisibilityComputation = {
   mask: PlayVisibilityMask | null
 }
 
-type PlayVisibilityWorkerResponse = {
-  requestId: number
-  result: PlayVisibilityComputation
-}
-
 export type PlayVisibilityState = 'visible' | 'explored' | 'hidden'
 
 export type PlayVisibility = {
   active: boolean
   getCellVisibility: (cellKey: string) => PlayVisibilityState
-  getObjectVisibility: (cellKey: string) => PlayVisibilityState
+  getObjectVisibility: (object: DungeonObjectRecord) => PlayVisibilityState
   getWallVisibility: (wallKey: string) => PlayVisibilityState
   mask: PlayVisibilityMask | null
 }
@@ -114,6 +111,7 @@ export function usePlayVisibility(): PlayVisibility {
   const wallOpenings = useDungeonStore((state) => state.wallOpenings)
   const placedObjects = useDungeonStore((state) => state.placedObjects)
   const layers = useDungeonStore((state) => state.layers)
+  const generatedCharacters = useDungeonStore((state) => state.generatedCharacters)
   const mergeExploredCells = useDungeonStore((state) => state.mergeExploredCells)
   const objectRegistryVersion = useObjectRegistryVersion()
 
@@ -122,7 +120,7 @@ export function usePlayVisibility(): PlayVisibility {
       return null
     }
     const playerOrigins = Object.values(placedObjects)
-      .filter((object) => isVisiblePlayerOrigin(object, paintedCells, layers))
+      .filter((object) => isVisiblePlayerOrigin(object, paintedCells, layers, generatedCharacters))
       .map((object) => object.cell)
     const blockerLookup = getBlockingObjectIdsByCell(placedObjects, layers)
     return {
@@ -133,37 +131,11 @@ export function usePlayVisibility(): PlayVisibility {
       blockingCellKeys: [...blockerLookup.keys()],
       blockerLookupEntries: [...blockerLookup.entries()],
     } satisfies PlayVisibilityWorkerInput
-  }, [layers, objectRegistryVersion, paintedCells, placedObjects, tool, wallOpenings])
+  }, [generatedCharacters, layers, objectRegistryVersion, paintedCells, placedObjects, tool, wallOpenings])
   const [visibilityData, setVisibilityData] = useState<PlayVisibilityComputation>({
     visibleCellKeys: [],
     mask: null,
   })
-  const requestIdRef = useRef(0)
-  const worker = useMemo(
-    () =>
-      typeof Worker === 'undefined'
-        ? null
-        : new Worker(new URL('./playVisibility.worker.ts', import.meta.url), { type: 'module' }),
-    [],
-  )
-
-  useEffect(() => () => worker?.terminate(), [worker])
-
-  useEffect(() => {
-    if (!worker) {
-      return
-    }
-
-    const handleMessage = (event: MessageEvent<PlayVisibilityWorkerResponse>) => {
-      if (event.data.requestId !== requestIdRef.current) {
-        return
-      }
-      setVisibilityData(event.data.result)
-    }
-
-    worker.addEventListener('message', handleMessage)
-    return () => worker.removeEventListener('message', handleMessage)
-  }, [worker])
 
   useEffect(() => {
     if (tool !== 'play' || !workerInput) {
@@ -171,15 +143,8 @@ export function usePlayVisibility(): PlayVisibility {
       return
     }
 
-    if (!worker) {
-      setVisibilityData(computePlayVisibilityData(workerInput))
-      return
-    }
-
-    const requestId = requestIdRef.current + 1
-    requestIdRef.current = requestId
-    worker.postMessage({ requestId, input: workerInput })
-  }, [tool, worker, workerInput])
+    setVisibilityData(computePlayVisibilityData(workerInput))
+  }, [tool, workerInput])
 
   const mask = useMemo(
     () => withExploredCellKeys(visibilityData.mask, exploredCells),
@@ -218,7 +183,8 @@ export function usePlayVisibility(): PlayVisibility {
     return {
       active: true,
       getCellVisibility,
-      getObjectVisibility: getCellVisibility,
+      getObjectVisibility: (object) =>
+        getObjectVisibilityState(object, getCellVisibility, generatedCharacters),
       mask,
       getWallVisibility: (wallKey: string) => {
         const parsed = parseWallKey(wallKey)
@@ -232,7 +198,7 @@ export function usePlayVisibility(): PlayVisibility {
         return maxVisibility(cellVisibility, adjacentVisibility)
       },
     }
-  }, [exploredCells, mask, tool, visibilityData.visibleCellKeys])
+  }, [exploredCells, generatedCharacters, mask, tool, visibilityData.visibleCellKeys])
 }
 
 export function computePlayVisibilityData(input: PlayVisibilityWorkerInput): PlayVisibilityComputation {
@@ -277,12 +243,37 @@ export function isVisiblePlayerOrigin(
   object: DungeonObjectRecord,
   paintedCells: PaintedCells,
   layers: Record<string, Layer>,
+  generatedCharacters: Record<string, GeneratedCharacterRecord>,
 ) {
+  const generatedCharacter =
+    object.assetId && isGeneratedCharacterAssetId(object.assetId)
+      ? generatedCharacters[object.assetId] ?? null
+      : null
+
   return (
     object.type === 'player' &&
+    generatedCharacter?.kind !== 'npc' &&
     layers[object.layerId]?.visible !== false &&
     Boolean(paintedCells[getCellKey(object.cell)])
   )
+}
+
+export function getObjectVisibilityState(
+  object: DungeonObjectRecord,
+  getCellVisibility: (cellKey: string) => PlayVisibilityState,
+  generatedCharacters: Record<string, GeneratedCharacterRecord>,
+): PlayVisibilityState {
+  const cellVisibility = getCellVisibility(getCellKey(object.cell))
+  const generatedCharacter =
+    object.assetId && isGeneratedCharacterAssetId(object.assetId)
+      ? generatedCharacters[object.assetId] ?? null
+      : null
+
+  if (generatedCharacter?.kind === 'npc' && cellVisibility !== 'visible') {
+    return 'hidden'
+  }
+
+  return cellVisibility
 }
 
 export function computeVisibleCellKeys(

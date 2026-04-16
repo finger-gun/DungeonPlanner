@@ -95,8 +95,10 @@ function App() {
   const clearExploredCells = useDungeonStore((state) => state.clearExploredCells)
   const showLosDebugMask = useDungeonStore((state) => state.showLosDebugMask)
   const showLosDebugRays = useDungeonStore((state) => state.showLosDebugRays)
+  const showProjectionDebugMesh = useDungeonStore((state) => state.showProjectionDebugMesh)
   const setShowLosDebugMask = useDungeonStore((state) => state.setShowLosDebugMask)
   const setShowLosDebugRays = useDungeonStore((state) => state.setShowLosDebugRays)
+  const setShowProjectionDebugMesh = useDungeonStore((state) => state.setShowProjectionDebugMesh)
 
   const onWindowKeyDown = useEffectEvent((event: KeyboardEvent) => {
     if (event.ctrlKey && event.shiftKey && event.key === 'F12') {
@@ -317,8 +319,10 @@ function App() {
                 clearExploredCells={clearExploredCells}
                 showLosDebugMask={showLosDebugMask}
                 showLosDebugRays={showLosDebugRays}
+                showProjectionDebugMesh={showProjectionDebugMesh}
                 setShowLosDebugMask={setShowLosDebugMask}
                 setShowLosDebugRays={setShowLosDebugRays}
+                setShowProjectionDebugMesh={setShowProjectionDebugMesh}
               />
             )}
 
@@ -359,15 +363,19 @@ function DebugVisibilityPanel({
   clearExploredCells,
   showLosDebugMask,
   showLosDebugRays,
+  showProjectionDebugMesh,
   setShowLosDebugMask,
   setShowLosDebugRays,
+  setShowProjectionDebugMesh,
 }: {
   exploredCellCount: number
   clearExploredCells: () => void
   showLosDebugMask: boolean
   showLosDebugRays: boolean
+  showProjectionDebugMesh: boolean
   setShowLosDebugMask: (show: boolean) => void
   setShowLosDebugRays: (show: boolean) => void
+  setShowProjectionDebugMesh: (show: boolean) => void
 }) {
   return (
     <aside
@@ -401,6 +409,11 @@ function DebugVisibilityPanel({
           label="Render LoS mask"
           pressed={showLosDebugMask}
           onClick={() => setShowLosDebugMask(!showLosDebugMask)}
+        />
+        <DebugToggleButton
+          label="Show projection mesh"
+          pressed={showProjectionDebugMesh}
+          onClick={() => setShowProjectionDebugMesh(!showProjectionDebugMesh)}
         />
       </div>
     </aside>

@@ -5,6 +5,7 @@ import {
   castVisibilityMaskRay,
   computeVisibilitySamples,
   computeVisibleCellKeys,
+  getObjectVisibilityState,
   isVisiblePlayerOrigin,
 } from './playVisibility'
 import type { OpeningRecord, PaintedCells } from '../../store/useDungeonStore'
@@ -226,6 +227,43 @@ describe('computeVisibleCellKeys', () => {
       unregisterObject(blockerId)
     }
   })
+
+  it('ignores blocker children marked to skip LOS raycasts', () => {
+    const paintedCells = makeCells([
+      { cell: [0, 0], roomId: 'room-a' },
+      { cell: [1, 0], roomId: 'room-a' },
+      { cell: [2, 0], roomId: 'room-a' },
+    ])
+
+    const blockerId = 'ignored-ring'
+    const blocker = new THREE.Group()
+    blocker.position.set(0, 0, 0)
+    blocker.userData.ignoreLosRaycast = true
+
+    const ringMesh = new THREE.Mesh(
+      new THREE.BoxGeometry(0.8, 0.02, 0.8),
+      new THREE.MeshBasicMaterial(),
+    )
+    ringMesh.position.set(GRID_SIZE * 1.5, 0.38, GRID_SIZE * 0.5)
+    ringMesh.userData.ignoreLosRaycast = true
+    blocker.add(ringMesh)
+    registerObject(blockerId, blocker)
+
+    try {
+      const visible = computeVisibleCellKeys(
+        paintedCells,
+        {},
+        [[0, 0]],
+        3,
+        ['1:0'],
+        new Map([['1:0', [blockerId]]]),
+      )
+
+      expect(visible).toContain('2:0')
+    } finally {
+      unregisterObject(blockerId)
+    }
+  })
 })
 
 describe('castVisibilityMaskRay', () => {
@@ -353,7 +391,125 @@ describe('isVisiblePlayerOrigin', () => {
         },
         paintedCells,
         { default: { id: 'default', name: 'Default', visible: true, locked: false } },
+        {},
       ),
     ).toBe(true)
   })
+
+  it('does not treat generated NPCs as line-of-sight origins', () => {
+    const paintedCells = makeCells([{ cell: [0, 0], roomId: 'room-a' }])
+
+    expect(
+      isVisiblePlayerOrigin(
+        {
+          id: 'npc-1',
+          type: 'player',
+          assetId: 'generated.player.npc',
+          position: [1, 0, 1],
+          rotation: [0, 0, 0],
+          cell: [0, 0],
+          cellKey: '0:0:floor',
+          layerId: 'default',
+          props: {},
+        },
+        paintedCells,
+        { default: { id: 'default', name: 'Default', visible: true, locked: false } },
+        {
+          'generated.player.npc': {
+            assetId: 'generated.player.npc',
+            storageId: 'npc-storage',
+            name: 'Goblin',
+            kind: 'npc',
+            prompt: 'goblin',
+            model: 'x/z-image-turbo',
+            size: 'M',
+            originalImageUrl: 'data:image/png;base64,test',
+            processedImageUrl: 'data:image/png;base64,test',
+            thumbnailUrl: 'data:image/png;base64,test',
+            width: 256,
+            height: 512,
+            createdAt: '2026-01-01T00:00:00.000Z',
+            updatedAt: '2026-01-01T00:00:00.000Z',
+          },
+        },
+      ),
+    ).toBe(false)
+  })
+})
+
+describe('getObjectVisibilityState', () => {
+  it('hides generated NPCs when their cell is only explored', () => {
+    expect(
+      getObjectVisibilityState(
+        {
+          id: 'npc-1',
+          type: 'player',
+          assetId: 'generated.player.npc',
+          position: [1, 0, 1],
+          rotation: [0, 0, 0],
+          cell: [0, 0],
+          cellKey: '0:0:floor',
+          layerId: 'default',
+          props: {},
+        },
+        () => 'explored',
+        {
+          'generated.player.npc': {
+            assetId: 'generated.player.npc',
+            storageId: 'npc-storage',
+            name: 'Goblin',
+            kind: 'npc',
+            prompt: 'goblin',
+            model: 'x/z-image-turbo',
+            size: 'M',
+            originalImageUrl: 'data:image/png;base64,test',
+            processedImageUrl: 'data:image/png;base64,test',
+            thumbnailUrl: 'data:image/png;base64,test',
+            width: 256,
+            height: 512,
+            createdAt: '2026-01-01T00:00:00.000Z',
+            updatedAt: '2026-01-01T00:00:00.000Z',
+          },
+        },
+      ),
+    ).toBe('hidden')
+  })
+
+  it('keeps players visible according to the cell visibility state', () => {
+    expect(
+      getObjectVisibilityState(
+        {
+          id: 'player-1',
+          type: 'player',
+          assetId: 'generated.player.pc',
+          position: [1, 0, 1],
+          rotation: [0, 0, 0],
+          cell: [0, 0],
+          cellKey: '0:0:floor',
+          layerId: 'default',
+          props: {},
+        },
+        () => 'explored',
+        {
+          'generated.player.pc': {
+            assetId: 'generated.player.pc',
+            storageId: 'pc-storage',
+            name: 'Hero',
+            kind: 'player',
+            prompt: 'hero',
+            model: 'x/z-image-turbo',
+            size: 'M',
+            originalImageUrl: 'data:image/png;base64,test',
+            processedImageUrl: 'data:image/png;base64,test',
+            thumbnailUrl: 'data:image/png;base64,test',
+            width: 256,
+            height: 512,
+            createdAt: '2026-01-01T00:00:00.000Z',
+            updatedAt: '2026-01-01T00:00:00.000Z',
+          },
+        },
+      ),
+    ).toBe('explored')
+  })
+
 })

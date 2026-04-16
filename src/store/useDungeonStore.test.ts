@@ -356,6 +356,16 @@ describe('useDungeonStore history', () => {
     expect(useDungeonStore.getState().tool).toBe('prop')
   })
 
+  it('toggles the projection debug mesh visibility flag', () => {
+    expect(useDungeonStore.getState().showProjectionDebugMesh).toBe(false)
+
+    useDungeonStore.getState().setShowProjectionDebugMesh(true)
+    expect(useDungeonStore.getState().showProjectionDebugMesh).toBe(true)
+
+    useDungeonStore.getState().setShowProjectionDebugMesh(false)
+    expect(useDungeonStore.getState().showProjectionDebugMesh).toBe(false)
+  })
+
   it('switches to top-down view when entering room mode', () => {
     useDungeonStore.getState().setTool('room')
 

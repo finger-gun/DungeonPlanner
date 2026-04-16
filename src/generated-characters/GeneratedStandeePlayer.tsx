@@ -2,9 +2,13 @@ import { useEffect, useMemo } from 'react'
 import { useTexture } from '@react-three/drei'
 import * as THREE from 'three'
 import type { ContentPackComponentProps } from '../content-packs/types'
-import type { GeneratedCharacterRecord, GeneratedCharacterSize } from './types'
+import type { GeneratedCharacterRecord } from './types'
+import {
+  GENERATED_CHARACTER_BASE_RADIUS,
+  getGeneratedCharacterScale,
+} from './rendering'
 
-const BASE_RADIUS = 0.34
+const BASE_RADIUS = GENERATED_CHARACTER_BASE_RADIUS
 const BASE_HEIGHT = 0.08
 const CARD_HEIGHT = 1.85
 const CARD_THICKNESS = 0.032
@@ -166,18 +170,4 @@ export function GeneratedStandeePlayer({
       </group>
     </group>
   )
-}
-
-function getGeneratedCharacterScale(size: GeneratedCharacterSize) {
-  switch (size) {
-    case 'S':
-      return 0.82
-    case 'XL':
-      return 1.35
-    case 'XXL':
-      return 1.85
-    case 'M':
-    default:
-      return 1
-  }
 }

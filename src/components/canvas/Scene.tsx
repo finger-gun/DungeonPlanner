@@ -481,7 +481,7 @@ function FloorContent({ startY = 0 }: { startY?: number }) {
             variant="prop"
             visibility="visible"
           />
-          <PlayerSelectionRing color={dragState.valid ? '#22c55e' : '#ef4444'} />
+          <PlayerSelectionRing assetId={dragState.assetId} color={dragState.valid ? '#d4a72c' : '#ef4444'} />
         </group>
       )}
     </group>

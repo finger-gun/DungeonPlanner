@@ -5,6 +5,8 @@ import {
   type Vector3Like,
 } from '../../hooks/useSnapToGrid'
 
+const DRAG_LIFT_Y = 0.24
+
 export type PlayDragState = {
   objectId: string
   assetId: string | null
@@ -42,7 +44,7 @@ export function createPlayDragState(
     positionY: object.position[1],
     cell: object.cell,
     position: [snappedPosition[0], object.position[1], snappedPosition[2]],
-    displayPosition: [object.position[0], object.position[1], object.position[2]],
+    displayPosition: [object.position[0], object.position[1] + DRAG_LIFT_Y, object.position[2]],
     grabOffset,
     valid: true,
     animationState: 'pickup',
@@ -64,7 +66,7 @@ export function updatePlayDragState(
     ...state,
     cell: snapped.cell,
     position: [snapped.position[0], state.positionY, snapped.position[2]],
-    displayPosition: [displayX, state.positionY, displayZ],
+    displayPosition: [displayX, state.positionY + DRAG_LIFT_Y, displayZ],
     valid,
   }
 }
