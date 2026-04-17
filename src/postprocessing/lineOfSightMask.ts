@@ -17,8 +17,8 @@ export function geometryLayerMask(
   const FAR = float(0.9999)
 
   return Fn(() => {
-    const depth = depthTex.uv(screenUV as any).r
-    const sceneDepth = sceneDepthTex.uv(screenUV as any).r
+    const depth = depthTex.sample(screenUV as any).r
+    const sceneDepth = sceneDepthTex.sample(screenUV as any).r
     const hasGeometry = float(1.0).sub(step(FAR, depth))
     const isFrontmost = step((depth as any).sub(float(DEPTH_EPSILON)), sceneDepth)
     const visible = hasGeometry.mul(isFrontmost)

@@ -14,7 +14,8 @@ export const kaykitBarrelSmallAsset = createKayKitAsset({
   modelName: 'barrel_small',
   transform: ASSET_TRANSFORM,
   metadata: {
-    connectsTo: 'FLOOR',
+    connectsTo: 'FREE',
+    propSurface: true,
     blocksLineOfSight: false,
   },
 })

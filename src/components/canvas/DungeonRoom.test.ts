@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { deriveWallCornersFromSegments } from './wallCornerLayout'
+import { shouldActivateFloorReceiver } from './floorReceiverMode'
 
 describe('deriveWallCornersFromSegments', () => {
   it('creates passage-end corners from surviving orthogonal wall segments', () => {
@@ -34,5 +35,12 @@ describe('deriveWallCornersFromSegments', () => {
     ])
 
     expect(corners).toHaveLength(0)
+  })
+
+  it('only activates floor receivers in play mode unless the debug mesh is shown', () => {
+    expect(shouldActivateFloorReceiver('room', false)).toBe(false)
+    expect(shouldActivateFloorReceiver('move', false)).toBe(false)
+    expect(shouldActivateFloorReceiver('play', false)).toBe(true)
+    expect(shouldActivateFloorReceiver('room', true)).toBe(true)
   })
 })

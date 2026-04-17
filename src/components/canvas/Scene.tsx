@@ -332,6 +332,7 @@ function FloorContent({ startY = 0 }: { startY?: number }) {
   const tool = useDungeonStore((state) => state.tool)
   const showLosDebugMask = useDungeonStore((state) => state.showLosDebugMask)
   const showLosDebugRays = useDungeonStore((state) => state.showLosDebugRays)
+  const showLensFocusDebugPoint = useDungeonStore((state) => state.showLensFocusDebugPoint)
   const moveObject = useDungeonStore((state) => state.moveObject)
   const selectObject = useDungeonStore((state) => state.selectObject)
   const setObjectDragActive = useDungeonStore((state) => state.setObjectDragActive)
@@ -500,7 +501,7 @@ function FloorContent({ startY = 0 }: { startY?: number }) {
 
   return (
     <group ref={groupRef} position={[0, startY, 0]}>
-      {(postProcessingEnabled || (visibility.active && visibility.mask !== null)) && (
+      {(postProcessingEnabled || showLensFocusDebugPoint || (visibility.active && visibility.mask !== null)) && (
         <WebGPUPostProcessing lineOfSightActive={visibility.active && visibility.mask !== null} />
       )}
       <DungeonRoom visibility={visibility} />
