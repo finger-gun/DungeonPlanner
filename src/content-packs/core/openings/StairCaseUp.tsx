@@ -33,5 +33,7 @@ export const propsStairCaseUpAsset: ContentPackAsset = {
   Component: PropsStairCaseUp,
   metadata: {
     connectsTo: 'FLOOR',
+    stairDirection: 'up',
+    pairedAssetId: 'core.props_staircase_down',
   },
 }

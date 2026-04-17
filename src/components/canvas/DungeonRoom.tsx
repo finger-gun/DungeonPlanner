@@ -1,4 +1,4 @@
-import { useRef, useMemo, useLayoutEffect } from 'react'
+import { useRef, useMemo, useLayoutEffect, useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
 import { useGLTF } from '@react-three/drei'
 import { useFrame } from '@react-three/fiber'
@@ -10,6 +10,7 @@ import {
   getCellKey,
   type GridCell,
 } from '../../hooks/useSnapToGrid'
+import { getContentPackAssetById } from '../../content-packs/registry'
 import {
   useDungeonStore,
   type DungeonObjectRecord,
@@ -20,41 +21,59 @@ import {
 } from '../../store/useDungeonStore'
 import { getOpeningSegments } from '../../store/openingSegments'
 import { getBuildYOffset, isAnimationActive } from '../../store/buildAnimations'
+import {
+  collectBoundaryWallSegments,
+  getInheritedWallAssetIdForWallKey,
+  getOppositeDirection,
+  wallKeyToWorldPosition,
+  type BoundaryWallSegment,
+} from '../../store/wallSegments'
+import { isDownStairAssetId } from '../../store/stairAssets'
 import { ContentPackInstance } from './ContentPackInstance'
-import { floorAsset } from '../../content-packs/core/tiles/Floor'
-import { FLOOR_VARIANT_URLS } from '../../content-packs/core/tiles/floorVariants'
 import { buildMergedFloorReceiverGeometry } from './floorReceiverGeometry'
 import { registerDecalReceivers, unregisterDecalReceivers } from './decalReceiverRegistry'
 import { registerObject, unregisterObject } from './objectRegistry'
 import type { PlayVisibility, PlayVisibilityState } from './playVisibility'
+import { deriveWallCornersFromSegments, type WallCornerInstance } from './wallCornerLayout'
+import type { ContentPackModelTransform } from '../../content-packs/types'
 
 const WALL_EXTRA_DELAY_MS = 70
 
-type WallDirection = 'north' | 'south' | 'east' | 'west'
-
 type RoomWallInstance = {
   key: string
-  direction: WallDirection
+  assetId: string | null
+  segmentKeys: string[]
   position: [number, number, number]
   rotation: [number, number, number]
+  objectProps?: Record<string, unknown>
 }
 
-const WALL_DIRECTIONS: Array<{
-  direction: WallDirection
-  opposite: WallDirection
-  delta: GridCell
-  rotation: [number, number, number]
-}> = [
-  { direction: 'north', opposite: 'south', delta: [0, 1],  rotation: [0, Math.PI, 0] },
-  { direction: 'south', opposite: 'north', delta: [0, -1], rotation: [0, 0, 0] },
-  { direction: 'east',  opposite: 'west',  delta: [1, 0],  rotation: [0, -Math.PI / 2, 0] },
-  { direction: 'west',  opposite: 'east',  delta: [-1, 0], rotation: [0, Math.PI / 2, 0] },
-]
+type RoomCornerRenderInstance = WallCornerInstance & {
+  assetId: string | null
+}
 
-type CellGroup = {
+type FloorGroup = {
   floorAssetId: string | null
-  wallAssetId: string | null
   cells: GridCell[]
+}
+
+type FloorReceiverCellInput = {
+  cell: GridCell
+  cellKey: string
+  assetId: string | null
+}
+
+type ResolvedFloorReceiverCellInput = FloorReceiverCellInput & {
+  assetUrl: string
+  receiverTransform?: ContentPackModelTransform
+}
+
+type BoundaryWallSegmentWithAsset = BoundaryWallSegment & {
+  assetId: string | null
+}
+
+function isWallDirection(value: string): value is 'north' | 'south' | 'east' | 'west' {
+  return value === 'north' || value === 'south' || value === 'east' || value === 'west'
 }
 
 export type DungeonRoomData = {
@@ -63,6 +82,8 @@ export type DungeonRoomData = {
   rooms: Record<string, Room>
   wallOpenings: Record<string, OpeningRecord>
   placedObjects: Record<string, DungeonObjectRecord>
+  floorTileAssetIds: Record<string, string>
+  wallSurfaceAssetIds: Record<string, string>
   globalFloorAssetId: string | null
   globalWallAssetId: string | null
 }
@@ -81,6 +102,8 @@ export function DungeonRoom({
   const liveRooms = useDungeonStore((state) => state.rooms)
   const liveWallOpenings = useDungeonStore((state) => state.wallOpenings)
   const livePlacedObjects = useDungeonStore((state) => state.placedObjects)
+  const liveFloorTileAssetIds = useDungeonStore((state) => state.floorTileAssetIds)
+  const liveWallSurfaceAssetIds = useDungeonStore((state) => state.wallSurfaceAssetIds)
   const liveGlobalFloorAssetId = useDungeonStore((state) => state.selectedAssetIds.floor)
   const liveGlobalWallAssetId = useDungeonStore((state) => state.selectedAssetIds.wall)
   const resolvedData = data ?? {
@@ -89,6 +112,8 @@ export function DungeonRoom({
     rooms: liveRooms,
     wallOpenings: liveWallOpenings,
     placedObjects: livePlacedObjects,
+    floorTileAssetIds: liveFloorTileAssetIds,
+    wallSurfaceAssetIds: liveWallSurfaceAssetIds,
     globalFloorAssetId: liveGlobalFloorAssetId,
     globalWallAssetId: liveGlobalWallAssetId,
   }
@@ -98,6 +123,8 @@ export function DungeonRoom({
     rooms,
     wallOpenings,
     placedObjects,
+    floorTileAssetIds,
+    wallSurfaceAssetIds,
     globalFloorAssetId,
     globalWallAssetId,
   } = resolvedData
@@ -107,7 +134,7 @@ export function DungeonRoom({
   const blockedFloorCellKeys = useMemo(() => {
     const set = new Set<string>()
     for (const obj of Object.values(placedObjects)) {
-      if (obj.assetId === 'core.props_staircase_down') {
+      if (isDownStairAssetId(obj.assetId)) {
         set.add(`${obj.cell[0]}:${obj.cell[1]}`)
       }
     }
@@ -123,52 +150,126 @@ export function DungeonRoom({
     Object.values(wallOpenings).forEach((opening) => {
       getOpeningSegments(opening.wallKey, opening.width).forEach((segKey) => {
         set.add(segKey)
-        // Mirror: the same wall face as seen from the neighbour
+        const position = wallKeyToWorldPosition(segKey)
         const parts = segKey.split(':')
-        const cx = parseInt(parts[0], 10)
-        const cz = parseInt(parts[1], 10)
-        const dirEntry = WALL_DIRECTIONS.find((d) => d.direction === parts[2])
-        if (dirEntry) {
-          const nx = cx + dirEntry.delta[0]
-          const nz = cz + dirEntry.delta[1]
-          set.add(`${nx}:${nz}:${dirEntry.opposite}`)
+        const cx = Number.parseInt(parts[0] ?? '', 10)
+        const cz = Number.parseInt(parts[1] ?? '', 10)
+        const direction = parts[2]
+        if (position && !Number.isNaN(cx) && !Number.isNaN(cz) && isWallDirection(direction)) {
+          const opposite = getOppositeDirection(direction)
+          const [dx, dz] =
+            direction === 'north'
+              ? [0, 1]
+              : direction === 'south'
+                ? [0, -1]
+                : direction === 'east'
+                  ? [1, 0]
+                  : [-1, 0]
+          set.add(`${cx + dx}:${cz + dz}:${opposite}`)
         }
       })
     })
     return set
   }, [wallOpenings])
 
-  // Group visible cells by their effective (floor, wall) asset pair.
-  // Room asset overrides take precedence over the global selection.
-  const cellGroups = useMemo<CellGroup[]>(() => {
-    const groups = new Map<string, CellGroup>()
-
-    Object.values(paintedCells).forEach((record) => {
-      if (layers[record.layerId]?.visible === false) return
-      const room = record.roomId ? rooms[record.roomId] : null
-      const floorAssetId = room?.floorAssetId ?? globalFloorAssetId
-      const wallAssetId = room?.wallAssetId ?? globalWallAssetId
-      const key = `${floorAssetId}||${wallAssetId}`
-      if (!groups.has(key)) groups.set(key, { floorAssetId, wallAssetId, cells: [] })
-      groups.get(key)!.cells.push(record.cell)
-    })
-
-    return Array.from(groups.values())
-  }, [paintedCells, layers, rooms, globalFloorAssetId, globalWallAssetId])
+  const visiblePaintedCells = useMemo(
+    () =>
+      Object.fromEntries(
+        Object.entries(paintedCells).filter(([, record]) => layers[record.layerId]?.visible !== false),
+      ) as PaintedCells,
+    [layers, paintedCells],
+  )
+  const floorGroups = useMemo<FloorGroup[]>(
+    () => deriveFloorGroups(visiblePaintedCells, rooms, globalFloorAssetId, floorTileAssetIds),
+    [floorTileAssetIds, globalFloorAssetId, rooms, visiblePaintedCells],
+  )
+  const visibleFloorReceiverCells = useMemo(
+    () => deriveFloorReceiverCells(visiblePaintedCells, rooms, globalFloorAssetId, floorTileAssetIds),
+    [floorTileAssetIds, globalFloorAssetId, rooms, visiblePaintedCells],
+  )
+  const walls = useMemo(
+    () =>
+      deriveWallInstances(
+        visiblePaintedCells,
+        rooms,
+        globalWallAssetId,
+        wallSurfaceAssetIds,
+        suppressedWallKeys,
+      ),
+    [globalWallAssetId, rooms, suppressedWallKeys, visiblePaintedCells, wallSurfaceAssetIds],
+  )
+  const corners = useMemo(
+    () =>
+      deriveVisibleWallCorners(
+        visiblePaintedCells,
+        rooms,
+        globalWallAssetId,
+        wallSurfaceAssetIds,
+        suppressedWallKeys,
+      ),
+    [globalWallAssetId, rooms, suppressedWallKeys, visiblePaintedCells, wallSurfaceAssetIds],
+  )
+  const useLineOfSightPostMask = visibility.active && visibility.mask !== null
 
   return (
     <>
-      {cellGroups.map((group) => (
+      {!data && (
+        <FloorDecalReceiver
+          receiverId="floor-receiver:active"
+          cells={visibleFloorReceiverCells}
+          blockedFloorCellKeys={blockedFloorCellKeys}
+        />
+      )}
+      {floorGroups.map((group) => (
           <CellGroupRenderer
-            key={`${group.floorAssetId}||${group.wallAssetId}`}
+            key={group.floorAssetId ?? 'none'}
             group={group}
-            paintedCells={paintedCells}
-            suppressedWallKeys={suppressedWallKeys}
             blockedFloorCellKeys={blockedFloorCellKeys}
             visibility={visibility}
             enableBuildAnimation={enableBuildAnimation}
           />
         ))}
+      {walls.map((wall) => {
+        const floorKey = wall.segmentKeys[0]?.split(':').slice(0, 2).join(':') ?? wall.key
+        return (
+          <AnimatedTileGroup
+            key={wall.key}
+            cellKey={floorKey}
+            extraDelay={WALL_EXTRA_DELAY_MS}
+            enabled={enableBuildAnimation}
+          >
+            <ContentPackInstance
+              assetId={wall.assetId}
+              position={wall.position}
+              rotation={wall.rotation}
+              variant="wall"
+              variantKey={wall.key}
+              visibility={getWallSpanVisibilityState(visibility, wall.segmentKeys)}
+              useLineOfSightPostMask={useLineOfSightPostMask}
+              objectProps={wall.objectProps}
+            />
+          </AnimatedTileGroup>
+        )
+      })}
+      {corners.map((corner) => (
+        <AnimatedTileGroup
+          key={corner.key}
+          cellKey={corner.key.split(':').slice(0, 2).join(':')}
+          extraDelay={WALL_EXTRA_DELAY_MS}
+          enabled={enableBuildAnimation}
+        >
+          <ContentPackInstance
+            assetId={corner.assetId}
+            position={corner.position}
+            rotation={corner.rotation}
+            variant="wall"
+            variantKey={corner.key}
+            visibility={getWallSpanVisibilityState(visibility, corner.wallKeys)}
+            useLineOfSightPostMask={useLineOfSightPostMask}
+            objectProps={corner.objectProps}
+          />
+        </AnimatedTileGroup>
+      ))}
       {Object.values(wallOpenings).map((opening) => (
         <OpeningRenderer
           key={opening.id}
@@ -184,34 +285,19 @@ export function DungeonRoom({
 
 function CellGroupRenderer({
   group,
-  paintedCells,
-  suppressedWallKeys,
   blockedFloorCellKeys,
   visibility,
   enableBuildAnimation,
 }: {
-  group: CellGroup
-  paintedCells: PaintedCells
-  suppressedWallKeys: Set<string>
+  group: FloorGroup
   blockedFloorCellKeys: Set<string>
   visibility: PlayVisibility
   enableBuildAnimation: boolean
 }) {
-  const walls = useMemo(
-    () => deriveRoomWalls(group.cells, paintedCells, suppressedWallKeys),
-    [group.cells, paintedCells, suppressedWallKeys],
-  )
   const useLineOfSightPostMask = visibility.active && visibility.mask !== null
 
   return (
     <>
-      {group.floorAssetId === floorAsset.id && (
-        <FloorDecalReceiver
-          receiverId={`floor-receiver:${group.floorAssetId ?? 'none'}:${group.wallAssetId ?? 'none'}:${group.cells.map(getCellKey).sort().join('|')}`}
-          cells={group.cells}
-          blockedFloorCellKeys={blockedFloorCellKeys}
-        />
-      )}
       {group.cells.map((cell) => {
         const key = getCellKey(cell)
         if (blockedFloorCellKeys.has(key)) return null
@@ -228,28 +314,6 @@ function CellGroupRenderer({
           </AnimatedTileGroup>
         )
       })}
-
-      {walls.map((wall) => {
-        const floorKey = wall.key.split(':').slice(0, 2).join(':')
-        return (
-          <AnimatedTileGroup
-            key={wall.key}
-            cellKey={floorKey}
-            extraDelay={WALL_EXTRA_DELAY_MS}
-            enabled={enableBuildAnimation}
-          >
-            <ContentPackInstance
-              assetId={group.wallAssetId}
-              position={wall.position}
-              rotation={wall.rotation}
-              variant="wall"
-              variantKey={wall.key}
-              visibility={visibility.getWallVisibility(wall.key)}
-              useLineOfSightPostMask={useLineOfSightPostMask}
-            />
-          </AnimatedTileGroup>
-        )
-      })}
     </>
   )
 }
@@ -260,17 +324,131 @@ function FloorDecalReceiver({
   blockedFloorCellKeys,
 }: {
   receiverId: string
-  cells: GridCell[]
+  cells: FloorReceiverCellInput[]
   blockedFloorCellKeys: Set<string>
 }) {
-  const gltfs = useGLTF(FLOOR_VARIANT_URLS as unknown as string[])
+  const receiverCells = useMemo(
+    () => cells.flatMap((cell) => {
+      const asset = cell.assetId ? getContentPackAssetById(cell.assetId) : null
+      const assetUrl = asset?.projectionReceiver?.getAssetUrl?.(cell.cellKey) ?? asset?.assetUrl
+      if (!assetUrl) {
+        return []
+      }
+
+      return [{
+        ...cell,
+        assetUrl,
+        receiverTransform: asset?.projectionReceiver?.transform,
+      }] satisfies ResolvedFloorReceiverCellInput[]
+    }),
+    [cells],
+  )
+
+  if (receiverCells.length === 0) {
+    return null
+  }
+
+  return (
+    <ResolvedFloorDecalReceiver
+      receiverId={receiverId}
+      receiverCells={receiverCells}
+      blockedFloorCellKeys={blockedFloorCellKeys}
+    />
+  )
+}
+
+function ResolvedFloorDecalReceiver({
+  receiverId,
+  receiverCells,
+  blockedFloorCellKeys,
+}: {
+  receiverId: string
+  receiverCells: ResolvedFloorReceiverCellInput[]
+  blockedFloorCellKeys: Set<string>
+}) {
+  const tool = useDungeonStore((state) => state.tool)
   const showProjectionDebugMesh = useDungeonStore((state) => state.showProjectionDebugMesh)
   const meshRef = useRef<THREE.Mesh>(null)
-  const geometry = useMemo(() => buildMergedFloorReceiverGeometry({
-    cells,
-    blockedFloorCellKeys,
-    variantScenes: gltfs.map((gltf) => gltf.scene),
-  }), [blockedFloorCellKeys, cells, gltfs])
+  const [geometry, setGeometry] = useState<THREE.BufferGeometry | null>(null)
+  const dirtyRef = useRef(true)
+  const previousToolRef = useRef(tool)
+  const receiverAssetUrls = useMemo(
+    () => Array.from(new Set(receiverCells.map((cell) => cell.assetUrl))),
+    [receiverCells],
+  )
+  const gltfs = useGLTF(receiverAssetUrls as string[])
+  const receiverScenesByUrl = useMemo(() => {
+    const loaded = Array.isArray(gltfs) ? gltfs : [gltfs]
+    return new Map(
+      receiverAssetUrls.map((assetUrl, index) => [assetUrl, loaded[index]?.scene ?? null]),
+    )
+  }, [gltfs, receiverAssetUrls])
+  const resolvedReceiverCells = useMemo(
+    () => receiverCells.flatMap((cell) => {
+      const receiverScene = receiverScenesByUrl.get(cell.assetUrl)
+      if (!receiverScene) {
+        return []
+      }
+
+      return [{
+        cell: cell.cell,
+        receiverScene,
+        receiverTransform: cell.receiverTransform,
+      }]
+    }),
+    [receiverCells, receiverScenesByUrl],
+  )
+  const receiverSignature = useMemo(
+    () => [
+      ...receiverCells
+        .map((cell) => `${cell.cellKey}:${cell.assetUrl}:${JSON.stringify(cell.receiverTransform ?? null)}`)
+        .sort(),
+      ...Array.from(blockedFloorCellKeys).sort().map((cellKey) => `blocked:${cellKey}`),
+    ].join('|'),
+    [blockedFloorCellKeys, receiverCells],
+  )
+
+  useEffect(() => {
+    dirtyRef.current = true
+  }, [receiverSignature])
+
+  useLayoutEffect(() => {
+    const enteringPlay = previousToolRef.current !== 'play' && tool === 'play'
+    previousToolRef.current = tool
+
+    if (!resolvedReceiverCells.length) {
+      setGeometry((previous) => {
+        previous?.dispose()
+        return null
+      })
+      dirtyRef.current = false
+      return
+    }
+
+    if (tool !== 'play') {
+      return
+    }
+
+    if (!enteringPlay && geometry !== null) {
+      return
+    }
+
+    if (!dirtyRef.current && geometry) {
+      return
+    }
+
+    const nextGeometry = buildMergedFloorReceiverGeometry({
+      cells: resolvedReceiverCells,
+      blockedFloorCellKeys,
+    })
+
+    setGeometry((previous) => {
+      previous?.dispose()
+      return nextGeometry
+    })
+    dirtyRef.current = false
+  }, [blockedFloorCellKeys, geometry, resolvedReceiverCells, tool])
+
   const projectionReceiverMesh = useMemo(() => {
     if (!geometry) {
       return null
@@ -328,6 +506,22 @@ function FloorDecalReceiver({
   )
 }
 
+function deriveFloorReceiverCells(
+  paintedCells: PaintedCells,
+  rooms: Record<string, Room>,
+  globalFloorAssetId: string | null,
+  floorTileAssetIds: Record<string, string>,
+): FloorReceiverCellInput[] {
+  return Object.entries(paintedCells).map(([cellKey, record]) => {
+    const room = record.roomId ? rooms[record.roomId] : null
+    return {
+      cell: record.cell,
+      cellKey,
+      assetId: floorTileAssetIds[cellKey] ?? room?.floorAssetId ?? globalFloorAssetId,
+    }
+  })
+}
+
 /**
  * Wraps a tile in a group whose Y position is driven each frame by the build
  * animation registry. When there is no active animation the group stays at Y=0
@@ -368,49 +562,124 @@ function AnimatedTileGroup({
   return <group ref={groupRef}>{children}</group>
 }
 
-function deriveRoomWalls(
-  cells: GridCell[],
-  allPaintedCells: PaintedCells,
+function deriveFloorGroups(
+  paintedCells: PaintedCells,
+  rooms: Record<string, Room>,
+  globalFloorAssetId: string | null,
+  floorTileAssetIds: Record<string, string>,
+): FloorGroup[] {
+  const groups = new Map<string, FloorGroup>()
+
+  Object.entries(paintedCells).forEach(([cellKey, record]) => {
+    const room = record.roomId ? rooms[record.roomId] : null
+    const floorAssetId = floorTileAssetIds[cellKey] ?? room?.floorAssetId ?? globalFloorAssetId
+    const groupKey = floorAssetId ?? 'none'
+    if (!groups.has(groupKey)) {
+      groups.set(groupKey, {
+        floorAssetId,
+        cells: [],
+      })
+    }
+    groups.get(groupKey)!.cells.push(record.cell)
+  })
+
+  return Array.from(groups.values())
+}
+
+function deriveWallInstances(
+  paintedCells: PaintedCells,
+  rooms: Record<string, Room>,
+  globalWallAssetId: string | null,
+  wallSurfaceAssetIds: Record<string, string>,
   suppressedWallKeys: Set<string>,
 ): RoomWallInstance[] {
+  const wallSegments = collectBoundaryWallSegments(paintedCells, { suppressedWallKeys }).map((segment) => ({
+    ...segment,
+    assetId:
+      wallSurfaceAssetIds[segment.key] ??
+      getInheritedWallAssetIdForWallKey(segment.key, paintedCells, rooms, globalWallAssetId),
+  }))
+
+  const groups = new Map<string, BoundaryWallSegmentWithAsset[]>()
+  wallSegments.forEach((segment) => {
+    const [xPart, zPart] = segment.key.split(':')
+    const lineKey =
+      segment.direction === 'north' || segment.direction === 'south'
+        ? `${segment.direction}:${zPart}`
+        : `${segment.direction}:${xPart}`
+    const groupKey = `${segment.assetId ?? 'none'}|${lineKey}`
+    if (!groups.has(groupKey)) {
+      groups.set(groupKey, [])
+    }
+    groups.get(groupKey)!.push(segment)
+  })
+
   const walls: RoomWallInstance[] = []
+  groups.forEach((segments) => {
+    const sorted = [...segments].sort((left, right) => left.index - right.index)
+    let runStart = 0
 
-  cells.forEach((cell) => {
-    const cellKey = getCellKey(cell)
-    const center = cellToWorldPosition(cell)
-    const currentRoomId = allPaintedCells[cellKey]?.roomId ?? null
-
-    WALL_DIRECTIONS.forEach(({ direction, delta, rotation }) => {
-      const neighbor: GridCell = [cell[0] + delta[0], cell[1] + delta[1]]
-      const neighborKey = getCellKey(neighbor)
-      const neighborRecord = allPaintedCells[neighborKey]
-
-      if (neighborRecord) {
-        const neighborRoomId = neighborRecord.roomId ?? null
-        if (currentRoomId === neighborRoomId) return // same room — no wall
-
-        // Different rooms: only the canonical side (lower cell key) owns the wall,
-        // so the boundary wall is rendered exactly once.
-        if (cellKey > neighborKey) return
+    while (runStart < sorted.length) {
+      let runEnd = runStart + 1
+      while (runEnd < sorted.length && sorted[runEnd].index === sorted[runEnd - 1].index + 1) {
+        runEnd += 1
       }
 
-      const wallKey = `${cellKey}:${direction}`
-      if (suppressedWallKeys.has(wallKey)) return
+      const run = sorted.slice(runStart, runEnd)
+      const wallSpan = getContentPackAssetById(run[0]?.assetId ?? '')?.metadata?.wallSpan ?? 1
+      let offset = 0
 
-      walls.push({
-        key: wallKey,
-        direction,
-        position: [
-          center[0] + delta[0] * (GRID_SIZE * 0.5),
-          0,
-          center[2] + delta[1] * (GRID_SIZE * 0.5),
-        ],
-        rotation,
-      })
-    })
+      while (offset < run.length) {
+        const remaining = run.length - offset
+        const span = remaining >= wallSpan ? wallSpan : 1
+        const segmentKeys = run.slice(offset, offset + span).map((segment) => segment.key)
+        const transform = getWallSpanWorldTransform(segmentKeys)
+        if (transform) {
+          walls.push({
+            key: segmentKeys.join('|'),
+            assetId: run[offset]?.assetId ?? null,
+            segmentKeys,
+            position: transform.position,
+            rotation: transform.rotation,
+            ...(wallSpan > 1 ? { objectProps: { span } } : {}),
+          })
+        }
+
+        offset += span
+      }
+
+      runStart = runEnd
+    }
   })
 
   return walls
+}
+
+function deriveVisibleWallCorners(
+  paintedCells: PaintedCells,
+  rooms: Record<string, Room>,
+  globalWallAssetId: string | null,
+  wallSurfaceAssetIds: Record<string, string>,
+  suppressedWallKeys: Set<string>,
+): RoomCornerRenderInstance[] {
+  const wallSegments = collectBoundaryWallSegments(paintedCells, { suppressedWallKeys }).map((segment) => ({
+    ...segment,
+    assetId:
+      wallSurfaceAssetIds[segment.key] ??
+      getInheritedWallAssetIdForWallKey(segment.key, paintedCells, rooms, globalWallAssetId),
+  }))
+  const wallAssetIdsByKey = new Map(wallSegments.map((segment) => [segment.key, segment.assetId]))
+
+  return deriveWallCornersFromSegments(wallSegments)
+    .flatMap<RoomCornerRenderInstance>((corner) => {
+      const assetId =
+        corner.wallKeys
+          .map((wallKey) => wallAssetIdsByKey.get(wallKey) ?? null)
+          .find((candidate) => getContentPackAssetById(candidate ?? '')?.metadata?.wallCornerType === 'solitary') ??
+        null
+
+      return assetId ? [{ ...corner, assetId }] : []
+    })
 }
 
 function OpeningRenderer({
@@ -429,7 +698,8 @@ function OpeningRenderer({
   const ppEnabled = useDungeonStore((state) => state.postProcessing.enabled)
   const selected = selection === opening.id
   const useLineOfSightPostMask = visibility.active && visibility.mask !== null
-  const wallVisibility = visibility.getWallVisibility(opening.wallKey)
+  const openingSegmentKeys = getOpeningSegments(opening.wallKey, opening.width)
+  const wallVisibility = getWallSpanVisibilityState(visibility, openingSegmentKeys)
 
   const groupRef = useRef<THREE.Group>(null)
   useLayoutEffect(() => {
@@ -441,7 +711,7 @@ function OpeningRenderer({
 
   if (!layerVisible) return null
 
-  const wallPosition = wallKeyToWorldPosition(opening.wallKey)
+  const wallPosition = getWallSpanWorldTransform(openingSegmentKeys)
   if (!wallPosition) return null
 
   // Apply 180° flip when requested (front/back swap)
@@ -513,27 +783,55 @@ export function getWallVisibilityState(
   return visibility.getWallVisibility(wallKey)
 }
 
-/** Convert a wall key ("x:z:direction") to world position + rotation. */
-function wallKeyToWorldPosition(
-  wallKey: string,
+function getWallSpanVisibilityState(
+  visibility: PlayVisibility,
+  wallKeys: string[],
+): PlayVisibilityState {
+  let resolved: PlayVisibilityState = 'hidden'
+
+  for (const wallKey of wallKeys) {
+    const next = visibility.getWallVisibility(wallKey)
+    if (next === 'visible') {
+      return 'visible'
+    }
+    if (next === 'explored') {
+      resolved = 'explored'
+    }
+  }
+
+  return resolved
+}
+
+function getWallSpanWorldTransform(
+  wallKeys: string[],
 ): { position: [number, number, number]; rotation: [number, number, number] } | null {
-  const parts = wallKey.split(':')
-  if (parts.length !== 3) return null
-  const x = parseInt(parts[0], 10)
-  const z = parseInt(parts[1], 10)
-  const direction = parts[2]
-  if (isNaN(x) || isNaN(z)) return null
+  if (wallKeys.length === 0) {
+    return null
+  }
 
-  const dir = WALL_DIRECTIONS.find((d) => d.direction === direction)
-  if (!dir) return null
+  const transforms = wallKeys
+    .map((wallKey) => wallKeyToWorldPosition(wallKey))
+    .filter((transform): transform is NonNullable<ReturnType<typeof wallKeyToWorldPosition>> => Boolean(transform))
 
-  const center = cellToWorldPosition([x, z])
+  if (transforms.length === 0) {
+    return null
+  }
+
+  const position = transforms.reduce<[number, number, number]>(
+    (accumulator, transform) => [
+      accumulator[0] + transform.position[0],
+      accumulator[1] + transform.position[1],
+      accumulator[2] + transform.position[2],
+    ],
+    [0, 0, 0],
+  )
+
   return {
     position: [
-      center[0] + dir.delta[0] * (GRID_SIZE * 0.5),
-      0,
-      center[2] + dir.delta[1] * (GRID_SIZE * 0.5),
+      position[0] / transforms.length,
+      position[1] / transforms.length,
+      position[2] / transforms.length,
     ],
-    rotation: dir.rotation,
+    rotation: transforms[0].rotation,
   }
 }

@@ -12,7 +12,10 @@ import {
   type UpdateGeneratedCharacterInput,
 } from '../generated-characters/types'
 import { serializeDungeon, deserializeDungeon } from './serialization'
+import { sanitizePersistedAssetReferences } from './assetReferences'
 import { getOpeningSegments } from './openingSegments'
+import { getPairedStairAssetId, getStairDirectionForAssetId } from './stairAssets'
+import { getCanonicalWallKey, getInheritedWallAssetIdForWallKey } from './wallSegments'
 import {
   getRoomBounds,
   getRoomCellKeysInBounds,
@@ -21,13 +24,19 @@ import {
   type RoomBoundaryRun,
   type RoomBounds,
 } from './roomResize'
+import { Euler, Quaternion, Vector3 } from 'three'
 
 export { getOpeningSegments } from './openingSegments'
 
 export type DungeonTool = 'move' | 'room' | 'prop' | 'character' | 'opening' | 'select' | 'play'
 export type CameraMode = 'orbit'
 export type CameraPreset = 'perspective' | 'isometric' | 'top-down'
+export type RoomEditMode = 'rooms' | 'floor-variants' | 'wall-variants'
 export type SelectedAssetIds = Record<ContentPackCategory, string | null>
+export type SurfaceBrushAssetIds = {
+  floor: string | null
+  wall: string | null
+}
 export type CharacterSheetState = {
   open: boolean
   assetId: string | null
@@ -88,6 +97,10 @@ export type DungeonObjectRecord = {
   assetId: string | null
   position: [number, number, number]
   rotation: [number, number, number]
+  localPosition?: [number, number, number] | null
+  localRotation?: [number, number, number] | null
+  parentObjectId?: string | null
+  supportCellKey?: string
   props: Record<string, unknown>
   cell: GridCell
   cellKey: string
@@ -97,6 +110,8 @@ export type DungeonObjectRecord = {
 type DungeonSnapshot = {
   paintedCells: PaintedCells
   exploredCells: Record<string, true>
+  floorTileAssetIds: Record<string, string>
+  wallSurfaceAssetIds: Record<string, string>
   placedObjects: Record<string, DungeonObjectRecord>
   wallOpenings: Record<string, OpeningRecord>
   occupancy: Record<string, string>
@@ -113,7 +128,17 @@ type DungeonSnapshot = {
 type PlaceObjectInput = Pick<
   DungeonObjectRecord,
   'type' | 'assetId' | 'position' | 'rotation' | 'props' | 'cell' | 'cellKey'
->
+> & {
+  localPosition?: DungeonObjectRecord['localPosition']
+  localRotation?: DungeonObjectRecord['localRotation']
+  parentObjectId?: DungeonObjectRecord['parentObjectId']
+  supportCellKey?: DungeonObjectRecord['supportCellKey']
+}
+
+type MutableObjectMaps = {
+  placedObjects: Record<string, DungeonObjectRecord>
+  occupancy: Record<string, string>
+}
 
 type MoveObjectInput = Pick<DungeonObjectRecord, 'position' | 'cell' | 'cellKey'>
 
@@ -136,9 +161,11 @@ type DungeonState = DungeonSnapshot & {
   isPaintingStrokeActive: boolean
   isObjectDragActive: boolean
   isRoomResizeHandleActive: boolean
+  roomEditMode: RoomEditMode
   wallConnectionMode: WallConnectionMode
   wallConnectionWidth: 1 | 2 | 3
   selectedRoomId: string | null
+  surfaceBrushAssetIds: SurfaceBrushAssetIds
   sceneLighting: SceneLighting
   postProcessing: PostProcessingSettings
   showGrid: boolean
@@ -169,9 +196,13 @@ type DungeonState = DungeonSnapshot & {
   setTool: (tool: DungeonTool) => void
   selectRoom: (id: string | null) => void
   setRoomResizeHandleActive: (active: boolean) => void
+  setRoomEditMode: (mode: RoomEditMode) => void
   setWallConnectionMode: (mode: WallConnectionMode) => void
   setWallConnectionWidth: (width: 1 | 2 | 3) => void
   setSelectedAsset: (category: ContentPackCategory, assetId: string) => void
+  setSurfaceBrushAsset: (category: keyof SurfaceBrushAssetIds, assetId: string) => void
+  setFloorTileAsset: (cellKey: string, assetId: string | null) => boolean
+  setWallSurfaceAsset: (wallKey: string, assetId: string | null) => boolean
   setPaintingStrokeActive: (active: boolean) => void
   setObjectDragActive: (active: boolean) => void
   setSceneLightingIntensity: (intensity: number) => void
@@ -259,6 +290,8 @@ function cloneSnapshot(snapshot: DungeonSnapshot): DungeonSnapshot {
       ]),
     ),
     exploredCells: { ...snapshot.exploredCells },
+    floorTileAssetIds: { ...snapshot.floorTileAssetIds },
+    wallSurfaceAssetIds: { ...snapshot.wallSurfaceAssetIds },
     placedObjects: Object.fromEntries(
       Object.entries(snapshot.placedObjects).map(([id, object]) => [
         id,
@@ -266,6 +299,14 @@ function cloneSnapshot(snapshot: DungeonSnapshot): DungeonSnapshot {
           ...object,
           position: [...object.position] as DungeonObjectRecord['position'],
           rotation: [...object.rotation] as DungeonObjectRecord['rotation'],
+          localPosition: object.localPosition
+            ? [...object.localPosition] as DungeonObjectRecord['localPosition']
+            : object.localPosition ?? null,
+          localRotation: object.localRotation
+            ? [...object.localRotation] as DungeonObjectRecord['localRotation']
+            : object.localRotation ?? null,
+          parentObjectId: object.parentObjectId ?? null,
+          supportCellKey: object.supportCellKey ?? getCellKey(object.cell),
           cell: [...object.cell] as GridCell,
           props: { ...object.props },
         },
@@ -311,6 +352,8 @@ function createEmptySnapshot(): DungeonSnapshot {
   return {
     paintedCells: {},
     exploredCells: {},
+    floorTileAssetIds: {},
+    wallSurfaceAssetIds: {},
     placedObjects: {},
     wallOpenings: {},
     occupancy: {},
@@ -413,23 +456,120 @@ function isAnchorDirection(value: unknown): value is AnchorDirection {
   )
 }
 
-function isConnector(value: unknown): value is PropConnector {
+function isAnchoredConnector(value: unknown): value is Exclude<PropConnector, 'FREE'> {
   return value === 'FLOOR' || value === 'WALL' || value === 'WALLFLOOR'
+}
+
+function collectDescendantIds(
+  placedObjects: Record<string, DungeonObjectRecord>,
+  rootId: string,
+) {
+  const pending = [rootId]
+  const removedIds = new Set<string>()
+
+  while (pending.length > 0) {
+    const currentId = pending.pop()
+    if (!currentId || removedIds.has(currentId)) {
+      continue
+    }
+
+    removedIds.add(currentId)
+
+    Object.values(placedObjects).forEach((object) => {
+      if (object.parentObjectId === currentId) {
+        pending.push(object.id)
+      }
+    })
+  }
+
+  return removedIds
+}
+
+function removeObjectHierarchy(
+  current: MutableObjectMaps,
+  rootId: string,
+) {
+  const removedIds = collectDescendantIds(current.placedObjects, rootId)
+
+  removedIds.forEach((objectId) => {
+    delete current.placedObjects[objectId]
+  })
+
+  Object.entries(current.occupancy).forEach(([anchorKey, objectId]) => {
+    if (removedIds.has(objectId)) {
+      delete current.occupancy[anchorKey]
+    }
+  })
+
+  return removedIds
+}
+
+function deriveWorldTransformFromParent(
+  parent: DungeonObjectRecord,
+  localPosition: DungeonObjectRecord['position'],
+  localRotation: DungeonObjectRecord['rotation'],
+) {
+  const parentPosition = new Vector3(...parent.position)
+  const parentQuaternion = new Quaternion().setFromEuler(new Euler(...parent.rotation))
+  const childOffset = new Vector3(...localPosition).applyQuaternion(parentQuaternion)
+  const childQuaternion = parentQuaternion.multiply(
+    new Quaternion().setFromEuler(new Euler(...localRotation)),
+  )
+  const childEuler = new Euler().setFromQuaternion(childQuaternion)
+
+  return {
+    position: parentPosition
+      .add(childOffset)
+      .toArray() as DungeonObjectRecord['position'],
+    rotation: [childEuler.x, childEuler.y, childEuler.z] as DungeonObjectRecord['rotation'],
+  }
+}
+
+function updateDescendantWorldTransforms(
+  placedObjects: Record<string, DungeonObjectRecord>,
+  parentId: string,
+) {
+  const parent = placedObjects[parentId]
+  if (!parent) {
+    return
+  }
+
+  Object.values(placedObjects).forEach((object) => {
+    if (object.parentObjectId !== parentId || !object.localPosition || !object.localRotation) {
+      return
+    }
+
+    const worldTransform = deriveWorldTransformFromParent(
+      parent,
+      object.localPosition,
+      object.localRotation,
+    )
+
+    placedObjects[object.id] = {
+      ...object,
+      position: worldTransform.position,
+      rotation: worldTransform.rotation,
+    }
+
+    updateDescendantWorldTransforms(placedObjects, object.id)
+  })
 }
 
 function isPropAnchorValid(
   object: DungeonObjectRecord,
   paintedCells: PaintedCells,
 ) {
-  const cellKey = getCellKey(object.cell)
-  if (!paintedCells[cellKey]) {
+  const supportCellKey = object.supportCellKey ?? getCellKey(object.cell)
+  if (!paintedCells[supportCellKey]) {
     return false
   }
 
   const connector = object.props.connector
-  if (!isConnector(connector)) {
+  if (!isAnchoredConnector(connector)) {
     return true
   }
+
+  const cellKey = getCellKey(object.cell)
 
   if (connector === 'FLOOR') {
     return object.cellKey === `${cellKey}:floor`
@@ -467,9 +607,11 @@ function pruneInvalidConnectedProps(
   changedCells: GridCell[],
 ) {
   const affectedAnchorKeys = collectAffectedAnchorKeys(changedCells)
+  const changedCellKeys = new Set(changedCells.map((cell) => getCellKey(cell)))
   const placedObjects = { ...current.placedObjects }
   const occupancy = { ...current.occupancy }
   let selection = current.selection
+  const invalidRootIds = new Set<string>()
 
   affectedAnchorKeys.forEach((anchorKey) => {
     const objectId = occupancy[anchorKey]
@@ -482,10 +624,35 @@ function pruneInvalidConnectedProps(
       return
     }
 
-    delete placedObjects[objectId]
-    delete occupancy[anchorKey]
+    invalidRootIds.add(objectId)
+  })
 
-    if (selection === objectId) {
+  Object.values(placedObjects).forEach((object) => {
+    if (object.parentObjectId) {
+      return
+    }
+
+    const connector = object.props.connector
+    const supportCellKey = object.supportCellKey ?? getCellKey(object.cell)
+    if (connector === 'FREE' && changedCellKeys.has(supportCellKey) && !paintedCells[supportCellKey]) {
+      invalidRootIds.add(object.id)
+    }
+  })
+
+  invalidRootIds.forEach((objectId) => {
+    const removedIds = removeObjectHierarchy({ placedObjects, occupancy }, objectId)
+    if (selection && removedIds.has(selection)) {
+      selection = null
+    }
+  })
+
+  Object.values(placedObjects).forEach((object) => {
+    if (!object.parentObjectId || placedObjects[object.parentObjectId]) {
+      return
+    }
+
+    const removedIds = removeObjectHierarchy({ placedObjects, occupancy }, object.id)
+    if (selection && removedIds.has(selection)) {
       selection = null
     }
   })
@@ -515,6 +682,20 @@ function pruneInvalidConnectedProps(
   return { placedObjects, occupancy, selection, wallOpenings }
 }
 
+function pruneInvalidSurfaceOverrides(
+  current: Pick<DungeonSnapshot, 'floorTileAssetIds' | 'wallSurfaceAssetIds'>,
+  paintedCells: PaintedCells,
+) {
+  const floorTileAssetIds = Object.fromEntries(
+    Object.entries(current.floorTileAssetIds).filter(([cellKey]) => Boolean(paintedCells[cellKey])),
+  )
+  const wallSurfaceAssetIds = Object.fromEntries(
+    Object.entries(current.wallSurfaceAssetIds).filter(([wallKey]) => getCanonicalWallKey(wallKey, paintedCells) === wallKey),
+  )
+
+  return { floorTileAssetIds, wallSurfaceAssetIds }
+}
+
 export const useDungeonStore = create<DungeonState>()(
   persist(
     (set, get) => {
@@ -528,9 +709,14 @@ export const useDungeonStore = create<DungeonState>()(
   isPaintingStrokeActive: false,
   isObjectDragActive: false,
   isRoomResizeHandleActive: false,
+  roomEditMode: 'rooms' as RoomEditMode,
   wallConnectionMode: 'door' as WallConnectionMode,
   wallConnectionWidth: 1 as 1 | 2 | 3,
   selectedRoomId: null,
+  surfaceBrushAssetIds: {
+    floor: getDefaultAssetIdByCategory('floor'),
+    wall: getDefaultAssetIdByCategory('wall'),
+  },
   sceneLighting: { intensity: 1 },
   postProcessing: { enabled: false, focusDistance: 0.5, focalLength: 3, bokehScale: 2 },
   showGrid: true,
@@ -601,10 +787,16 @@ export const useDungeonStore = create<DungeonState>()(
         selection,
         wallOpenings,
       } = pruneInvalidConnectedProps(current, paintedCells, nextCells)
+      const { floorTileAssetIds, wallSurfaceAssetIds } = pruneInvalidSurfaceOverrides(
+        current,
+        paintedCells,
+      )
 
       return {
         ...current,
         paintedCells,
+        floorTileAssetIds,
+        wallSurfaceAssetIds,
         placedObjects,
         wallOpenings,
         occupancy,
@@ -647,10 +839,16 @@ export const useDungeonStore = create<DungeonState>()(
         selection,
         wallOpenings,
       } = pruneInvalidConnectedProps(current, paintedCells, removedCells)
+      const { floorTileAssetIds, wallSurfaceAssetIds } = pruneInvalidSurfaceOverrides(
+        current,
+        paintedCells,
+      )
 
       return {
         ...current,
         paintedCells,
+        floorTileAssetIds,
+        wallSurfaceAssetIds,
         placedObjects,
         wallOpenings,
         occupancy,
@@ -664,7 +862,12 @@ export const useDungeonStore = create<DungeonState>()(
   },
   placeObject: (input) => {
     const state = get()
-    const existingId = state.occupancy[input.cellKey]
+    const consumesOccupancy = input.props.connector !== 'FREE'
+    if (input.parentObjectId && !state.placedObjects[input.parentObjectId]) {
+      return null
+    }
+
+    const existingId = consumesOccupancy ? state.occupancy[input.cellKey] : null
     const existingObject = existingId ? state.placedObjects[existingId] : null
 
     if (
@@ -674,6 +877,13 @@ export const useDungeonStore = create<DungeonState>()(
       existingObject.assetId === input.assetId &&
       existingObject.position.every((value, index) => value === input.position[index]) &&
       existingObject.rotation.every((value, index) => value === input.rotation[index]) &&
+      (existingObject.parentObjectId ?? null) === (input.parentObjectId ?? null) &&
+      (existingObject.supportCellKey ?? getCellKey(existingObject.cell)) ===
+        (input.supportCellKey ?? getCellKey(input.cell)) &&
+      JSON.stringify(existingObject.localPosition ?? null) ===
+        JSON.stringify(input.localPosition ?? null) &&
+      JSON.stringify(existingObject.localRotation ?? null) ===
+        JSON.stringify(input.localRotation ?? null) &&
       JSON.stringify(existingObject.props) === JSON.stringify(input.props)
     ) {
       return existingObject.id
@@ -687,7 +897,7 @@ export const useDungeonStore = create<DungeonState>()(
       const occupancy = { ...current.occupancy }
 
       if (existingId) {
-        delete placedObjects[existingId]
+        removeObjectHierarchy({ placedObjects, occupancy }, existingId)
       }
 
       placedObjects[nextId] = {
@@ -696,12 +906,22 @@ export const useDungeonStore = create<DungeonState>()(
         assetId: input.assetId,
         position: [...input.position] as DungeonObjectRecord['position'],
         rotation: [...input.rotation] as DungeonObjectRecord['rotation'],
+        localPosition: input.localPosition
+          ? [...input.localPosition] as DungeonObjectRecord['localPosition']
+          : input.localPosition ?? null,
+        localRotation: input.localRotation
+          ? [...input.localRotation] as DungeonObjectRecord['localRotation']
+          : input.localRotation ?? null,
+        parentObjectId: input.parentObjectId ?? null,
+        supportCellKey: input.supportCellKey ?? getCellKey(input.cell),
         props: { ...input.props },
         cell: [...input.cell] as GridCell,
         cellKey: input.cellKey,
         layerId: current.activeLayerId,
       }
-      occupancy[input.cellKey] = nextId
+      if (consumesOccupancy) {
+        occupancy[input.cellKey] = nextId
+      }
 
       return {
         ...current,
@@ -713,14 +933,12 @@ export const useDungeonStore = create<DungeonState>()(
       }
     })
 
-    // Auto-create adjacent floor when placing a staircase prop
-    if (input.assetId === 'core.props_staircase_up' || input.assetId === 'core.props_staircase_down') {
+    const stairDirection = getStairDirectionForAssetId(input.assetId)
+    const opposingAssetId = getPairedStairAssetId(input.assetId)
+    if (stairDirection && opposingAssetId) {
       const updated = get()
       const currentLevel = updated.floors[updated.activeFloorId]?.level ?? 0
-      const targetLevel = input.assetId === 'core.props_staircase_up' ? currentLevel + 1 : currentLevel - 1
-      const opposingAssetId = input.assetId === 'core.props_staircase_up'
-        ? 'core.props_staircase_down'
-        : 'core.props_staircase_up'
+      const targetLevel = stairDirection === 'up' ? currentLevel + 1 : currentLevel - 1
       get().ensureAdjacentFloor(targetLevel, input.cell, opposingAssetId, input.position, input.rotation)
     }
 
@@ -768,12 +986,14 @@ export const useDungeonStore = create<DungeonState>()(
           position: [...input.position] as DungeonObjectRecord['position'],
           cell: [...input.cell] as GridCell,
           cellKey: input.cellKey,
+          supportCellKey: getCellKey(input.cell),
         },
       }
       const occupancy = { ...current.occupancy }
 
       delete occupancy[currentObject.cellKey]
       occupancy[input.cellKey] = id
+      updateDescendantWorldTransforms(placedObjects, id)
 
       return {
         ...current,
@@ -864,9 +1084,7 @@ export const useDungeonStore = create<DungeonState>()(
   },
   removeObject: (id) => {
     const state = get()
-    const object = state.placedObjects[id]
-
-    if (!object) {
+    if (!state.placedObjects[id]) {
       return
     }
 
@@ -876,14 +1094,13 @@ export const useDungeonStore = create<DungeonState>()(
       const placedObjects = { ...current.placedObjects }
       const occupancy = { ...current.occupancy }
 
-      delete placedObjects[id]
-      delete occupancy[object.cellKey]
+      const removedIds = removeObjectHierarchy({ placedObjects, occupancy }, id)
 
       return {
         ...current,
         placedObjects,
         occupancy,
-        selection: current.selection === id ? null : current.selection,
+        selection: current.selection && removedIds.has(current.selection) ? null : current.selection,
         history: [...current.history, previousSnapshot],
         future: [],
       }
@@ -933,22 +1150,40 @@ export const useDungeonStore = create<DungeonState>()(
           : Math.PI / 2
       const previousSnapshot = cloneSnapshot(state)
 
-      set((current) => ({
-        ...current,
-        placedObjects: {
+      set((current) => {
+        const currentSelection = current.placedObjects[selection]
+        if (!currentSelection) {
+          return current
+        }
+
+        const placedObjects = {
           ...current.placedObjects,
           [selection]: {
-            ...current.placedObjects[selection],
+            ...currentSelection,
             rotation: [
-              current.placedObjects[selection].rotation[0],
-              current.placedObjects[selection].rotation[1] + rotationStep,
-              current.placedObjects[selection].rotation[2],
-            ],
+              currentSelection.rotation[0],
+              currentSelection.rotation[1] + rotationStep,
+              currentSelection.rotation[2],
+            ] as DungeonObjectRecord['rotation'],
+            localRotation: currentSelection.localRotation
+              ? [
+                  currentSelection.localRotation[0],
+                  currentSelection.localRotation[1] + rotationStep,
+                  currentSelection.localRotation[2],
+                ] as DungeonObjectRecord['localRotation']
+              : currentSelection.localRotation ?? null,
           },
-        },
-        history: [...current.history, previousSnapshot],
-        future: [],
-      }))
+        }
+
+        updateDescendantWorldTransforms(placedObjects, selection)
+
+        return {
+          ...current,
+          placedObjects,
+          history: [...current.history, previousSnapshot],
+          future: [],
+        }
+      })
       return
     }
 
@@ -1021,6 +1256,14 @@ export const useDungeonStore = create<DungeonState>()(
           isRoomResizeHandleActive: active,
         })
   },
+  setRoomEditMode: (mode) => {
+    set((current) => current.roomEditMode === mode
+      ? current
+      : {
+          ...current,
+          roomEditMode: mode,
+        })
+  },
   setWallConnectionMode: (mode) => {
     set((current) => current.wallConnectionMode === mode
       ? current
@@ -1055,6 +1298,87 @@ export const useDungeonStore = create<DungeonState>()(
       history: [...current.history, previousSnapshot],
       future: [],
     }))
+  },
+  setSurfaceBrushAsset: (category, assetId) => {
+    set((current) => current.surfaceBrushAssetIds[category] === assetId
+      ? current
+      : {
+          ...current,
+          surfaceBrushAssetIds: {
+            ...current.surfaceBrushAssetIds,
+            [category]: assetId,
+          },
+        })
+  },
+  setFloorTileAsset: (cellKey, assetId) => {
+    const state = get()
+    const cellRecord = state.paintedCells[cellKey]
+    if (!cellRecord) {
+      return false
+    }
+
+    const room = cellRecord.roomId ? state.rooms[cellRecord.roomId] : null
+    const inheritedAssetId = room?.floorAssetId ?? state.selectedAssetIds.floor
+    const nextAssetId = assetId && assetId !== inheritedAssetId ? assetId : null
+    const currentAssetId = state.floorTileAssetIds[cellKey] ?? null
+    if (currentAssetId === nextAssetId) {
+      return false
+    }
+
+    const previousSnapshot = cloneSnapshot(state)
+    set((current) => {
+      const floorTileAssetIds = { ...current.floorTileAssetIds }
+      if (nextAssetId) {
+        floorTileAssetIds[cellKey] = nextAssetId
+      } else {
+        delete floorTileAssetIds[cellKey]
+      }
+
+      return {
+        ...current,
+        floorTileAssetIds,
+        history: [...current.history, previousSnapshot],
+        future: [],
+      }
+    })
+    return true
+  },
+  setWallSurfaceAsset: (wallKey, assetId) => {
+    const state = get()
+    const canonicalWallKey = getCanonicalWallKey(wallKey, state.paintedCells)
+    if (!canonicalWallKey) {
+      return false
+    }
+
+    const inheritedAssetId = getInheritedWallAssetIdForWallKey(
+      canonicalWallKey,
+      state.paintedCells,
+      state.rooms,
+      state.selectedAssetIds.wall,
+    )
+    const nextAssetId = assetId && assetId !== inheritedAssetId ? assetId : null
+    const currentAssetId = state.wallSurfaceAssetIds[canonicalWallKey] ?? null
+    if (currentAssetId === nextAssetId) {
+      return false
+    }
+
+    const previousSnapshot = cloneSnapshot(state)
+    set((current) => {
+      const wallSurfaceAssetIds = { ...current.wallSurfaceAssetIds }
+      if (nextAssetId) {
+        wallSurfaceAssetIds[canonicalWallKey] = nextAssetId
+      } else {
+        delete wallSurfaceAssetIds[canonicalWallKey]
+      }
+
+      return {
+        ...current,
+        wallSurfaceAssetIds,
+        history: [...current.history, previousSnapshot],
+        future: [],
+      }
+    })
+    return true
   },
   setPaintingStrokeActive: (active) => {
     set((state) => {
@@ -1259,6 +1583,11 @@ export const useDungeonStore = create<DungeonState>()(
         isPaintingStrokeActive: false,
         isObjectDragActive: false,
         selectedRoomId: null,
+        roomEditMode: 'rooms',
+        surfaceBrushAssetIds: {
+          floor: getDefaultAssetIdByCategory('floor'),
+          wall: getDefaultAssetIdByCategory('wall'),
+        },
         floorViewMode: 'active',
         characterSheet: { open: false, assetId: null },
         activeCameraMode: 'perspective',
@@ -1278,6 +1607,11 @@ export const useDungeonStore = create<DungeonState>()(
         isPaintingStrokeActive: false,
         isObjectDragActive: false,
         selectedRoomId: null,
+        roomEditMode: 'rooms',
+        surfaceBrushAssetIds: {
+          floor: getDefaultAssetIdByCategory('floor'),
+          wall: getDefaultAssetIdByCategory('wall'),
+        },
         cameraMode: 'orbit',
       floorViewMode: 'active',
       characterSheet: { open: false, assetId: null },
@@ -1422,11 +1756,17 @@ export const useDungeonStore = create<DungeonState>()(
           paintedCells,
           removedCells,
         )
+      const { floorTileAssetIds, wallSurfaceAssetIds } = pruneInvalidSurfaceOverrides(
+        current,
+        paintedCells,
+      )
 
       return {
         ...current,
         rooms,
         paintedCells,
+        floorTileAssetIds,
+        wallSurfaceAssetIds,
         placedObjects,
         wallOpenings,
         occupancy,
@@ -1450,9 +1790,28 @@ export const useDungeonStore = create<DungeonState>()(
       cellKeys.forEach((key) => {
         if (paintedCells[key]) paintedCells[key] = { ...paintedCells[key], roomId }
       })
+      const changedCells = cellKeys
+        .map((key) => paintedCells[key]?.cell ?? current.paintedCells[key]?.cell)
+        .filter((cell): cell is GridCell => Boolean(cell))
+      const {
+        placedObjects,
+        occupancy,
+        selection,
+        wallOpenings,
+      } = pruneInvalidConnectedProps(current, paintedCells, changedCells)
+      const { floorTileAssetIds, wallSurfaceAssetIds } = pruneInvalidSurfaceOverrides(
+        current,
+        paintedCells,
+      )
       return {
         ...current,
         paintedCells,
+        floorTileAssetIds,
+        wallSurfaceAssetIds,
+        placedObjects,
+        occupancy,
+        selection,
+        wallOpenings,
         history: [...current.history, previousSnapshot],
         future: [],
       }
@@ -1540,10 +1899,16 @@ export const useDungeonStore = create<DungeonState>()(
           paintedCells,
           changedCells,
         )
+      const { floorTileAssetIds, wallSurfaceAssetIds } = pruneInvalidSurfaceOverrides(
+        current,
+        paintedCells,
+      )
 
       return {
         ...current,
         paintedCells,
+        floorTileAssetIds,
+        wallSurfaceAssetIds,
         placedObjects,
         wallOpenings,
         occupancy,
@@ -1613,10 +1978,16 @@ export const useDungeonStore = create<DungeonState>()(
 
       const { placedObjects, occupancy, selection, wallOpenings } =
         pruneInvalidConnectedProps(current, paintedCells, changedCells)
+      const { floorTileAssetIds, wallSurfaceAssetIds } = pruneInvalidSurfaceOverrides(
+        current,
+        paintedCells,
+      )
 
       return {
         ...current,
         paintedCells,
+        floorTileAssetIds,
+        wallSurfaceAssetIds,
         placedObjects,
         wallOpenings,
         occupancy,
@@ -1670,10 +2041,10 @@ export const useDungeonStore = create<DungeonState>()(
 
     // Find a staircase prop on the current floor to seed the new floor
     const staircaseDown = Object.values(state.placedObjects).find(
-      (obj) => obj.assetId === 'core.props_staircase_down',
+      (obj) => getStairDirectionForAssetId(obj.assetId) === 'down',
     )
     const staircaseUp = Object.values(state.placedObjects).find(
-      (obj) => obj.assetId === 'core.props_staircase_up',
+      (obj) => getStairDirectionForAssetId(obj.assetId) === 'up',
     )
     const staircaseOnCurrentFloor = staircaseDown ?? staircaseUp
 
@@ -1682,25 +2053,24 @@ export const useDungeonStore = create<DungeonState>()(
 
     if (staircaseOnCurrentFloor) {
       // Place opposing staircase on new floor at same grid cell
-      const opposingAssetId =
-        staircaseOnCurrentFloor.assetId === 'core.props_staircase_down'
-          ? 'core.props_staircase_up'
-          : 'core.props_staircase_down'
-      const staircaseId = createObjectId()
-      const cell = staircaseOnCurrentFloor.cell
-      const cellKey = `${getCellKey(cell)}:floor`
-      newSnapshot.placedObjects[staircaseId] = {
-        id: staircaseId,
-        type: 'prop',
-        assetId: opposingAssetId,
-        position: staircaseOnCurrentFloor.position,
-        rotation: staircaseOnCurrentFloor.rotation,
-        props: { connector: 'FLOOR', direction: null },
-        cell,
-        cellKey,
-        layerId: DEFAULT_LAYER_ID,
+      const opposingAssetId = getPairedStairAssetId(staircaseOnCurrentFloor.assetId)
+      if (opposingAssetId) {
+        const staircaseId = createObjectId()
+        const cell = staircaseOnCurrentFloor.cell
+        const cellKey = `${getCellKey(cell)}:floor`
+        newSnapshot.placedObjects[staircaseId] = {
+          id: staircaseId,
+          type: 'prop',
+          assetId: opposingAssetId,
+          position: staircaseOnCurrentFloor.position,
+          rotation: staircaseOnCurrentFloor.rotation,
+          props: { connector: 'FLOOR', direction: null },
+          cell,
+          cellKey,
+          layerId: DEFAULT_LAYER_ID,
+        }
+        newSnapshot.occupancy[cellKey] = staircaseId
       }
-      newSnapshot.occupancy[cellKey] = staircaseId
     }
 
     const newFloor: FloorRecord = {
@@ -1993,6 +2363,8 @@ export const useDungeonStore = create<DungeonState>()(
       rooms: state.rooms,
       paintedCells: state.paintedCells,
       exploredCells: state.exploredCells,
+      floorTileAssetIds: state.floorTileAssetIds,
+      wallSurfaceAssetIds: state.wallSurfaceAssetIds,
       placedObjects: state.placedObjects,
       wallOpenings: state.wallOpenings,
       occupancy: state.occupancy,
@@ -2024,6 +2396,11 @@ export const useDungeonStore = create<DungeonState>()(
          isPaintingStrokeActive: false,
          isObjectDragActive: false,
          selectedRoomId: null,
+        roomEditMode: 'rooms',
+        surfaceBrushAssetIds: {
+          floor: getDefaultAssetIdByCategory('floor'),
+          wall: getDefaultAssetIdByCategory('wall'),
+        },
         floorViewMode: 'active',
         activeCameraMode: 'perspective',
         cameraPreset: null,
@@ -2043,6 +2420,8 @@ export const useDungeonStore = create<DungeonState>()(
         dungeonName: state.dungeonName,
         paintedCells: state.paintedCells,
         exploredCells: state.exploredCells,
+        floorTileAssetIds: state.floorTileAssetIds,
+        wallSurfaceAssetIds: state.wallSurfaceAssetIds,
         placedObjects: state.placedObjects,
         wallOpenings: state.wallOpenings,
         occupancy: state.occupancy,
@@ -2066,6 +2445,7 @@ export const useDungeonStore = create<DungeonState>()(
           return
         }
 
+        Object.assign(state, sanitizePersistedAssetReferences(state))
         state.generatedCharacters = normalizeGeneratedCharacters(
           state.generatedCharacters as Record<string, Partial<GeneratedCharacterRecord>> | undefined,
         )

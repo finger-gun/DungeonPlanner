@@ -305,6 +305,49 @@ describe('useDungeonStore history', () => {
     expect(Object.keys(nextState.paintedCells)).toHaveLength(2)
   })
 
+  it('applies and clears a floor tile variant override', () => {
+    useDungeonStore.getState().paintCells([[0, 0]])
+
+    const applied = useDungeonStore.getState().setFloorTileAsset('0:0', 'kaykit.floor_tile_small_broken_a')
+
+    expect(applied).toBe(true)
+    expect(useDungeonStore.getState().floorTileAssetIds['0:0']).toBe('kaykit.floor_tile_small_broken_a')
+
+    useDungeonStore.getState().eraseCells([[0, 0]])
+    expect(useDungeonStore.getState().floorTileAssetIds['0:0']).toBeUndefined()
+  })
+
+  it('stores wall variant overrides on the canonical wall key', () => {
+    useDungeonStore.getState().paintCells([[0, 0]])
+    useDungeonStore.getState().paintCells([[1, 0]])
+
+    const applied = useDungeonStore.getState().setWallSurfaceAsset('1:0:west', 'core.wall')
+
+    expect(applied).toBe(true)
+    expect(useDungeonStore.getState().wallSurfaceAssetIds['0:0:east']).toBe('core.wall')
+    expect(useDungeonStore.getState().wallSurfaceAssetIds['1:0:west']).toBeUndefined()
+  })
+
+  it('creates an adjacent floor for KayKit stair assets using their paired metadata', () => {
+    useDungeonStore.getState().paintCells([[0, 0]])
+
+    useDungeonStore.getState().placeObject({
+      type: 'prop',
+      assetId: 'kaykit.opening_stairs_up',
+      position: [1, 0, 1],
+      rotation: [0, 0, 0],
+      props: { connector: 'FLOOR', direction: null },
+      cell: [0, 0],
+      cellKey: '0:0:floor',
+    })
+
+    const state = useDungeonStore.getState()
+    const upperFloor = Object.values(state.floors).find((floor) => floor.level === 1)
+    expect(upperFloor).toBeDefined()
+    const staircase = upperFloor ? Object.values(upperFloor.snapshot.placedObjects)[0] : null
+    expect(staircase?.assetId).toBe('kaykit.opening_stairs_down')
+  })
+
   it('replaces the existing prop in a cell and supports undo/redo', () => {
     useDungeonStore.getState().placeObject({
       type: 'prop',
@@ -533,6 +576,125 @@ describe('useDungeonStore history', () => {
     const state = useDungeonStore.getState()
     expect(state.occupancy['0:0:floor']).toBeUndefined()
     expect(state.placedObjects[propId!]).toBeUndefined()
+  })
+
+  it('places a free prop on a painted floor cell without consuming occupancy', () => {
+    useDungeonStore.getState().paintCells([[0, 0]])
+
+    const propId = useDungeonStore.getState().placeObject({
+      type: 'prop',
+      assetId: 'kaykit.prop_candle_lit',
+      position: [1.2, 0, 0.8],
+      rotation: [0, Math.PI / 2, 0],
+      props: {
+        connector: 'FREE',
+        direction: null,
+      },
+      cell: [0, 0],
+      cellKey: '0:0',
+      supportCellKey: '0:0',
+    })
+
+    const state = useDungeonStore.getState()
+    expect(propId).toBeTruthy()
+    expect(state.occupancy['0:0:floor']).toBeUndefined()
+    expect(state.placedObjects[propId!]).toMatchObject({
+      parentObjectId: null,
+      supportCellKey: '0:0',
+      position: [1.2, 0, 0.8],
+      rotation: [0, Math.PI / 2, 0],
+    })
+  })
+
+  it('keeps child free props attached to their parent transform', () => {
+    useDungeonStore.getState().paintCells([[0, 0]])
+
+    const parentId = useDungeonStore.getState().placeObject({
+      type: 'prop',
+      assetId: 'kaykit.prop_box_large',
+      position: [1, 0, 1],
+      rotation: [0, 0, 0],
+      props: {
+        connector: 'FLOOR',
+        direction: null,
+      },
+      cell: [0, 0],
+      cellKey: '0:0:floor',
+      supportCellKey: '0:0',
+    })
+
+    const childId = useDungeonStore.getState().placeObject({
+      type: 'prop',
+      assetId: 'kaykit.prop_candle_lit',
+      position: [1.5, 1, 1],
+      rotation: [0, 0, 0],
+      props: {
+        connector: 'FREE',
+        direction: null,
+      },
+      cell: [0, 0],
+      cellKey: '0:0',
+      parentObjectId: parentId,
+      localPosition: [0.5, 1, 0],
+      localRotation: [0, 0, 0],
+      supportCellKey: '0:0',
+    })
+
+    useDungeonStore.getState().selectObject(parentId)
+    useDungeonStore.getState().rotateSelection()
+
+    const state = useDungeonStore.getState()
+    expect(state.placedObjects[childId!]).toMatchObject({
+      parentObjectId: parentId,
+      localPosition: [0.5, 1, 0],
+    })
+    expect(state.placedObjects[childId!]?.position[0]).toBeCloseTo(1)
+    expect(state.placedObjects[childId!]?.position[1]).toBeCloseTo(1)
+    expect(state.placedObjects[childId!]?.position[2]).toBeCloseTo(0.5)
+    expect(state.placedObjects[childId!]?.rotation[0]).toBeCloseTo(0)
+    expect(state.placedObjects[childId!]?.rotation[1]).toBeCloseTo(Math.PI / 2)
+    expect(state.placedObjects[childId!]?.rotation[2]).toBeCloseTo(0)
+  })
+
+  it('cascades child free props when their ancestor support is removed', () => {
+    useDungeonStore.getState().paintCells([[0, 0]])
+
+    const parentId = useDungeonStore.getState().placeObject({
+      type: 'prop',
+      assetId: 'kaykit.prop_box_large',
+      position: [1, 0, 1],
+      rotation: [0, 0, 0],
+      props: {
+        connector: 'FREE',
+        direction: null,
+      },
+      cell: [0, 0],
+      cellKey: '0:0',
+      supportCellKey: '0:0',
+    })
+
+    const childId = useDungeonStore.getState().placeObject({
+      type: 'prop',
+      assetId: 'kaykit.prop_candle_lit',
+      position: [1, 1, 1],
+      rotation: [0, 0, 0],
+      props: {
+        connector: 'FREE',
+        direction: null,
+      },
+      cell: [0, 0],
+      cellKey: '0:0',
+      parentObjectId: parentId,
+      localPosition: [0, 1, 0],
+      localRotation: [0, 0, 0],
+      supportCellKey: '0:0',
+    })
+
+    useDungeonStore.getState().eraseCells([[0, 0]])
+
+    const state = useDungeonStore.getState()
+    expect(state.placedObjects[parentId!]).toBeUndefined()
+    expect(state.placedObjects[childId!]).toBeUndefined()
   })
 
   it('rotates a selected floor object by 90 degrees', () => {

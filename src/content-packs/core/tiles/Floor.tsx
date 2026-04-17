@@ -36,4 +36,10 @@ export const floorAsset: ContentPackAsset = {
   category: 'floor',
   assetUrl: FLOOR_VARIANT_URLS[0],
   Component: Floor,
+  projectionReceiver: {
+    getAssetUrl: getFloorVariantAssetUrl,
+    transform: {
+      position: [...FLOOR_PIVOT_OFFSET],
+    },
+  },
 }

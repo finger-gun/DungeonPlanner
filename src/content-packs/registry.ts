@@ -1,8 +1,9 @@
-import { coreContentPack } from './core'
+//import { coreContentPack } from './core'
+import { kaykitContentPack } from './kaykit'
 import type { ContentPackCategory } from './types'
 import { getRuntimeAssetById, getRuntimeAssetsByCategory } from './runtimeRegistry'
 
-export const contentPacks = [coreContentPack]
+export const contentPacks = [kaykitContentPack]
 
 export const contentPackAssets = contentPacks.flatMap((pack) => pack.assets)
 

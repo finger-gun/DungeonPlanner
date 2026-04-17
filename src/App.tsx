@@ -81,6 +81,7 @@ function RightPanel() {
 
 function App() {
   const tool = useDungeonStore((state) => state.tool)
+  const roomEditMode = useDungeonStore((state) => state.roomEditMode)
   const isPlayMode = tool === 'play'
   const [debugPanelOpen, setDebugPanelOpen] = useState(false)
   const propCount = useDungeonStore(
@@ -249,7 +250,11 @@ function App() {
       : tool === 'move'
       ? 'Application settings and viewport controls'
         : tool === 'room'
-          ? 'Click room to select · drag room edges to resize · rectangular rooms also show corner handles · left-drag empty space to build · right-drag to erase'
+          ? roomEditMode === 'rooms'
+            ? 'Click room to select · drag room edges to resize · rectangular rooms also show corner handles · left-drag empty space to build · right-drag to erase'
+            : roomEditMode === 'floor-variants'
+              ? 'Pick a floor variant · click a painted tile to apply it · right-click to clear the tile override'
+              : 'Pick a wall variant · click a wall segment to apply it · right-click to clear the wall override'
         : tool === 'character'
           ? 'Select a character to place · click a room cell to place it · use Edit to reopen the character sheet'
         : tool === 'opening'

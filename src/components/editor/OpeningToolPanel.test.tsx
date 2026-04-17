@@ -19,16 +19,16 @@ describe('OpeningToolPanel', () => {
     expect(screen.getByText('Opening Catalogue')).toBeInTheDocument()
     expect(screen.getByText('Doors')).toBeInTheDocument()
     expect(screen.getByText('Stairs')).toBeInTheDocument()
-    expect(screen.getByAltText('Small door thumbnail')).toBeInTheDocument()
-    expect(screen.getByAltText('Staircase Up thumbnail')).toBeInTheDocument()
+    expect(screen.getByAltText('KayKit Doorway thumbnail')).toBeInTheDocument()
+    expect(screen.getByAltText('KayKit Stairs Up thumbnail')).toBeInTheDocument()
   })
 
   it('updates the selected opening asset when a catalog card is clicked', () => {
     render(<OpeningToolPanel />)
 
-    fireEvent.click(screen.getByRole('button', { name: /small door with bars/i }))
+    fireEvent.click(screen.getByRole('button', { name: /kaykit doorway/i }))
 
-    expect(useDungeonStore.getState().selectedAssetIds.opening).toBe('core.opening_door_wall_bars_1')
-    expect(screen.getByRole('button', { name: /small door with bars/i })).toHaveAttribute('aria-pressed', 'true')
+    expect(useDungeonStore.getState().selectedAssetIds.opening).toBe('kaykit.opening_wall_doorway')
+    expect(screen.getByRole('button', { name: /kaykit doorway/i })).toHaveAttribute('aria-pressed', 'true')
   })
 })

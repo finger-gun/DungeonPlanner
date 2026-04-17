@@ -15,6 +15,7 @@ import { shouldRenderLineOfSightLight } from './losRendering'
 type DungeonObjectProps = {
   object: DungeonObjectRecord
   visibility: PlayVisibility
+  childrenByParent?: Record<string, DungeonObjectRecord[]>
   onPlayDragStart?: (object: DungeonObjectRecord, event: ThreeEvent<PointerEvent>) => void
   playerAnimationState?: 'default' | 'selected' | 'pickup' | 'holding' | 'release'
 }
@@ -22,6 +23,7 @@ type DungeonObjectProps = {
 export const DungeonObject = memo(function DungeonObject({
   object,
   visibility,
+  childrenByParent,
   onPlayDragStart,
   playerAnimationState,
 }: DungeonObjectProps) {
@@ -85,9 +87,12 @@ export const DungeonObject = memo(function DungeonObject({
 
   const showHullOutline = selected && !ppEnabled && object.type !== 'player'
   const showPlayerSelectionRing = selected && object.type === 'player'
+  const childObjects = childrenByParent?.[object.id] ?? []
+  const position = object.parentObjectId ? (object.localPosition ?? object.position) : object.position
+  const rotation = object.parentObjectId ? (object.localRotation ?? object.rotation) : object.rotation
 
   return (
-    <group ref={groupRef} position={object.position} rotation={object.rotation}>
+    <group ref={groupRef} position={position} rotation={rotation}>
       <ContentPackInstance
         assetId={object.assetId}
         selected={showHullOutline}
@@ -107,6 +112,15 @@ export const DungeonObject = memo(function DungeonObject({
       {light && shouldRenderLineOfSightLight(visibilityState, useLineOfSightPostMask) && (
         <PropPointLight light={light} />
       )}
+      {childObjects.map((childObject) => (
+        <DungeonObject
+          key={childObject.id}
+          object={childObject}
+          visibility={visibility}
+          childrenByParent={childrenByParent}
+          onPlayDragStart={onPlayDragStart}
+        />
+      ))}
     </group>
   )
 })

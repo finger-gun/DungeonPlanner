@@ -1,6 +1,7 @@
 import { useEffect, useEffectEvent, useMemo, useRef, useState } from 'react'
 import type { ThreeEvent } from '@react-three/fiber'
 import { useThree } from '@react-three/fiber'
+import * as THREE from 'three'
 import { getContentPackAssetById } from '../../content-packs/registry'
 import type { ContentPackAsset, PropConnector } from '../../content-packs/types'
 import { useRaycaster } from '../../hooks/useRaycaster'
@@ -17,11 +18,20 @@ import {
 import {
   useDungeonStore,
   type DungeonTool,
+  type DungeonObjectRecord,
   type PaintedCellRecord,
   type Room,
   type WallConnectionMode,
 } from '../../store/useDungeonStore'
 import { getOpeningSegments } from '../../store/openingSegments'
+import {
+  getCanonicalWallKey as getCanonicalWallKeyForGrid,
+  getInheritedWallAssetIdForWallKey,
+  getOppositeDirection,
+  isInterRoomBoundary,
+  isWallBoundary,
+  wallKeyToWorldPosition,
+} from '../../store/wallSegments'
 import { triggerBuild } from '../../store/buildAnimations'
 import { FloorGridOverlay } from './FloorGridOverlay'
 import { ContentPackInstance } from './ContentPackInstance'
@@ -38,17 +48,27 @@ type GridProps = {
 export function Grid({ size = 120, playMode = false }: GridProps) {
   const { snap } = useSnapToGrid()
   const raycaster = useRaycaster(0)
-  const { gl } = useThree()
+  const { gl, camera, scene } = useThree()
+  const surfaceRaycasterRef = useRef(new THREE.Raycaster())
+  const surfacePointerRef = useRef(new THREE.Vector2())
   const paintedCells = useDungeonStore((state) => state.paintedCells)
+  const placedObjects = useDungeonStore((state) => state.placedObjects)
   const paintCells = useDungeonStore((state) => state.paintCells)
   const eraseCells = useDungeonStore((state) => state.eraseCells)
+  const setFloorTileAsset = useDungeonStore((state) => state.setFloorTileAsset)
+  const setWallSurfaceAsset = useDungeonStore((state) => state.setWallSurfaceAsset)
   const placeObject = useDungeonStore((state) => state.placeObject)
   const removeObjectAtCell = useDungeonStore((state) => state.removeObjectAtCell)
+  const removeObject = useDungeonStore((state) => state.removeObject)
   const placeOpening = useDungeonStore((state) => state.placeOpening)
   const placeOpenPassages = useDungeonStore((state) => state.placeOpenPassages)
   const removeOpening = useDungeonStore((state) => state.removeOpening)
   const wallOpenings = useDungeonStore((state) => state.wallOpenings)
   const rooms = useDungeonStore((state) => state.rooms)
+  const roomEditMode = useDungeonStore((state) => state.roomEditMode)
+  const surfaceBrushAssetIds = useDungeonStore((state) => state.surfaceBrushAssetIds)
+  const floorTileAssetIds = useDungeonStore((state) => state.floorTileAssetIds)
+  const wallSurfaceAssetIds = useDungeonStore((state) => state.wallSurfaceAssetIds)
   const setPaintingStrokeActive = useDungeonStore(
     (state) => state.setPaintingStrokeActive,
   )
@@ -59,7 +79,10 @@ export function Grid({ size = 120, playMode = false }: GridProps) {
   const selectedPropAssetId = useDungeonStore((state) => state.selectedAssetIds.prop)
   const selectedCharacterAssetId = useDungeonStore((state) => state.selectedAssetIds.player)
   const selectedOpeningAssetId = useDungeonStore((state) => state.selectedAssetIds.opening)
+  const selectedFloorBrushAssetId = surfaceBrushAssetIds.floor
+  const selectedWallBrushAssetId = surfaceBrushAssetIds.wall
   const globalWallAssetId = useDungeonStore((state) => state.selectedAssetIds.wall)
+  const globalFloorAssetId = useDungeonStore((state) => state.selectedAssetIds.floor)
   const wallConnectionMode = useDungeonStore((state) => state.wallConnectionMode)
   const selection = useDungeonStore((state) => state.selection)
   const selectedPropAsset = selectedPropAssetId
@@ -77,6 +100,7 @@ export function Grid({ size = 120, playMode = false }: GridProps) {
   )
   const [hoveredCell, setHoveredCell] = useState<SnappedGridPosition | null>(null)
   const [hoveredPoint, setHoveredPoint] = useState<{ x: number; y: number; z: number } | null>(null)
+  const [hoveredSurfaceHit, setHoveredSurfaceHit] = useState<PlacementSurfaceHit | null>(null)
   const [strokeMode, setStrokeMode] = useState<'paint' | 'erase' | null>(null)
   const [strokeStartCell, setStrokeStartCell] = useState<GridCell | null>(null)
   const [strokeCurrentCell, setStrokeCurrentCell] = useState<GridCell | null>(null)
@@ -106,6 +130,25 @@ export function Grid({ size = 120, playMode = false }: GridProps) {
   useEffect(() => {
     paintedCellsRef.current = paintedCells
   }, [paintedCells])
+
+  const resolvePlacementSurfaceHit = useEffectEvent((pointerEvent: PointerEvent) => {
+    const rect = gl.domElement.getBoundingClientRect()
+    if (rect.width === 0 || rect.height === 0) {
+      return null
+    }
+
+    surfacePointerRef.current.set(
+      ((pointerEvent.clientX - rect.left) / rect.width) * 2 - 1,
+      -((pointerEvent.clientY - rect.top) / rect.height) * 2 + 1,
+    )
+    surfaceRaycasterRef.current.setFromCamera(surfacePointerRef.current, camera)
+
+    return findPlacementSurfaceHit(
+      surfaceRaycasterRef.current.intersectObjects(scene.children, true),
+      paintedCells,
+      placedObjects,
+    )
+  })
 
   // R key: rotates floor-connected assets; flips wall-connected openings 180°
   useEffect(() => {
@@ -178,6 +221,10 @@ export function Grid({ size = 120, playMode = false }: GridProps) {
   }
 
   const previewCells = useMemo(() => {
+    if (tool !== 'room' || roomEditMode !== 'rooms') {
+      return []
+    }
+
     return getRoomPreviewCells({
       hoveredCell,
       paintedCells,
@@ -189,6 +236,7 @@ export function Grid({ size = 120, playMode = false }: GridProps) {
     })
   }, [
     hoveredCell,
+    roomEditMode,
     isRoomResizeHandleActive,
     paintedCells,
     strokeCurrentCell,
@@ -198,7 +246,7 @@ export function Grid({ size = 120, playMode = false }: GridProps) {
   ])
 
   const commitStroke = useEffectEvent(() => {
-    if (tool !== 'room') {
+    if (tool !== 'room' || roomEditMode !== 'rooms') {
       updateStrokeState(null, null, null)
       return
     }
@@ -263,8 +311,9 @@ export function Grid({ size = 120, playMode = false }: GridProps) {
     const snapped = snap(point)
     setHoveredCell(snapped)
     setHoveredPoint(point)
+    setHoveredSurfaceHit(resolvePlacementSurfaceHit(event.nativeEvent))
 
-    if (tool === 'room' && strokeModeRef.current) {
+    if (tool === 'room' && roomEditMode === 'rooms' && strokeModeRef.current) {
       updateStrokeState(
         strokeModeRef.current,
         strokeStartRef.current,
@@ -292,25 +341,33 @@ export function Grid({ size = 120, playMode = false }: GridProps) {
   function handlePointerDown(event: ThreeEvent<PointerEvent>) {
     const point = raycaster.pointOnPlane(event)
     const snapped = snap(point)
+    const surfaceHit = resolvePlacementSurfaceHit(event.nativeEvent)
     setHoveredCell(snapped)
     setHoveredPoint(point)
+    setHoveredSurfaceHit(surfaceHit)
 
     if (tool === 'opening') {
       const isFloorOpening = openingToolMode === 'floor-asset'
 
-      if (isFloorOpening) {
-        // Stairs and other floor-connected openings use prop-style placement
-        const rawPlacement = selectedOpeningAsset
-          ? getPropPlacement(selectedOpeningAsset, point, paintedCells)
-          : null
-        const propPlacement = applyFloorRotation(rawPlacement, floorRotationIndex * (Math.PI / 2))
+        if (isFloorOpening) {
+          // Stairs and other floor-connected openings use prop-style placement
+          const rawPlacement = selectedOpeningAsset
+            ? getPropPlacement(selectedOpeningAsset, point, paintedCells, surfaceHit)
+            : null
+          const propPlacement = applyFloorRotation(rawPlacement, floorRotationIndex * (Math.PI / 2))
 
-        if (event.button === 2) {
-          if (propPlacement) removeObjectAtCell(propPlacement.anchorKey)
-          return
+          if (event.button === 2) {
+            const hoveredObjectId = raycaster.objectIdFromEvent(event)
+            if (hoveredObjectId) {
+              removeObject(hoveredObjectId)
+            } else if (propPlacement && propPlacement.anchorKey) {
+              removeObjectAtCell(propPlacement.anchorKey)
+            }
+            return
         }
         if (event.button !== 0 || !propPlacement) return
 
+        const localTransform = getNestedLocalTransform(propPlacement, placedObjects)
         placeObject({
           type: 'prop',
           assetId: selectedOpeningAssetId,
@@ -318,10 +375,14 @@ export function Grid({ size = 120, playMode = false }: GridProps) {
           rotation: propPlacement.rotation,
           props: { connector: propPlacement.connector, direction: propPlacement.direction },
           cell: propPlacement.cell,
-          cellKey: propPlacement.anchorKey,
+          cellKey: propPlacement.anchorKey ?? propPlacement.supportCellKey,
+          parentObjectId: propPlacement.parentObjectId,
+          localPosition: localTransform.localPosition,
+          localRotation: localTransform.localRotation,
+          supportCellKey: propPlacement.supportCellKey,
         })
         return
-      }
+        }
 
       const openingPlacement = getWallConnectionPlacement(
         wallConnectionMode,
@@ -367,12 +428,15 @@ export function Grid({ size = 120, playMode = false }: GridProps) {
       const activeAsset = tool === 'character' ? selectedCharacterAsset : selectedPropAsset
       const activeAssetId = tool === 'character' ? selectedCharacterAssetId : selectedPropAssetId
       const rawPlacement = activeAsset
-        ? getPropPlacement(activeAsset, point, paintedCells)
+        ? getPropPlacement(activeAsset, point, paintedCells, surfaceHit)
         : null
       const propPlacement = applyFloorRotation(rawPlacement, floorRotationIndex * (Math.PI / 2))
 
       if (event.button === 2) {
-        if (propPlacement) {
+        const hoveredObjectId = raycaster.objectIdFromEvent(event)
+        if (hoveredObjectId) {
+          removeObject(hoveredObjectId)
+        } else if (propPlacement?.anchorKey) {
           removeObjectAtCell(propPlacement.anchorKey)
         }
         return
@@ -386,6 +450,7 @@ export function Grid({ size = 120, playMode = false }: GridProps) {
         return
       }
 
+      const localTransform = getNestedLocalTransform(propPlacement, placedObjects)
       const normalizedObjectType = tool === 'character' || activeAsset?.category === 'player'
         ? 'player'
         : 'prop'
@@ -400,12 +465,47 @@ export function Grid({ size = 120, playMode = false }: GridProps) {
           direction: propPlacement.direction,
         },
         cell: propPlacement.cell,
-        cellKey: propPlacement.anchorKey,
+        cellKey: propPlacement.anchorKey ?? propPlacement.supportCellKey,
+        parentObjectId: propPlacement.parentObjectId,
+        localPosition: localTransform.localPosition,
+        localRotation: localTransform.localRotation,
+        supportCellKey: propPlacement.supportCellKey,
       })
       return
     }
 
     if (tool === 'room') {
+      if (roomEditMode === 'floor-variants') {
+        const cellKey = getCellKey(snapped.cell)
+        if (!paintedCells[cellKey]) {
+          return
+        }
+
+        if (event.button === 0) {
+          setFloorTileAsset(cellKey, selectedFloorBrushAssetId)
+        } else if (event.button === 2) {
+          setFloorTileAsset(cellKey, null)
+        }
+        return
+      }
+
+      if (roomEditMode === 'wall-variants') {
+        const wallPlacement = hoveredPoint
+          ? getOpeningPlacement(1, hoveredPoint, paintedCells)
+          : getOpeningPlacement(1, point, paintedCells)
+        if (!wallPlacement?.valid) {
+          return
+        }
+
+        const wallKey = `${getCellKey(wallPlacement.cell)}:${wallPlacement.direction}`
+        if (event.button === 0) {
+          setWallSurfaceAsset(wallKey, selectedWallBrushAssetId)
+        } else if (event.button === 2) {
+          setWallSurfaceAsset(wallKey, null)
+        }
+        return
+      }
+
       const hoveredRoomId = paintedCells[getCellKey(snapped.cell)]?.roomId ?? null
 
       if (event.button === 0 && hoveredRoomId) {
@@ -460,10 +560,16 @@ export function Grid({ size = 120, playMode = false }: GridProps) {
     () => new Set(eligibleOpenPassageWalls.map((wall) => wall.wallKey)),
     [eligibleOpenPassageWalls],
   )
+  const isFloorVariantMode = tool === 'room' && roomEditMode === 'floor-variants'
+  const isWallVariantMode = tool === 'room' && roomEditMode === 'wall-variants'
   const isOpenWallBrushMode =
     tool === 'opening' &&
     wallConnectionMode === 'open' &&
     openingToolMode === 'wall-connection'
+  const wallVariantPlacement = useMemo(
+    () => (isWallVariantMode && hoveredPoint ? getOpeningPlacement(1, hoveredPoint, paintedCells) : null),
+    [hoveredPoint, isWallVariantMode, paintedCells],
+  )
   const activeHoveredOpenWallKey =
     hoveredOpenWallKey && eligibleOpenPassageWallKeys.has(hoveredOpenWallKey)
       ? hoveredOpenWallKey
@@ -479,6 +585,7 @@ export function Grid({ size = 120, playMode = false }: GridProps) {
           if (!isNavigationTool && !strokeModeRef.current && !openPassageBrushActiveRef.current) {
             setHoveredCell(null)
             setHoveredPoint(null)
+            setHoveredSurfaceHit(null)
           }
         }}
         onPointerDown={isNavigationTool ? undefined : handlePointerDown}
@@ -524,12 +631,12 @@ export function Grid({ size = 120, playMode = false }: GridProps) {
           propPlacement={(() => {
             if (tool === 'prop' && selectedPropAsset && hoveredPoint)
               return applyFloorRotation(
-                getPropPlacement(selectedPropAsset, hoveredPoint, paintedCells),
+                getPropPlacement(selectedPropAsset, hoveredPoint, paintedCells, hoveredSurfaceHit),
                 floorRotationIndex * (Math.PI / 2),
               )
             if (tool === 'character' && selectedCharacterAsset && hoveredPoint)
               return applyFloorRotation(
-                getPropPlacement(selectedCharacterAsset, hoveredPoint, paintedCells),
+                getPropPlacement(selectedCharacterAsset, hoveredPoint, paintedCells, hoveredSurfaceHit),
                 floorRotationIndex * (Math.PI / 2),
               )
             if (
@@ -539,7 +646,7 @@ export function Grid({ size = 120, playMode = false }: GridProps) {
               openingToolMode === 'floor-asset'
             )
               return applyFloorRotation(
-                getPropPlacement(selectedOpeningAsset, hoveredPoint, paintedCells),
+                getPropPlacement(selectedOpeningAsset, hoveredPoint, paintedCells, hoveredSurfaceHit),
                 floorRotationIndex * (Math.PI / 2),
               )
             return null
@@ -557,6 +664,9 @@ export function Grid({ size = 120, playMode = false }: GridProps) {
           openingPlacement={
             tool === 'opening' ? wallConnectionPlacement : null
           }
+          floorVariantAssetId={isFloorVariantMode ? selectedFloorBrushAssetId : null}
+          wallVariantAssetId={isWallVariantMode ? selectedWallBrushAssetId : null}
+          wallVariantPlacement={isWallVariantMode ? wallVariantPlacement : null}
           openingAssetId={
             tool === 'opening' &&
             wallConnectionMode === 'door' &&
@@ -570,11 +680,14 @@ export function Grid({ size = 120, playMode = false }: GridProps) {
           hoveredOpenWallKey={activeHoveredOpenWallKey}
           openPassageBrushWallKeys={openPassageBrushWallKeys}
           eligibleOpenWallKeys={eligibleOpenPassageWallKeys}
-          paintedCells={paintedCells}
-          rooms={rooms}
-          globalWallAssetId={globalWallAssetId}
-        />
-      )}
+           paintedCells={paintedCells}
+           rooms={rooms}
+           floorTileAssetIds={floorTileAssetIds}
+           globalWallAssetId={globalWallAssetId}
+           globalFloorAssetId={globalFloorAssetId}
+           wallSurfaceAssetIds={wallSurfaceAssetIds}
+         />
+       )}
     </group>
   )
 }
@@ -588,6 +701,9 @@ function HoverPreview({
   propPlacement,
   propAssetId,
   openingPlacement,
+  floorVariantAssetId,
+  wallVariantAssetId,
+  wallVariantPlacement,
   openingAssetId,
   wallConnectionMode,
   wallConnectionRemovable,
@@ -597,7 +713,10 @@ function HoverPreview({
   eligibleOpenWallKeys,
   paintedCells,
   rooms,
+  floorTileAssetIds,
   globalWallAssetId,
+  globalFloorAssetId,
+  wallSurfaceAssetIds,
 }: {
   hoveredCell: SnappedGridPosition | null
   hoveredPoint: { x: number; y: number; z: number } | null
@@ -607,6 +726,9 @@ function HoverPreview({
   propPlacement: PropPlacement | null
   propAssetId: string | null
   openingPlacement: OpeningPlacement | null
+  floorVariantAssetId: string | null
+  wallVariantAssetId: string | null
+  wallVariantPlacement: OpeningPlacement | null
   openingAssetId: string | null
   wallConnectionMode: WallConnectionMode
   wallConnectionRemovable: boolean
@@ -616,11 +738,18 @@ function HoverPreview({
   eligibleOpenWallKeys: Set<string>
   paintedCells: Record<string, PaintedCellRecord>
   rooms: Record<string, Room>
+  floorTileAssetIds: Record<string, string>
   globalWallAssetId: string | null
+  globalFloorAssetId: string | null
+  wallSurfaceAssetIds: Record<string, string>
 }) {
   // Prop tool OR floor-connected opening (e.g. stairs) — both use prop-style preview
   if (tool === 'prop' || tool === 'character' || (tool === 'opening' && propAssetId)) {
     if (!hoveredCell || !hoveredPoint) return null
+    const previewAsset = propAssetId ? getContentPackAssetById(propAssetId) : null
+    if (previewAsset?.metadata?.connectsTo === 'FREE' && !propPlacement) {
+      return null
+    }
 
     const position = propPlacement?.position ?? [hoveredCell.position[0], 0, hoveredCell.position[2]]
     const rotation = propPlacement?.rotation ?? [0, 0, 0]
@@ -635,6 +764,53 @@ function HoverPreview({
     )
   }
 
+  if (tool === 'room' && floorVariantAssetId) {
+    if (!hoveredCell || !paintedCells[hoveredCell.key]) {
+      return null
+    }
+
+    const effectiveFloorAssetId =
+      floorTileAssetIds[hoveredCell.key] ??
+      getFloorAssetIdForCellKey(hoveredCell.key, paintedCells, rooms, globalFloorAssetId)
+
+    return (
+      <group position={hoveredCell.position}>
+        <ContentPackInstance
+          assetId={floorVariantAssetId}
+          variant="floor"
+          tint={effectiveFloorAssetId === floorVariantAssetId ? '#22c55e' : '#7dd3fc'}
+          tintOpacity={0.3}
+        />
+      </group>
+    )
+  }
+
+  if (tool === 'room' && wallVariantAssetId) {
+    if (!wallVariantPlacement?.valid) {
+      return null
+    }
+
+    const wallKey = `${getCellKey(wallVariantPlacement.cell)}:${wallVariantPlacement.direction}`
+    const effectiveWallAssetId = getWallAssetIdForWallKey(
+      wallKey,
+      paintedCells,
+      rooms,
+      globalWallAssetId,
+      wallSurfaceAssetIds,
+    )
+
+    return (
+      <group position={wallVariantPlacement.position} rotation={wallVariantPlacement.rotation}>
+        <ContentPackInstance
+          assetId={wallVariantAssetId}
+          variant="wall"
+          tint={effectiveWallAssetId === wallVariantAssetId ? '#22c55e' : '#7dd3fc'}
+          tintOpacity={0.26}
+        />
+      </group>
+    )
+  }
+
   if (tool === 'opening') {
     if (wallConnectionMode === 'open') {
       return (
@@ -643,7 +819,13 @@ function HoverPreview({
             <WallSegmentHighlight
               key={wallKey}
               wallKey={wallKey}
-              assetId={getWallAssetIdForWallKey(wallKey, paintedCells, rooms, globalWallAssetId)}
+              assetId={getWallAssetIdForWallKey(
+                wallKey,
+                paintedCells,
+                rooms,
+                globalWallAssetId,
+                wallSurfaceAssetIds,
+              )}
               color={OPEN_WALL_BRUSH_COLOR}
               opacity={0.34}
             />
@@ -654,7 +836,13 @@ function HoverPreview({
             <WallSegmentHighlight
               key={hoveredOpenWallKey}
               wallKey={hoveredOpenWallKey}
-              assetId={getWallAssetIdForWallKey(hoveredOpenWallKey, paintedCells, rooms, globalWallAssetId)}
+              assetId={getWallAssetIdForWallKey(
+                hoveredOpenWallKey,
+                paintedCells,
+                rooms,
+                globalWallAssetId,
+                wallSurfaceAssetIds,
+              )}
               color={OPEN_WALL_HOVER_COLOR}
               opacity={0.24}
             />
@@ -742,9 +930,20 @@ type PropPlacement = {
   connector: PropConnector
   direction: 'north' | 'south' | 'east' | 'west' | null
   cell: GridCell
-  anchorKey: string
+  anchorKey: string | null
+  supportCellKey: string
   position: [number, number, number]
   rotation: [number, number, number]
+  parentObjectId: string | null
+  localPosition: [number, number, number] | null
+  localRotation: [number, number, number] | null
+}
+
+type PlacementSurfaceHit = {
+  objectId: string
+  cell: GridCell
+  supportCellKey: string
+  position: [number, number, number]
 }
 
 const WALL_CONNECTOR_DIRECTIONS: Array<{
@@ -768,47 +967,151 @@ function applyFloorRotation(
   placement: PropPlacement | null,
   yRotation: number,
 ): PropPlacement | null {
-  if (!placement || placement.connector !== 'FLOOR') return placement
+  if (!placement || (placement.connector !== 'FLOOR' && placement.connector !== 'FREE')) return placement
   return { ...placement, rotation: [0, yRotation, 0] }
 }
 
-/**
- * Returns true if there is a visible wall between `cell` and `neighbor`:
- * - neighbor is unpainted (exterior wall), OR
- * - neighbor is painted but belongs to a different room (inter-room wall)
- */
-function isWallBoundary(
-  cell: GridCell,
-  neighbor: GridCell,
+function findPlacementSurfaceHit(
+  intersections: THREE.Intersection[],
   paintedCells: Record<string, PaintedCellRecord>,
-): boolean {
-  const neighborRecord = paintedCells[getCellKey(neighbor)]
-  if (!neighborRecord) return true
-  const cellRecord = paintedCells[getCellKey(cell)]
-  return (cellRecord?.roomId ?? null) !== (neighborRecord.roomId ?? null)
+  placedObjects: Record<string, DungeonObjectRecord>,
+): PlacementSurfaceHit | null {
+  for (const intersection of intersections) {
+    const objectId = raycastObjectId(intersection.object)
+    if (!objectId) {
+      continue
+    }
+
+    const placedObject = placedObjects[objectId]
+    if (!placedObject) {
+      continue
+    }
+    const supportCellKey = placedObject.supportCellKey ?? getCellKey(placedObject.cell)
+    if (!paintedCells[supportCellKey]) {
+      continue
+    }
+
+    const asset = placedObject.assetId ? getContentPackAssetById(placedObject.assetId) : null
+    if (!asset?.metadata?.propSurface) {
+      continue
+    }
+
+    const faceNormal = intersection.face?.normal.clone()
+    if (!faceNormal) {
+      continue
+    }
+
+    const worldNormal = faceNormal.transformDirection(intersection.object.matrixWorld)
+    if (worldNormal.y < 0.65) {
+      continue
+    }
+
+    return {
+      objectId,
+      cell: placedObject.cell,
+      supportCellKey,
+      position: [
+        intersection.point.x,
+        intersection.point.y,
+        intersection.point.z,
+      ],
+    }
+  }
+
+  return null
 }
 
-function isInterRoomBoundary(
-  cell: GridCell,
-  neighbor: GridCell,
-  paintedCells: Record<string, PaintedCellRecord>,
+function getNestedLocalTransform(
+  placement: PropPlacement,
+  placedObjects: Record<string, DungeonObjectRecord>,
 ) {
-  const cellRecord = paintedCells[getCellKey(cell)]
-  const neighborRecord = paintedCells[getCellKey(neighbor)]
-  return Boolean(
-    cellRecord &&
-    neighborRecord &&
-    (cellRecord.roomId ?? null) !== (neighborRecord.roomId ?? null),
+  if (!placement.parentObjectId) {
+    return {
+      localPosition: placement.localPosition,
+      localRotation: placement.localRotation,
+    }
+  }
+
+  const parentObject = placedObjects[placement.parentObjectId]
+  if (!parentObject) {
+    return {
+      localPosition: null,
+      localRotation: null,
+    }
+  }
+
+  const parentPosition = new THREE.Vector3(...parentObject.position)
+  const parentQuaternion = new THREE.Quaternion().setFromEuler(new THREE.Euler(...parentObject.rotation))
+  const localPosition = new THREE.Vector3(...placement.position)
+    .sub(parentPosition)
+    .applyQuaternion(parentQuaternion.clone().invert())
+  const worldQuaternion = new THREE.Quaternion().setFromEuler(new THREE.Euler(...placement.rotation))
+  const localEuler = new THREE.Euler().setFromQuaternion(
+    parentQuaternion.clone().invert().multiply(worldQuaternion),
   )
+
+  return {
+    localPosition: localPosition.toArray() as PropPlacement['localPosition'],
+    localRotation: [localEuler.x, localEuler.y, localEuler.z] as PropPlacement['localRotation'],
+  }
+}
+
+function raycastObjectId(object: THREE.Object3D | null) {
+  let current = object
+
+  while (current) {
+    const objectId = current.userData.objectId
+    if (typeof objectId === 'string') {
+      return objectId
+    }
+    current = current.parent
+  }
+
+  return null
 }
 
 function getPropPlacement(
   asset: ContentPackAsset,
   point: { x: number; y: number; z: number },
   paintedCells: Record<string, PaintedCellRecord>,
+  surfaceHit: PlacementSurfaceHit | null,
 ): PropPlacement | null {
   const snapped = snapWorldPointToGrid(point)
   const connector = asset.metadata?.connectsTo ?? 'FLOOR'
+
+  if (connector === 'FREE') {
+    if (surfaceHit) {
+      return {
+        connector,
+        direction: null,
+        cell: surfaceHit.cell,
+        anchorKey: null,
+        supportCellKey: surfaceHit.supportCellKey,
+        position: surfaceHit.position,
+        rotation: [0, 0, 0],
+        parentObjectId: surfaceHit.objectId,
+        localPosition: null,
+        localRotation: [0, 0, 0],
+      }
+    }
+
+    if (!paintedCells[snapped.key]) {
+      return null
+    }
+
+    return {
+      connector,
+      direction: null,
+      cell: snapped.cell,
+      anchorKey: null,
+      supportCellKey: snapped.key,
+      position: [point.x, 0, point.z],
+      rotation: [0, 0, 0],
+      parentObjectId: null,
+      localPosition: null,
+      localRotation: null,
+    }
+  }
 
   if (!paintedCells[snapped.key]) {
     return null
@@ -822,8 +1125,12 @@ function getPropPlacement(
       direction: null,
       cell: snapped.cell,
       anchorKey: `${snapped.key}:floor`,
+      supportCellKey: snapped.key,
       position: [cellCenter[0], 0, cellCenter[2]],
       rotation: [0, 0, 0],
+      parentObjectId: null,
+      localPosition: null,
+      localRotation: null,
     }
   }
 
@@ -852,12 +1159,16 @@ function getPropPlacement(
     direction: matchingDirection.name,
     cell: snapped.cell,
     anchorKey: `${snapped.key}:${matchingDirection.name}`,
+    supportCellKey: snapped.key,
     position: [
       cellCenter[0] + matchingDirection.delta[0] * (GRID_SIZE * 0.5),
       0,
       cellCenter[2] + matchingDirection.delta[1] * (GRID_SIZE * 0.5),
     ],
     rotation: matchingDirection.rotation,
+    parentObjectId: null,
+    localPosition: null,
+    localRotation: null,
   }
 }
 
@@ -1022,78 +1333,31 @@ function deriveEligibleOpenPassageWalls(
   return walls
 }
 
+function getFloorAssetIdForCellKey(
+  cellKey: string,
+  paintedCells: Record<string, PaintedCellRecord>,
+  rooms: Record<string, Room>,
+  globalFloorAssetId: string | null,
+) {
+  const record = paintedCells[cellKey]
+  const room = record?.roomId ? rooms[record.roomId] : null
+  return room?.floorAssetId ?? globalFloorAssetId
+}
+
 function getWallAssetIdForWallKey(
   wallKey: string,
   paintedCells: Record<string, PaintedCellRecord>,
   rooms: Record<string, Room>,
   globalWallAssetId: string | null,
+  wallSurfaceAssetIds: Record<string, string>,
 ) {
-  const parts = wallKey.split(':')
-  if (parts.length !== 3) {
-    return globalWallAssetId
-  }
-
-  const cell: GridCell = [parseInt(parts[0], 10), parseInt(parts[1], 10)]
-  const direction = WALL_CONNECTOR_DIRECTIONS.find((entry) => entry.name === parts[2])
-  if (!direction) {
-    return globalWallAssetId
-  }
-
-  const cellKey = getCellKey(cell)
-  const neighbor: GridCell = [cell[0] + direction.delta[0], cell[1] + direction.delta[1]]
-  const neighborKey = getCellKey(neighbor)
-
-  let ownerRecord = paintedCells[cellKey]
-  const neighborRecord = paintedCells[neighborKey]
-  if (ownerRecord && neighborRecord && cellKey > neighborKey) {
-    ownerRecord = neighborRecord
-  }
-
-  if (!ownerRecord) {
-    return globalWallAssetId
-  }
-
-  const room = ownerRecord.roomId ? rooms[ownerRecord.roomId] : null
-  return room?.wallAssetId ?? globalWallAssetId
-}
-
-function getOppositeDirection(
-  direction: 'north' | 'south' | 'east' | 'west',
-) {
-  switch (direction) {
-    case 'north':
-      return 'south'
-    case 'south':
-      return 'north'
-    case 'east':
-      return 'west'
-    case 'west':
-      return 'east'
-  }
-}
-
-function wallKeyToWorldPosition(
-  wallKey: string,
-): { position: [number, number, number]; rotation: [number, number, number] } | null {
-  const parts = wallKey.split(':')
-  if (parts.length !== 3) return null
-
-  const x = parseInt(parts[0], 10)
-  const z = parseInt(parts[1], 10)
-  if (Number.isNaN(x) || Number.isNaN(z)) return null
-
-  const direction = WALL_CONNECTOR_DIRECTIONS.find((entry) => entry.name === parts[2])
-  if (!direction) return null
-
-  const center = cellToWorldPosition([x, z])
-  return {
-    position: [
-      center[0] + direction.delta[0] * (GRID_SIZE * 0.5),
-      0,
-      center[2] + direction.delta[1] * (GRID_SIZE * 0.5),
-    ],
-    rotation: direction.rotation,
-  }
+  const inheritedAssetId = getInheritedWallAssetIdForWallKey(
+    wallKey,
+    paintedCells,
+    rooms,
+    globalWallAssetId,
+  )
+  return wallSurfaceAssetIds[getCanonicalWallKeyForGrid(wallKey, paintedCells) ?? ''] ?? inheritedAssetId
 }
 
 function WallSegmentHighlight({

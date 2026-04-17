@@ -18,15 +18,28 @@ describe('PropToolPanel', () => {
     expect(screen.getByText('Catalogue')).toBeInTheDocument()
     expect(screen.getByText('Props')).toBeInTheDocument()
     expect(screen.queryByText('Characters')).not.toBeInTheDocument()
-    expect(screen.getByAltText('Barrel thumbnail')).toBeInTheDocument()
+    expect(screen.getByAltText('KayKit Lit Candle thumbnail')).toBeInTheDocument()
   })
 
   it('updates the selected prop asset when a catalog card is clicked', () => {
     render(<PropToolPanel />)
 
-    fireEvent.click(screen.getByRole('button', { name: /barrel/i }))
+    const candleButton = screen.getByRole('button', { name: /kaykit lit candle/i })
+    expect(candleButton).toBeInTheDocument()
+    fireEvent.click(candleButton)
 
-    expect(useDungeonStore.getState().selectedAssetIds.prop).toBe('core.props_barrel')
-    expect(screen.getByRole('button', { name: /barrel/i })).toHaveAttribute('aria-pressed', 'true')
+    expect(useDungeonStore.getState().selectedAssetIds.prop).toBe('kaykit.props_candle_lit')
+    expect(candleButton).toHaveAttribute('aria-pressed', 'true')
+  })
+
+  it('allows selecting a prop surface receiver asset from the catalog', () => {
+    render(<PropToolPanel />)
+
+    const boxButton = screen.getByRole('button', { name: /kaykit large box/i })
+    expect(boxButton).toBeInTheDocument()
+    fireEvent.click(boxButton)
+
+    expect(useDungeonStore.getState().selectedAssetIds.prop).toBe('kaykit.props_box_large')
+    expect(boxButton).toHaveAttribute('aria-pressed', 'true')
   })
 })

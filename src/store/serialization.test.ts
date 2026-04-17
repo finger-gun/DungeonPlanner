@@ -16,6 +16,8 @@ function emptyFloorSnapshot() {
     rooms: {},
     paintedCells: {},
     exploredCells: {},
+    floorTileAssetIds: {},
+    wallSurfaceAssetIds: {},
     placedObjects: {},
     wallOpenings: {},
     occupancy: {},
@@ -82,6 +84,19 @@ describe('serializeDungeon / deserializeDungeon roundtrip', () => {
     expect(result).not.toBeNull()
     const exploredCells = result!.exploredCells ?? result!.floors?.['floor-1']?.snapshot?.exploredCells
     expect(exploredCells?.['2:3']).toBe(true)
+  })
+
+  it('preserves floor and wall surface overrides', () => {
+    const state = baseState()
+    state.floors!['floor-1'].snapshot.floorTileAssetIds['2:3'] = 'kaykit.floor_tile_small_broken_a'
+    state.floors!['floor-1'].snapshot.wallSurfaceAssetIds['2:3:north'] = 'kaykit.wall'
+
+    const result = deserializeDungeon(serializeDungeon(state))
+    expect(result).not.toBeNull()
+    const floorTileAssetIds = result!.floorTileAssetIds ?? result!.floors?.['floor-1']?.snapshot?.floorTileAssetIds
+    const wallSurfaceAssetIds = result!.wallSurfaceAssetIds ?? result!.floors?.['floor-1']?.snapshot?.wallSurfaceAssetIds
+    expect(floorTileAssetIds?.['2:3']).toBe('kaykit.floor_tile_small_broken_a')
+    expect(wallSurfaceAssetIds?.['2:3:north']).toBe('kaykit.wall')
   })
 
   it('preserves placed objects', () => {

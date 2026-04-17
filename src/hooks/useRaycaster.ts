@@ -15,10 +15,14 @@ export function useRaycaster(planeY = 0) {
     },
     objectIdFromEvent(event: ThreeEvent<PointerEvent>) {
       for (const intersection of event.intersections) {
-        const objectId = intersection.object.userData.objectId
+        let current: THREE.Object3D | null = intersection.object
 
-        if (typeof objectId === 'string') {
-          return objectId
+        while (current) {
+          const objectId = current.userData.objectId
+          if (typeof objectId === 'string') {
+            return objectId
+          }
+          current = current.parent
         }
       }
 

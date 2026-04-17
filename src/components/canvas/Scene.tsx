@@ -21,8 +21,9 @@ import { createPlayDragState, updatePlayDragState, type PlayDragState } from './
 import { RoomResizeOverlay } from './RoomResizeOverlay'
 import { getEffectiveFloorViewMode } from './floorViewMode'
 import type { DungeonRoomData } from './DungeonRoom'
+import { isDownStairAssetId } from '../../store/stairAssets'
 
-const FLOOR_HEIGHT_UNIT = 3
+const SCENE_OVERVIEW_FLOOR_HEIGHT_UNIT = 3
 const PLAYER_ANIMATION_MS = {
   pickup: 520,
   release: 520,
@@ -189,6 +190,30 @@ type FloorRenderEntry = {
   level: number
   data: DungeonRoomData
   objects: DungeonObjectRecord[]
+  childrenByParent: Record<string, DungeonObjectRecord[]>
+}
+
+function getTopLevelObjects(objects: DungeonObjectRecord[]) {
+  const objectIds = new Set(objects.map((object) => object.id))
+  return objects.filter((object) => !object.parentObjectId || !objectIds.has(object.parentObjectId))
+}
+
+function buildObjectChildrenIndex(objects: DungeonObjectRecord[]) {
+  const childrenByParent: Record<string, DungeonObjectRecord[]> = {}
+
+  objects.forEach((object) => {
+    if (!object.parentObjectId) {
+      return
+    }
+
+    if (!childrenByParent[object.parentObjectId]) {
+      childrenByParent[object.parentObjectId] = []
+    }
+
+    childrenByParent[object.parentObjectId].push(object)
+  })
+
+  return childrenByParent
 }
 
 function SceneOverviewContent() {
@@ -201,6 +226,8 @@ function SceneOverviewContent() {
   const rooms = useDungeonStore((state) => state.rooms)
   const wallOpenings = useDungeonStore((state) => state.wallOpenings)
   const placedObjects = useDungeonStore((state) => state.placedObjects)
+  const floorTileAssetIds = useDungeonStore((state) => state.floorTileAssetIds)
+  const wallSurfaceAssetIds = useDungeonStore((state) => state.wallSurfaceAssetIds)
   const globalFloorAssetId = useDungeonStore((state) => state.selectedAssetIds.floor)
   const globalWallAssetId = useDungeonStore((state) => state.selectedAssetIds.wall)
   const floorEntries = useMemo<FloorRenderEntry[]>(() => {
@@ -215,6 +242,9 @@ function SceneOverviewContent() {
       }
 
       if (floorId === activeFloorId) {
+        const visibleObjects = Object.values(placedObjects).filter(
+          (object) => layers[object.layerId]?.visible !== false,
+        )
         return [{
           id: floorId,
           level: floor.level,
@@ -224,29 +254,36 @@ function SceneOverviewContent() {
             rooms,
             wallOpenings,
             placedObjects,
+            floorTileAssetIds,
+            wallSurfaceAssetIds,
             globalFloorAssetId,
             globalWallAssetId,
           },
-          objects: Object.values(placedObjects).filter((object) => layers[object.layerId]?.visible !== false),
+          objects: getTopLevelObjects(visibleObjects),
+          childrenByParent: buildObjectChildrenIndex(visibleObjects),
         }]
       }
 
       const snapshot = floor.snapshot
+      const visibleObjects = Object.values(snapshot.placedObjects).filter(
+        (object) => snapshot.layers[object.layerId]?.visible !== false,
+      )
       return [{
         id: floorId,
         level: floor.level,
         data: {
           paintedCells: snapshot.paintedCells,
           layers: snapshot.layers,
-          rooms: snapshot.rooms,
-          wallOpenings: snapshot.wallOpenings,
-          placedObjects: snapshot.placedObjects,
-          globalFloorAssetId: snapshot.selectedAssetIds.floor,
-          globalWallAssetId: snapshot.selectedAssetIds.wall,
+            rooms: snapshot.rooms,
+            wallOpenings: snapshot.wallOpenings,
+            placedObjects: snapshot.placedObjects,
+            floorTileAssetIds: snapshot.floorTileAssetIds,
+            wallSurfaceAssetIds: snapshot.wallSurfaceAssetIds,
+            globalFloorAssetId: snapshot.selectedAssetIds.floor,
+            globalWallAssetId: snapshot.selectedAssetIds.wall,
         },
-        objects: Object.values(snapshot.placedObjects).filter(
-          (object) => snapshot.layers[object.layerId]?.visible !== false,
-        ),
+        objects: getTopLevelObjects(visibleObjects),
+        childrenByParent: buildObjectChildrenIndex(visibleObjects),
       }]
     })
   }, [
@@ -258,20 +295,27 @@ function SceneOverviewContent() {
     layers,
     paintedCells,
     placedObjects,
+    floorTileAssetIds,
     rooms,
     wallOpenings,
+    wallSurfaceAssetIds,
   ])
 
   return (
     <>
       {postProcessingEnabled && <WebGPUPostProcessing />}
       {floorEntries.map((entry) => (
-        <group key={entry.id} position={[0, entry.level * FLOOR_HEIGHT_UNIT, 0]}>
+        <group key={entry.id} position={[0, entry.level * SCENE_OVERVIEW_FLOOR_HEIGHT_UNIT, 0]}>
           <DungeonRoom data={entry.data} visibility={ALWAYS_VISIBLE} enableBuildAnimation={false} />
           {entry.objects
-            .filter((object) => object.assetId !== 'core.props_staircase_down')
+            .filter((object) => !isDownStairAssetId(object.assetId))
             .map((object) => (
-              <DungeonObject key={object.id} object={object} visibility={ALWAYS_VISIBLE} />
+              <DungeonObject
+                key={object.id}
+                object={object}
+                visibility={ALWAYS_VISIBLE}
+                childrenByParent={entry.childrenByParent}
+              />
             ))}
         </group>
       ))}
@@ -299,6 +343,8 @@ function FloorContent({ startY = 0 }: { startY?: number }) {
     () => Object.values(placedObjects).filter((obj) => layers[obj.layerId]?.visible !== false),
     [placedObjects, layers],
   )
+  const topLevelObjects = useMemo(() => getTopLevelObjects(objects), [objects])
+  const childrenByParent = useMemo(() => buildObjectChildrenIndex(objects), [objects])
 
   const groupRef = useRef<THREE.Group>(null)
   const animYRef = useRef(startY)
@@ -465,12 +511,13 @@ function FloorContent({ startY = 0 }: { startY?: number }) {
           {showLosDebugRays && <PlayVisibilityDebugRays mask={visibility.mask} />}
         </>
       )}
-      {objects.map((object) => (
+      {topLevelObjects.map((object) => (
         dragState?.objectId === object.id ? null : (
           <DungeonObject
             key={object.id}
             object={object}
             visibility={visibility}
+            childrenByParent={childrenByParent}
             onPlayDragStart={startDrag}
             playerAnimationState={releaseAnimationIds[object.id] ? 'release' : undefined}
           />

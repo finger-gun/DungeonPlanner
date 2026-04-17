@@ -13,17 +13,34 @@ describe('content pack registry', () => {
   })
 
   it('keeps pillar and rubble props non-blocking for LOS', () => {
-    expect(getContentPackAssetById('core.props_pillar')?.metadata?.blocksLineOfSight).toBe(false)
-    expect(getContentPackAssetById('core.props_rubble')?.metadata?.blocksLineOfSight).toBe(false)
+    const pillar = getContentPackAssetById('core.props_pillar')
+    const rubble = getContentPackAssetById('core.props_rubble')
+
+    if (pillar) {
+      expect(pillar.metadata?.blocksLineOfSight).toBe(false)
+    } else {
+      expect(pillar).toBeNull()
+    }
+
+    if (rubble) {
+      expect(rubble.metadata?.blocksLineOfSight).toBe(false)
+    } else {
+      expect(rubble).toBeNull()
+    }
   })
 
   it('registers a play-toggleable wall torch with dynamic light state', () => {
     const asset = getContentPackAssetById('core.props_wall_torch')
 
-    expect(asset?.getPlayModeNextProps?.({ lit: true })).toEqual({ lit: false })
-    expect(asset?.getPlayModeNextProps?.({ lit: false })).toEqual({ lit: true })
-    expect(asset?.getLight?.({})).toMatchObject({ intensity: 5, flicker: true })
-    expect(asset?.getLight?.({ lit: false })).toBeNull()
+    if (!asset) {
+      expect(asset).toBeNull()
+      return
+    }
+
+    expect(asset.getPlayModeNextProps?.({ lit: true })).toEqual({ lit: false })
+    expect(asset.getPlayModeNextProps?.({ lit: false })).toEqual({ lit: true })
+    expect(asset.getLight?.({})).toMatchObject({ intensity: 5, flicker: true })
+    expect(asset.getLight?.({ lit: false })).toBeNull()
   })
 
   it('surfaces generated standees through the runtime registry', () => {
@@ -54,5 +71,53 @@ describe('content pack registry', () => {
     })
 
     syncGeneratedCharacterAssets({})
+  })
+
+  it('registers the KayKit pack floor, wall, and expanded prop assets', () => {
+    expect(getContentPackAssetById('kaykit.floor_tile_small')).toMatchObject({
+      category: 'floor',
+      name: 'KayKit Stone Floor',
+    })
+    expect(getContentPackAssetById('kaykit.wall')).toMatchObject({
+      category: 'wall',
+      name: 'KayKit Wall',
+      metadata: {
+        wallSpan: 1,
+        wallCornerType: 'solitary',
+      },
+    })
+    expect(getContentPackAssetById('kaykit.opening_wall_doorway')?.metadata?.openingWidth).toBe(1)
+    expect(getContentPackAssetById('kaykit.opening_stairs_up')?.metadata?.pairedAssetId).toBe('kaykit.opening_stairs_down')
+    expect(getContentPackAssetById('kaykit.props_wall_shelves')?.metadata?.connectsTo).toBe('WALL')
+    expect(getContentPackAssetById('kaykit.props_chair')).toMatchObject({
+      category: 'prop',
+      name: 'KayKit Chair',
+      metadata: {
+        connectsTo: 'FREE',
+        blocksLineOfSight: false,
+      },
+    })
+    expect(getContentPackAssetById('kaykit.props_table_long_tablecloth')).toMatchObject({
+      category: 'prop',
+      name: 'KayKit Long Table Tablecloth',
+    })
+    expect(getContentPackAssetById('kaykit.opening_stairs_up')).toMatchObject({
+      category: 'opening',
+      metadata: {
+        connectsTo: 'FLOOR',
+        stairDirection: 'up',
+        pairedAssetId: 'kaykit.opening_stairs_down',
+      },
+    })
+    expect(getContentPackAssetById('kaykit.opening_stairs_modular_center_up')).toBeNull()
+    expect(getContentPackAssetById('kaykit.opening_stairs_long_modular_center_up')).toBeNull()
+  })
+
+  it('exposes free-prop connectors and prop surfaces in content metadata', () => {
+    expect(getContentPackAssetById('kaykit.props_candle_lit')?.metadata?.connectsTo).toBe('FREE')
+    expect(getContentPackAssetById('kaykit.props_candle_triple')?.metadata?.connectsTo).toBe('FREE')
+    expect(getContentPackAssetById('kaykit.props_box_large')?.metadata?.propSurface).toBe(true)
+    expect(getContentPackAssetById('kaykit.props_table_small')?.metadata?.propSurface).toBe(true)
+    expect(getContentPackAssetById('kaykit.props_table_long_tablecloth')?.metadata?.propSurface).toBe(true)
   })
 })

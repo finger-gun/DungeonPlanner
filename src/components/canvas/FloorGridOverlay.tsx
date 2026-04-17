@@ -17,7 +17,9 @@ import {
 } from 'three/tsl'
 import { GRID_SIZE } from '../../hooks/useSnapToGrid'
 
-const GRID_Y = 0
+const GRID_Y = 0.01
+const GRID_POLYGON_OFFSET_FACTOR = -2
+const GRID_POLYGON_OFFSET_UNITS = -2
 
 type Props = {
   size?: number
@@ -65,6 +67,9 @@ export function FloorGridOverlay({ size = 120, showBase = true }: Props) {
       depthWrite:  false,
       depthTest:   true,
       side: THREE.DoubleSide,
+      polygonOffset: true,
+      polygonOffsetFactor: GRID_POLYGON_OFFSET_FACTOR,
+      polygonOffsetUnits: GRID_POLYGON_OFFSET_UNITS,
     })
     mat.colorNode = vec4(lineColor.x, lineColor.y, lineColor.z, alpha)
     return mat

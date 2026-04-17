@@ -28,6 +28,10 @@ function KeyboardCameraControls() {
   const isObjectDragActive = useDungeonStore((state) => state.isObjectDragActive)
   const activeCameraMode = useDungeonStore((state) => state.activeCameraMode)
 
+  function clearPressedKeys() {
+    pressedKeys.current.clear()
+  }
+
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       const active = document.activeElement
@@ -45,13 +49,33 @@ function KeyboardCameraControls() {
     const onKeyUp = (e: KeyboardEvent) => {
       pressedKeys.current.delete(e.key.toLowerCase())
     }
+    const onWindowBlur = () => {
+      clearPressedKeys()
+    }
+    const onVisibilityChange = () => {
+      if (document.hidden) {
+        clearPressedKeys()
+      }
+    }
+
     window.addEventListener('keydown', onKeyDown)
     window.addEventListener('keyup', onKeyUp)
+    window.addEventListener('blur', onWindowBlur)
+    document.addEventListener('visibilitychange', onVisibilityChange)
     return () => {
+      clearPressedKeys()
       window.removeEventListener('keydown', onKeyDown)
       window.removeEventListener('keyup', onKeyUp)
+      window.removeEventListener('blur', onWindowBlur)
+      document.removeEventListener('visibilitychange', onVisibilityChange)
     }
   }, [])
+
+  useEffect(() => {
+    if (isPaintingStrokeActive || isObjectDragActive) {
+      clearPressedKeys()
+    }
+  }, [isObjectDragActive, isPaintingStrokeActive])
 
   useFrame((state) => {
     if (isPaintingStrokeActive || isObjectDragActive) return
