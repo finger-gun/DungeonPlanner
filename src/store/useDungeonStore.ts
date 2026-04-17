@@ -25,6 +25,10 @@ import {
   type RoomBounds,
 } from './roomResize'
 import { Euler, Quaternion, Vector3 } from 'three'
+import {
+  DEFAULT_POST_PROCESSING_SETTINGS,
+  normalizePostProcessingSettings,
+} from '../postprocessing/tiltShiftMath'
 
 export { getOpeningSegments } from './openingSegments'
 
@@ -148,8 +152,9 @@ export type SceneLighting = {
 
 export type PostProcessingSettings = {
   enabled: boolean
-  focusDistance: number // 0–1 screen-Y used to sample the focus line
-  focalLength: number   // depth tolerance around the sampled focus depth
+  focusDistance: number // legacy saved manual focus value retained for backward compatibility
+  focalLength: number   // foreground blur falloff distance in world units
+  backgroundFocalLength: number // background blur falloff distance in world units
   bokehScale: number    // artistic bokeh size multiplier
 }
 
@@ -171,6 +176,7 @@ type DungeonState = DungeonSnapshot & {
   showGrid: boolean
   showLosDebugMask: boolean
   showLosDebugRays: boolean
+  showLensFocusDebugPoint: boolean
   showProjectionDebugMesh: boolean
   floorViewMode: FloorViewMode
   generatedCharacters: Record<string, GeneratedCharacterRecord>
@@ -210,6 +216,7 @@ type DungeonState = DungeonSnapshot & {
   setShowGrid: (show: boolean) => void
   setShowLosDebugMask: (show: boolean) => void
   setShowLosDebugRays: (show: boolean) => void
+  setShowLensFocusDebugPoint: (show: boolean) => void
   setShowProjectionDebugMesh: (show: boolean) => void
   setFloorViewMode: (mode: FloorViewMode) => void
   createGeneratedCharacter: (input: CreateGeneratedCharacterInput) => string
@@ -718,10 +725,11 @@ export const useDungeonStore = create<DungeonState>()(
     wall: getDefaultAssetIdByCategory('wall'),
   },
   sceneLighting: { intensity: 1 },
-  postProcessing: { enabled: false, focusDistance: 0.5, focalLength: 3, bokehScale: 2 },
+  postProcessing: { ...DEFAULT_POST_PROCESSING_SETTINGS },
   showGrid: true,
   showLosDebugMask: false,
   showLosDebugRays: false,
+  showLensFocusDebugPoint: false,
   showProjectionDebugMesh: false,
   floorViewMode: 'active' as FloorViewMode,
   generatedCharacters: {},
@@ -1408,7 +1416,10 @@ export const useDungeonStore = create<DungeonState>()(
     set((state) => ({ ...state, sceneLighting: { ...state.sceneLighting, intensity } }))
   },
   setPostProcessing: (settings) => {
-    set((state) => ({ ...state, postProcessing: { ...state.postProcessing, ...settings } }))
+    set((state) => ({
+      ...state,
+      postProcessing: normalizePostProcessingSettings({ ...state.postProcessing, ...settings }),
+    }))
   },
   setShowGrid: (show) => {
     set((state) => ({ ...state, showGrid: show }))
@@ -1418,6 +1429,9 @@ export const useDungeonStore = create<DungeonState>()(
   },
   setShowLosDebugRays: (show) => {
     set((state) => ({ ...state, showLosDebugRays: show }))
+  },
+  setShowLensFocusDebugPoint: (show) => {
+    set((state) => ({ ...state, showLensFocusDebugPoint: show }))
   },
   setShowProjectionDebugMesh: (show) => {
     set((state) => ({ ...state, showProjectionDebugMesh: show }))
@@ -1619,10 +1633,11 @@ export const useDungeonStore = create<DungeonState>()(
       cameraPreset: 'perspective', // triggers camera to home position
        // Settings reset to defaults
        sceneLighting: { intensity: 1 },
-        postProcessing: { enabled: false, focusDistance: 0.5, focalLength: 3, bokehScale: 2 },
+         postProcessing: { ...DEFAULT_POST_PROCESSING_SETTINGS },
         showGrid: true,
         showLosDebugMask: false,
         showLosDebugRays: false,
+        showLensFocusDebugPoint: false,
         showProjectionDebugMesh: false,
         // Undo/redo cleared
       history: [],
@@ -2446,6 +2461,9 @@ export const useDungeonStore = create<DungeonState>()(
         }
 
         Object.assign(state, sanitizePersistedAssetReferences(state))
+        state.postProcessing = normalizePostProcessingSettings(
+          state.postProcessing as Partial<PostProcessingSettings> | undefined,
+        )
         state.generatedCharacters = normalizeGeneratedCharacters(
           state.generatedCharacters as Record<string, Partial<GeneratedCharacterRecord>> | undefined,
         )

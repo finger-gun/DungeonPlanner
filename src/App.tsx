@@ -96,9 +96,11 @@ function App() {
   const clearExploredCells = useDungeonStore((state) => state.clearExploredCells)
   const showLosDebugMask = useDungeonStore((state) => state.showLosDebugMask)
   const showLosDebugRays = useDungeonStore((state) => state.showLosDebugRays)
+  const showLensFocusDebugPoint = useDungeonStore((state) => state.showLensFocusDebugPoint)
   const showProjectionDebugMesh = useDungeonStore((state) => state.showProjectionDebugMesh)
   const setShowLosDebugMask = useDungeonStore((state) => state.setShowLosDebugMask)
   const setShowLosDebugRays = useDungeonStore((state) => state.setShowLosDebugRays)
+  const setShowLensFocusDebugPoint = useDungeonStore((state) => state.setShowLensFocusDebugPoint)
   const setShowProjectionDebugMesh = useDungeonStore((state) => state.setShowProjectionDebugMesh)
 
   const onWindowKeyDown = useEffectEvent((event: KeyboardEvent) => {
@@ -324,9 +326,11 @@ function App() {
                 clearExploredCells={clearExploredCells}
                 showLosDebugMask={showLosDebugMask}
                 showLosDebugRays={showLosDebugRays}
+                showLensFocusDebugPoint={showLensFocusDebugPoint}
                 showProjectionDebugMesh={showProjectionDebugMesh}
                 setShowLosDebugMask={setShowLosDebugMask}
                 setShowLosDebugRays={setShowLosDebugRays}
+                setShowLensFocusDebugPoint={setShowLensFocusDebugPoint}
                 setShowProjectionDebugMesh={setShowProjectionDebugMesh}
               />
             )}
@@ -368,18 +372,22 @@ function DebugVisibilityPanel({
   clearExploredCells,
   showLosDebugMask,
   showLosDebugRays,
+  showLensFocusDebugPoint,
   showProjectionDebugMesh,
   setShowLosDebugMask,
   setShowLosDebugRays,
+  setShowLensFocusDebugPoint,
   setShowProjectionDebugMesh,
 }: {
   exploredCellCount: number
   clearExploredCells: () => void
   showLosDebugMask: boolean
   showLosDebugRays: boolean
+  showLensFocusDebugPoint: boolean
   showProjectionDebugMesh: boolean
   setShowLosDebugMask: (show: boolean) => void
   setShowLosDebugRays: (show: boolean) => void
+  setShowLensFocusDebugPoint: (show: boolean) => void
   setShowProjectionDebugMesh: (show: boolean) => void
 }) {
   return (
@@ -414,6 +422,11 @@ function DebugVisibilityPanel({
           label="Render LoS mask"
           pressed={showLosDebugMask}
           onClick={() => setShowLosDebugMask(!showLosDebugMask)}
+        />
+        <DebugToggleButton
+          label="Show autofocus point"
+          pressed={showLensFocusDebugPoint}
+          onClick={() => setShowLensFocusDebugPoint(!showLensFocusDebugPoint)}
         />
         <DebugToggleButton
           label="Show projection mesh"

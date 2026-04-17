@@ -14,7 +14,7 @@ export const kaykitStoolAsset = createKayKitAsset({
   modelName: 'stool',
   transform: ASSET_TRANSFORM,
   metadata: {
-    connectsTo: 'FLOOR',
+    connectsTo: 'FREE',
     blocksLineOfSight: false,
   },
 })

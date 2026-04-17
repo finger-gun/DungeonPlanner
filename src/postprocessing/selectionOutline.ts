@@ -34,11 +34,11 @@ export function selectionOutline(
     const px = float(1.0).div((screenSize as any).x)
     const py = float(1.0).div((screenSize as any).y)
 
-    const depth = depthTex.uv(uv).r
-    const dR    = depthTex.uv(uv.add(vec2(px,        float(0)))).r
-    const dL    = depthTex.uv(uv.sub(vec2(px,        float(0)))).r
-    const dU    = depthTex.uv(uv.add(vec2(float(0),  py       ))).r
-    const dD    = depthTex.uv(uv.sub(vec2(float(0),  py       ))).r
+    const depth = depthTex.sample(uv).r
+    const dR    = depthTex.sample(uv.add(vec2(px,        float(0)))).r
+    const dL    = depthTex.sample(uv.sub(vec2(px,        float(0)))).r
+    const dU    = depthTex.sample(uv.add(vec2(float(0),  py       ))).r
+    const dD    = depthTex.sample(uv.sub(vec2(float(0),  py       ))).r
 
     // 1.0 if this pixel has geometry (depth below far), 0.0 otherwise
     const hasGeom = float(1.0).sub(step(FAR, depth))

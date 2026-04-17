@@ -15,6 +15,11 @@ const MODEL_URLS = import.meta.glob('../../../assets/models/kaykit/*.glb', {
   import: 'default',
 }) as Record<string, string>
 
+const GLTF_URLS = import.meta.glob('../../../assets/models/kaykit/*.gltf', {
+  eager: true,
+  import: 'default',
+}) as Record<string, string>
+
 const THUMBNAIL_URLS = import.meta.glob('../../../assets/models/kaykit/*.png', {
   eager: true,
   import: 'default',
@@ -47,7 +52,7 @@ const DEFAULT_ROTATION = [0, 0, 0] as const
 export const KAYKIT_BASE_SCALE = 0.5
 
 export function createKayKitAsset(definition: KayKitAssetDefinition): ContentPackAsset {
-  const assetUrl = resolveKayKitAssetUrl(definition.modelName, 'glb')
+  const assetUrl = resolveKayKitModelAssetUrl(definition.modelName)
   const thumbnailUrl = resolveKayKitAssetUrl(definition.thumbnailName ?? definition.modelName, 'png')
   const resolvedTransform = resolveTransform(definition.transform)
   const Component = createStaticModelComponent(assetUrl, definition.transform)
@@ -98,6 +103,10 @@ export function resolveKayKitAssetUrl(name: string, extension: 'glb' | 'png') {
   const key = `../../../assets/models/kaykit/${name}.${extension}`
   const url = extension === 'glb' ? MODEL_URLS[key] : THUMBNAIL_URLS[key]
   return url ?? undefined
+}
+
+export function resolveKayKitModelAssetUrl(name: string) {
+  return resolveKayKitAssetUrl(name, 'glb') ?? GLTF_URLS[`../../../assets/models/kaykit/${name}.gltf`]
 }
 
 function resolveTransform(transform?: KayKitTransform) {

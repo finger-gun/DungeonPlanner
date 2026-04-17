@@ -1,4 +1,4 @@
-import { useRef, useMemo, useLayoutEffect, useEffect, useState } from 'react'
+import { useRef, useMemo, useLayoutEffect, useState } from 'react'
 import type { ReactNode } from 'react'
 import { useGLTF } from '@react-three/drei'
 import { useFrame } from '@react-three/fiber'
@@ -35,6 +35,7 @@ import { registerDecalReceivers, unregisterDecalReceivers } from './decalReceive
 import { registerObject, unregisterObject } from './objectRegistry'
 import type { PlayVisibility, PlayVisibilityState } from './playVisibility'
 import { deriveWallCornersFromSegments, type WallCornerInstance } from './wallCornerLayout'
+import { shouldActivateFloorReceiver } from './floorReceiverMode'
 import type { ContentPackModelTransform } from '../../content-packs/types'
 
 const WALL_EXTRA_DELAY_MS = 70
@@ -327,6 +328,8 @@ function FloorDecalReceiver({
   cells: FloorReceiverCellInput[]
   blockedFloorCellKeys: Set<string>
 }) {
+  const tool = useDungeonStore((state) => state.tool)
+  const showProjectionDebugMesh = useDungeonStore((state) => state.showProjectionDebugMesh)
   const receiverCells = useMemo(
     () => cells.flatMap((cell) => {
       const asset = cell.assetId ? getContentPackAssetById(cell.assetId) : null
@@ -348,11 +351,16 @@ function FloorDecalReceiver({
     return null
   }
 
+  if (!shouldActivateFloorReceiver(tool, showProjectionDebugMesh)) {
+    return null
+  }
+
   return (
     <ResolvedFloorDecalReceiver
       receiverId={receiverId}
       receiverCells={receiverCells}
       blockedFloorCellKeys={blockedFloorCellKeys}
+      showProjectionDebugMesh={showProjectionDebugMesh}
     />
   )
 }
@@ -361,17 +369,15 @@ function ResolvedFloorDecalReceiver({
   receiverId,
   receiverCells,
   blockedFloorCellKeys,
+  showProjectionDebugMesh,
 }: {
   receiverId: string
   receiverCells: ResolvedFloorReceiverCellInput[]
   blockedFloorCellKeys: Set<string>
+  showProjectionDebugMesh: boolean
 }) {
-  const tool = useDungeonStore((state) => state.tool)
-  const showProjectionDebugMesh = useDungeonStore((state) => state.showProjectionDebugMesh)
   const meshRef = useRef<THREE.Mesh>(null)
   const [geometry, setGeometry] = useState<THREE.BufferGeometry | null>(null)
-  const dirtyRef = useRef(true)
-  const previousToolRef = useRef(tool)
   const receiverAssetUrls = useMemo(
     () => Array.from(new Set(receiverCells.map((cell) => cell.assetUrl))),
     [receiverCells],
@@ -408,32 +414,12 @@ function ResolvedFloorDecalReceiver({
     [blockedFloorCellKeys, receiverCells],
   )
 
-  useEffect(() => {
-    dirtyRef.current = true
-  }, [receiverSignature])
-
   useLayoutEffect(() => {
-    const enteringPlay = previousToolRef.current !== 'play' && tool === 'play'
-    previousToolRef.current = tool
-
     if (!resolvedReceiverCells.length) {
       setGeometry((previous) => {
         previous?.dispose()
         return null
       })
-      dirtyRef.current = false
-      return
-    }
-
-    if (tool !== 'play') {
-      return
-    }
-
-    if (!enteringPlay && geometry !== null) {
-      return
-    }
-
-    if (!dirtyRef.current && geometry) {
       return
     }
 
@@ -446,8 +432,7 @@ function ResolvedFloorDecalReceiver({
       previous?.dispose()
       return nextGeometry
     })
-    dirtyRef.current = false
-  }, [blockedFloorCellKeys, geometry, resolvedReceiverCells, tool])
+  }, [blockedFloorCellKeys, receiverSignature, resolvedReceiverCells])
 
   const projectionReceiverMesh = useMemo(() => {
     if (!geometry) {

@@ -1,5 +1,57 @@
-export const TILT_SHIFT_FOCUS_SAMPLE_XS = [0.38, 0.5, 0.62] as const
+export type PostProcessingSettingsShape = {
+  enabled: boolean
+  focusDistance: number
+  focalLength: number
+  backgroundFocalLength: number
+  bokehScale: number
+}
+
+export const DEFAULT_AUTOFOCUS_SMOOTH_TIME = 0.5
+
+export const DEFAULT_POST_PROCESSING_SETTINGS: PostProcessingSettingsShape = {
+  enabled: true,
+  focusDistance: 0.5,
+  focalLength: 9,
+  backgroundFocalLength: 9,
+  bokehScale: 0.5,
+}
+
+type PostProcessingSettingsLike = Partial<PostProcessingSettingsShape>
 
 export function depthFocusRangeFromFocalLength(focalLength: number) {
-  return Math.max(0.015, focalLength / 30)
+  return focalLength
+}
+
+export function smoothAutofocusDistance(
+  currentDistance: number,
+  targetDistance: number,
+  deltaSeconds: number,
+  smoothTime = DEFAULT_AUTOFOCUS_SMOOTH_TIME,
+) {
+  if (smoothTime <= 0 || deltaSeconds <= 0) {
+    return targetDistance
+  }
+
+  const alpha = 1 - Math.exp(-deltaSeconds / smoothTime)
+  return currentDistance + ((targetDistance - currentDistance) * alpha)
+}
+
+export function normalizePostProcessingSettings(settings?: PostProcessingSettingsLike) {
+  const focalLength = typeof settings?.focalLength === 'number'
+    ? settings.focalLength
+    : DEFAULT_POST_PROCESSING_SETTINGS.focalLength
+
+  return {
+    enabled: settings?.enabled === true,
+    focusDistance: typeof settings?.focusDistance === 'number'
+      ? settings.focusDistance
+      : DEFAULT_POST_PROCESSING_SETTINGS.focusDistance,
+    focalLength,
+    backgroundFocalLength: typeof settings?.backgroundFocalLength === 'number'
+      ? settings.backgroundFocalLength
+      : focalLength,
+    bokehScale: typeof settings?.bokehScale === 'number'
+      ? settings.bokehScale
+      : DEFAULT_POST_PROCESSING_SETTINGS.bokehScale,
+  }
 }

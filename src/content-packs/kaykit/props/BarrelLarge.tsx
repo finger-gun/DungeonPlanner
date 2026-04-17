@@ -14,7 +14,8 @@ export const kaykitBarrelLargeAsset = createKayKitAsset({
   modelName: 'barrel_large',
   transform: ASSET_TRANSFORM,
   metadata: {
-    connectsTo: 'FLOOR',
+    connectsTo: 'FREE',
+    propSurface: true,
     blocksLineOfSight: false,
   },
 })

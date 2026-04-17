@@ -28,25 +28,32 @@ export function PostProcessingPanel() {
 
       <div className={`flex flex-col gap-3 transition-opacity ${pp.enabled ? 'opacity-100' : 'opacity-40 pointer-events-none'}`}>
         <div className="rounded-2xl border border-stone-800 bg-stone-950/60 px-4 py-4">
+          <p className="text-xs uppercase tracking-[0.22em] text-stone-400">Autofocus</p>
+          <p className="mt-2 text-xs leading-relaxed text-stone-400">
+            Focus follows whatever the camera center ray hits.
+          </p>
+        </div>
+
+        <div className="rounded-2xl border border-stone-800 bg-stone-950/60 px-4 py-4">
           <div className="mb-2 flex items-center justify-between">
-            <label className="text-xs uppercase tracking-[0.22em] text-stone-400">Focus Line</label>
-            <span className="text-xs tabular-nums text-stone-300">{(pp.focusDistance * 100).toFixed(0)}%</span>
+            <label className="text-xs uppercase tracking-[0.22em] text-stone-400">Near Range</label>
+            <span className="text-xs tabular-nums text-stone-300">{pp.focalLength.toFixed(2)}</span>
           </div>
           <input
-            type="range" min={0} max={1} step={0.01} value={pp.focusDistance}
-            onChange={(e) => setPostProcessing({ focusDistance: parseFloat(e.target.value) })}
+            type="range" min={0.5} max={12} step={0.25} value={pp.focalLength}
+            onChange={(e) => setPostProcessing({ focalLength: parseFloat(e.target.value) })}
             className="w-full accent-sky-400"
           />
         </div>
 
         <div className="rounded-2xl border border-stone-800 bg-stone-950/60 px-4 py-4">
           <div className="mb-2 flex items-center justify-between">
-            <label className="text-xs uppercase tracking-[0.22em] text-stone-400">Depth Range</label>
-            <span className="text-xs tabular-nums text-stone-300">{pp.focalLength.toFixed(2)}</span>
+            <label className="text-xs uppercase tracking-[0.22em] text-stone-400">Far Range</label>
+            <span className="text-xs tabular-nums text-stone-300">{pp.backgroundFocalLength.toFixed(2)}</span>
           </div>
           <input
-            type="range" min={0.5} max={12} step={0.25} value={pp.focalLength}
-            onChange={(e) => setPostProcessing({ focalLength: parseFloat(e.target.value) })}
+            type="range" min={0.5} max={12} step={0.25} value={pp.backgroundFocalLength}
+            onChange={(e) => setPostProcessing({ backgroundFocalLength: parseFloat(e.target.value) })}
             className="w-full accent-sky-400"
           />
         </div>
