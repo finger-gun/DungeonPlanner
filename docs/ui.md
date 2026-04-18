@@ -4,6 +4,19 @@ A walkthrough of every UI panel, tool, and keyboard shortcut. If you just want t
 
 ---
 
+
+## UI principles
+The editor UI is designed around a few core principles:
+
+- **Discoverable by default**. Common actions should be visible without hunting through menus. Tools, object categories, and scene structure should be readable at a glance, and the current tool should explain itself through labels, hover states, previews, and shortcut hints.
+- **Fast for repeated work**. Building a dungeon is an iterative process, so the interface should minimize friction for high-frequency actions like painting cells, placing props, switching floors, and undoing mistakes. Primary actions should take one or two interactions, not a long setup flow.
+- **Predictable and safe**. The editor should avoid surprising the user. Destructive actions need confirmation or obvious affordances, tool behavior should stay consistent, and visual feedback should make it clear what will happen before the user clicks.
+- **Readable over decorative**. The viewport and side panels exist to help users understand the scene quickly. Important state such as the active floor, selected object, locked layer, or invalid placement should be immediately legible without visual clutter.
+- **Context where it is needed**. Controls should appear close to the part of the workflow they affect. Scene structure belongs in the scene panel, tool-specific settings belong in the tool panel, and placement feedback belongs directly in the viewport.
+- **Support both new and experienced users**. New users should be able to learn the interface by exploring it, while experienced users should be able to move quickly with keyboard shortcuts, persistent panel structure, and consistent interaction rules.
+
+In practice, this means the UI should help users answer three questions at all times: what tool is active, what object or floor they are working on, and what action will happen next if they click or drag.
+
 ## Overall layout
 
 ```
@@ -13,7 +26,7 @@ A walkthrough of every UI panel, tool, and keyboard shortcut. If you just want t
 │      │                                  │  room tree)  │
 │      │                                  ├──────────────┤
 │      │                                  │ Tool panel   │
-│      │                                  │ (tool-        │
+│      │                                  │ (tool-       │
 │      │                                  │  specific)   │
 │      │                                  ├──────────────┤
 │      │                                  │ Layers       │
@@ -33,12 +46,13 @@ The toolbar has two sections: tools at the top and file operations at the bottom
 ### Tools
 
 | Icon | Tool | Shortcut hint |
-|------|------|--------------|
+|------|------|---------------|
+| Play | **Start** | Starts the player experience |
 | Cursor | **Select** | Click props/openings to inspect or delete |
-| Blocks | **Room** | Paint/erase floor cells |
+| Blocks | **Room** | Paint/erase edit rooms |
+| People | **Characters** | Create, edit characters and NPCs | 
 | Box | **Prop** | Place and inspect props |
 | Door | **Opening** | Place wall openings (doors, archways, stairs) |
-| Camera | **Camera** | Pan and rotate without accidentally placing things |
 
 Clicking a tool icon activates it. The active tool is highlighted in amber.
 
@@ -49,11 +63,50 @@ A small pop-up with three actions:
 - **Save Dungeon** — downloads a `.dungeon.json` file
 - **Load Dungeon** — opens a file picker and loads a `.dungeon.json` or `.json` file
 
+### Settings
+General settings that affects the application as a whole such as:
+- FPS cap
+- Grid visibility
+- Light rig
+- Camera and focus
+
 ### Undo / Redo
 
 At the very bottom of the toolbar. Greyed out when unavailable. Maps to the current floor's undo stack — each floor has independent undo history.
 
 **Keyboard shortcuts:** `Cmd/Ctrl + Z` to undo, `Cmd/Ctrl + Shift + Z` or `Cmd/Ctrl + Y` to redo.
+
+---
+
+## Start tool
+
+The Start tool switches the editor into the player-facing view of the dungeon. Use it when you want to preview how the scene reads during play instead of continuing to build.
+
+### What Start mode changes
+
+- The viewport focuses on the active floor instead of the broader editing overview.
+- Visibility is driven by placed player characters. Cells in line of sight stay fully visible, previously seen cells remain explored, and unknown space is hidden.
+- The tool-specific editing panel is cleared so the screen stays focused on presentation rather than placement controls.
+
+This mode is meant for checking readability, sight lines, lighting, and room-to-room flow from a player perspective. To resume editing, switch back to any build tool.
+
+---
+
+## Select tool
+
+In the Select tool, clicking any placed prop, character, or opening selects it and shows an inspector in the right panel with position, rotation, cell, and context actions.
+
+### What you can inspect
+
+- **Props** show their asset name, transform, and a **Delete** button.
+- **Characters** show the same placement data, and generated characters also expose an **Edit** action to reopen their character sheet.
+- **Openings** show their opening type and wall placement details.
+
+**Delete** or **Backspace** removes the selected object from anywhere (any tool).
+
+**Escape** clears the current selection.
+
+When post-processing is enabled, selected objects get a depth-edge outline in the viewport. When post-processing is off, a red inverted-hull outline is used instead.
 
 ---
 
@@ -66,6 +119,45 @@ You can hold the button and sweep across many cells in one stroke — they're al
 New cells automatically go on the active layer. If the active layer is locked, painting is blocked.
 
 When you paint cells, each tile rises from below with a staggered wave animation — tiles closest to where you released the drag animate first, creating a ripple effect.
+
+### Surface modes
+
+The Room tool also controls the surface brush used for dungeon structure:
+
+- **Rooms** paints and erases room cells.
+- **Floor** applies floor variants to existing painted cells.
+- **Walls** applies wall variants to room boundaries.
+
+When you switch to Floor or Walls mode, the right panel changes from a simple room brush to an asset catalogue for that surface type.
+
+---
+
+## Characters tool
+
+The Characters tool is for building and placing player characters or NPC standees in the dungeon.
+
+### Character library
+
+The right panel is split into two main sources:
+
+- **Created Characters** are your generated or custom characters.
+- **Core Characters** are built-in standees from the default content pack.
+
+The **Create New Character** card opens a blank character sheet. Draft characters stay editable until they have a generated standee image, at which point they can be armed for placement like any other character.
+
+### Placing characters
+
+Click a ready character in the library to arm it, then **click a floor cell** in the viewport to place it.
+
+Placed characters use the same direct-placement flow as props:
+
+- **Click** to place on a valid cell
+- **Right-click** a placed character to remove it quickly
+- **R** rotates the selected character
+
+### Editing generated characters
+
+Generated characters can be reopened from the library or from the selected-character card in the right panel. The character sheet is where you edit the prompt, preview the standee image, regenerate art, and prepare the character for placement.
 
 ---
 
@@ -103,21 +195,9 @@ Doors have a front and a back. Press **R** while hovering a wall-connected openi
 
 ---
 
-## Select tool
+## Viewport navigation
 
-In the Select tool, clicking any placed prop or opening selects it and shows an inspector in the right panel with position, rotation, cell, and a **Delete** button.
-
-**Delete** or **Backspace** removes the selected object from anywhere (any tool).
-
-**Escape** deselects.
-
-When post-processing is enabled, selected objects get a depth-edge outline in the viewport. When post-processing is off, a red inverted-hull outline is used instead.
-
----
-
-## Camera tool
-
-Activating the Camera tool is mostly just a safety net — you can pan/rotate without accidentally painting cells or placing props.
+Camera movement is available while working in the editor, and the Settings button is where viewport presentation controls live. Use these controls to inspect the dungeon without changing its contents.
 
 ### Mouse controls
 
@@ -143,9 +223,11 @@ Panning happens by moving both `camera.position` and `controls.target` by the sa
 
 ---
 
-## Camera settings (inside Camera tool panel)
+## View controls
 
 ### Camera presets
+
+Camera presets are available from the camera button in the top-right of the viewport.
 
 Three view modes:
 - **Perspective** — classic 3D view with orbit controls. Good for seeing depth and the overall dungeon feel.
@@ -156,10 +238,11 @@ Switching presets animates the camera smoothly to the new position using a sprin
 
 ### Post-processing (Lens)
 
-A toggle to enable/disable the tilt-shift depth-of-field and selection outline pass. Three sliders control the DoF:
-- **Focus distance** — where in the scene (0–1 along the frustum) the sharpest band sits
-- **Focal length** — how wide the in-focus band is
-- **Bokeh** — how much to blur out-of-focus regions
+The Settings button in the toolbar exposes the viewport tuning controls. Lens settings include a toggle for post-processing plus controls for:
+- **Autofocus** — keeps focus centered on whatever the camera's center ray is hitting
+- **Near range** — how much foreground depth stays in focus
+- **Far range** — how much background depth stays in focus
+- **Blur** — the overall strength of the blur effect
 
 ### Lighting
 
@@ -227,6 +310,6 @@ The **+** button at the header adds a new layer and activates it immediately.
 | Cmd/Ctrl + Shift + Z | Redo |
 | Cmd/Ctrl + Y | Redo |
 | Alt + click | Inspect object (in Prop/Opening tool) |
-| Right-click | Remove prop/opening under cursor |
+| Right-click | Remove prop, character, or opening under cursor |
 
 All shortcuts are suppressed when a text input or contenteditable has focus, so you can rename rooms and layers without accidentally triggering tools.
