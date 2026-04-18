@@ -10,7 +10,7 @@ import { useThree, useFrame } from '@react-three/fiber'
 import * as THREE from 'three/webgpu'
 import { pass, uniform } from 'three/tsl'
 import { tiltShift } from '../../postprocessing/tiltShift'
-import { depthFocusRangeFromFocalLength } from '../../postprocessing/tiltShiftMath'
+import { DEFAULT_AUTOFOCUS_SMOOTH_TIME } from '../../postprocessing/tiltShiftMath'
 import { selectionOutline, alphaOver, SELECTION_OUTLINE_LAYER } from '../../postprocessing/selectionOutline'
 import {
   EXPLORED_MEMORY_MASK_LAYER,
@@ -20,6 +20,7 @@ import {
 } from '../../postprocessing/lineOfSightMask'
 import { useDungeonStore } from '../../store/useDungeonStore'
 import { getRegisteredObject } from './objectRegistry'
+import { resolveAutofocusTarget } from './autofocusTarget'
 
 export { SELECTION_OUTLINE_LAYER }
 
@@ -34,12 +35,20 @@ export function WebGPUPostProcessing({
   const visibleLosCameraRef = useRef<THREE.Camera | null>(null)
   const exploredLosCameraRef = useRef<THREE.Camera | null>(null)
 
-  const focusCenterUniform = useRef(uniform(0.5))
-  const focusRangeUniform  = useRef(uniform(0.15))
+  const focusDistanceUniform = useRef(uniform((camera as any).far ?? 100))
+  const nearFocusRangeUniform = useRef(uniform(0.15))
+  const farFocusRangeUniform = useRef(uniform(0.15))
   const blurRadiusUniform  = useRef(uniform(6))
 
   const settings  = useDungeonStore((state) => state.postProcessing)
   const selection = useDungeonStore((state) => state.selection)
+  const showLensFocusDebugPoint = useDungeonStore((state) => state.showLensFocusDebugPoint)
+  const focusMarkerRef = useRef<THREE.Group | null>(null)
+  const focusRaycasterRef = useRef(new THREE.Raycaster())
+  const focusNdcRef = useRef(new THREE.Vector2(0, 0))
+  const focusPointRef = useRef(new THREE.Vector3())
+  const focusTargetPointRef = useRef(new THREE.Vector3())
+  const focusPointInitializedRef = useRef(false)
 
   // Track previous selection so we can disable layer 31 on it without a full scene.traverse()
   const prevSelectionRef = useRef<string | null>(null)
@@ -72,11 +81,12 @@ export function WebGPUPostProcessing({
     const baseScenePass = pass(scene as any, camera as any) as any
     const baseSceneDepth = baseScenePass.getTextureNode('depth') as any
     let outputNode = settings.enabled
-      ? tiltShift(scene, camera, {
-          focusCenter: focusCenterUniform.current,
-          focusRange: focusRangeUniform.current,
-          blurRadius: blurRadiusUniform.current,
-        })
+        ? tiltShift(scene, camera, {
+           focusDistance: focusDistanceUniform.current,
+           nearFocusRange: nearFocusRangeUniform.current,
+           farFocusRange: farFocusRangeUniform.current,
+           blurRadius: blurRadiusUniform.current,
+         })
       : baseScenePass.getTextureNode()
 
     // Clone camera restricted to layer 31 for the selection outline pass
@@ -132,14 +142,19 @@ export function WebGPUPostProcessing({
 
   // Update shader uniforms only when settings actually change — not every frame.
   useEffect(() => {
-    focusCenterUniform.current.value = settings.focusDistance
-    focusRangeUniform.current.value  = depthFocusRangeFromFocalLength(settings.focalLength)
+    nearFocusRangeUniform.current.value = settings.focalLength
+    farFocusRangeUniform.current.value = settings.backgroundFocalLength
     blurRadiusUniform.current.value  = settings.bokehScale * 4
-  }, [settings.focusDistance, settings.focalLength, settings.bokehScale])
+  }, [
+    settings.focalLength,
+    settings.backgroundFocalLength,
+    settings.bokehScale,
+  ])
 
   // Priority=1: R3F skips its own gl.render(); we drive the frame.
-  useFrame(({ camera: cam }) => {
+  useFrame((frameState, delta) => {
     if (!postProcessingRef.current) return
+    const cam = frameState.camera as any
 
     // Sync outline camera to live camera before render
     const oc = outlineCameraRef.current as any
@@ -178,8 +193,90 @@ export function WebGPUPostProcessing({
       exploredCamera.projectionMatrixInverse.copy(src.projectionMatrixInverse)
     }
 
+    const focusMarker = focusMarkerRef.current as any
+    const raycaster = focusRaycasterRef.current
+    raycaster.layers.mask = (cam as any).layers.mask
+    raycaster.setFromCamera(focusNdcRef.current, cam as any)
+
+    const hit = raycaster
+      .intersectObjects(scene.children, true)
+      .find((intersection) => !intersection.object.userData?.ignoreLensFocusDebug)
+
+    const controls = (frameState as any).controls as any
+    const preferOrbitTarget = cam.isOrthographicCamera === true
+    const orbitTarget = controls?.target
+      ? { x: controls.target.x, y: controls.target.y, z: controls.target.z }
+      : null
+    const raycastTarget = hit
+      ? { x: hit.point.x, y: hit.point.y, z: hit.point.z }
+      : null
+    const resolvedTarget = resolveAutofocusTarget(preferOrbitTarget, orbitTarget, raycastTarget)
+
+    if (resolvedTarget) {
+      focusTargetPointRef.current.set(resolvedTarget.x, resolvedTarget.y, resolvedTarget.z)
+
+      if (!focusPointInitializedRef.current || delta <= 0) {
+        focusPointRef.current.copy(focusTargetPointRef.current)
+        focusPointInitializedRef.current = true
+      } else {
+        const alpha = 1 - Math.exp(-delta / DEFAULT_AUTOFOCUS_SMOOTH_TIME)
+        focusPointRef.current.lerp(focusTargetPointRef.current, alpha)
+      }
+
+      focusDistanceUniform.current.value = Math.max(
+        (cam as any).near ?? 0.01,
+        cam.position.distanceTo(focusPointRef.current),
+      )
+
+      if (focusMarker) {
+        if (showLensFocusDebugPoint) {
+          focusMarker.visible = true
+          focusMarker.position.copy(focusPointRef.current)
+        } else {
+          focusMarker.visible = false
+        }
+      }
+    } else {
+      focusPointInitializedRef.current = false
+      if (focusMarker) {
+        focusMarker.visible = false
+      }
+    }
+
     postProcessingRef.current.render()
   }, 1)
 
-  return null
+  return (
+    <group
+      ref={focusMarkerRef}
+      visible={false}
+      userData={{ ignoreLensFocusDebug: true }}
+      renderOrder={10}
+    >
+      <mesh userData={{ ignoreLensFocusDebug: true }}>
+        <sphereGeometry args={[0.12, 16, 16]} />
+        <meshBasicMaterial
+          color="#34d399"
+          depthTest={false}
+          depthWrite={false}
+          transparent
+          opacity={0.95}
+        />
+      </mesh>
+      <mesh
+        rotation={[-Math.PI / 2, 0, 0]}
+        userData={{ ignoreLensFocusDebug: true }}
+      >
+        <ringGeometry args={[0.18, 0.26, 32]} />
+        <meshBasicMaterial
+          color="#34d399"
+          side={THREE.DoubleSide}
+          depthTest={false}
+          depthWrite={false}
+          transparent
+          opacity={0.75}
+        />
+      </mesh>
+    </group>
+  )
 }

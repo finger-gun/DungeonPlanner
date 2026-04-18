@@ -409,6 +409,16 @@ describe('useDungeonStore history', () => {
     expect(useDungeonStore.getState().showProjectionDebugMesh).toBe(false)
   })
 
+  it('toggles the lens focus debug point visibility flag', () => {
+    expect(useDungeonStore.getState().showLensFocusDebugPoint).toBe(false)
+
+    useDungeonStore.getState().setShowLensFocusDebugPoint(true)
+    expect(useDungeonStore.getState().showLensFocusDebugPoint).toBe(true)
+
+    useDungeonStore.getState().setShowLensFocusDebugPoint(false)
+    expect(useDungeonStore.getState().showLensFocusDebugPoint).toBe(false)
+  })
+
   it('switches to top-down view when entering room mode', () => {
     useDungeonStore.getState().setTool('room')
 

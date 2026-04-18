@@ -1,14 +1,36 @@
 import { describe, expect, it } from 'vitest'
-import { depthFocusRangeFromFocalLength, TILT_SHIFT_FOCUS_SAMPLE_XS } from './tiltShiftMath'
+import {
+  DEFAULT_AUTOFOCUS_SMOOTH_TIME,
+  depthFocusRangeFromFocalLength,
+  normalizePostProcessingSettings,
+  smoothAutofocusDistance,
+} from './tiltShiftMath'
 
 describe('tiltShift helpers', () => {
-  it('maps focal length controls to a stable depth focus tolerance', () => {
-    expect(depthFocusRangeFromFocalLength(0.1)).toBe(0.015)
-    expect(depthFocusRangeFromFocalLength(3)).toBeCloseTo(0.1)
-    expect(depthFocusRangeFromFocalLength(12)).toBeCloseTo(0.4)
+  it('preserves focal length controls as world-space focus ranges', () => {
+    expect(depthFocusRangeFromFocalLength(0.5)).toBe(0.5)
+    expect(depthFocusRangeFromFocalLength(3)).toBe(3)
+    expect(depthFocusRangeFromFocalLength(12)).toBe(12)
   })
 
-  it('samples focus depth near the center of the frame', () => {
-    expect(TILT_SHIFT_FOCUS_SAMPLE_XS).toEqual([0.38, 0.5, 0.62])
+  it('defaults background focus range to the foreground range for older settings', () => {
+    expect(normalizePostProcessingSettings({ enabled: false, focalLength: 4 })).toMatchObject({
+      enabled: false,
+      focusDistance: 0.5,
+      focalLength: 4,
+      backgroundFocalLength: 4,
+      bokehScale: 0.5,
+    })
+    expect(normalizePostProcessingSettings({ focalLength: 4, backgroundFocalLength: 7 }))
+      .toMatchObject({ focalLength: 4, backgroundFocalLength: 7 })
+  })
+
+  it('smooths autofocus changes over time', () => {
+    expect(smoothAutofocusDistance(2, 10, 0)).toBe(10)
+    expect(smoothAutofocusDistance(2, 10, 0.5, 0)).toBe(10)
+    expect(smoothAutofocusDistance(2, 10, DEFAULT_AUTOFOCUS_SMOOTH_TIME))
+      .toBeGreaterThan(2)
+    expect(smoothAutofocusDistance(2, 10, DEFAULT_AUTOFOCUS_SMOOTH_TIME))
+      .toBeLessThan(10)
   })
 })

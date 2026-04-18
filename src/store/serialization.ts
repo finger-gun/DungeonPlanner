@@ -7,6 +7,10 @@
 import { getDefaultAssetIdByCategory } from '../content-packs/registry'
 import { getContentPackAssetById } from '../content-packs/registry'
 import { sanitizePersistedAssetReferences } from './assetReferences'
+import {
+  DEFAULT_POST_PROCESSING_SETTINGS,
+  normalizePostProcessingSettings,
+} from '../postprocessing/tiltShiftMath'
 import type {
   DungeonObjectRecord,
   DungeonObjectType,
@@ -19,7 +23,7 @@ import type {
 import type { GridCell } from '../hooks/useSnapToGrid'
 import { getCellKey } from '../hooks/useSnapToGrid'
 
-const CURRENT_VERSION = 8
+const CURRENT_VERSION = 9
 
 // ── Serialized shapes (compact, no redundant keys) ────────────────────────────
 
@@ -72,7 +76,13 @@ export type DungeonFile = {
   version: number
   name: string
   sceneLighting: { intensity: number }
-  postProcessing: { enabled: boolean; focusDistance: number; focalLength: number; bokehScale: number }
+  postProcessing: {
+    enabled: boolean
+    focusDistance: number
+    focalLength: number
+    backgroundFocalLength: number
+    bokehScale: number
+  }
   activeFloorId: string
   floorOrder: string[]
   floors: SerializedFloor[]
@@ -83,7 +93,13 @@ export type DungeonFile = {
 export type SerializableState = {
   name?: string
   sceneLighting: { intensity: number }
-  postProcessing: { enabled: boolean; focusDistance: number; focalLength: number; bokehScale: number }
+  postProcessing: {
+    enabled: boolean
+    focusDistance: number
+    focalLength: number
+    backgroundFocalLength: number
+    bokehScale: number
+  }
   // Active floor working state (flat, for backwards compat)
   layers: Record<string, Layer>
   layerOrder: string[]
@@ -222,7 +238,7 @@ export function deserializeDungeon(json: string): SerializableState | null {
   if (version < 4 && !(raw as Record<string, unknown>).postProcessing) {
     raw = {
       ...(raw as Record<string, unknown>),
-      postProcessing: { enabled: false, focusDistance: 0.5, focalLength: 3, bokehScale: 2 },
+      postProcessing: { ...DEFAULT_POST_PROCESSING_SETTINGS },
     }
   }
 
@@ -307,6 +323,16 @@ export function deserializeDungeon(json: string): SerializableState | null {
               wallSurfaceAssetIds: isObject(floor.wallSurfaceAssetIds) ? floor.wallSurfaceAssetIds : {},
             }
           : floor,
+      ),
+    }
+  }
+
+  if (version < 9) {
+    const r = raw as Record<string, unknown>
+    raw = {
+      ...r,
+      postProcessing: normalizePostProcessingSettings(
+        isObject(r.postProcessing) ? r.postProcessing : undefined,
       ),
     }
   }
@@ -519,12 +545,7 @@ function parseFile(raw: Record<string, unknown>): SerializableState | null {
       sceneLighting: {
         intensity: typeof sceneLightingRaw.intensity === 'number' ? sceneLightingRaw.intensity : 1,
       },
-      postProcessing: {
-        enabled: ppRaw.enabled === true,
-        focusDistance: typeof ppRaw.focusDistance === 'number' ? ppRaw.focusDistance : 0.5,
-        focalLength: typeof ppRaw.focalLength === 'number' ? ppRaw.focalLength : 3,
-        bokehScale: typeof ppRaw.bokehScale === 'number' ? ppRaw.bokehScale : 2,
-      },
+      postProcessing: normalizePostProcessingSettings(ppRaw),
       // Active floor working state (spread into top-level for the store)
       ...activeFloorData,
       floors,

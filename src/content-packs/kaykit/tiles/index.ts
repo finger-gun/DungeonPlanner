@@ -14,6 +14,13 @@ import { kaykitFloorDirtSmallWeedsAsset } from './FloorDirtSmallWeeds'
 import { kaykitFloorWoodSmallAsset } from './FloorWoodSmall'
 import { kaykitFloorWoodSmallDarkAsset } from './FloorWoodSmallDark'
 import { kaykitWallAsset } from './Wall'
+import { kaykitWallArchedAsset } from './WallArched'
+import { kaykitWallBrokenAsset } from './WallBroken'
+import { kaykitWallCrackedAsset } from './WallCracked'
+import { kaykitWallHalfAsset } from './WallHalf'
+import { kaykitWallPillarAsset } from './WallPillar'
+import { kaykitWallScaffoldAsset } from './WallScaffold'
+import { kaykitWallSlopedAsset } from './WallSloped'
 
 export const kaykitTileAssets = [
   kaykitFloorTileSmallAsset,
@@ -32,4 +39,11 @@ export const kaykitTileAssets = [
   kaykitFloorWoodSmallAsset,
   kaykitFloorWoodSmallDarkAsset,
   kaykitWallAsset,
+  kaykitWallArchedAsset,
+  kaykitWallBrokenAsset,
+  kaykitWallCrackedAsset,
+  kaykitWallHalfAsset,
+  kaykitWallPillarAsset,
+  kaykitWallScaffoldAsset,
+  kaykitWallSlopedAsset,
 ]

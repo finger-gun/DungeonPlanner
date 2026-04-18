@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { serializeDungeon, deserializeDungeon } from './serialization'
 import type { SerializableState } from './serialization'
 import type { FloorRecord } from './useDungeonStore'
+import { DEFAULT_POST_PROCESSING_SETTINGS } from '../postprocessing/tiltShiftMath'
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 
@@ -41,7 +42,7 @@ function baseState(): SerializableState {
   return {
     name: 'Test Dungeon',
     sceneLighting: { intensity: 1.5 },
-    postProcessing: { enabled: false, focusDistance: 0.5, focalLength: 3, bokehScale: 2 },
+    postProcessing: { ...DEFAULT_POST_PROCESSING_SETTINGS },
     ...emptyFloorSnapshot(),
     floors: { [groundId]: makeFloor(groundId, 'Ground Floor', 0) },
     floorOrder: [groundId],
@@ -58,7 +59,10 @@ describe('serializeDungeon / deserializeDungeon roundtrip', () => {
     expect(result).not.toBeNull()
     expect(result!.name).toBe('Test Dungeon')
     expect(result!.sceneLighting.intensity).toBe(1.5)
-    expect(result!.postProcessing.enabled).toBe(false)
+    expect(result!.postProcessing.enabled).toBe(true)
+    expect(result!.postProcessing.focalLength).toBe(9)
+    expect(result!.postProcessing.backgroundFocalLength).toBe(9)
+    expect(result!.postProcessing.bokehScale).toBe(0.5)
   })
 
   it('preserves painted cells', () => {
@@ -227,6 +231,7 @@ describe('deserializeDungeon version migrations', () => {
     // Should have been wrapped into a floors array
     expect(result!.floorOrder ?? []).toHaveLength(1)
     expect(result!.name).toBe('Old Dungeon')
+    expect(result!.postProcessing.backgroundFocalLength).toBe(3)
   })
 
   it('v1→v5: adds empty openings and nextRoomNumber when missing', () => {

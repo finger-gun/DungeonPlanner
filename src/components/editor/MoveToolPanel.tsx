@@ -126,9 +126,15 @@ export function MoveToolPanel() {
           </button>
         </div>
         <div className={`rounded-2xl border border-stone-800 bg-stone-950/60 px-4 py-4 flex flex-col gap-4 transition-opacity ${pp.enabled ? 'opacity-100' : 'opacity-40 pointer-events-none'}`}>
+          <div>
+            <p className="text-xs uppercase tracking-[0.22em] text-stone-400">Autofocus</p>
+            <p className="mt-2 text-xs leading-relaxed text-stone-400">
+              Focus follows whatever the camera center ray hits.
+            </p>
+          </div>
           {([
-            { label: 'Focus Line', value: pp.focusDistance, min: 0,   max: 1,  step: 0.01, fmt: (v: number) => `${(v*100).toFixed(0)}%`, key: 'focusDistance' as const },
-            { label: 'Depth Range', value: pp.focalLength, min: 0.5, max: 12, step: 0.25, fmt: (v: number) => v.toFixed(2),             key: 'focalLength'   as const },
+            { label: 'Near Range', value: pp.focalLength, min: 0.5, max: 12, step: 0.25, fmt: (v: number) => v.toFixed(2),             key: 'focalLength'   as const },
+            { label: 'Far Range',  value: pp.backgroundFocalLength, min: 0.5, max: 12, step: 0.25, fmt: (v: number) => v.toFixed(2),   key: 'backgroundFocalLength' as const },
             { label: 'Blur',       value: pp.bokehScale,  min: 0.5, max: 6,  step: 0.25, fmt: (v: number) => `${v.toFixed(2)}x`,      key: 'bokehScale'    as const },
           ]).map(({ label, value, min, max, step, fmt, key }) => (
             <div key={key}>

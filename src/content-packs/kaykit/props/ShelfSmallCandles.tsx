@@ -6,6 +6,14 @@ const ASSET_TRANSFORM = {
   scale: [1, 1, 1],
 } satisfies KayKitTransform
 
+const light = {
+  color: '#ffcc82',
+  intensity: 1.2,
+  distance: 5,
+  decay: 1.2,
+  offset: [0, 0.82, 0] as [number, number, number],
+  flicker: true,
+}
 
 export const kaykitShelfSmallCandlesAsset = createKayKitAsset({
   id: 'kaykit.props_shelf_small_candles',
@@ -15,6 +23,7 @@ export const kaykitShelfSmallCandlesAsset = createKayKitAsset({
   modelName: 'shelf_small_candles',
   transform: ASSET_TRANSFORM,
   metadata: {
+    light,
     connectsTo: 'WALL',
     blocksLineOfSight: false,
   },

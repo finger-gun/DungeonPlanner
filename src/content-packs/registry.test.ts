@@ -86,7 +86,32 @@ describe('content pack registry', () => {
         wallCornerType: 'solitary',
       },
     })
+    expect(getContentPackAssetById('kaykit.wall_arched')).toMatchObject({
+      category: 'wall',
+      name: 'KayKit Arched Wall',
+      metadata: {
+        wallSpan: 1,
+        wallCornerType: 'solitary',
+      },
+    })
+    expect(getContentPackAssetById('kaykit.wall_cracked')).toMatchObject({
+      category: 'wall',
+      name: 'KayKit Cracked Wall',
+    })
+    expect(getContentPackAssetById('kaykit.wall_scaffold')).toMatchObject({
+      category: 'wall',
+      name: 'KayKit Scaffold Wall',
+      metadata: {
+        wallSpan: 1,
+        wallCornerType: 'solitary',
+      },
+    })
     expect(getContentPackAssetById('kaykit.opening_wall_doorway')?.metadata?.openingWidth).toBe(1)
+    expect(getContentPackAssetById('kaykit.opening_wall_doorway_scaffold')?.metadata?.openingWidth).toBe(1)
+    expect(getContentPackAssetById('kaykit.opening_wall_open_scaffold')?.metadata?.openingWidth).toBe(1)
+    expect(getContentPackAssetById('kaykit.opening_wall_archedwindow_gated_scaffold')?.metadata?.openingWidth).toBe(1)
+    expect(getContentPackAssetById('kaykit.opening_wall_window_open_scaffold')?.metadata?.openingWidth).toBe(1)
+    expect(getContentPackAssetById('kaykit.opening_wall_window_closed_scaffold')?.metadata?.openingWidth).toBe(1)
     expect(getContentPackAssetById('kaykit.opening_stairs_up')?.metadata?.pairedAssetId).toBe('kaykit.opening_stairs_down')
     expect(getContentPackAssetById('kaykit.props_wall_shelves')?.metadata?.connectsTo).toBe('WALL')
     expect(getContentPackAssetById('kaykit.props_chair')).toMatchObject({
