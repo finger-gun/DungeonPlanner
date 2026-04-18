@@ -361,7 +361,7 @@ function mergeModelOptions(installedModels: string[], defaultModel: string | nul
       continue
     }
     const trimmed = model.trim()
-    if (!trimmed || seen.has(trimmed)) {
+    if (!trimmed || !isLikelyImageGenerationModel(trimmed) || seen.has(trimmed)) {
       continue
     }
     seen.add(trimmed)
@@ -370,3 +370,19 @@ function mergeModelOptions(installedModels: string[], defaultModel: string | nul
 
   return merged
 }
+
+function isLikelyImageGenerationModel(model: string) {
+  const normalized = model.toLowerCase()
+  return [
+    /(?:^|[/:._-])image(?:$|[/:._-])/,
+    /(?:^|[/:._-])flux\d*(?:$|[/:._-])/,
+    /(?:^|[/:._-])sd(?:$|[/:._-])/,
+    /(?:^|[/:._-])sdxl(?:$|[/:._-])/,
+    /stable[-_]?diffusion/,
+    /(?:^|[/:._-])pixart(?:$|[/:._-])/,
+    /(?:^|[/:._-])kandinsky(?:$|[/:._-])/,
+    /(?:^|[/:._-])dall[-_]?e(?:$|[/:._-])/,
+  ].some((pattern) => pattern.test(normalized))
+}
+
+export { isLikelyImageGenerationModel, mergeModelOptions }

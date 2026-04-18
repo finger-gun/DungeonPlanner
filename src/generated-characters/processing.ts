@@ -2,7 +2,7 @@ import type { CreateGeneratedCharacterInput } from './types'
 
 const MAX_SOURCE_DIMENSION = 1024
 const THUMBNAIL_SIZE = 256
-const OUTLINE_RADIUS = 6
+const OUTLINE_RADIUS = 9
 const OUTLINE_FEATHER = 1.25
 const SUBJECT_ALPHA_THRESHOLD = 18
 const GREEN_SCREEN_EDGE_THRESHOLD = 0.2
@@ -78,8 +78,7 @@ export async function processGeneratedCharacterImage(sourceImageDataUrl: string)
     throw new Error('Canvas 2D context is unavailable.')
   }
 
-  const outlineImageData = outputContext.createImageData(cropWidth, cropHeight)
-  const subjectImageData = outputContext.createImageData(cropWidth, cropHeight)
+  const compositedImageData = outputContext.createImageData(cropWidth, cropHeight)
 
   for (let y = paddedCropBounds.minY; y <= paddedCropBounds.maxY; y += 1) {
     for (let x = paddedCropBounds.minX; x <= paddedCropBounds.maxX; x += 1) {
@@ -89,22 +88,23 @@ export async function processGeneratedCharacterImage(sourceImageDataUrl: string)
       const outline = outlineMask[sourceIndex]
 
       if (outline > 0 && alpha <= SUBJECT_ALPHA_THRESHOLD) {
-        outlineImageData.data[targetIndex] = 255
-        outlineImageData.data[targetIndex + 1] = 255
-        outlineImageData.data[targetIndex + 2] = 255
-        outlineImageData.data[targetIndex + 3] = outline
+        compositedImageData.data[targetIndex] = 255
+        compositedImageData.data[targetIndex + 1] = 255
+        compositedImageData.data[targetIndex + 2] = 255
+        compositedImageData.data[targetIndex + 3] = outline
       }
 
       const originalIndex = sourceIndex * 4
-      subjectImageData.data[targetIndex] = sourceImageData.data[originalIndex]
-      subjectImageData.data[targetIndex + 1] = sourceImageData.data[originalIndex + 1]
-      subjectImageData.data[targetIndex + 2] = sourceImageData.data[originalIndex + 2]
-      subjectImageData.data[targetIndex + 3] = alpha
+      if (alpha > 0) {
+        compositedImageData.data[targetIndex] = sourceImageData.data[originalIndex]
+        compositedImageData.data[targetIndex + 1] = sourceImageData.data[originalIndex + 1]
+        compositedImageData.data[targetIndex + 2] = sourceImageData.data[originalIndex + 2]
+        compositedImageData.data[targetIndex + 3] = alpha
+      }
     }
   }
 
-  outputContext.putImageData(outlineImageData, 0, 0)
-  outputContext.putImageData(subjectImageData, 0, 0)
+  outputContext.putImageData(compositedImageData, 0, 0)
 
   const thumbnailCanvas = document.createElement('canvas')
   thumbnailCanvas.width = THUMBNAIL_SIZE
@@ -216,6 +216,12 @@ export function isGreenishBackgroundPixel(red: number, green: number, blue: numb
   return green > 60 && greenLead > 10 && chroma > 12
 }
 
+function isLikelyGreenScreenSpillPixel(red: number, green: number, blue: number) {
+  const greenLead = green - Math.max(red, blue)
+  const chroma = Math.max(red, green, blue) - Math.min(red, green, blue)
+  return green >= 135 && greenLead >= 28 && chroma >= 28
+}
+
 function isWhiteBorderPixel(red: number, green: number, blue: number) {
   const brightness = (0.2126 * red) + (0.7152 * green) + (0.0722 * blue)
   const chroma = Math.max(red, green, blue) - Math.min(red, green, blue)
@@ -300,6 +306,7 @@ export function removeGreenBackgroundRegions(
   threshold: number,
 ) {
   const visited = new Uint8Array(mask.length)
+  const enclosedPocketAreaLimit = Math.max(16, Math.round(width * height * 0.02))
 
   const isOpaqueGreen = (pixelIndex: number) => {
     if (mask[pixelIndex] <= threshold) {
@@ -323,12 +330,22 @@ export function removeGreenBackgroundRegions(
     let touchesEdge = false
     let whiteBorderNeighbors = 0
     let subjectNeighbors = 0
+    let spillGreenPixels = 0
     visited[pixelIndex] = 1
 
     for (let queueIndex = 0; queueIndex < component.length; queueIndex += 1) {
       const currentIndex = component[queueIndex]
       const x = currentIndex % width
       const y = Math.floor(currentIndex / width)
+      const currentColorIndex = currentIndex * 4
+
+      if (isLikelyGreenScreenSpillPixel(
+        imageData[currentColorIndex],
+        imageData[currentColorIndex + 1],
+        imageData[currentColorIndex + 2],
+      )) {
+        spillGreenPixels += 1
+      }
 
       if (x === 0 || x === width - 1 || y === 0 || y === height - 1) {
         touchesEdge = true
@@ -369,7 +386,28 @@ export function removeGreenBackgroundRegions(
       }
     }
 
-    const shouldRemove = touchesEdge || (whiteBorderNeighbors > 0 && whiteBorderNeighbors >= subjectNeighbors)
+    const neighborCount = whiteBorderNeighbors + subjectNeighbors
+    const borderedByWhitespace = whiteBorderNeighbors > 0
+      && whiteBorderNeighbors >= Math.max(2, Math.ceil(subjectNeighbors * 0.6))
+    const whiteEnclosedIsland = neighborCount > 0
+      && whiteBorderNeighbors >= 6
+      && (whiteBorderNeighbors / neighborCount) >= 0.5
+    const spillDominance = spillGreenPixels / component.length
+    const enclosedSpillPocket = !touchesEdge
+      && component.length <= enclosedPocketAreaLimit
+      && subjectNeighbors >= 8
+      && spillDominance >= 0.75
+    const saturatedInteriorSpill = !touchesEdge
+      && component.length <= enclosedPocketAreaLimit
+      && subjectNeighbors >= 12
+      && spillGreenPixels >= 6
+      && spillDominance >= 0.45
+    const shouldRemove =
+      touchesEdge
+      || borderedByWhitespace
+      || whiteEnclosedIsland
+      || enclosedSpillPocket
+      || saturatedInteriorSpill
     if (!shouldRemove) {
       continue
     }

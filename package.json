@@ -6,7 +6,7 @@
   "packageManager": "pnpm@10.33.0",
   "scripts": {
     "dev": "vite",
-    "dev:full": "turbo run dev --parallel --filter=dungeonplanner --filter=dungeonplanner-server",
+    "dev:full": "concurrently -n app,server -c blue,green \"pnpm run dev\" \"pnpm run server\"",
     "build": "pnpm run build:demo && pnpm run build:docs",
     "build:demo": "tsc -b && vite build",
     "build:docs": "node scripts/build-docs-site.mjs",

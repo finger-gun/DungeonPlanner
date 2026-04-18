@@ -64,7 +64,7 @@ describe('generated character processing', () => {
     expect(mask[(3 * width) + 3]).toBe(0)
   })
 
-  it('keeps green subject details when they are bounded by non-white character colors', () => {
+  it('keeps muted green subject details when they are bounded by non-white character colors', () => {
     const width = 5
     const height = 5
     const mask = new Uint8ClampedArray(width * height).fill(255)
@@ -84,11 +84,84 @@ describe('generated character processing', () => {
       }
     }
 
-    setPixel(2, 2, 24, 190, 48)
+    setPixel(2, 2, 86, 126, 90)
 
     removeGreenBackgroundRegions(mask, imageData, width, height, 18)
 
     expect(mask[(2 * width) + 2]).toBe(255)
+  })
+
+  it('removes bright enclosed greenscreen pockets trapped within the subject silhouette', () => {
+    const width = 7
+    const height = 7
+    const mask = new Uint8ClampedArray(width * height).fill(255)
+    const imageData = new Uint8ClampedArray(width * height * 4)
+
+    const setPixel = (x: number, y: number, red: number, green: number, blue: number) => {
+      const index = ((y * width) + x) * 4
+      imageData[index] = red
+      imageData[index + 1] = green
+      imageData[index + 2] = blue
+      imageData[index + 3] = 255
+    }
+
+    for (let y = 0; y < height; y += 1) {
+      for (let x = 0; x < width; x += 1) {
+        setPixel(x, y, 42, 42, 42)
+      }
+    }
+
+    setPixel(3, 3, 18, 176, 36)
+    setPixel(4, 3, 24, 188, 44)
+    setPixel(3, 4, 22, 182, 40)
+    setPixel(4, 4, 20, 180, 38)
+
+    removeGreenBackgroundRegions(mask, imageData, width, height, 18)
+
+    expect(mask[(3 * width) + 3]).toBe(0)
+    expect(mask[(3 * width) + 4]).toBe(0)
+    expect(mask[(4 * width) + 3]).toBe(0)
+    expect(mask[(4 * width) + 4]).toBe(0)
+  })
+
+  it('removes larger saturated interior spill regions even when not white-enclosed', () => {
+    const width = 9
+    const height = 9
+    const mask = new Uint8ClampedArray(width * height).fill(255)
+    const imageData = new Uint8ClampedArray(width * height * 4)
+
+    const setPixel = (x: number, y: number, red: number, green: number, blue: number) => {
+      const index = ((y * width) + x) * 4
+      imageData[index] = red
+      imageData[index + 1] = green
+      imageData[index + 2] = blue
+      imageData[index + 3] = 255
+    }
+
+    for (let y = 0; y < height; y += 1) {
+      for (let x = 0; x < width; x += 1) {
+        setPixel(x, y, 44, 44, 44)
+      }
+    }
+
+    for (let y = 3; y <= 5; y += 1) {
+      for (let x = 3; x <= 5; x += 1) {
+        setPixel(x, y, 20, 175, 40)
+      }
+    }
+    setPixel(4, 4, 36, 150, 50)
+
+    removeGreenBackgroundRegions(mask, imageData, width, height, 18)
+
+    expect(mask[(3 * width) + 3]).toBe(0)
+    expect(mask[(3 * width) + 4]).toBe(0)
+    expect(mask[(3 * width) + 5]).toBe(0)
+    expect(mask[(4 * width) + 3]).toBe(0)
+    expect(mask[(4 * width) + 4]).toBe(0)
+    expect(mask[(4 * width) + 5]).toBe(0)
+    expect(mask[(5 * width) + 3]).toBe(0)
+    expect(mask[(5 * width) + 4]).toBe(0)
+    expect(mask[(5 * width) + 5]).toBe(0)
   })
 
   it('builds an outline mask with a softened outer edge instead of binary steps', () => {
@@ -215,5 +288,46 @@ describe('generated character processing', () => {
 
     expect(mask[(1 * width) + 2]).toBe(0)
     expect(mask[(2 * width) + 2]).toBe(255)
+  })
+
+  it('removes enclosed green islands surrounded mostly by white frame pixels', () => {
+    const width = 8
+    const height = 8
+    const mask = new Uint8ClampedArray(width * height).fill(255)
+    const imageData = new Uint8ClampedArray(width * height * 4)
+
+    const setPixel = (x: number, y: number, red: number, green: number, blue: number) => {
+      const index = ((y * width) + x) * 4
+      imageData[index] = red
+      imageData[index + 1] = green
+      imageData[index + 2] = blue
+      imageData[index + 3] = 255
+    }
+
+    for (let y = 0; y < height; y += 1) {
+      for (let x = 0; x < width; x += 1) {
+        setPixel(x, y, 42, 42, 42)
+      }
+    }
+
+    for (let y = 2; y <= 5; y += 1) {
+      for (let x = 2; x <= 5; x += 1) {
+        if (x === 2 || x === 5 || y === 2 || y === 5) {
+          setPixel(x, y, 255, 255, 255)
+        }
+      }
+    }
+
+    setPixel(3, 3, 20, 170, 40)
+    setPixel(4, 3, 24, 176, 44)
+    setPixel(3, 4, 22, 172, 42)
+    setPixel(4, 4, 23, 178, 45)
+
+    removeGreenBackgroundRegions(mask, imageData, width, height, 18)
+
+    expect(mask[(3 * width) + 3]).toBe(0)
+    expect(mask[(3 * width) + 4]).toBe(0)
+    expect(mask[(4 * width) + 3]).toBe(0)
+    expect(mask[(4 * width) + 4]).toBe(0)
   })
 })
