@@ -26,12 +26,8 @@
   <img src="https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=white&style=flat-square" alt="React 19" />
   <img src="https://img.shields.io/badge/Three.js-0.182-black?logo=threedotjs&style=flat-square" alt="Three.js 0.182" />
   <img src="https://img.shields.io/badge/TypeScript-6-3178C6?logo=typescript&logoColor=white&style=flat-square" alt="TypeScript 6" />
-  <a href="https://github.com/finger-gun/DungeonPlanner/actions/workflows/test.yml">
-    <img src="https://github.com/finger-gun/DungeonPlanner/actions/workflows/test.yml/badge.svg" alt="Test status" />
-  </a>
-  <a href="https://github.com/finger-gun/DungeonPlanner/actions/workflows/github-code-scanning/codeql">
-    <img src="https://github.com/finger-gun/DungeonPlanner/actions/workflows/github-code-scanning/codeql/badge.svg" alt="CodeQL status" />
-  </a>
+  <a href="https://github.com/finger-gun/DungeonPlanner/actions/workflows/test.yml"><img src="https://github.com/finger-gun/DungeonPlanner/actions/workflows/test.yml/badge.svg" alt="Test status" /></a>
+  <a href="https://github.com/finger-gun/DungeonPlanner/actions/workflows/github-code-scanning/codeql"><img src="https://github.com/finger-gun/DungeonPlanner/actions/workflows/github-code-scanning/codeql/badge.svg" alt="CodeQL status" /></a>
 </p>
 
 ---
