@@ -1,5 +1,6 @@
 const GENERATED_CHARACTER_API_PATH = '/api/generated-characters/image'
 const GENERATED_CHARACTER_ASSET_API_PATH = '/api/generated-characters/assets'
+const GENERATED_CHARACTER_MODELS_API_PATH = '/api/generated-characters/models'
 const UNAVAILABLE_MESSAGE =
   'Character generation is unavailable right now. In dev, start `npm run dev:full` (or `npm run server`) and make sure Ollama is running.'
 const STORAGE_UNAVAILABLE_MESSAGE =
@@ -19,10 +20,21 @@ type GeneratedCharacterAssetPayload = {
   thumbnailUrl?: string
 }
 
+type GeneratedCharacterModelsPayload = {
+  error?: string
+  models?: unknown
+  defaultModel?: unknown
+}
+
 export async function requestGeneratedCharacterImage(
   prompt: string,
-  fetchImpl: typeof fetch = fetch,
+  options: {
+    model?: string | null
+    fetchImpl?: typeof fetch
+  } = {},
 ) {
+  const fetchImpl = options.fetchImpl ?? fetch
+  const trimmedModel = typeof options.model === 'string' ? options.model.trim() : ''
   const response = await performRequest(
     GENERATED_CHARACTER_API_PATH,
     {
@@ -30,7 +42,10 @@ export async function requestGeneratedCharacterImage(
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ prompt }),
+      body: JSON.stringify({
+        prompt,
+        ...(trimmedModel ? { model: trimmedModel } : {}),
+      }),
     },
     fetchImpl,
     UNAVAILABLE_MESSAGE,
@@ -48,6 +63,39 @@ export async function requestGeneratedCharacterImage(
   return {
     imageDataUrl: payload.imageDataUrl,
     model: payload.model,
+  }
+}
+
+export async function listGeneratedCharacterModels(fetchImpl: typeof fetch = fetch) {
+  const response = await performRequest(
+    GENERATED_CHARACTER_MODELS_API_PATH,
+    {
+      method: 'GET',
+    },
+    fetchImpl,
+    UNAVAILABLE_MESSAGE,
+  )
+  const { payload, rawText } = await readPayload<GeneratedCharacterModelsPayload>(response)
+
+  if (!response.ok) {
+    throw new Error(resolveRequestError(response, payload, rawText))
+  }
+
+  const models = Array.isArray(payload.models)
+    ? payload.models
+      .map((model) => (typeof model === 'string' ? model.trim() : ''))
+      .filter((model): model is string => model.length > 0)
+    : []
+  const defaultModel = typeof payload.defaultModel === 'string' && payload.defaultModel.trim()
+    ? payload.defaultModel.trim()
+    : null
+
+  return {
+    defaultModel,
+    models: dedupeModelNames([
+      ...(defaultModel ? [defaultModel] : []),
+      ...models,
+    ]),
   }
 }
 
@@ -185,6 +233,20 @@ function sanitizePlainText(value: string) {
   }
 
   return trimmed
+}
+
+function dedupeModelNames(models: string[]) {
+  const seen = new Set<string>()
+  const unique: string[] = []
+  for (const model of models) {
+    if (seen.has(model)) {
+      continue
+    }
+    seen.add(model)
+    unique.push(model)
+  }
+
+  return unique
 }
 
 export { STORAGE_UNAVAILABLE_MESSAGE, UNAVAILABLE_MESSAGE }

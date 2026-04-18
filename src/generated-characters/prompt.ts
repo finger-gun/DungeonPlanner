@@ -7,12 +7,13 @@ import {
 } from './types'
 
 const BASE_CHARACTER_SYSTEM_PROMPT = [
-  'Create a fantasy tabletop character illustration sticker design with a white border.',
+  'Create a fantasy tabletop character illustration.',
   'The subject must be centered, clearly readable, and fully visible from head to toe.',
-  'Use a clear green screen background with no scenery, no environment, no floor, no shadows, and no framing elements.',
+  'Use a clear green screen background with no scenery, no environment, no floor, and no shadows.',
+  'Do not add any frame, border, sticker outline, nameplate, caption, text, logo, watermark, or UI overlay.',
   'Keep the edge strong and uncluttered.',
   'Use polished fantasy concept art / book illustration styling with crisp edges and even lighting.',
-  'Avoid cropped limbs, extra characters, speech bubbles, UI elements, text, logos, watermarks, and heavy atmospheric effects.',
+  'Avoid cropped limbs, extra characters, speech bubbles, decorative plates, and heavy atmospheric effects.',
 ].join(' ')
 
 export function composeGeneratedCharacterPrompt(character: Pick<GeneratedCharacterRecord, 'kind' | 'name' | 'prompt' | 'size'>) {

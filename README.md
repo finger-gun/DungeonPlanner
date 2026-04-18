@@ -74,7 +74,7 @@ App runs at **http://localhost:5173**.
 ### Workspace commands
 
 ```bash
-pnpm run dev:full     # app + server via Turborepo
+pnpm run dev:full     # app + server (both in watch mode)
 pnpm run build        # app build
 pnpm run build:all    # build all workspace packages
 pnpm run test         # unit tests

@@ -24,7 +24,7 @@ Guidelines for AI coding agents working in this codebase.
 ```bash
 pnpm run dev          # start app dev server
 pnpm run server       # start multiplayer server dev mode
-pnpm run dev:full     # start app + server with Turborepo
+pnpm run dev:full     # start app + server (both in watch mode)
 pnpm run build        # TypeScript check + Vite build (run before committing)
 pnpm run build:all    # build all workspace packages with Turborepo
 pnpm run lint         # ESLint (app)

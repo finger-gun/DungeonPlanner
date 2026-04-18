@@ -11,10 +11,10 @@ import {
 const BASE_RADIUS = GENERATED_CHARACTER_BASE_RADIUS
 const BASE_HEIGHT = 0.08
 const CARD_HEIGHT = 1.85
-const CARD_THICKNESS = 0.032
+const CARD_THICKNESS = 0.056
 const CARD_FACE_OFFSET = CARD_THICKNESS * 0.5
 const CARD_Y_OFFSET = BASE_HEIGHT + (CARD_HEIGHT * 0.5) + 0.04
-const CARD_DEPTH_LAYERS = [-0.012, -0.008, -0.004, 0, 0.004, 0.008, 0.012] as const
+const CARD_DEPTH_LAYERS = [-0.024, -0.02, -0.016, -0.012, -0.008, -0.004, 0, 0.004, 0.008, 0.012, 0.016, 0.02, 0.024] as const
 
 export function GeneratedStandeePlayer({
   character,
@@ -121,7 +121,7 @@ export function GeneratedStandeePlayer({
       <group position={[0, CARD_Y_OFFSET, 0]}>
         {CARD_DEPTH_LAYERS.map((offset) => (
           <mesh
-            key={offset}
+            key={`front-${offset}`}
             position={[0, 0, offset]}
             castShadow
             receiveShadow
@@ -130,8 +130,28 @@ export function GeneratedStandeePlayer({
             <meshStandardMaterial
               color="#f7f2e7"
               alphaMap={alphaTexture ?? undefined}
-              transparent
-              alphaTest={0.1}
+              transparent={false}
+              alphaTest={0.03}
+              side={THREE.FrontSide}
+              roughness={0.92}
+              metalness={0}
+            />
+          </mesh>
+        ))}
+        {CARD_DEPTH_LAYERS.map((offset) => (
+          <mesh
+            key={`back-${offset}`}
+            position={[0, 0, -offset]}
+            rotation={[0, Math.PI, 0]}
+            castShadow
+            receiveShadow
+          >
+            <planeGeometry args={[cardWidth, cardHeight]} />
+            <meshStandardMaterial
+              color="#f7f2e7"
+              alphaMap={alphaTexture ?? undefined}
+              transparent={false}
+              alphaTest={0.03}
               side={THREE.FrontSide}
               roughness={0.92}
               metalness={0}
@@ -144,7 +164,7 @@ export function GeneratedStandeePlayer({
           <meshStandardMaterial
             map={texture}
             transparent
-            alphaTest={0.08}
+            alphaTest={0.03}
             side={THREE.FrontSide}
             roughness={0.8}
             metalness={0}
@@ -161,7 +181,7 @@ export function GeneratedStandeePlayer({
           <meshStandardMaterial
             map={texture}
             transparent
-            alphaTest={0.08}
+            alphaTest={0.03}
             side={THREE.FrontSide}
             roughness={0.8}
             metalness={0}

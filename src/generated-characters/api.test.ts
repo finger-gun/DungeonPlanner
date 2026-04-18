@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import {
+  listGeneratedCharacterModels,
   deleteGeneratedCharacterAssets,
   requestGeneratedCharacterImage,
   saveGeneratedCharacterAssets,
@@ -21,7 +22,7 @@ describe('requestGeneratedCharacterImage', () => {
       }),
     )
 
-    await expect(requestGeneratedCharacterImage('wizard', fetchImpl)).resolves.toEqual({
+    await expect(requestGeneratedCharacterImage('wizard', { fetchImpl })).resolves.toEqual({
       imageDataUrl: 'data:image/png;base64,abc',
       model: 'x/z-image-turbo',
     })
@@ -30,7 +31,7 @@ describe('requestGeneratedCharacterImage', () => {
   it('surfaces a friendly message when the request cannot reach the backend', async () => {
     const fetchImpl = vi.fn().mockRejectedValue(new TypeError('Failed to fetch'))
 
-    await expect(requestGeneratedCharacterImage('wizard', fetchImpl)).rejects.toThrow(UNAVAILABLE_MESSAGE)
+    await expect(requestGeneratedCharacterImage('wizard', { fetchImpl })).rejects.toThrow(UNAVAILABLE_MESSAGE)
   })
 
   it('falls back to a friendly message for non-JSON proxy failures', async () => {
@@ -44,7 +45,34 @@ describe('requestGeneratedCharacterImage', () => {
       }),
     )
 
-    await expect(requestGeneratedCharacterImage('wizard', fetchImpl)).rejects.toThrow(UNAVAILABLE_MESSAGE)
+    await expect(requestGeneratedCharacterImage('wizard', { fetchImpl })).rejects.toThrow(UNAVAILABLE_MESSAGE)
+  })
+
+  it('passes an explicitly selected model to the backend', async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({
+        imageDataUrl: 'data:image/png;base64,abc',
+        model: 'x/flux2-klein:9b',
+      }), {
+        status: 200,
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      }),
+    )
+
+    await requestGeneratedCharacterImage('wizard', {
+      model: 'x/flux2-klein:9b',
+      fetchImpl,
+    })
+
+    expect(fetchImpl).toHaveBeenCalledWith('/api/generated-characters/image', expect.objectContaining({
+      method: 'POST',
+      body: JSON.stringify({
+        prompt: 'wizard',
+        model: 'x/flux2-klein:9b',
+      }),
+    }))
   })
 
   it('saves generated assets to disk through the backend', async () => {
@@ -90,5 +118,26 @@ describe('requestGeneratedCharacterImage', () => {
     )
 
     await expect(deleteGeneratedCharacterAssets('storage-test', fetchImpl)).resolves.toBeUndefined()
+  })
+})
+
+describe('listGeneratedCharacterModels', () => {
+  it('returns installed model names from the backend', async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({
+        defaultModel: 'x/z-image-turbo',
+        models: ['x/z-image-turbo', 'x/flux2-klein:9b'],
+      }), {
+        status: 200,
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      }),
+    )
+
+    await expect(listGeneratedCharacterModels(fetchImpl)).resolves.toEqual({
+      defaultModel: 'x/z-image-turbo',
+      models: ['x/z-image-turbo', 'x/flux2-klein:9b'],
+    })
   })
 })

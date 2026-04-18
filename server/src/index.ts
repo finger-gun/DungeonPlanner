@@ -11,6 +11,7 @@ import { fileURLToPath } from 'url'
 import {
   GeneratedCharacterRequestError,
   handleGeneratedCharacterImageRequest,
+  listGeneratedCharacterModels,
 } from './generatedCharacterImage.js'
 import {
   deleteGeneratedCharacterAssets,
@@ -45,6 +46,16 @@ app.post('/api/generated-characters/image', async (req, res) => {
   } catch (error) {
     res.status(error instanceof GeneratedCharacterRequestError ? error.status : 502).json({
       error: error instanceof Error ? error.message : 'Image generation failed.',
+    })
+  }
+})
+
+app.get('/api/generated-characters/models', async (_req, res) => {
+  try {
+    res.json(await listGeneratedCharacterModels())
+  } catch (error) {
+    res.status(502).json({
+      error: error instanceof Error ? error.message : 'Could not list installed Ollama models.',
     })
   }
 })

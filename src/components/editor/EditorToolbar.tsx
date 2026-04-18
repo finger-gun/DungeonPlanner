@@ -38,7 +38,7 @@ export function EditorToolbar() {
       {/* App mark */}
       <div className="flex flex-col items-center gap-1">
         <div className="mb-3 flex h-8 w-8 items-center justify-center rounded-xl bg-amber-400/15 text-amber-300">
-          <span className="text-xs font-bold">D</span>
+          <img src="/icon.png" alt="DungeonPlanner" className="h-5 w-5 rounded-sm object-contain" />
         </div>
 
         {/* Tool icons */}
