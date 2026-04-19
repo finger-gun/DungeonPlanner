@@ -1,0 +1,15 @@
+import { createDungeonAsset } from '../../shared/createDungeonAsset'
+import { DUNGEON_PROP_TRANSFORM } from '../../shared/dungeonConstants'
+
+export const dungeonBannerWhiteAsset = createDungeonAsset({
+  id: 'dungeon.props_banners_banner_white',
+  slug: 'dungeon-props-banners-banner-white',
+  name: 'Dungeon Banner White',
+  category: 'prop',
+  modelName: 'banner_white',
+  transform: DUNGEON_PROP_TRANSFORM,
+  metadata: {
+    connectsTo: 'WALL',
+    blocksLineOfSight: false,
+  },
+})

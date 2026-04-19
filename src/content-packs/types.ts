@@ -34,6 +34,7 @@ export type Connector = {
   rotation?: readonly [number, number, number]
 }
 
+// Legacy type kept for backward compatibility
 export type PropConnector = 'FLOOR' | 'WALL' | 'WALLFLOOR' | 'FREE'
 
 export type PropLight = {
@@ -56,10 +57,8 @@ export type TileSpan = {
 }
 
 export type ContentPackAssetMetadata = {
-  /** Legacy: single connection type (deprecated, use connectsTo array instead) */
-  connectsTo?: PropConnector
-  /** What this asset can connect to (FLOOR, WALL, or SURFACE for stackable objects) */
-  connectsToTypes?: ConnectsTo | ConnectsTo[]
+  /** What this asset connects to. Supports single value, array, or legacy PropConnector types */
+  connectsTo?: PropConnector | ConnectsTo | ConnectsTo[]
   /** How this asset snaps during placement: GRID (snap to grid/wall centers) or FREE (freeform) */
   snapsTo?: SnapsTo
   /** Multiple connection points for objects that can attach in different ways */

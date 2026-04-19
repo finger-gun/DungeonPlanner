@@ -1079,7 +1079,8 @@ function getPropPlacement(
   surfaceHit: PlacementSurfaceHit | null,
 ): PropPlacement | null {
   // Use new placement system if asset has new metadata
-  if (asset.metadata?.connectsToTypes || asset.metadata?.connectors || asset.metadata?.snapsTo) {
+  if (asset.metadata?.connectors || asset.metadata?.snapsTo || 
+      (asset.metadata?.connectsTo && (Array.isArray(asset.metadata.connectsTo) || asset.metadata.connectsTo === 'SURFACE'))) {
     const snapResult = calculatePropSnapPosition(
       asset,
       point,
@@ -1112,7 +1113,13 @@ function getPropPlacement(
   
   // Legacy placement logic for backward compatibility
   const snapped = snapWorldPointToGrid(point)
-  const connector = asset.metadata?.connectsTo ?? 'FLOOR'
+  const connectsTo = asset.metadata?.connectsTo ?? 'FLOOR'
+  
+  // For legacy logic, we only handle single PropConnector values
+  const connector: PropConnector = 
+    Array.isArray(connectsTo) ? 'FLOOR' :  // Default arrays to FLOOR for legacy
+    connectsTo === 'SURFACE' ? 'FLOOR' :   // SURFACE not supported in legacy
+    connectsTo
 
   if (connector === 'FREE') {
     if (surfaceHit) {

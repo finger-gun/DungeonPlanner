@@ -1,0 +1,15 @@
+import { createDungeonAsset } from '../../shared/createDungeonAsset'
+import { DUNGEON_PROP_TRANSFORM } from '../../shared/dungeonConstants'
+
+export const dungeonBarStraightCShortAsset = createDungeonAsset({
+  id: 'dungeon.props_bars_bar_straight_C_short',
+  slug: 'dungeon-props-bars-bar-straight-C-short',
+  name: 'Dungeon Bar Straight C Short',
+  category: 'prop',
+  modelName: 'bar_straight_C_short',
+  transform: DUNGEON_PROP_TRANSFORM,
+  metadata: {
+    connectsTo: 'FLOOR',
+    blocksLineOfSight: false,
+  },
+})

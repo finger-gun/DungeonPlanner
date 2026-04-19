@@ -20,16 +20,32 @@ type WallSegment = {
 }
 
 /**
- * Get default connector for an asset based on legacy metadata
+ * Get default connector for an asset based on metadata
  */
 function getDefaultConnector(asset: ContentPackAsset): Connector {
   const connectsTo = asset.metadata?.connectsTo ?? 'FLOOR'
   
-  // Map legacy connectsTo to new connector
-  const type: ConnectsTo = 
-    connectsTo === 'WALL' ? 'WALL' :
-    connectsTo === 'FREE' ? 'FLOOR' :  // FREE still connects to floor, just doesn't snap
-    'FLOOR'
+  // Handle legacy PropConnector types
+  if (connectsTo === 'FREE' || connectsTo === 'WALLFLOOR') {
+    return {
+      point: [0, 0, 0],
+      type: 'FLOOR',
+    }
+  }
+  
+  // Handle new ConnectsTo types (including arrays)
+  if (Array.isArray(connectsTo)) {
+    // For arrays, use first type as default
+    return {
+      point: [0, 0, 0],
+      type: connectsTo[0],
+    }
+  }
+  
+  // Single ConnectsTo value
+  const type: ConnectsTo = connectsTo === 'WALL' ? 'WALL' : 
+                          connectsTo === 'SURFACE' ? 'SURFACE' :
+                          'FLOOR'
   
   return {
     point: [0, 0, 0],
@@ -38,13 +54,25 @@ function getDefaultConnector(asset: ContentPackAsset): Connector {
 }
 
 /**
- * Get all connectors for an asset (from metadata or default)
+ * Get all connectors for an asset (from metadata or inferred from connectsTo)
  */
 function getAssetConnectors(asset: ContentPackAsset): Connector[] {
+  // Explicit connectors take priority
   if (asset.metadata?.connectors && asset.metadata.connectors.length > 0) {
     return asset.metadata.connectors as Connector[]
   }
   
+  const connectsTo = asset.metadata?.connectsTo
+  
+  // Handle array of connection types - create a connector for each
+  if (Array.isArray(connectsTo)) {
+    return connectsTo.map(type => ({
+      point: [0, 0, 0] as readonly [number, number, number],
+      type,
+    }))
+  }
+  
+  // Single connector
   return [getDefaultConnector(asset)]
 }
 
