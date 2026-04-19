@@ -41,6 +41,7 @@ export function WebGPUPostProcessing({
   const blurRadiusUniform  = useRef(uniform(6))
 
   const settings  = useDungeonStore((state) => state.postProcessing)
+  const activeCameraMode = useDungeonStore((state) => state.activeCameraMode)
   const selection = useDungeonStore((state) => state.selection)
   const showLensFocusDebugPoint = useDungeonStore((state) => state.showLensFocusDebugPoint)
   const focusMarkerRef = useRef<THREE.Group | null>(null)
@@ -90,7 +91,9 @@ export function WebGPUPostProcessing({
 
         const baseScenePass = pass(scene as any, camera as any) as any
         const baseSceneDepth = baseScenePass.getTextureNode('depth') as any
-        let outputNode = settings.enabled
+        // Apply tilt-shift blur only when enabled AND not in top-down view
+        const shouldApplyBlur = settings.enabled && activeCameraMode !== 'top-down'
+        let outputNode = shouldApplyBlur
             ? tiltShift(scene, camera, {
                focusDistance: focusDistanceUniform.current,
                nearFocusRange: nearFocusRangeUniform.current,
@@ -145,7 +148,7 @@ export function WebGPUPostProcessing({
       exploredLosCameraRef.current = null
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [camera, lineOfSightActive, renderer, scene, settings.enabled, size])
+  }, [camera, lineOfSightActive, renderer, scene, settings.enabled, activeCameraMode, size])
 
   // Update shader uniforms only when settings actually change — not every frame.
   useEffect(() => {

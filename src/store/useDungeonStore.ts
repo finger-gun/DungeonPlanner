@@ -183,6 +183,7 @@ type DungeonState = DungeonSnapshot & {
   characterSheet: CharacterSheetState
   activeCameraMode: CameraPreset
   cameraPreset: CameraPreset | null
+  previousCameraPreset: CameraPreset | null
   history: DungeonSnapshot[]
   future: DungeonSnapshot[]
   paintCells: (cells: GridCell[]) => number
@@ -740,6 +741,7 @@ export const useDungeonStore = create<DungeonState>()(
   fpsLimit: 60 as 0 | 30 | 60 | 120,
   activeCameraMode: 'perspective',
   cameraPreset: null,
+  previousCameraPreset: null,
   history: [],
   future: [],
   floors: {
@@ -1244,8 +1246,15 @@ export const useDungeonStore = create<DungeonState>()(
       ...current,
       tool,
       isRoomResizeHandleActive: tool === 'room' ? current.isRoomResizeHandleActive : false,
-      cameraPreset: tool === 'room' ? 'top-down' : current.cameraPreset,
-      activeCameraMode: tool === 'room' ? 'top-down' : current.activeCameraMode,
+      // When entering room mode, save current camera and switch to top-down
+      // When leaving room mode, restore previous camera preset
+      previousCameraPreset: tool === 'room' ? current.activeCameraMode : current.previousCameraPreset,
+      cameraPreset: tool === 'room' 
+        ? 'top-down' 
+        : (current.previousCameraPreset ? current.previousCameraPreset : current.cameraPreset),
+      activeCameraMode: tool === 'room' 
+        ? 'top-down' 
+        : (current.previousCameraPreset ? current.previousCameraPreset : current.activeCameraMode),
       history: [...current.history, previousSnapshot],
       future: [],
     }))
