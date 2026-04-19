@@ -22,6 +22,18 @@ export type ContentPackBatchRender = {
     | ContentPackModelTransform
     | ((variantKey?: string, objectProps?: Record<string, unknown>) => ContentPackModelTransform | undefined)
 }
+export type ConnectsTo = 'FLOOR' | 'WALL' | 'SURFACE'
+export type SnapsTo = 'GRID' | 'FREE'
+
+export type Connector = {
+  /** Position in local object space relative to model origin */
+  point: readonly [number, number, number]
+  /** What this connector can attach to */
+  type: ConnectsTo
+  /** Optional rotation adjustment when connected (euler angles in radians) */
+  rotation?: readonly [number, number, number]
+}
+
 export type PropConnector = 'FLOOR' | 'WALL' | 'WALLFLOOR' | 'FREE'
 
 export type PropLight = {
@@ -36,8 +48,23 @@ export type PropLight = {
   castShadow?: boolean
 }
 
+export type TileSpan = {
+  /** How many grid cells wide this tile spans (1 cell = GRID_SIZE units). */
+  gridWidth: 1 | 2 | 4
+  /** How many grid cells deep this tile spans (1 cell = GRID_SIZE units). */
+  gridHeight: 1 | 2 | 4
+}
+
 export type ContentPackAssetMetadata = {
+  /** Legacy: single connection type (deprecated, use connectsTo array instead) */
   connectsTo?: PropConnector
+  /** What this asset can connect to (FLOOR, WALL, or SURFACE for stackable objects) */
+  connectsToTypes?: ConnectsTo | ConnectsTo[]
+  /** How this asset snaps during placement: GRID (snap to grid/wall centers) or FREE (freeform) */
+  snapsTo?: SnapsTo
+  /** Multiple connection points for objects that can attach in different ways */
+  connectors?: Connector[]
+  /** Whether other props can be placed on this object's surface */
   propSurface?: boolean
   light?: PropLight
   /** Whether this asset blocks play-mode line of sight when placed on a floor cell. */
@@ -54,6 +81,8 @@ export type ContentPackAssetMetadata = {
   stairDirection?: 'up' | 'down'
   /** Matching staircase asset to place on the adjacent floor. */
   pairedAssetId?: string
+  /** How many grid cells this floor/ceiling tile spans. Default is 1x1. */
+  tileSpan?: TileSpan
 }
 
 export type ContentPackAsset = {
@@ -78,4 +107,12 @@ export type ContentPack = {
   id: string
   name: string
   assets: ContentPackAsset[]
+  /** Optional default asset IDs for each category */
+  defaultAssets?: {
+    floor?: string
+    wall?: string
+    opening?: string
+    prop?: string
+    player?: string
+  }
 }
