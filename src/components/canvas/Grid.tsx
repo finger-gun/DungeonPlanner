@@ -1078,9 +1078,18 @@ function getPropPlacement(
   paintedCells: Record<string, PaintedCellRecord>,
   surfaceHit: PlacementSurfaceHit | null,
 ): PropPlacement | null {
-  // Use new placement system if asset has new metadata
-  if (asset.metadata?.connectors || asset.metadata?.snapsTo || 
-      (asset.metadata?.connectsTo && (Array.isArray(asset.metadata.connectsTo) || asset.metadata.connectsTo === 'SURFACE'))) {
+  // Use new placement system if asset has new metadata features
+  // OR if it uses new ConnectsTo values (WALL, SURFACE, or arrays)
+  const hasNewMetadata = 
+    asset.metadata?.connectors || 
+    asset.metadata?.snapsTo || 
+    (asset.metadata?.connectsTo && (
+      Array.isArray(asset.metadata.connectsTo) || 
+      asset.metadata.connectsTo === 'SURFACE' ||
+      asset.metadata.connectsTo === 'WALL'
+    ))
+  
+  if (hasNewMetadata) {
     const snapResult = calculatePropSnapPosition(
       asset,
       point,

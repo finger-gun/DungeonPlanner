@@ -17,6 +17,13 @@ export const dungeonTorchMountedAsset = createDungeonAsset({
   transform,
   metadata: {
     connectsTo: 'WALL',
+    snapsTo: 'GRID',
+    connectors: [
+      {
+        type: 'WALL',
+        point: [0, 1, -0.125], // Back of torch against wall
+      }
+    ],
     blocksLineOfSight: false,
   },
   getLight: (objectProps) => {
