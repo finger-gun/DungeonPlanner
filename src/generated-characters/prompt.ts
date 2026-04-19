@@ -7,7 +7,7 @@ import {
 } from './types'
 
 const BASE_CHARACTER_SYSTEM_PROMPT = [
-  'Create a fantasy tabletop character illustration.',
+  'Create a fantasy tabletop character or creature illustration.',
   'The subject must be centered, clearly readable, and fully visible from head to toe.',
   'Use a clear green screen background with no scenery, no environment, no floor, and no shadows.',
   'Do not add any frame, border, sticker outline, nameplate, caption, text, logo, watermark, or UI overlay.',

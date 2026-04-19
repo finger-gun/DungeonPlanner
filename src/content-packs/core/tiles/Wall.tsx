@@ -39,6 +39,10 @@ export function Wall({
   )
 }
 
+export function getWallVariantAssetUrl(variantKey: string | undefined) {
+  return WALL_VARIANT_URLS[getVariantIndex(variantKey, WALL_VARIANT_URLS.length)]
+}
+
 function getVariantIndex(variantKey: string | undefined, variantCount: number) {
   if (!variantKey) {
     return 0
@@ -63,4 +67,10 @@ export const wallAsset: ContentPackAsset = {
   category: 'wall',
   assetUrl: wallAssetUrl,
   Component: Wall,
+  batchRender: {
+    getAssetUrl: getWallVariantAssetUrl,
+    transform: {
+      position: WALL_PIVOT_OFFSET,
+    },
+  },
 }

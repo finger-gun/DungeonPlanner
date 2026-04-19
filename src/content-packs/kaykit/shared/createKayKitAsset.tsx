@@ -1,4 +1,3 @@
-/* eslint-disable react-refresh/only-export-components */
 import { useMemo } from 'react'
 import { useGLTF } from '@react-three/drei'
 import type {
@@ -65,6 +64,10 @@ export function createKayKitAsset(definition: KayKitAssetDefinition): ContentPac
     assetUrl,
     ...(thumbnailUrl ? { thumbnailUrl } : {}),
     Component,
+    batchRender: {
+      getAssetUrl: () => assetUrl,
+      transform: resolvedTransform,
+    },
     projectionReceiver: {
       getAssetUrl: () => assetUrl,
       transform: resolvedTransform,

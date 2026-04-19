@@ -1,4 +1,3 @@
-/* eslint-disable react-refresh/only-export-components */
 import { useMemo } from 'react'
 import { useGLTF } from '@react-three/drei'
 import type { ContentPackAsset, ContentPackComponentProps } from '../../types'
@@ -59,6 +58,15 @@ export function createKayKitWallAsset(definition: KayKitWallAssetDefinition): Co
     assetUrl,
     ...(thumbnailUrl ? { thumbnailUrl } : {}),
     Component: KayKitWallVariant,
+    batchRender: {
+      getAssetUrl: (_, objectProps) =>
+        objectProps?.kind === 'corner' ? cornerAssetUrl : assetUrl,
+      transform: (_, objectProps) => (
+        objectProps?.kind === 'corner'
+          ? { position: [0, 0, 0] as const, rotation: WALL_CORNER_ROTATION, scale: WALL_CORNER_SCALE }
+          : WALL_DEFAULT_TRANSFORM
+      ),
+    },
     metadata: {
       wallSpan: 1,
       wallCornerType: 'solitary',

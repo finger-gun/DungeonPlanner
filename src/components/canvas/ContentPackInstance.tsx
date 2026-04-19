@@ -8,11 +8,8 @@ import type { ComponentType } from 'react'
 import type { ContentPackComponentProps } from '../../content-packs/types'
 import { GRID_SIZE } from '../../hooks/useSnapToGrid'
 import type { PlayVisibilityState } from './playVisibility'
-import {
-  EXPLORED_MEMORY_MASK_LAYER,
-  LINE_OF_SIGHT_MASK_LAYER,
-} from '../../postprocessing/lineOfSightMask'
 import { shouldRenderLineOfSightGeometry } from './losRendering'
+import { setLosLayers } from './losLayers'
 
 /** Inverted-hull outline: a slightly scaled-up back-face clone with a
  *  bright emissive rim material. Works with any geometry/GLTF. */
@@ -438,21 +435,4 @@ function FallbackMesh({
       )}
     </mesh>
   )
-}
-
-function setLosLayers(object: THREE.Object3D, visibility: PlayVisibilityState) {
-  object.traverse((child) => {
-    if (!(child instanceof THREE.Mesh)) {
-      return
-    }
-
-    child.layers.disable(LINE_OF_SIGHT_MASK_LAYER)
-    child.layers.disable(EXPLORED_MEMORY_MASK_LAYER)
-
-    if (visibility === 'visible') {
-      child.layers.enable(LINE_OF_SIGHT_MASK_LAYER)
-    } else if (visibility === 'explored') {
-      child.layers.enable(EXPLORED_MEMORY_MASK_LAYER)
-    }
-  })
 }

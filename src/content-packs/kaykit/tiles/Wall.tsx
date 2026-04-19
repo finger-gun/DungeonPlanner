@@ -49,6 +49,15 @@ export const kaykitWallAsset: ContentPackAsset = {
   assetUrl: wallAssetUrl,
   ...(wallThumbnailUrl ? { thumbnailUrl: wallThumbnailUrl } : {}),
   Component: KayKitWall,
+  batchRender: {
+    getAssetUrl: (_, objectProps) =>
+      objectProps?.kind === 'corner' ? wallCornerSmallAssetUrl : wallAssetUrl,
+    transform: (_, objectProps) => (
+      objectProps?.kind === 'corner'
+        ? { position: [0, 0, 0] as const, rotation: WALL_CORNER_ROTATION, scale: WALL_CORNER_SCALE }
+        : WALL_DEFAULT_TRANSFORM
+    ),
+  },
   metadata: {
     wallSpan: 1,
     wallCornerType: 'solitary',

@@ -78,60 +78,67 @@ export function WebGPUPostProcessing({
   useEffect(() => {
     if (!renderer || !scene || !camera) return
 
-    const baseScenePass = pass(scene as any, camera as any) as any
-    const baseSceneDepth = baseScenePass.getTextureNode('depth') as any
-    let outputNode = settings.enabled
-        ? tiltShift(scene, camera, {
-           focusDistance: focusDistanceUniform.current,
-           nearFocusRange: nearFocusRangeUniform.current,
-           farFocusRange: farFocusRangeUniform.current,
-           blurRadius: blurRadiusUniform.current,
-         })
-      : baseScenePass.getTextureNode()
-
-    // Clone camera restricted to layer 31 for the selection outline pass
-    const outlineCamera = (camera as any).clone() as THREE.Camera
-    ;(outlineCamera as any).layers.disableAll()
-    ;(outlineCamera as any).layers.enable(SELECTION_OUTLINE_LAYER)
-    outlineCameraRef.current = outlineCamera
-
-    if (settings.enabled) {
-      outputNode = alphaOver(outputNode, selectionOutline(scene, outlineCamera))
-    }
-
-    if (lineOfSightActive) {
-      const visibleLosCamera = (camera as any).clone() as THREE.Camera
-      ;(visibleLosCamera as any).layers.disableAll()
-      ;(visibleLosCamera as any).layers.enable(LINE_OF_SIGHT_MASK_LAYER)
-      visibleLosCameraRef.current = visibleLosCamera
-
-      const exploredLosCamera = (camera as any).clone() as THREE.Camera
-      ;(exploredLosCamera as any).layers.disableAll()
-      ;(exploredLosCamera as any).layers.enable(EXPLORED_MEMORY_MASK_LAYER)
-      exploredLosCameraRef.current = exploredLosCamera
-
-      outputNode = applyLineOfSightMask(
-        outputNode,
-        geometryLayerMask(scene, visibleLosCamera, baseSceneDepth),
-        geometryLayerMask(scene, exploredLosCamera, baseSceneDepth),
-      )
-    } else {
-      visibleLosCameraRef.current = null
-      exploredLosCameraRef.current = null
-    }
-
-    const postProcessing = new THREE.PostProcessing(
-      renderer as unknown as THREE.WebGPURenderer,
-    )
-    postProcessing.outputNode = outputNode
-    postProcessingRef.current = postProcessing
+    let cancelled = false
 
     // Pre-warm all material pipelines currently in the scene so Three.js
     // doesn't try to compile them for the first time mid-postprocessing-render
-    // (which triggers the WebGPU "PipelineLayout with '' label" error on Firefox).
-    ;(renderer as any).compileAsync?.(scene, camera).catch(() => {/* best-effort */})
+    // (which triggers the WebGPU pipeline error on initial load when effects are enabled).
+    ;(renderer as any).compileAsync?.(scene, camera)
+      .catch(() => {/* best-effort */})
+      .finally(() => {
+        if (cancelled) return
+
+        const baseScenePass = pass(scene as any, camera as any) as any
+        const baseSceneDepth = baseScenePass.getTextureNode('depth') as any
+        let outputNode = settings.enabled
+            ? tiltShift(scene, camera, {
+               focusDistance: focusDistanceUniform.current,
+               nearFocusRange: nearFocusRangeUniform.current,
+               farFocusRange: farFocusRangeUniform.current,
+               blurRadius: blurRadiusUniform.current,
+             })
+          : baseScenePass.getTextureNode()
+
+        // Clone camera restricted to layer 31 for the selection outline pass
+        const outlineCamera = (camera as any).clone() as THREE.Camera
+        ;(outlineCamera as any).layers.disableAll()
+        ;(outlineCamera as any).layers.enable(SELECTION_OUTLINE_LAYER)
+        outlineCameraRef.current = outlineCamera
+
+        if (settings.enabled) {
+          outputNode = alphaOver(outputNode, selectionOutline(scene, outlineCamera))
+        }
+
+        if (lineOfSightActive) {
+          const visibleLosCamera = (camera as any).clone() as THREE.Camera
+          ;(visibleLosCamera as any).layers.disableAll()
+          ;(visibleLosCamera as any).layers.enable(LINE_OF_SIGHT_MASK_LAYER)
+          visibleLosCameraRef.current = visibleLosCamera
+
+          const exploredLosCamera = (camera as any).clone() as THREE.Camera
+          ;(exploredLosCamera as any).layers.disableAll()
+          ;(exploredLosCamera as any).layers.enable(EXPLORED_MEMORY_MASK_LAYER)
+          exploredLosCameraRef.current = exploredLosCamera
+
+          outputNode = applyLineOfSightMask(
+            outputNode,
+            geometryLayerMask(scene, visibleLosCamera, baseSceneDepth),
+            geometryLayerMask(scene, exploredLosCamera, baseSceneDepth),
+          )
+        } else {
+          visibleLosCameraRef.current = null
+          exploredLosCameraRef.current = null
+        }
+
+        const postProcessing = new THREE.PostProcessing(
+          renderer as unknown as THREE.WebGPURenderer,
+        )
+        postProcessing.outputNode = outputNode
+        postProcessingRef.current = postProcessing
+      })
 
     return () => {
+      cancelled = true
       postProcessingRef.current = null
       outlineCameraRef.current  = null
       visibleLosCameraRef.current = null

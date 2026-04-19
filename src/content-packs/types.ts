@@ -13,6 +13,15 @@ export type ContentPackModelTransform = {
   rotation?: readonly [number, number, number]
   scale?: number | readonly [number, number, number]
 }
+export type ContentPackBatchRender = {
+  getAssetUrl?: (
+    variantKey?: string,
+    objectProps?: Record<string, unknown>,
+  ) => string | undefined
+  transform?:
+    | ContentPackModelTransform
+    | ((variantKey?: string, objectProps?: Record<string, unknown>) => ContentPackModelTransform | undefined)
+}
 export type PropConnector = 'FLOOR' | 'WALL' | 'WALLFLOOR' | 'FREE'
 
 export type PropLight = {
@@ -60,6 +69,7 @@ export type ContentPackAsset = {
     getAssetUrl?: (variantKey?: string) => string | undefined
     transform?: ContentPackModelTransform
   }
+  batchRender?: ContentPackBatchRender
   getLight?: (objectProps: Record<string, unknown>) => PropLight | null
   getPlayModeNextProps?: (objectProps: Record<string, unknown>) => Record<string, unknown> | null
 }
