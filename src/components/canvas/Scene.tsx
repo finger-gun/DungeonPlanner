@@ -148,6 +148,8 @@ export default Scene
 function GlobalContent() {
   const lightIntensity = useDungeonStore((state) => state.sceneLighting.intensity)
   const mapMode = useDungeonStore((state) => state.mapMode)
+  const outdoorGroundTextureCells = useDungeonStore((state) => state.outdoorGroundTextureCells)
+  const outdoorTerrainHeights = useDungeonStore((state) => state.outdoorTerrainHeights)
   const outdoorTimeOfDay = useDungeonStore((state) => state.outdoorTimeOfDay)
   const tool = useDungeonStore((state) => state.tool)
   const floorViewMode = useDungeonStore((state) => state.floorViewMode)
@@ -202,7 +204,13 @@ function GlobalContent() {
 
   return (
     <>
-      {mapMode === 'outdoor' && <OutdoorGround outdoorBlend={outdoorBlend} />}
+      {mapMode === 'outdoor' && (
+        <OutdoorGround
+          outdoorBlend={outdoorBlend}
+          outdoorGroundTextureCells={outdoorGroundTextureCells}
+          outdoorTerrainHeights={outdoorTerrainHeights}
+        />
+      )}
       <color attach="background" args={[skyColor]} />
       <fog attach="fog" args={[skyColor, fogNear, fogFar]} />
       <ambientLight intensity={1.6 * lightIntensity} color={ambientColor} />
@@ -441,6 +449,7 @@ function FloorContent({ startY = 0 }: { startY?: number }) {
   const placedObjects = useDungeonStore((state) => state.placedObjects)
   const paintedCells = useDungeonStore((state) => state.paintedCells)
   const blockedCells = useDungeonStore((state) => state.blockedCells)
+  const outdoorTerrainHeights = useDungeonStore((state) => state.outdoorTerrainHeights)
   const mapMode = useDungeonStore((state) => state.mapMode)
   const occupancy = useDungeonStore((state) => state.occupancy)
   const layers = useDungeonStore((state) => state.layers)
@@ -515,14 +524,18 @@ function FloorContent({ startY = 0 }: { startY?: number }) {
       new THREE.Plane(new THREE.Vector3(0, 1, 0), 0),
       new THREE.Vector3(),
     )
-    const nextState = createPlayDragState(object, pointerPoint)
+    const nextState = createPlayDragState(
+      object,
+      pointerPoint,
+      mapMode === 'outdoor' ? outdoorTerrainHeights : undefined,
+    )
 
     selectObject(object.id)
     setDragState(nextState)
     dragStateRef.current = nextState
     setObjectDragActive(true)
     invalidate()
-  }, [invalidate, selectObject, setObjectDragActive, tool])
+  }, [invalidate, mapMode, outdoorTerrainHeights, selectObject, setObjectDragActive, tool])
 
   useEffect(() => {
     if (!dragState) {
@@ -570,6 +583,7 @@ function FloorContent({ startY = 0 }: { startY?: number }) {
               ? !blockedCells[targetKey]
               : Boolean(paintedCells[targetKey]),
             occupantId,
+            mapMode === 'outdoor' ? outdoorTerrainHeights : undefined,
           )
         : current)
       invalidate()
@@ -611,7 +625,19 @@ function FloorContent({ startY = 0 }: { startY?: number }) {
       window.removeEventListener('pointermove', handlePointerMove)
       window.removeEventListener('pointerup', handlePointerUp)
     }
-  }, [blockedCells, camera, dragState, gl, invalidate, mapMode, moveObject, occupancy, paintedCells, stopDrag])
+  }, [
+    blockedCells,
+    camera,
+    dragState,
+    gl,
+    invalidate,
+    mapMode,
+    moveObject,
+    occupancy,
+    outdoorTerrainHeights,
+    paintedCells,
+    stopDrag,
+  ])
 
   useEffect(() => {
     if (tool === 'play') {

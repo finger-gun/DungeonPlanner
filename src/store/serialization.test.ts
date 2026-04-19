@@ -17,6 +17,7 @@ function emptyFloorSnapshot() {
     rooms: {},
     paintedCells: {},
     blockedCells: {},
+    outdoorTerrainHeights: {},
     outdoorGroundTextureCells: {},
     exploredCells: {},
     floorTileAssetIds: {},
@@ -150,6 +151,23 @@ describe('serializeDungeon / deserializeDungeon roundtrip', () => {
     expect(outdoorGroundTextureCells?.['6:7']).toMatchObject({
       cell: [6, 7],
       textureType: 'rough-stone',
+    })
+  })
+
+  it('preserves outdoor terrain heights', () => {
+    const state = baseState()
+    state.floors!['floor-1'].snapshot.outdoorTerrainHeights['3:4'] = {
+      cell: [3, 4],
+      height: 1.25,
+    }
+
+    const result = deserializeDungeon(serializeDungeon(state))
+    expect(result).not.toBeNull()
+    const outdoorTerrainHeights = result!.outdoorTerrainHeights
+      ?? result!.floors?.['floor-1']?.snapshot?.outdoorTerrainHeights
+    expect(outdoorTerrainHeights?.['3:4']).toMatchObject({
+      cell: [3, 4],
+      height: 1.25,
     })
   })
 
@@ -325,5 +343,36 @@ describe('deserializeDungeon version migrations', () => {
     expect(result!.name).toBe('Very Old')
     expect(result!.mapMode).toBe('indoor')
     expect(result!.outdoorTimeOfDay).toBe(0.5)
+  })
+
+  it('v12→v13: adds empty outdoor terrain heights when missing', () => {
+    const v12File = JSON.stringify({
+      version: 12,
+      name: 'Legacy Outdoor',
+      mapMode: 'outdoor',
+      sceneLighting: { intensity: 1 },
+      postProcessing: { ...DEFAULT_POST_PROCESSING_SETTINGS },
+      activeFloorId: 'floor-1',
+      floorOrder: ['floor-1'],
+      floors: [{
+        id: 'floor-1',
+        name: 'Ground Floor',
+        level: 0,
+        layers: [{ id: 'default', name: 'Default', visible: true, locked: false }],
+        layerOrder: ['default'],
+        activeLayerId: 'default',
+        rooms: [],
+        cells: [],
+        blockedCells: [],
+        exploredCells: [],
+        objects: [],
+        openings: [],
+        nextRoomNumber: 1,
+      }],
+    })
+
+    const result = deserializeDungeon(v12File)
+    expect(result).not.toBeNull()
+    expect(result!.outdoorTerrainHeights).toEqual({})
   })
 })

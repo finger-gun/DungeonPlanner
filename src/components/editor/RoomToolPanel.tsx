@@ -3,6 +3,7 @@ import {
   useDungeonStore,
   type OutdoorBrushMode,
   type OutdoorGroundTextureType,
+  type OutdoorTerrainSculptMode,
   type OutdoorTerrainDensity,
   type OutdoorTerrainType,
   type RoomEditMode,
@@ -33,7 +34,13 @@ const TERRAIN_DENSITIES: Array<{ id: OutdoorTerrainDensity; label: string }> = [
 
 const OUTDOOR_BRUSH_MODES: Array<{ id: OutdoorBrushMode; label: string }> = [
   { id: 'surroundings', label: 'Surroundings' },
+  { id: 'terrain-sculpt', label: 'Terrain Sculpt' },
   { id: 'ground-texture', label: 'Ground Texture' },
+]
+
+const OUTDOOR_SCULPT_MODES: Array<{ id: OutdoorTerrainSculptMode; label: string }> = [
+  { id: 'raise', label: 'Raise' },
+  { id: 'lower', label: 'Lower' },
 ]
 
 const OUTDOOR_GROUND_TEXTURES: Array<{ id: OutdoorGroundTextureType; label: string }> = [
@@ -51,6 +58,7 @@ export function RoomToolPanel() {
   const outdoorTerrainType = useDungeonStore((state) => state.outdoorTerrainType)
   const outdoorOverpaintRegenerate = useDungeonStore((state) => state.outdoorOverpaintRegenerate)
   const outdoorBrushMode = useDungeonStore((state) => state.outdoorBrushMode)
+  const outdoorTerrainSculptMode = useDungeonStore((state) => state.outdoorTerrainSculptMode)
   const outdoorGroundTextureBrush = useDungeonStore((state) => state.outdoorGroundTextureBrush)
   const setRoomEditMode = useDungeonStore((state) => state.setRoomEditMode)
   const setSurfaceBrushAsset = useDungeonStore((state) => state.setSurfaceBrushAsset)
@@ -58,6 +66,7 @@ export function RoomToolPanel() {
   const setOutdoorTerrainType = useDungeonStore((state) => state.setOutdoorTerrainType)
   const setOutdoorOverpaintRegenerate = useDungeonStore((state) => state.setOutdoorOverpaintRegenerate)
   const setOutdoorBrushMode = useDungeonStore((state) => state.setOutdoorBrushMode)
+  const setOutdoorTerrainSculptMode = useDungeonStore((state) => state.setOutdoorTerrainSculptMode)
   const setOutdoorGroundTextureBrush = useDungeonStore((state) => state.setOutdoorGroundTextureBrush)
 
   const selectedFloorAsset = surfaceBrushAssetIds.floor
@@ -104,6 +113,8 @@ export function RoomToolPanel() {
             {mapMode === 'outdoor'
               ? outdoorBrushMode === 'ground-texture'
                 ? 'Left-drag to paint ground textures. Right-drag to erase texture paint.'
+                : outdoorBrushMode === 'terrain-sculpt'
+                  ? 'Left-drag to sculpt with the selected terrain mode. Right-drag uses the opposite mode for quick raise/lower edits.'
                 : 'Left-drag to paint terrain surroundings. Right-drag to erase. Painted areas auto-place terrain props and remain inaccessible.'
               : 'Left-drag to paint rooms. Right-drag to erase.'}
           </p>
@@ -153,6 +164,32 @@ export function RoomToolPanel() {
                       )
                     })}
                   </div>
+                </div>
+              ) : outdoorBrushMode === 'terrain-sculpt' ? (
+                <div>
+                  <p className="mb-1 uppercase tracking-[0.2em] text-stone-500">Sculpt Direction</p>
+                  <div className="grid grid-cols-2 gap-2">
+                    {OUTDOOR_SCULPT_MODES.map((sculptMode) => {
+                      const active = outdoorTerrainSculptMode === sculptMode.id
+                      return (
+                        <button
+                          key={sculptMode.id}
+                          type="button"
+                          onClick={() => setOutdoorTerrainSculptMode(sculptMode.id)}
+                          className={`rounded-xl border px-2 py-1.5 transition ${
+                            active
+                              ? 'border-teal-300/35 bg-teal-400/10 text-teal-200'
+                              : 'border-stone-800 bg-stone-950/60 text-stone-400 hover:border-stone-700 hover:text-stone-200'
+                          }`}
+                        >
+                          {sculptMode.label}
+                        </button>
+                      )
+                    })}
+                  </div>
+                  <p className="mt-2 text-stone-500">
+                    Sculpt strokes use a soft 3x3 brush and keep older outdoor maps flat until you edit them.
+                  </p>
                 </div>
               ) : (
                 <>

@@ -19,6 +19,7 @@ import type {
   Layer,
   MapMode,
   OutdoorTerrainDensity,
+  OutdoorTerrainHeightfield,
   OutdoorGroundTextureCells,
   OutdoorGroundTextureType,
   OutdoorTerrainProfile,
@@ -30,7 +31,7 @@ import type {
 import type { GridCell } from '../hooks/useSnapToGrid'
 import { getCellKey } from '../hooks/useSnapToGrid'
 
-const CURRENT_VERSION = 12
+const CURRENT_VERSION = 13
 
 // ── Serialized shapes (compact, no redundant keys) ────────────────────────────
 
@@ -75,6 +76,11 @@ type SerializedFloor = {
     x: number
     z: number
     layerId: string
+  }>
+  outdoorTerrainHeights?: Array<{
+    x: number
+    z: number
+    height: number
   }>
   outdoorGroundTextureCells?: Array<{
     x: number
@@ -137,6 +143,7 @@ export type SerializableState = {
   rooms: Record<string, Room>
   paintedCells: PaintedCells
   blockedCells: BlockedCells
+  outdoorTerrainHeights: OutdoorTerrainHeightfield
   outdoorGroundTextureCells: OutdoorGroundTextureCells
   exploredCells: Record<string, true>
   floorTileAssetIds: Record<string, string>
@@ -164,6 +171,7 @@ function serializeFloorData(
     rooms: Record<string, Room>
     paintedCells: PaintedCells
     blockedCells: BlockedCells
+    outdoorTerrainHeights: OutdoorTerrainHeightfield
     outdoorGroundTextureCells: OutdoorGroundTextureCells
     exploredCells: Record<string, true>
     floorTileAssetIds: Record<string, string>
@@ -186,6 +194,9 @@ function serializeFloorData(
     })),
     blockedCells: Object.values(snapshot.blockedCells).map((r) => ({
       x: r.cell[0], z: r.cell[1], layerId: r.layerId,
+    })),
+    outdoorTerrainHeights: Object.values(snapshot.outdoorTerrainHeights).map((record) => ({
+      x: record.cell[0], z: record.cell[1], height: record.height,
     })),
     outdoorGroundTextureCells: Object.values(snapshot.outdoorGroundTextureCells).map((r) => ({
       x: r.cell[0], z: r.cell[1], layerId: r.layerId, textureType: r.textureType,
@@ -225,6 +236,7 @@ export function serializeDungeon(state: SerializableState): string {
       rooms: state.rooms,
       paintedCells: state.paintedCells,
       blockedCells: state.blockedCells,
+      outdoorTerrainHeights: state.outdoorTerrainHeights,
       outdoorGroundTextureCells: state.outdoorGroundTextureCells,
       exploredCells: state.exploredCells,
       floorTileAssetIds: state.floorTileAssetIds,
@@ -430,6 +442,18 @@ export function deserializeDungeon(json: string): SerializableState | null {
     }
   }
 
+  if (version < 13 && Array.isArray((raw as Record<string, unknown>).floors)) {
+    const r = raw as Record<string, unknown>
+    raw = {
+      ...r,
+      floors: (r.floors as unknown[]).map((floor) =>
+        isObject(floor) && !Array.isArray(floor.outdoorTerrainHeights)
+          ? { ...floor, outdoorTerrainHeights: [] }
+          : floor,
+      ),
+    }
+  }
+
   return parseFile(raw as Record<string, unknown>)
 }
 
@@ -442,6 +466,7 @@ function parseFloorData(raw: Record<string, unknown>): {
   rooms: Record<string, Room>
   paintedCells: PaintedCells
   blockedCells: BlockedCells
+  outdoorTerrainHeights: OutdoorTerrainHeightfield
   outdoorGroundTextureCells: OutdoorGroundTextureCells
   exploredCells: Record<string, true>
   floorTileAssetIds: Record<string, string>
@@ -512,6 +537,22 @@ function parseFloorData(raw: Record<string, unknown>): {
     ]
     const layerId = typeof c.layerId === 'string' && layers[c.layerId] ? c.layerId : 'default'
     blockedCells[getCellKey(cell)] = { cell, layerId, roomId: null }
+  }
+  const outdoorTerrainHeights: OutdoorTerrainHeightfield = {}
+  const outdoorTerrainHeightsArr = Array.isArray(raw.outdoorTerrainHeights)
+    ? (raw.outdoorTerrainHeights as unknown[])
+    : []
+  for (const record of outdoorTerrainHeightsArr) {
+    if (!isObject(record)) continue
+    const cell: GridCell = [
+      typeof record.x === 'number' ? record.x : 0,
+      typeof record.z === 'number' ? record.z : 0,
+    ]
+    const height = typeof record.height === 'number' ? record.height : 0
+    if (height === 0) {
+      continue
+    }
+    outdoorTerrainHeights[getCellKey(cell)] = { cell, height }
   }
   const outdoorGroundTextureCells: OutdoorGroundTextureCells = {}
   const outdoorGroundTextureCellsArr = Array.isArray(raw.outdoorGroundTextureCells)
@@ -593,7 +634,13 @@ function parseFloorData(raw: Record<string, unknown>): {
 
   return {
     layers, layerOrder, activeLayerId, rooms,
-    paintedCells, blockedCells, outdoorGroundTextureCells, exploredCells, floorTileAssetIds, wallSurfaceAssetIds,
+    paintedCells,
+    blockedCells,
+    outdoorTerrainHeights,
+    outdoorGroundTextureCells,
+    exploredCells,
+    floorTileAssetIds,
+    wallSurfaceAssetIds,
     placedObjects, wallOpenings, occupancy,
     nextRoomNumber: typeof raw.nextRoomNumber === 'number' && raw.nextRoomNumber >= 1
       ? raw.nextRoomNumber : 1,

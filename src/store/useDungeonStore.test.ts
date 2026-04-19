@@ -61,6 +61,41 @@ describe('useDungeonStore history', () => {
     expect(state.outdoorTerrainType).toBe('mixed')
     expect(state.outdoorTerrainDensity).toBe('medium')
     expect(state.outdoorOverpaintRegenerate).toBe(false)
+    expect(state.outdoorBrushMode).toBe('surroundings')
+    expect(state.outdoorTerrainSculptMode).toBe('raise')
+    expect(state.outdoorTerrainHeights).toEqual({})
+  })
+
+  it('sculpts outdoor terrain heights only in outdoor mode', () => {
+    expect(useDungeonStore.getState().sculptOutdoorTerrain([[2, 2]], 'raise')).toBe(0)
+
+    useDungeonStore.getState().newDungeon('outdoor')
+    expect(useDungeonStore.getState().sculptOutdoorTerrain([[2, 2]], 'raise')).toBe(1)
+
+    const state = useDungeonStore.getState()
+    expect(state.outdoorTerrainHeights['2:2']?.height).toBeGreaterThan(0)
+    expect(state.outdoorTerrainHeights['1:2']?.height).toBeGreaterThan(0)
+  })
+
+  it('reanchors outdoor placed objects after terrain sculpting', () => {
+    useDungeonStore.getState().newDungeon('outdoor')
+    const assetId = createTestGeneratedCharacter('Terrain Scout')
+    const placedId = useDungeonStore.getState().placeObject({
+      type: 'player',
+      assetId,
+      position: [1, 0, 1],
+      rotation: [0, 0, 0],
+      props: { connector: 'FLOOR', direction: null },
+      cell: [0, 0],
+      cellKey: '0:0:floor',
+      supportCellKey: '0:0',
+    })
+
+    expect(useDungeonStore.getState().placedObjects[placedId!]?.position[1]).toBe(0)
+
+    useDungeonStore.getState().sculptOutdoorTerrain([[0, 0]], 'raise')
+
+    expect(useDungeonStore.getState().placedObjects[placedId!]?.position[1]).toBeGreaterThan(0)
   })
 
   it('paints and erases outdoor surrounding cells with generated forest props', () => {

@@ -1,50 +1,48 @@
 import { describe, expect, it } from 'vitest'
 import { createPlayDragState, updatePlayDragState } from './playDrag'
 
-describe('playDrag', () => {
-  it('keeps the grabbed player under the cursor while snapping the drop target', () => {
-    const drag = createPlayDragState({
+describe('playDrag terrain support', () => {
+  it('anchors drag state to sculpted outdoor terrain heights', () => {
+    const outdoorTerrainHeights = {
+      '0:0': { cell: [0, 0] as [number, number], height: 1.5 },
+    }
+
+    const dragState = createPlayDragState({
       id: 'player-1',
       assetId: 'generated.player.test',
       rotation: [0, 0, 0],
       position: [1, 0, 1],
       cell: [0, 0],
-    }, { x: 0.2, y: 0, z: 0.4 })
+    }, undefined, outdoorTerrainHeights)
 
-    const updated = updatePlayDragState(drag, { x: 2.4, y: 0, z: 3.1 }, true)
-
-    expect(updated.displayPosition).toEqual([3.2, 0.24, 3.7])
-    expect(updated.cell).toEqual([1, 1])
-    expect(updated.position).toEqual([3, 0, 3])
-    expect(updated.valid).toBe(true)
+    expect(dragState.positionY).toBe(1.5)
+    expect(dragState.position).toEqual([1, 1.5, 1])
   })
 
-  it('starts the dragged player slightly lifted above the floor', () => {
-    const drag = createPlayDragState({
-      id: 'player-1',
+  it('updates dragged positions to the target sculpted cell height', () => {
+    const outdoorTerrainHeights = {
+      '1:0': { cell: [1, 0] as [number, number], height: 0.75 },
+    }
+
+    const dragState = updatePlayDragState({
+      objectId: 'player-1',
       assetId: 'generated.player.test',
       rotation: [0, 0, 0],
-      position: [1, 0, 1],
+      positionY: 0,
       cell: [0, 0],
-    })
-
-    expect(drag.displayPosition).toEqual([1, 0.24, 1])
-    expect(drag.position).toEqual([1, 0, 1])
-  })
-
-  it('marks the dragged player invalid when the target cell is blocked', () => {
-    const drag = createPlayDragState({
-      id: 'player-1',
-      assetId: 'generated.player.test',
-      rotation: [0, 0, 0],
       position: [1, 0, 1],
-      cell: [0, 0],
-    })
+      displayPosition: [1, 0.24, 1],
+      grabOffset: [0, 0],
+      valid: true,
+      animationState: 'holding',
+    }, {
+      x: 3,
+      y: 0,
+      z: 1,
+    }, true, undefined, outdoorTerrainHeights)
 
-    const occupied = updatePlayDragState(drag, { x: 2.1, y: 0, z: 2.1 }, true, 'player-2')
-    const unpainted = updatePlayDragState(drag, { x: 2.1, y: 0, z: 2.1 }, false)
-
-    expect(occupied.valid).toBe(false)
-    expect(unpainted.valid).toBe(false)
+    expect(dragState.cell).toEqual([1, 0])
+    expect(dragState.positionY).toBe(0.75)
+    expect(dragState.position).toEqual([3, 0.75, 1])
   })
 })

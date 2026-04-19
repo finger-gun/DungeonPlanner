@@ -34,4 +34,17 @@ describe('RoomToolPanel', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Rough Stone' }))
     expect(useDungeonStore.getState().outdoorGroundTextureBrush).toBe('rough-stone')
   })
+
+  it('shows sculpt controls only for the terrain sculpt brush', () => {
+    useDungeonStore.getState().newDungeon('outdoor')
+    render(<RoomToolPanel />)
+
+    expect(screen.queryByText('Sculpt Direction')).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Terrain Sculpt' }))
+    expect(screen.getByText('Sculpt Direction')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Lower' }))
+    expect(useDungeonStore.getState().outdoorTerrainSculptMode).toBe('lower')
+  })
 })

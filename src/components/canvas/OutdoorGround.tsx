@@ -3,12 +3,17 @@ import { useTexture } from '@react-three/drei'
 import * as THREE from 'three'
 import { GRID_SIZE } from '../../hooks/useSnapToGrid'
 import {
-  useDungeonStore,
   type OutdoorGroundTextureCells,
   type OutdoorGroundTextureType,
 } from '../../store/useDungeonStore'
+import {
+  OUTDOOR_TERRAIN_SEGMENTS,
+  OUTDOOR_TERRAIN_WORLD_SIZE,
+  sampleOutdoorTerrainHeight,
+  type OutdoorTerrainHeightfield,
+} from '../../store/outdoorTerrain'
 
-const OUTDOOR_GROUND_SIZE = 260
+const OUTDOOR_GROUND_SIZE = OUTDOOR_TERRAIN_WORLD_SIZE
 const OUTDOOR_GROUND_HALF_SIZE = OUTDOOR_GROUND_SIZE / 2
 const MASK_TEXTURE_SIZE = 768
 const MASK_BLUR_PX = 6
@@ -96,19 +101,48 @@ export function createTextureMask(
   return configureMaskTexture(new THREE.CanvasTexture(blurredCanvas))
 }
 
-export function OutdoorGround({ outdoorBlend }: { outdoorBlend: number }) {
-  const outdoorGroundTextureCells = useDungeonStore((state) => state.outdoorGroundTextureCells)
+export function OutdoorGround({
+  outdoorBlend,
+  outdoorGroundTextureCells,
+  outdoorTerrainHeights,
+}: {
+  outdoorBlend: number
+  outdoorGroundTextureCells?: OutdoorGroundTextureCells
+  outdoorTerrainHeights: OutdoorTerrainHeightfield
+}) {
+  const groundTextureCells = outdoorGroundTextureCells ?? {}
   const textures = useTexture(TERRAIN_TEXTURE_PATHS)
+  const terrainGeometry = useMemo(() => {
+    const geometry = new THREE.PlaneGeometry(
+      OUTDOOR_GROUND_SIZE,
+      OUTDOOR_GROUND_SIZE,
+      OUTDOOR_TERRAIN_SEGMENTS,
+      OUTDOOR_TERRAIN_SEGMENTS,
+    )
+    geometry.rotateX(-Math.PI / 2)
+
+    const position = geometry.attributes.position
+    for (let index = 0; index < position.count; index += 1) {
+      const worldX = position.getX(index)
+      const worldZ = position.getZ(index)
+      position.setY(index, sampleOutdoorTerrainHeight(outdoorTerrainHeights, worldX, worldZ))
+    }
+
+    position.needsUpdate = true
+    geometry.computeVertexNormals()
+    return geometry
+  }, [outdoorTerrainHeights])
 
   const maskTextures = useMemo<Record<OverlayTextureType, THREE.CanvasTexture>>(
     () => ({
-      'dry-dirt': createTextureMask(outdoorGroundTextureCells, 'dry-dirt'),
-      'rough-stone': createTextureMask(outdoorGroundTextureCells, 'rough-stone'),
-      'wet-dirt': createTextureMask(outdoorGroundTextureCells, 'wet-dirt'),
+      'dry-dirt': createTextureMask(groundTextureCells, 'dry-dirt'),
+      'rough-stone': createTextureMask(groundTextureCells, 'rough-stone'),
+      'wet-dirt': createTextureMask(groundTextureCells, 'wet-dirt'),
     }),
-    [outdoorGroundTextureCells],
+    [groundTextureCells],
   )
 
+  useEffect(() => () => terrainGeometry.dispose(), [terrainGeometry])
   useEffect(() => () => {
     Object.values(maskTextures).forEach((texture) => texture.dispose())
   }, [maskTextures])
@@ -124,8 +158,7 @@ export function OutdoorGround({ outdoorBlend }: { outdoorBlend: number }) {
 
   return (
     <group>
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.022, 0]} receiveShadow>
-        <planeGeometry args={[OUTDOOR_GROUND_SIZE, OUTDOOR_GROUND_SIZE]} />
+      <mesh geometry={terrainGeometry} receiveShadow>
         <meshStandardMaterial
           map={textures['short-grass']}
           color={groundColor}
@@ -136,16 +169,18 @@ export function OutdoorGround({ outdoorBlend }: { outdoorBlend: number }) {
       {OVERLAY_TEXTURE_TYPES.map((textureType, index) => (
         <mesh
           key={textureType}
-          rotation={[-Math.PI / 2, 0, 0]}
-          position={[0, -0.0215 + index * 0.0002, 0]}
+          geometry={terrainGeometry}
           receiveShadow
+          renderOrder={index + 1}
         >
-          <planeGeometry args={[OUTDOOR_GROUND_SIZE, OUTDOOR_GROUND_SIZE]} />
           <meshStandardMaterial
             map={textures[textureType]}
             alphaMap={maskTextures[textureType]}
             transparent
             depthWrite={false}
+            polygonOffset
+            polygonOffsetFactor={-1 - index}
+            polygonOffsetUnits={-1}
             roughness={1}
             metalness={0}
           />
