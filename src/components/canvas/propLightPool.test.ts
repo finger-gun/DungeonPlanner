@@ -1,7 +1,23 @@
 import { describe, expect, it } from 'vitest'
 import * as THREE from 'three'
 import type { DungeonObjectRecord } from '../../store/useDungeonStore'
-import { buildPropLightPoolAssignments, getPropLightWorldPosition } from './propLightPool'
+import type { PropLight } from '../../content-packs/types'
+import {
+  buildPropLightPoolAssignments,
+  getPropLightWorldPosition,
+  precomputeLightSources,
+  type PropLightSource,
+} from './propLightPool'
+
+const CANDLE_LIGHT: PropLight = {
+  color: '#ff9040',
+  intensity: 1,
+  // distance matches the dungeon candle_lit asset — the frustum-culling tests
+  // are calibrated to this value (outside-view at [10,0,-5] is just outside
+  // the near-view margin sphere of radius 4.5+1.5=6.0).
+  distance: 4.5,
+  decay: 2,
+}
 
 const visibleVisibility = {
   getObjectVisibility: () => 'visible' as const,
@@ -21,14 +37,14 @@ describe('propLightPool', () => {
   })
 
   it('keeps the closest prop lights when the pool is capped', () => {
-    const objects = [
-      createObject('far', [12, 0, 0]),
-      createObject('near', [1, 0, 0]),
-      createObject('mid', [4, 0, 0]),
+    const lightSources = [
+      createLightSource('far', [12, 0, 0]),
+      createLightSource('near', [1, 0, 0]),
+      createLightSource('mid', [4, 0, 0]),
     ]
 
     const assignments = buildPropLightPoolAssignments({
-      objects,
+      lightSources,
       visibility: visibleVisibility,
       useLineOfSightPostMask: false,
       cameraPosition: [0, 0, 0],
@@ -40,11 +56,11 @@ describe('propLightPool', () => {
 
   it('only keeps lights whose influence overlaps the view or near-view margin', () => {
     const assignments = buildPropLightPoolAssignments({
-      objects: [
-        createObject('visible', [0, 0, -5]),
-        createObject('influence-overlaps-view', [6, 0, -5]),
-        createObject('near-view-margin', [8, 0, -5]),
-        createObject('outside-view', [10, 0, -5]),
+      lightSources: [
+        createLightSource('visible', [0, 0, -5]),
+        createLightSource('influence-overlaps-view', [6, 0, -5]),
+        createLightSource('near-view-margin', [8, 0, -5]),
+        createLightSource('outside-view', [10, 0, -5]),
       ],
       visibility: visibleVisibility,
       useLineOfSightPostMask: false,
@@ -62,9 +78,9 @@ describe('propLightPool', () => {
 
   it('prioritizes lights already affecting the viewport over near-view lights', () => {
     const assignments = buildPropLightPoolAssignments({
-      objects: [
-        createObject('near-view-margin', [8, 0, -5]),
-        createObject('visible', [0, 0, -5]),
+      lightSources: [
+        createLightSource('near-view-margin', [8, 0, -5]),
+        createLightSource('visible', [0, 0, -5]),
       ],
       visibility: visibleVisibility,
       useLineOfSightPostMask: false,
@@ -78,7 +94,7 @@ describe('propLightPool', () => {
 
   it('skips hidden prop lights when line-of-sight post masking is inactive', () => {
     const assignments = buildPropLightPoolAssignments({
-      objects: [createObject('hidden', [1, 0, 0])],
+      lightSources: [createLightSource('hidden', [1, 0, 0])],
       visibility: {
         getObjectVisibility: () => 'hidden',
       },
@@ -89,22 +105,40 @@ describe('propLightPool', () => {
 
     expect(assignments).toEqual([])
   })
+
+  it('precomputeLightSources only returns objects with registered lights', () => {
+    // Objects without a valid assetId produce no light source.
+    const objects: DungeonObjectRecord[] = [
+      createObject('no-asset', [0, 0, 0], null),
+      createObject('unknown-asset', [1, 0, 0], 'unknown.asset.id'),
+    ]
+    expect(precomputeLightSources(objects)).toHaveLength(0)
+  })
 })
 
 function createObject(
   id: string,
   position: [number, number, number],
+  assetId: string | null,
 ): DungeonObjectRecord {
   return {
     id,
     type: 'prop',
-    assetId: 'dungeon.props_candle_lit',
+    assetId,
     position,
     rotation: [0, 0, 0],
     props: {},
     cell: [0, 0],
     cellKey: '0,0:floor',
     layerId: 'layer-1',
+  }
+}
+
+function createLightSource(id: string, position: [number, number, number]): PropLightSource {
+  return {
+    key: id,
+    object: createObject(id, position, null),
+    light: CANDLE_LIGHT,
   }
 }
 

@@ -1,4 +1,4 @@
-import { useMemo, useRef } from 'react'
+import { useEffect, useMemo, useRef } from 'react'
 import { useFrame } from '@react-three/fiber'
 import * as THREE from 'three'
 import type { PropLight } from '../../content-packs/types'
@@ -7,9 +7,16 @@ import type { DungeonObjectRecord } from '../../store/useDungeonStore'
 import type { PlayVisibility } from './playVisibility'
 import { shouldRenderLineOfSightLight } from './losRendering'
 
-const DEFAULT_POOLED_PROP_LIGHTS = 32
+export const DEFAULT_POOLED_PROP_LIGHTS = 32
 const DORMANT_LIGHT_POSITION: [number, number, number] = [0, -1000, 0]
 const NEAR_VIEW_LIGHT_MARGIN = 1.5
+/** Minimum squared camera displacement before re-sorting the light pool. */
+const CAMERA_DIRTY_THRESHOLD_SQ = 0.01
+/**
+ * Max age (seconds) before forcing a re-sort even when the camera is still,
+ * so that visibility changes (e.g. player movement) are reflected promptly.
+ */
+const ASSIGNMENT_MAX_STALE_AGE_S = 0.5
 const positionScratch = new THREE.Vector3()
 const offsetScratch = new THREE.Vector3()
 const rotationScratch = new THREE.Euler()
@@ -20,6 +27,29 @@ export type PropLightPoolAssignment = {
   key: string
   position: [number, number, number]
   light: PropLight
+}
+
+/**
+ * A pre-resolved light source — asset registry lookup is done once when the
+ * objects list changes rather than inside the per-frame useFrame callback.
+ */
+export type PropLightSource = {
+  key: string
+  object: DungeonObjectRecord
+  light: PropLight
+}
+
+/**
+ * Pre-computes the list of objects that emit light.
+ * Call this via useMemo so registry lookups only run when objects change,
+ * not on every animation frame.
+ */
+export function precomputeLightSources(objects: DungeonObjectRecord[]): PropLightSource[] {
+  return objects.flatMap((object) => {
+    const asset = object.assetId ? getContentPackAssetById(object.assetId) : null
+    const light = asset?.getLight?.(object.props) ?? asset?.metadata?.light ?? null
+    return light ? [{ key: object.id, object, light }] : []
+  })
 }
 
 export function PropLightPool({
@@ -36,46 +66,89 @@ export function PropLightPool({
   const lightFrustumRef = useRef(new THREE.Frustum())
   const projectionMatrixRef = useRef(new THREE.Matrix4())
 
+  // Registry + getLight lookups are O(n_objects) — only redo when objects changes.
+  const lightSources = useMemo(() => precomputeLightSources(objects), [objects])
+
+  const assignmentsRef = useRef<PropLightPoolAssignment[]>([])
+  // Initialise far away so the very first frame is always treated as dirty.
+  const prevCameraPositionRef = useRef(new THREE.Vector3(0, -999999, 0))
+  const prevLightSourcesRef = useRef<PropLightSource[] | null>(null)
+  const lastRebuildTimeRef = useRef(-Infinity)
+
+  // Reset cached state when the pool size changes so stale slot refs don't linger.
+  useEffect(() => {
+    assignmentsRef.current = []
+    lastRebuildTimeRef.current = -Infinity
+  }, [maxLights])
+
   useFrame(({ camera, clock }) => {
-    camera.updateMatrixWorld()
-    projectionMatrixRef.current.multiplyMatrices(
-      camera.projectionMatrix,
-      camera.matrixWorldInverse,
-    )
-    lightFrustumRef.current.setFromProjectionMatrix(projectionMatrixRef.current)
+    const useLineOfSightPostMask = visibility.active && visibility.mask !== null
+    const now = clock.elapsedTime
 
-    const assignments = buildPropLightPoolAssignments({
-      objects,
-      visibility,
-      useLineOfSightPostMask: visibility.active && visibility.mask !== null,
-      cameraPosition: [camera.position.x, camera.position.y, camera.position.z],
-      cameraFrustum: lightFrustumRef.current,
-      maxLights,
-    })
+    const cameraMoved =
+      camera.position.distanceToSquared(prevCameraPositionRef.current) > CAMERA_DIRTY_THRESHOLD_SQ
+    const lightSourcesChanged = lightSources !== prevLightSourcesRef.current
+    const stale = now - lastRebuildTimeRef.current > ASSIGNMENT_MAX_STALE_AGE_S
 
+    if (cameraMoved || lightSourcesChanged || stale) {
+      projectionMatrixRef.current.multiplyMatrices(
+        camera.projectionMatrix,
+        camera.matrixWorldInverse,
+      )
+      lightFrustumRef.current.setFromProjectionMatrix(projectionMatrixRef.current)
+
+      assignmentsRef.current = buildPropLightPoolAssignments({
+        lightSources,
+        visibility,
+        useLineOfSightPostMask,
+        cameraPosition: [camera.position.x, camera.position.y, camera.position.z],
+        cameraFrustum: lightFrustumRef.current,
+        maxLights,
+      })
+
+      prevCameraPositionRef.current.copy(camera.position)
+      prevLightSourcesRef.current = lightSources
+      lastRebuildTimeRef.current = now
+
+      // Sync positions, colors, and distances — only needed when assignments change.
+      for (let index = 0; index < maxLights; index += 1) {
+        const pooledLight = refs.current[index]
+        if (!pooledLight) {
+          continue
+        }
+
+        const assignment = assignmentsRef.current[index]
+        if (!assignment) {
+          pooledLight.position.set(...DORMANT_LIGHT_POSITION)
+          pooledLight.color.copy(dormantColor)
+          pooledLight.intensity = 0
+          pooledLight.distance = 0
+          pooledLight.decay = 2
+          continue
+        }
+
+        pooledLight.position.set(...assignment.position)
+        pooledLight.color.set(assignment.light.color)
+        pooledLight.distance = assignment.light.distance
+        pooledLight.decay = assignment.light.decay ?? 2
+        // Non-flickering intensity is stable between assignment changes.
+        if (!assignment.light.flicker) {
+          pooledLight.intensity = assignment.light.intensity
+        }
+      }
+    }
+
+    // Flicker runs every frame — cheap sin math that needs continuous motion.
+    // This is decoupled from the expensive sort above.
     for (let index = 0; index < maxLights; index += 1) {
+      const assignment = assignmentsRef.current[index]
+      if (!assignment?.light.flicker) {
+        continue
+      }
       const pooledLight = refs.current[index]
-      if (!pooledLight) {
-        continue
+      if (pooledLight) {
+        pooledLight.intensity = getPooledLightIntensity(assignment, clock.elapsedTime)
       }
-
-      const assignment = assignments[index]
-      if (!assignment) {
-        pooledLight.position.set(...DORMANT_LIGHT_POSITION)
-        pooledLight.color.copy(dormantColor)
-        pooledLight.intensity = 0
-        pooledLight.distance = 0
-        pooledLight.decay = 2
-        pooledLight.castShadow = false
-        continue
-      }
-
-      pooledLight.position.set(...assignment.position)
-      pooledLight.color.set(assignment.light.color)
-      pooledLight.distance = assignment.light.distance
-      pooledLight.decay = assignment.light.decay ?? 2
-      pooledLight.castShadow = assignment.light.castShadow ?? false
-      pooledLight.intensity = getPooledLightIntensity(assignment, clock.elapsedTime)
     }
   })
 
@@ -100,14 +173,14 @@ export function PropLightPool({
 }
 
 export function buildPropLightPoolAssignments({
-  objects,
+  lightSources,
   visibility,
   useLineOfSightPostMask,
   cameraPosition,
   cameraFrustum,
   maxLights,
 }: {
-  objects: DungeonObjectRecord[]
+  lightSources: PropLightSource[]
   visibility: Pick<PlayVisibility, 'getObjectVisibility'>
   useLineOfSightPostMask: boolean
   cameraPosition: readonly [number, number, number]
@@ -119,13 +192,7 @@ export function buildPropLightPoolAssignments({
     viewPriority: 0 | 1
   }> = []
 
-  objects.forEach((object) => {
-    const asset = object.assetId ? getContentPackAssetById(object.assetId) : null
-    const light = asset?.getLight?.(object.props) ?? asset?.metadata?.light ?? null
-    if (!light) {
-      return
-    }
-
+  lightSources.forEach(({ key, object, light }) => {
     const visibilityState = visibility.getObjectVisibility(object)
     if (!shouldRenderLineOfSightLight(visibilityState, useLineOfSightPostMask)) {
       return
@@ -142,7 +209,7 @@ export function buildPropLightPoolAssignments({
     const dz = position[2] - cameraPosition[2]
 
     candidates.push({
-      key: object.id,
+      key,
       position,
       light,
       distanceToCameraSquared: dx * dx + dy * dy + dz * dz,

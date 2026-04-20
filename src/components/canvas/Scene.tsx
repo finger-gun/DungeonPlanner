@@ -12,7 +12,7 @@ import { PlayerSelectionRing } from './DungeonObject'
 import { DungeonRoom } from './DungeonRoom'
 import { WebGPUPostProcessing } from './WebGPUPostProcessing'
 import { FireEffectPreloader } from './effects/ObjectEffect'
-import { PropLightPool } from './propLightPool'
+import { DEFAULT_POOLED_PROP_LIGHTS, PropLightPool } from './propLightPool'
 import { useDungeonStore, type DungeonObjectRecord } from '../../store/useDungeonStore'
 import { usePlayVisibility } from './playVisibility'
 import { ContentPackInstance } from './ContentPackInstance'
@@ -364,6 +364,14 @@ function FloorContent({ startY = 0 }: { startY?: number }) {
   )
   const topLevelObjects = useMemo(() => getTopLevelObjects(objects), [objects])
   const childrenByParent = useMemo(() => buildObjectChildrenIndex(objects), [objects])
+  const lineOfSightActive = visibility.active && visibility.mask !== null
+  const showPostProcessing = postProcessingEnabled || showLensFocusDebugPoint || lineOfSightActive
+  // lineOfSightActive is intentionally excluded from this key: the pipeline
+  // updates in-place via useLayoutEffect deps in WebGPUPostProcessing, so a
+  // full remount (which forces re-compilation of all 12+ light shaders) is
+  // unnecessary and was causing permanent black-screen when compilation took
+  // more than one RAF frame.
+  const postProcessingKey = `${postProcessingEnabled ? 'post' : 'raw'}:${showLensFocusDebugPoint ? 'focus' : 'nofocus'}`
 
   const groupRef = useRef<THREE.Group>(null)
   const animYRef = useRef(startY)
@@ -519,12 +527,15 @@ function FloorContent({ startY = 0 }: { startY?: number }) {
 
   return (
     <group ref={groupRef} position={[0, startY, 0]}>
-      {(postProcessingEnabled || showLensFocusDebugPoint || (visibility.active && visibility.mask !== null)) && (
-        <WebGPUPostProcessing lineOfSightActive={visibility.active && visibility.mask !== null} />
+      {showPostProcessing && (
+        <WebGPUPostProcessing
+          key={postProcessingKey}
+          lineOfSightActive={lineOfSightActive}
+        />
       )}
       <DungeonRoom visibility={visibility} />
       <RoomResizeOverlay />
-      <PropLightPool objects={objects} visibility={visibility} />
+      <PropLightPool objects={objects} visibility={visibility} maxLights={DEFAULT_POOLED_PROP_LIGHTS} />
       {visibility.active && visibility.mask && (
         <>
           {showLosDebugMask && <PlayVisibilityMask mask={visibility.mask} mode="debug" />}

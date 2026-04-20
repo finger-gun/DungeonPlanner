@@ -353,7 +353,7 @@ export function computeVisibilityMask(
   solidWalls: Set<string> = new Set(),
 ): PlayVisibilityMask | null {
   const paintedCellKeys = Object.keys(paintedCells)
-  if (paintedCellKeys.length === 0) {
+  if (paintedCellKeys.length === 0 || origins.length === 0) {
     return null
   }
 
@@ -392,6 +392,9 @@ export function computeVisibilityMask(
       }
     })
     .filter((source): source is VisibilitySource => source !== null)
+  if (sources.length === 0) {
+    return null
+  }
   const polygons = sources.flatMap((source) => source.sectors)
   const cells = Object.values(paintedCells)
   const minCellX = Math.min(...cells.map((record) => record.cell[0]))
