@@ -59,6 +59,7 @@ export function RoomToolPanel() {
   const outdoorOverpaintRegenerate = useDungeonStore((state) => state.outdoorOverpaintRegenerate)
   const outdoorBrushMode = useDungeonStore((state) => state.outdoorBrushMode)
   const outdoorTerrainSculptMode = useDungeonStore((state) => state.outdoorTerrainSculptMode)
+  const outdoorDefaultGroundTexture = useDungeonStore((state) => state.outdoorDefaultGroundTexture)
   const outdoorGroundTextureBrush = useDungeonStore((state) => state.outdoorGroundTextureBrush)
   const setRoomEditMode = useDungeonStore((state) => state.setRoomEditMode)
   const setSurfaceBrushAsset = useDungeonStore((state) => state.setSurfaceBrushAsset)
@@ -67,6 +68,7 @@ export function RoomToolPanel() {
   const setOutdoorOverpaintRegenerate = useDungeonStore((state) => state.setOutdoorOverpaintRegenerate)
   const setOutdoorBrushMode = useDungeonStore((state) => state.setOutdoorBrushMode)
   const setOutdoorTerrainSculptMode = useDungeonStore((state) => state.setOutdoorTerrainSculptMode)
+  const setOutdoorDefaultGroundTexture = useDungeonStore((state) => state.setOutdoorDefaultGroundTexture)
   const setOutdoorGroundTextureBrush = useDungeonStore((state) => state.setOutdoorGroundTextureBrush)
 
   const selectedFloorAsset = surfaceBrushAssetIds.floor
@@ -120,6 +122,28 @@ export function RoomToolPanel() {
           </p>
           {mapMode === 'outdoor' && (
             <div className="mt-4 space-y-3 text-xs">
+              <div>
+                <p className="mb-1 uppercase tracking-[0.2em] text-stone-500">Global Ground Texture</p>
+                <div className="grid grid-cols-2 gap-2">
+                  {OUTDOOR_GROUND_TEXTURES.map((texture) => {
+                    const active = outdoorDefaultGroundTexture === texture.id
+                    return (
+                      <button
+                        key={`default-${texture.id}`}
+                        type="button"
+                        onClick={() => setOutdoorDefaultGroundTexture(texture.id)}
+                        className={`rounded-xl border px-2 py-1.5 transition ${
+                          active
+                            ? 'border-teal-300/35 bg-teal-400/10 text-teal-200'
+                            : 'border-stone-800 bg-stone-950/60 text-stone-400 hover:border-stone-700 hover:text-stone-200'
+                        }`}
+                      >
+                        {`Default ${texture.label}`}
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
               <div>
                 <p className="mb-1 uppercase tracking-[0.2em] text-stone-500">Brush Mode</p>
                 <div className="grid grid-cols-2 gap-2">

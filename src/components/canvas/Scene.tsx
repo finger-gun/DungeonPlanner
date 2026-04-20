@@ -149,6 +149,7 @@ function GlobalContent() {
   const lightIntensity = useDungeonStore((state) => state.sceneLighting.intensity)
   const mapMode = useDungeonStore((state) => state.mapMode)
   const outdoorGroundTextureCells = useDungeonStore((state) => state.outdoorGroundTextureCells)
+  const outdoorDefaultGroundTexture = useDungeonStore((state) => state.outdoorDefaultGroundTexture)
   const outdoorTerrainHeights = useDungeonStore((state) => state.outdoorTerrainHeights)
   const outdoorTimeOfDay = useDungeonStore((state) => state.outdoorTimeOfDay)
   const tool = useDungeonStore((state) => state.tool)
@@ -208,6 +209,7 @@ function GlobalContent() {
         <OutdoorGround
           outdoorBlend={outdoorBlend}
           outdoorGroundTextureCells={outdoorGroundTextureCells}
+          outdoorDefaultGroundTexture={outdoorDefaultGroundTexture}
           outdoorTerrainHeights={outdoorTerrainHeights}
         />
       )}

@@ -33,7 +33,9 @@ import {
   DEFAULT_OUTDOOR_TERRAIN_SCULPT_RADIUS,
   DEFAULT_OUTDOOR_TERRAIN_SCULPT_STEP,
   applyOutdoorTerrainSculpt,
+  getOutdoorTerrainSculptTargetCellKeys,
   getOutdoorTerrainWorldPosition,
+  quantizeOutdoorTerrainHeightfield,
   sampleOutdoorTerrainHeight,
   type OutdoorTerrainHeightfield,
   type OutdoorTerrainSculptMode,
@@ -207,6 +209,7 @@ type DungeonState = DungeonSnapshot & {
   outdoorTerrainSculptMode: OutdoorTerrainSculptMode
   outdoorTerrainSculptStep: number
   outdoorTerrainSculptRadius: number
+  outdoorDefaultGroundTexture: OutdoorGroundTextureType
   outdoorGroundTextureBrush: OutdoorGroundTextureType
   cameraMode: CameraMode
   isPaintingStrokeActive: boolean
@@ -271,6 +274,7 @@ type DungeonState = DungeonSnapshot & {
   setOutdoorOverpaintRegenerate: (value: boolean) => void
   setOutdoorBrushMode: (value: OutdoorBrushMode) => void
   setOutdoorTerrainSculptMode: (value: OutdoorTerrainSculptMode) => void
+  setOutdoorDefaultGroundTexture: (value: OutdoorGroundTextureType) => void
   setOutdoorGroundTextureBrush: (value: OutdoorGroundTextureType) => void
   setShowGrid: (show: boolean) => void
   setShowLosDebugMask: (show: boolean) => void
@@ -1156,6 +1160,7 @@ export const useDungeonStore = create<DungeonState>()(
   outdoorTerrainSculptMode: 'raise' as OutdoorTerrainSculptMode,
   outdoorTerrainSculptStep: DEFAULT_OUTDOOR_TERRAIN_SCULPT_STEP,
   outdoorTerrainSculptRadius: DEFAULT_OUTDOOR_TERRAIN_SCULPT_RADIUS,
+  outdoorDefaultGroundTexture: 'short-grass' as OutdoorGroundTextureType,
   outdoorGroundTextureBrush: 'short-grass' as OutdoorGroundTextureType,
   dungeonName: 'My Dungeon',
   cameraMode: 'orbit',
@@ -1363,7 +1368,7 @@ export const useDungeonStore = create<DungeonState>()(
 
     const previousSnapshot = cloneSnapshot(state)
     const sculptMode = mode ?? state.outdoorTerrainSculptMode
-    const targetCellKeys = new Set(cells.map((cell) => getCellKey(cell)))
+    const targetCellKeys = getOutdoorTerrainSculptTargetCellKeys(cells, state.outdoorTerrainSculptRadius)
 
     set((current) => {
       const outdoorTerrainHeights = applyOutdoorTerrainSculpt(
@@ -2161,6 +2166,11 @@ export const useDungeonStore = create<DungeonState>()(
       ? state
       : { ...state, outdoorTerrainSculptMode: value }))
   },
+  setOutdoorDefaultGroundTexture: (value) => {
+    set((state) => (state.outdoorDefaultGroundTexture === value
+      ? state
+      : { ...state, outdoorDefaultGroundTexture: value }))
+  },
   setOutdoorGroundTextureBrush: (value) => {
     set((state) => (state.outdoorGroundTextureBrush === value
       ? state
@@ -2349,6 +2359,7 @@ export const useDungeonStore = create<DungeonState>()(
         outdoorTerrainSculptMode: 'raise',
         outdoorTerrainSculptStep: DEFAULT_OUTDOOR_TERRAIN_SCULPT_STEP,
         outdoorTerrainSculptRadius: DEFAULT_OUTDOOR_TERRAIN_SCULPT_RADIUS,
+        outdoorDefaultGroundTexture: 'short-grass',
         outdoorGroundTextureBrush: 'short-grass',
         isPaintingStrokeActive: false,
         isObjectDragActive: false,
@@ -2384,6 +2395,7 @@ export const useDungeonStore = create<DungeonState>()(
          outdoorTerrainSculptMode: 'raise',
          outdoorTerrainSculptStep: DEFAULT_OUTDOOR_TERRAIN_SCULPT_STEP,
          outdoorTerrainSculptRadius: DEFAULT_OUTDOOR_TERRAIN_SCULPT_RADIUS,
+         outdoorDefaultGroundTexture: 'short-grass',
          outdoorGroundTextureBrush: 'short-grass',
         // UI / tool state
         isPaintingStrokeActive: false,
@@ -3145,6 +3157,7 @@ export const useDungeonStore = create<DungeonState>()(
       outdoorTerrainDensity: state.outdoorTerrainDensity,
       outdoorTerrainType: state.outdoorTerrainType,
       outdoorOverpaintRegenerate: state.outdoorOverpaintRegenerate,
+      outdoorDefaultGroundTexture: state.outdoorDefaultGroundTexture,
       outdoorTerrainHeights: state.outdoorTerrainHeights,
       sceneLighting: state.sceneLighting,
       postProcessing: state.postProcessing,
@@ -3196,6 +3209,7 @@ export const useDungeonStore = create<DungeonState>()(
         outdoorTerrainSculptMode: 'raise',
         outdoorTerrainSculptStep: DEFAULT_OUTDOOR_TERRAIN_SCULPT_STEP,
         outdoorTerrainSculptRadius: DEFAULT_OUTDOOR_TERRAIN_SCULPT_RADIUS,
+        outdoorDefaultGroundTexture: parsed.outdoorDefaultGroundTexture ?? 'short-grass',
         outdoorGroundTextureBrush: 'short-grass',
         dungeonName: parsed.name ?? current.dungeonName,
         generatedCharacters: normalizeGeneratedCharacters(current.generatedCharacters),
@@ -3253,6 +3267,7 @@ export const useDungeonStore = create<DungeonState>()(
         outdoorTerrainSculptMode: state.outdoorTerrainSculptMode,
         outdoorTerrainSculptStep: state.outdoorTerrainSculptStep,
         outdoorTerrainSculptRadius: state.outdoorTerrainSculptRadius,
+        outdoorDefaultGroundTexture: state.outdoorDefaultGroundTexture,
         outdoorGroundTextureBrush: state.outdoorGroundTextureBrush,
         selectedAssetIds: state.selectedAssetIds,
         generatedCharacters: state.generatedCharacters,
@@ -3268,10 +3283,13 @@ export const useDungeonStore = create<DungeonState>()(
         }
 
         Object.assign(state, sanitizePersistedAssetReferences(state))
-        state.outdoorTerrainHeights = (state.outdoorTerrainHeights ?? {}) as OutdoorTerrainHeightfield
+        state.outdoorTerrainHeights = quantizeOutdoorTerrainHeightfield(
+          (state.outdoorTerrainHeights ?? {}) as OutdoorTerrainHeightfield,
+        )
         state.outdoorTerrainSculptMode = state.outdoorTerrainSculptMode ?? 'raise'
         state.outdoorTerrainSculptStep = state.outdoorTerrainSculptStep ?? DEFAULT_OUTDOOR_TERRAIN_SCULPT_STEP
         state.outdoorTerrainSculptRadius = state.outdoorTerrainSculptRadius ?? DEFAULT_OUTDOOR_TERRAIN_SCULPT_RADIUS
+        state.outdoorDefaultGroundTexture = state.outdoorDefaultGroundTexture ?? 'short-grass'
         state.postProcessing = normalizePostProcessingSettings(
           state.postProcessing as Partial<PostProcessingSettings> | undefined,
         )

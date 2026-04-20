@@ -30,8 +30,9 @@ import type {
 } from './useDungeonStore'
 import type { GridCell } from '../hooks/useSnapToGrid'
 import { getCellKey } from '../hooks/useSnapToGrid'
+import { quantizeOutdoorTerrainHeight } from './outdoorTerrain'
 
-const CURRENT_VERSION = 13
+const CURRENT_VERSION = 14
 
 // ── Serialized shapes (compact, no redundant keys) ────────────────────────────
 
@@ -105,6 +106,7 @@ export type DungeonFile = {
   outdoorTerrainDensity?: OutdoorTerrainDensity
   outdoorTerrainType?: OutdoorTerrainType
   outdoorOverpaintRegenerate?: boolean
+  outdoorDefaultGroundTexture?: OutdoorGroundTextureType
   sceneLighting: { intensity: number }
   postProcessing: {
     enabled: boolean
@@ -128,6 +130,7 @@ export type SerializableState = {
   outdoorTerrainDensity?: OutdoorTerrainDensity
   outdoorTerrainType?: OutdoorTerrainType
   outdoorOverpaintRegenerate?: boolean
+  outdoorDefaultGroundTexture?: OutdoorGroundTextureType
   sceneLighting: { intensity: number }
   postProcessing: {
     enabled: boolean
@@ -259,6 +262,7 @@ export function serializeDungeon(state: SerializableState): string {
     outdoorTerrainDensity: state.outdoorTerrainDensity ?? 'medium',
     outdoorTerrainType: state.outdoorTerrainType ?? 'mixed',
     outdoorOverpaintRegenerate: state.outdoorOverpaintRegenerate ?? false,
+    outdoorDefaultGroundTexture: state.outdoorDefaultGroundTexture ?? 'short-grass',
     sceneLighting: { intensity: state.sceneLighting.intensity },
     postProcessing: { ...state.postProcessing },
     activeFloorId,
@@ -451,6 +455,35 @@ export function deserializeDungeon(json: string): SerializableState | null {
           ? { ...floor, outdoorTerrainHeights: [] }
           : floor,
       ),
+    }
+  }
+
+  if (version < 14 && Array.isArray((raw as Record<string, unknown>).floors)) {
+    const r = raw as Record<string, unknown>
+    raw = {
+      ...r,
+      floors: (r.floors as unknown[]).map((floor) => {
+        if (!isObject(floor) || !Array.isArray(floor.outdoorTerrainHeights)) {
+          return floor
+        }
+        const outdoorTerrainHeights = (floor.outdoorTerrainHeights as unknown[]).map((record) => {
+          if (!isObject(record)) {
+            return record
+          }
+          const height = quantizeOutdoorTerrainHeight(
+            typeof record.height === 'number' ? record.height : 0,
+          )
+          return {
+            ...record,
+            height,
+          }
+        })
+        return {
+          ...floor,
+          outdoorTerrainHeights: outdoorTerrainHeights.filter((record) =>
+            isObject(record) ? record.height !== 0 : true),
+        }
+      }),
     }
   }
 
@@ -730,6 +763,13 @@ function parseFile(raw: Record<string, unknown>): SerializableState | null {
           ? raw.outdoorTerrainType
           : 'mixed',
       outdoorOverpaintRegenerate: raw.outdoorOverpaintRegenerate === true,
+      outdoorDefaultGroundTexture:
+        raw.outdoorDefaultGroundTexture === 'short-grass' ||
+        raw.outdoorDefaultGroundTexture === 'dry-dirt' ||
+        raw.outdoorDefaultGroundTexture === 'rough-stone' ||
+        raw.outdoorDefaultGroundTexture === 'wet-dirt'
+          ? raw.outdoorDefaultGroundTexture
+          : 'short-grass',
       sceneLighting: {
         intensity: typeof sceneLightingRaw.intensity === 'number' ? sceneLightingRaw.intensity : 1,
       },

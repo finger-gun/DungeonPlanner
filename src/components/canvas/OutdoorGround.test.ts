@@ -1,10 +1,10 @@
 import * as THREE from 'three'
 import { describe, expect, it } from 'vitest'
-import { createTextureMask } from './OutdoorGround'
+import { createTextureMask, resolveOutdoorFaceTextures } from './OutdoorGround'
 import { sampleOutdoorTerrainHeight } from '../../store/outdoorTerrain'
 
 describe('createTextureMask', () => {
-  it('disables vertical texture flipping so painted ground aligns with cursor position', () => {
+  it('uses vertical texture flipping so painted ground aligns with cursor position', () => {
     const texture = createTextureMask({
       '2:1': {
         cell: [2, 1],
@@ -14,7 +14,7 @@ describe('createTextureMask', () => {
     }, 'rough-stone')
 
     expect(texture).toBeInstanceOf(THREE.CanvasTexture)
-    expect(texture.flipY).toBe(false)
+    expect(texture.flipY).toBe(true)
     expect(texture.wrapS).toBe(THREE.ClampToEdgeWrapping)
     expect(texture.wrapT).toBe(THREE.ClampToEdgeWrapping)
 
@@ -30,6 +30,23 @@ describe('createTextureMask', () => {
     }
 
     expect(sampleOutdoorTerrainHeight(outdoorTerrainHeights, 1, 1)).toBe(1)
-    expect(sampleOutdoorTerrainHeight(outdoorTerrainHeights, 2, 2)).toBeCloseTo(0.25, 5)
+    expect(sampleOutdoorTerrainHeight(outdoorTerrainHeights, 2, 2)).toBe(0)
+    expect(sampleOutdoorTerrainHeight(outdoorTerrainHeights, 1.9, 1.9)).toBe(1)
+  })
+})
+
+describe('resolveOutdoorFaceTextures', () => {
+  it('blends short-grass tops into wet-dirt side faces', () => {
+    expect(resolveOutdoorFaceTextures('short-grass')).toEqual({
+      sideTexture: 'wet-dirt',
+      blendTopTexture: 'short-grass',
+    })
+  })
+
+  it('keeps side textures matched for non-grass tops', () => {
+    expect(resolveOutdoorFaceTextures('wet-dirt')).toEqual({
+      sideTexture: 'wet-dirt',
+      blendTopTexture: null,
+    })
   })
 })

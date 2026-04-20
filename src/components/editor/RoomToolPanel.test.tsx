@@ -21,6 +21,7 @@ describe('RoomToolPanel', () => {
     useDungeonStore.getState().newDungeon('outdoor')
     render(<RoomToolPanel />)
     expect(screen.getByText('Brush Mode')).toBeInTheDocument()
+    expect(screen.getByText('Global Ground Texture')).toBeInTheDocument()
   })
 
   it('updates outdoor brush mode and texture brush from UI controls', () => {
@@ -33,6 +34,14 @@ describe('RoomToolPanel', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Rough Stone' }))
     expect(useDungeonStore.getState().outdoorGroundTextureBrush).toBe('rough-stone')
+  })
+
+  it('updates global outdoor default ground texture from UI controls', () => {
+    useDungeonStore.getState().newDungeon('outdoor')
+    render(<RoomToolPanel />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Default Dry Dirt' }))
+    expect(useDungeonStore.getState().outdoorDefaultGroundTexture).toBe('dry-dirt')
   })
 
   it('shows sculpt controls only for the terrain sculpt brush', () => {

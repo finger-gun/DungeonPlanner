@@ -54,6 +54,7 @@ function baseState(): SerializableState {
     outdoorTerrainDensity: 'medium',
     outdoorTerrainType: 'mixed',
     outdoorOverpaintRegenerate: false,
+    outdoorDefaultGroundTexture: 'short-grass',
     sceneLighting: { intensity: 1.5 },
     postProcessing: { ...DEFAULT_POST_PROCESSING_SETTINGS },
     ...emptyFloorSnapshot(),
@@ -82,10 +83,12 @@ describe('serializeDungeon / deserializeDungeon roundtrip', () => {
     const state = baseState()
     state.mapMode = 'outdoor'
     state.outdoorTimeOfDay = 0.8
+    state.outdoorDefaultGroundTexture = 'wet-dirt'
     const result = deserializeDungeon(serializeDungeon(state))
     expect(result).not.toBeNull()
     expect(result!.mapMode).toBe('outdoor')
     expect(result!.outdoorTimeOfDay).toBe(0.8)
+    expect(result!.outdoorDefaultGroundTexture).toBe('wet-dirt')
   })
 
   it('preserves outdoor terrain brush settings', () => {
@@ -374,5 +377,41 @@ describe('deserializeDungeon version migrations', () => {
     const result = deserializeDungeon(v12File)
     expect(result).not.toBeNull()
     expect(result!.outdoorTerrainHeights).toEqual({})
+  })
+
+  it('v13→v14: quantizes legacy smooth terrain heights to stepped levels', () => {
+    const v13File = JSON.stringify({
+      version: 13,
+      name: 'Legacy Smooth Outdoor',
+      mapMode: 'outdoor',
+      sceneLighting: { intensity: 1 },
+      postProcessing: { ...DEFAULT_POST_PROCESSING_SETTINGS },
+      activeFloorId: 'floor-1',
+      floorOrder: ['floor-1'],
+      floors: [{
+        id: 'floor-1',
+        name: 'Ground Floor',
+        level: 0,
+        layers: [{ id: 'default', name: 'Default', visible: true, locked: false }],
+        layerOrder: ['default'],
+        activeLayerId: 'default',
+        rooms: [],
+        cells: [],
+        blockedCells: [],
+        outdoorTerrainHeights: [
+          { x: 1, z: 1, height: 0.26 },
+          { x: 2, z: 2, height: 0.24 },
+        ],
+        exploredCells: [],
+        objects: [],
+        openings: [],
+        nextRoomNumber: 1,
+      }],
+    })
+
+    const result = deserializeDungeon(v13File)
+    expect(result).not.toBeNull()
+    expect(result!.outdoorTerrainHeights['1:1']?.height).toBe(0.5)
+    expect(result!.outdoorTerrainHeights['2:2']).toBeUndefined()
   })
 })

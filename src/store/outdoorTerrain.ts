@@ -20,6 +20,35 @@ function clampHeight(height: number) {
   return Math.max(-OUTDOOR_TERRAIN_MAX_HEIGHT, Math.min(OUTDOOR_TERRAIN_MAX_HEIGHT, height))
 }
 
+export function quantizeOutdoorTerrainHeight(
+  height: number,
+  step = DEFAULT_OUTDOOR_TERRAIN_SCULPT_STEP,
+) {
+  if (!Number.isFinite(height) || !Number.isFinite(step) || step <= 0) {
+    return 0
+  }
+
+  const clamped = clampHeight(height)
+  const quantized = Math.round(clamped / step) * step
+  return Math.abs(quantized) <= OUTDOOR_TERRAIN_HEIGHT_EPSILON ? 0 : clampHeight(quantized)
+}
+
+export function quantizeOutdoorTerrainHeightfield(
+  heightfield: OutdoorTerrainHeightfield,
+  step = DEFAULT_OUTDOOR_TERRAIN_SCULPT_STEP,
+) {
+  const quantized: OutdoorTerrainHeightfield = {}
+  Object.values(heightfield).forEach((record) => {
+    const height = quantizeOutdoorTerrainHeight(record.height, step)
+    if (height === 0) {
+      return
+    }
+    const cell: GridCell = [record.cell[0], record.cell[1]]
+    quantized[getCellKey(cell)] = { cell, height }
+  })
+  return quantized
+}
+
 export function getOutdoorTerrainCellHeight(
   heightfield: OutdoorTerrainHeightfield,
   cell: GridCell,
@@ -32,24 +61,10 @@ export function sampleOutdoorTerrainHeight(
   worldX: number,
   worldZ: number,
 ) {
-  const sampleX = worldX / GRID_SIZE - 0.5
-  const sampleZ = worldZ / GRID_SIZE - 0.5
-  const minX = Math.floor(sampleX)
-  const minZ = Math.floor(sampleZ)
-  const maxX = minX + 1
-  const maxZ = minZ + 1
-  const tx = sampleX - minX
-  const tz = sampleZ - minZ
-
-  const h00 = getOutdoorTerrainCellHeight(heightfield, [minX, minZ])
-  const h10 = getOutdoorTerrainCellHeight(heightfield, [maxX, minZ])
-  const h01 = getOutdoorTerrainCellHeight(heightfield, [minX, maxZ])
-  const h11 = getOutdoorTerrainCellHeight(heightfield, [maxX, maxZ])
-
-  const hx0 = h00 * (1 - tx) + h10 * tx
-  const hx1 = h01 * (1 - tx) + h11 * tx
-
-  return hx0 * (1 - tz) + hx1 * tz
+  return getOutdoorTerrainCellHeight(heightfield, [
+    Math.floor(worldX / GRID_SIZE),
+    Math.floor(worldZ / GRID_SIZE),
+  ])
 }
 
 export function getOutdoorTerrainWorldPosition(
@@ -91,7 +106,7 @@ export function applyOutdoorTerrainSculpt(
         const cell: GridCell = [targetX + deltaX, targetZ + deltaZ]
         const key = getCellKey(cell)
         const currentHeight = nextHeightfield[key]?.height ?? 0
-        const nextHeight = clampHeight(currentHeight + direction * step * weight)
+        const nextHeight = quantizeOutdoorTerrainHeight(currentHeight + direction * step * weight, step)
 
         if (Math.abs(nextHeight) <= OUTDOOR_TERRAIN_HEIGHT_EPSILON) {
           delete nextHeightfield[key]
@@ -107,4 +122,24 @@ export function applyOutdoorTerrainSculpt(
   }
 
   return nextHeightfield
+}
+
+export function getOutdoorTerrainSculptTargetCellKeys(cells: GridCell[], radius: number) {
+  const keys = new Set<string>()
+  if (cells.length === 0 || radius < 0) {
+    return keys
+  }
+
+  for (const [targetX, targetZ] of cells) {
+    for (let deltaX = -radius; deltaX <= radius; deltaX += 1) {
+      for (let deltaZ = -radius; deltaZ <= radius; deltaZ += 1) {
+        if (Math.hypot(deltaX, deltaZ) > radius) {
+          continue
+        }
+        keys.add(getCellKey([targetX + deltaX, targetZ + deltaZ]))
+      }
+    }
+  }
+
+  return keys
 }

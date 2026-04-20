@@ -63,6 +63,7 @@ describe('useDungeonStore history', () => {
     expect(state.outdoorOverpaintRegenerate).toBe(false)
     expect(state.outdoorBrushMode).toBe('surroundings')
     expect(state.outdoorTerrainSculptMode).toBe('raise')
+    expect(state.outdoorDefaultGroundTexture).toBe('short-grass')
     expect(state.outdoorTerrainHeights).toEqual({})
   })
 
@@ -73,8 +74,8 @@ describe('useDungeonStore history', () => {
     expect(useDungeonStore.getState().sculptOutdoorTerrain([[2, 2]], 'raise')).toBe(1)
 
     const state = useDungeonStore.getState()
-    expect(state.outdoorTerrainHeights['2:2']?.height).toBeGreaterThan(0)
-    expect(state.outdoorTerrainHeights['1:2']?.height).toBeGreaterThan(0)
+    expect(state.outdoorTerrainHeights['2:2']?.height).toBe(0.5)
+    expect(state.outdoorTerrainHeights['1:2']?.height).toBe(0.5)
   })
 
   it('reanchors outdoor placed objects after terrain sculpting', () => {
@@ -95,7 +96,26 @@ describe('useDungeonStore history', () => {
 
     useDungeonStore.getState().sculptOutdoorTerrain([[0, 0]], 'raise')
 
-    expect(useDungeonStore.getState().placedObjects[placedId!]?.position[1]).toBeGreaterThan(0)
+    expect(useDungeonStore.getState().placedObjects[placedId!]?.position[1]).toBe(0.5)
+  })
+
+  it('reanchors supported outdoor objects for radius-affected neighbor cells', () => {
+    useDungeonStore.getState().newDungeon('outdoor')
+    const assetId = createTestGeneratedCharacter('Terrain Neighbor')
+    const placedId = useDungeonStore.getState().placeObject({
+      type: 'player',
+      assetId,
+      position: [3, 0, 1],
+      rotation: [0, 0, 0],
+      props: { connector: 'FLOOR', direction: null },
+      cell: [1, 0],
+      cellKey: '1:0:floor',
+      supportCellKey: '1:0',
+    })
+
+    useDungeonStore.getState().sculptOutdoorTerrain([[0, 0]], 'raise')
+
+    expect(useDungeonStore.getState().placedObjects[placedId!]?.position[1]).toBe(0.5)
   })
 
   it('paints and erases outdoor surrounding cells with generated forest props', () => {
