@@ -4,33 +4,38 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/png" href="/icon.png" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>dungeonplanner</title>
+    <title>DungeonPlanner</title>
     <!-- Google tag (gtag.js) -->
-    <script async src="https://www.googletagmanager.com/gtag/js?id=G-4TZCSBF6LN"></script>
+    <script
+      async
+      src="https://www.googletagmanager.com/gtag/js?id=G-4TZCSBF6LN"
+    ></script>
     <script>
       window.dataLayer = window.dataLayer || [];
-      function gtag() { dataLayer.push(arguments); }
-      gtag('js', new Date());
+      function gtag() {
+        dataLayer.push(arguments);
+      }
+      gtag("js", new Date());
 
-      gtag('consent', 'default', {
-        ad_storage: 'denied',
-        ad_user_data: 'denied',
-        ad_personalization: 'denied',
-        analytics_storage: 'denied',
+      gtag("consent", "default", {
+        ad_storage: "denied",
+        ad_user_data: "denied",
+        ad_personalization: "denied",
+        analytics_storage: "denied",
         wait_for_update: 500,
       });
 
-      const consentChoice = localStorage.getItem('dp_cookie_consent');
-      if (consentChoice === 'granted') {
-        gtag('consent', 'update', {
-          ad_storage: 'granted',
-          ad_user_data: 'granted',
-          ad_personalization: 'granted',
-          analytics_storage: 'granted',
+      const consentChoice = localStorage.getItem("dp_cookie_consent");
+      if (consentChoice === "granted") {
+        gtag("consent", "update", {
+          ad_storage: "granted",
+          ad_user_data: "granted",
+          ad_personalization: "granted",
+          analytics_storage: "granted",
         });
       }
 
-      gtag('config', 'G-4TZCSBF6LN');
+      gtag("config", "G-4TZCSBF6LN");
     </script>
     <style>
       .cookie-consent-banner {
@@ -45,7 +50,11 @@
         border-radius: 12px;
         padding: 14px 16px;
         box-shadow: 0 18px 50px rgba(2, 6, 23, 0.5);
-        font-family: Inter, system-ui, -apple-system, sans-serif;
+        font-family:
+          Inter,
+          system-ui,
+          -apple-system,
+          sans-serif;
       }
       .cookie-consent-content {
         display: flex;
@@ -97,36 +106,56 @@
       <div class="cookie-consent-content">
         <p class="cookie-consent-text">
           We use cookies for traffic analytics. Read our
-          <a href="https://dungeonplanner.com/privacy-cookie-policy.html" target="_blank" rel="noreferrer">Privacy &amp; Cookie Policy</a>.
+          <a
+            href="https://dungeonplanner.com/privacy-cookie-policy.html"
+            target="_blank"
+            rel="noreferrer"
+            >Privacy &amp; Cookie Policy</a
+          >.
         </p>
         <div class="cookie-consent-actions">
-          <button id="cookie-consent-reject" class="cookie-consent-btn cookie-consent-btn-reject" type="button">Reject</button>
-          <button id="cookie-consent-accept" class="cookie-consent-btn cookie-consent-btn-accept" type="button">Accept</button>
+          <button
+            id="cookie-consent-reject"
+            class="cookie-consent-btn cookie-consent-btn-reject"
+            type="button"
+          >
+            Reject
+          </button>
+          <button
+            id="cookie-consent-accept"
+            class="cookie-consent-btn cookie-consent-btn-accept"
+            type="button"
+          >
+            Accept
+          </button>
         </div>
       </div>
     </div>
     <script>
-      const consentBanner = document.getElementById('cookie-consent-banner');
-      const acceptCookies = document.getElementById('cookie-consent-accept');
-      const rejectCookies = document.getElementById('cookie-consent-reject');
+      const consentBanner = document.getElementById("cookie-consent-banner");
+      const acceptCookies = document.getElementById("cookie-consent-accept");
+      const rejectCookies = document.getElementById("cookie-consent-reject");
 
       const applyConsent = (granted) => {
-        localStorage.setItem('dp_cookie_consent', granted ? 'granted' : 'denied');
-        gtag('consent', 'update', {
-          ad_storage: granted ? 'granted' : 'denied',
-          ad_user_data: granted ? 'granted' : 'denied',
-          ad_personalization: granted ? 'granted' : 'denied',
-          analytics_storage: granted ? 'granted' : 'denied',
+        localStorage.setItem(
+          "dp_cookie_consent",
+          granted ? "granted" : "denied",
+        );
+        gtag("consent", "update", {
+          ad_storage: granted ? "granted" : "denied",
+          ad_user_data: granted ? "granted" : "denied",
+          ad_personalization: granted ? "granted" : "denied",
+          analytics_storage: granted ? "granted" : "denied",
         });
         consentBanner.hidden = true;
       };
 
-      if (!localStorage.getItem('dp_cookie_consent')) {
+      if (!localStorage.getItem("dp_cookie_consent")) {
         consentBanner.hidden = false;
       }
 
-      acceptCookies.addEventListener('click', () => applyConsent(true));
-      rejectCookies.addEventListener('click', () => applyConsent(false));
+      acceptCookies.addEventListener("click", () => applyConsent(true));
+      rejectCookies.addEventListener("click", () => applyConsent(false));
     </script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
