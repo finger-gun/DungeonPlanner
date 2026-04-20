@@ -9,10 +9,16 @@ export const dungeonBoxLargeAsset = createDungeonAsset({
   modelName: 'box_large',
   transform: DUNGEON_PROP_TRANSFORM,
   metadata: {
+    snapsTo: 'FREE',
+    propSurface: true,
     connectors: [
       {
         point: [0, 0, 0],
         type: 'FLOOR',
+      },
+      {
+        point: [0, 0, 0],
+        type: 'SURFACE',
       },
     ],
     blocksLineOfSight: false,

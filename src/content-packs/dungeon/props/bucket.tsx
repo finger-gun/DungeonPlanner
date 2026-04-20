@@ -9,6 +9,7 @@ export const dungeonBucketAsset = createDungeonAsset({
   modelName: 'bucket',
   transform: DUNGEON_PROP_TRANSFORM,
   metadata: {
+    snapsTo: 'FREE',
     connectors: [
       {
         point: [0, 0, 0],

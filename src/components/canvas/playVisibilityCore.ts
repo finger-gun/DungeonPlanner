@@ -1,5 +1,6 @@
 import { GRID_SIZE, getCellKey, type GridCell } from '../../hooks/useSnapToGrid'
 import { getOpeningSegments } from '../../store/openingSegments'
+import { getMirroredWallKey, type InnerWallRecord } from '../../store/manualWalls'
 import type { OpeningRecord, PaintedCells } from '../../store/useDungeonStore'
 
 const MASK_BASE_SAMPLE_COUNT = 1024
@@ -60,6 +61,7 @@ export type PlayVisibilityComputation = {
 export type PlayVisibilityWorkerInput = {
   paintedCells: PaintedCells
   wallOpenings: Record<string, OpeningRecord>
+  innerWalls: Record<string, InnerWallRecord>
   origins: GridCell[]
   range: number
   blockingCellKeys: string[]
@@ -86,6 +88,7 @@ const WALL_DIRECTIONS: Record<WallDirection, { delta: GridCell; opposite: WallDi
 export function computePlayVisibilityData(input: PlayVisibilityWorkerInput): PlayVisibilityComputation {
   const blockerLookup = new Map<string, BlockerCellEntry>(input.blockerLookupEntries)
   const blockingCells = new Set(input.blockingCellKeys)
+  const solidWalls = buildSolidWallSet(input.innerWalls)
   const visibleCellKeys = computeVisibleCellKeys(
     input.paintedCells,
     input.wallOpenings,
@@ -93,6 +96,7 @@ export function computePlayVisibilityData(input: PlayVisibilityWorkerInput): Pla
     input.range,
     blockingCells,
     blockerLookup,
+    solidWalls,
   )
   const mask = computeVisibilityMask(
     input.paintedCells,
@@ -102,6 +106,7 @@ export function computePlayVisibilityData(input: PlayVisibilityWorkerInput): Pla
     input.range,
     blockingCells,
     blockerLookup,
+    solidWalls,
   )
 
   return { visibleCellKeys, mask }
@@ -114,6 +119,7 @@ export function computeVisibleCellKeys(
   range: number,
   blockingCellKeys: Iterable<string> = [],
   blockerLookup: BlockerLookup = new Map(),
+  solidWalls: Set<string> = new Set(),
 ): string[] {
   const openWalls = buildOpenWallSet(wallOpenings)
   const blockingCells = new Set(blockingCellKeys)
@@ -141,7 +147,7 @@ export function computeVisibleCellKeys(
           continue
         }
 
-        if (hasLineOfSight(origin, targetCell, paintedCells, openWalls, blockingCells, blockerLookup)) {
+        if (hasLineOfSight(origin, targetCell, paintedCells, openWalls, solidWalls, blockingCells, blockerLookup)) {
           visible.add(targetKey)
         }
       }
@@ -168,11 +174,26 @@ function buildOpenWallSet(wallOpenings: Record<string, OpeningRecord>) {
   return openWalls
 }
 
+function buildSolidWallSet(innerWalls: Record<string, InnerWallRecord>) {
+  const solidWalls = new Set<string>()
+
+  Object.keys(innerWalls).forEach((wallKey) => {
+    solidWalls.add(wallKey)
+    const mirroredWallKey = getMirroredWallKey(wallKey)
+    if (mirroredWallKey) {
+      solidWalls.add(mirroredWallKey)
+    }
+  })
+
+  return solidWalls
+}
+
 function hasLineOfSight(
   origin: GridCell,
   target: GridCell,
   paintedCells: PaintedCells,
   openWalls: Set<string>,
+  solidWalls: Set<string>,
   blockingCells: Set<string>,
   blockerLookup: BlockerLookup,
 ) {
@@ -207,12 +228,12 @@ function hasLineOfSight(
       const nextDiagonal: GridCell = [current[0] + stepX, current[1] + stepZ]
       const viaX: GridCell = [current[0] + stepX, current[1]]
       const viaZ: GridCell = [current[0], current[1] + stepZ]
-      const canPassViaX = canTraverseAdjacent(current, viaX, paintedCells, openWalls)
+      const canPassViaX = canTraverseAdjacent(current, viaX, paintedCells, openWalls, solidWalls)
         && !isBlockingSightCell(viaX, target, blockingCells, blockerLookup, originPoint, targetPoint)
-        && canTraverseAdjacent(viaX, nextDiagonal, paintedCells, openWalls)
-      const canPassViaZ = canTraverseAdjacent(current, viaZ, paintedCells, openWalls)
+        && canTraverseAdjacent(viaX, nextDiagonal, paintedCells, openWalls, solidWalls)
+      const canPassViaZ = canTraverseAdjacent(current, viaZ, paintedCells, openWalls, solidWalls)
         && !isBlockingSightCell(viaZ, target, blockingCells, blockerLookup, originPoint, targetPoint)
-        && canTraverseAdjacent(viaZ, nextDiagonal, paintedCells, openWalls)
+        && canTraverseAdjacent(viaZ, nextDiagonal, paintedCells, openWalls, solidWalls)
 
       if (!canPassViaX && !canPassViaZ) {
         return false
@@ -229,7 +250,7 @@ function hasLineOfSight(
 
     if (tMaxX < tMaxZ) {
       const nextCell: GridCell = [current[0] + stepX, current[1]]
-      if (!canTraverseAdjacent(current, nextCell, paintedCells, openWalls)) {
+      if (!canTraverseAdjacent(current, nextCell, paintedCells, openWalls, solidWalls)) {
         return false
       }
       current = nextCell
@@ -241,7 +262,7 @@ function hasLineOfSight(
     }
 
     const nextCell: GridCell = [current[0], current[1] + stepZ]
-    if (!canTraverseAdjacent(current, nextCell, paintedCells, openWalls)) {
+    if (!canTraverseAdjacent(current, nextCell, paintedCells, openWalls, solidWalls)) {
       return false
     }
     current = nextCell
@@ -259,6 +280,7 @@ function canTraverseAdjacent(
   to: GridCell,
   paintedCells: PaintedCells,
   openWalls: Set<string>,
+  solidWalls: Set<string>,
 ) {
   const direction = getDirection(from, to)
   if (!direction) {
@@ -273,11 +295,16 @@ function canTraverseAdjacent(
     return false
   }
 
+  const wallKey = `${fromKey}:${direction}`
+  if (solidWalls.has(wallKey)) {
+    return false
+  }
+
   if ((fromRecord.roomId ?? null) === (toRecord.roomId ?? null)) {
     return true
   }
 
-  return openWalls.has(`${fromKey}:${direction}`)
+  return openWalls.has(wallKey)
 }
 
 function getDirection(from: GridCell, to: GridCell): WallDirection | null {
@@ -323,6 +350,7 @@ export function computeVisibilityMask(
   range: number,
   blockingCellKeys: Iterable<string>,
   blockerLookup: BlockerLookup = new Map(),
+  solidWalls: Set<string> = new Set(),
 ): PlayVisibilityMask | null {
   const paintedCellKeys = Object.keys(paintedCells)
   if (paintedCellKeys.length === 0) {
@@ -337,6 +365,7 @@ export function computeVisibilityMask(
         origin,
         paintedCells,
         portalLookup,
+        solidWalls,
         blockingCells,
         range,
         blockerLookup,
@@ -347,6 +376,7 @@ export function computeVisibilityMask(
         samples,
         paintedCells,
         portalLookup,
+        solidWalls,
         blockingCells,
         range * GRID_SIZE,
         blockerLookup,
@@ -387,6 +417,7 @@ export function computeVisibilitySamples(
   originCell: GridCell,
   paintedCells: PaintedCells,
   portalLookup: Map<string, PortalSegment>,
+  solidWalls: Set<string>,
   blockingCells: Set<string>,
   range: number,
   blockerLookup: BlockerLookup = new Map(),
@@ -407,6 +438,7 @@ export function computeVisibilitySamples(
         angle,
         paintedCells,
         portalLookup,
+        solidWalls,
         blockingCells,
         maxDistance,
         blockerLookup,
@@ -419,6 +451,7 @@ function splitVisibilityPolygonIntoSectors(
   samples: VisibilitySample[],
   paintedCells: PaintedCells,
   portalLookup: Map<string, PortalSegment>,
+  solidWalls: Set<string>,
   blockingCells: Set<string>,
   maxDistance: number,
   blockerLookup: BlockerLookup,
@@ -443,6 +476,7 @@ function splitVisibilityPolygonIntoSectors(
         next,
         paintedCells,
         portalLookup,
+        solidWalls,
         blockingCells,
         maxDistance,
         blockerLookup,
@@ -482,6 +516,7 @@ function shouldSplitVisibilitySector(
   right: VisibilitySample,
   paintedCells: PaintedCells,
   portalLookup: Map<string, PortalSegment>,
+  solidWalls: Set<string>,
   blockingCells: Set<string>,
   maxDistance: number,
   blockerLookup: BlockerLookup,
@@ -497,6 +532,7 @@ function shouldSplitVisibilitySector(
     midpointAngle,
     paintedCells,
     portalLookup,
+    solidWalls,
     blockingCells,
     maxDistance,
     blockerLookup,
@@ -514,6 +550,7 @@ export function castVisibilityMaskRay(
   range: number,
   blockingCellKeys: Iterable<string> = [],
   blockerLookup: BlockerLookup = new Map(),
+  solidWalls: Set<string> = new Set(),
 ): readonly [number, number] {
   const origin: readonly [number, number] = [
     (originCell[0] + 0.5) * GRID_SIZE,
@@ -525,6 +562,7 @@ export function castVisibilityMaskRay(
     angle,
     paintedCells,
     buildPortalLookup(wallOpenings),
+    solidWalls,
     new Set(blockingCellKeys),
     range * GRID_SIZE,
     blockerLookup,
@@ -537,6 +575,7 @@ function castVisibilityMaskRayWithLookup(
   angle: number,
   paintedCells: PaintedCells,
   portalLookup: Map<string, PortalSegment>,
+  solidWalls: Set<string>,
   blockingCells: Set<string>,
   maxDistance: number,
   blockerLookup: BlockerLookup,
@@ -566,13 +605,13 @@ function castVisibilityMaskRayWithLookup(
       const canPassViaX =
         stepX !== 0 &&
         stepZ !== 0 &&
-        canTraverseRayBoundary(current, viaX, crossPoint, paintedCells, portalLookup) &&
-        canTraverseRayBoundary(viaX, diagonal, crossPoint, paintedCells, portalLookup)
+        canTraverseRayBoundary(current, viaX, crossPoint, paintedCells, portalLookup, solidWalls) &&
+        canTraverseRayBoundary(viaX, diagonal, crossPoint, paintedCells, portalLookup, solidWalls)
       const canPassViaZ =
         stepX !== 0 &&
         stepZ !== 0 &&
-        canTraverseRayBoundary(current, viaZ, crossPoint, paintedCells, portalLookup) &&
-        canTraverseRayBoundary(viaZ, diagonal, crossPoint, paintedCells, portalLookup)
+        canTraverseRayBoundary(current, viaZ, crossPoint, paintedCells, portalLookup, solidWalls) &&
+        canTraverseRayBoundary(viaZ, diagonal, crossPoint, paintedCells, portalLookup, solidWalls)
 
       if (!canPassViaX && !canPassViaZ) {
         return pointAtDistance(origin, direction, Math.max(0, distance - MASK_DISTANCE_EPSILON))
@@ -604,7 +643,7 @@ function castVisibilityMaskRayWithLookup(
       const distance = tMaxX
       const nextCell: GridCell = [current[0] + stepX, current[1]]
       const crossPoint = pointAtDistance(origin, direction, distance)
-      if (!canTraverseRayBoundary(current, nextCell, crossPoint, paintedCells, portalLookup)) {
+      if (!canTraverseRayBoundary(current, nextCell, crossPoint, paintedCells, portalLookup, solidWalls)) {
         return pointAtDistance(origin, direction, Math.max(0, distance - MASK_DISTANCE_EPSILON))
       }
 
@@ -631,7 +670,7 @@ function castVisibilityMaskRayWithLookup(
     const distance = tMaxZ
     const nextCell: GridCell = [current[0], current[1] + stepZ]
     const crossPoint = pointAtDistance(origin, direction, distance)
-    if (!canTraverseRayBoundary(current, nextCell, crossPoint, paintedCells, portalLookup)) {
+    if (!canTraverseRayBoundary(current, nextCell, crossPoint, paintedCells, portalLookup, solidWalls)) {
       return pointAtDistance(origin, direction, Math.max(0, distance - MASK_DISTANCE_EPSILON))
     }
 
@@ -783,6 +822,7 @@ function canTraverseRayBoundary(
   crossPoint: readonly [number, number],
   paintedCells: PaintedCells,
   portalLookup: Map<string, PortalSegment>,
+  solidWalls: Set<string>,
 ) {
   const direction = getDirection(from, to)
   if (!direction) {
@@ -795,10 +835,14 @@ function canTraverseRayBoundary(
   if (!fromRecord || !toRecord) {
     return false
   }
+  const wallKey = `${fromKey}:${direction}`
+  if (solidWalls.has(wallKey)) {
+    return false
+  }
   if ((fromRecord.roomId ?? null) === (toRecord.roomId ?? null)) {
     return true
   }
-  const portal = portalLookup.get(`${fromKey}:${direction}`)
+  const portal = portalLookup.get(wallKey)
   return portal ? pointPassesPortal(crossPoint, portal) : false
 }
 

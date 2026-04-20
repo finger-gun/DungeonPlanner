@@ -9,6 +9,7 @@ export const dungeonChairAsset = createDungeonAsset({
   modelName: 'chair',
   transform: DUNGEON_PROP_TRANSFORM,
   metadata: {
+    snapsTo: 'FREE',
     connectors: [
       {
         point: [0, 0, 0],

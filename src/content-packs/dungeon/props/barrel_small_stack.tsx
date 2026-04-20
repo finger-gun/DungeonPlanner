@@ -9,6 +9,7 @@ export const dungeonBarrelSmallStackAsset = createDungeonAsset({
   modelName: 'barrel_small_stack',
   transform: DUNGEON_PROP_TRANSFORM,
   metadata: {
+    snapsTo: 'FREE',
     connectors: [
       {
         point: [0, 0, 0],

@@ -88,6 +88,25 @@ describe('useDungeonStore history', () => {
     expect(state.placedObjects[placedId!]?.type).toBe('player')
   })
 
+  it('can place a prop without changing selection', () => {
+    const state = useDungeonStore.getState()
+    state.selectObject(null)
+
+    const placedId = state.placeObject({
+      type: 'prop',
+      assetId: 'core.props_wall_torch',
+      position: [1, 0.45, 1],
+      rotation: [0, 0, 0],
+      props: {},
+      cell: [0, 0],
+      cellKey: '0:0',
+      selectPlaced: false,
+    })
+
+    expect(placedId).toBeTruthy()
+    expect(useDungeonStore.getState().selection).toBeNull()
+  })
+
   it('removes the selected room', () => {
     useDungeonStore.getState().paintCells([[0, 0], [1, 0]])
     const roomId = useDungeonStore.getState().paintedCells['0:0'].roomId
@@ -645,6 +664,90 @@ describe('useDungeonStore history', () => {
     })
   })
 
+  it('allows multiple free-snapped floor props on the same tile', () => {
+    useDungeonStore.getState().paintCells([[0, 0]])
+
+    const firstId = useDungeonStore.getState().placeObject({
+      type: 'prop',
+      assetId: 'dungeon.props_book_brown',
+      position: [1.1, 0, 0.9],
+      rotation: [0, 0, 0],
+      props: {
+        connector: 'FLOOR',
+        direction: null,
+      },
+      cell: [0, 0],
+      cellKey: '0:0:floor',
+      supportCellKey: '0:0',
+    })
+    const secondId = useDungeonStore.getState().placeObject({
+      type: 'prop',
+      assetId: 'dungeon.props_bars_bar_straight_A',
+      position: [0.8, 0, 1.2],
+      rotation: [0, Math.PI / 4, 0],
+      props: {
+        connector: 'FLOOR',
+        direction: null,
+      },
+      cell: [0, 0],
+      cellKey: '0:0:floor',
+      supportCellKey: '0:0',
+    })
+
+    const state = useDungeonStore.getState()
+    expect(firstId).toBeTruthy()
+    expect(secondId).toBeTruthy()
+    expect(firstId).not.toBe(secondId)
+    expect(state.occupancy['0:0:floor']).toBeUndefined()
+    expect(state.placedObjects[firstId!]?.position).toEqual([1.1, 0, 0.9])
+    expect(state.placedObjects[secondId!]?.position).toEqual([0.8, 0, 1.2])
+  })
+
+  it('moves a free-snapped prop without disturbing grid occupancy on the same tile', () => {
+    useDungeonStore.getState().paintCells([[0, 0], [1, 0]])
+
+    const anchorId = useDungeonStore.getState().placeObject({
+      type: 'prop',
+      assetId: 'dungeon.props_table_small',
+      position: [1, 0, 1],
+      rotation: [0, 0, 0],
+      props: {
+        connector: 'FLOOR',
+        direction: null,
+      },
+      cell: [0, 0],
+      cellKey: '0:0:floor',
+      supportCellKey: '0:0',
+    })
+    const freeId = useDungeonStore.getState().placeObject({
+      type: 'prop',
+      assetId: 'dungeon.props_book_brown',
+      position: [1.2, 0, 0.8],
+      rotation: [0, 0, 0],
+      props: {
+        connector: 'FLOOR',
+        direction: null,
+      },
+      cell: [0, 0],
+      cellKey: '0:0:floor',
+      supportCellKey: '0:0',
+    })
+
+    const moved = useDungeonStore.getState().moveObject(freeId!, {
+      position: [3.2, 0, 0.8],
+      cell: [1, 0],
+      cellKey: '1:0:floor',
+    })
+
+    const state = useDungeonStore.getState()
+    expect(anchorId).toBeTruthy()
+    expect(moved).toBe(true)
+    expect(state.occupancy['0:0:floor']).toBe(anchorId)
+    expect(state.occupancy['1:0:floor']).toBeUndefined()
+    expect(state.placedObjects[freeId!]?.cell).toEqual([1, 0])
+    expect(state.placedObjects[freeId!]?.position).toEqual([3.2, 0, 0.8])
+  })
+
   it('keeps child free props attached to their parent transform', () => {
     useDungeonStore.getState().paintCells([[0, 0]])
 
@@ -911,6 +1014,50 @@ describe('useDungeonStore wall openings', () => {
     state.redo()
     state = useDungeonStore.getState()
     expect(Object.values(state.wallOpenings)).toHaveLength(2)
+  })
+
+  it('restores deleted shared walls by removing open passage records in one history step', () => {
+    useDungeonStore.getState().placeOpenPassages(['0:0:north', '1:0:north'])
+
+    let state = useDungeonStore.getState()
+    expect(Object.values(state.wallOpenings)).toHaveLength(2)
+
+    const restored = state.restoreOpenPassages(['1:0:north'])
+    expect(restored).toBe(1)
+
+    state = useDungeonStore.getState()
+    expect(Object.keys(state.wallOpenings)).toHaveLength(1)
+    expect(Object.values(state.wallOpenings)[0]).toMatchObject({ wallKey: '0:0:north' })
+
+    state.undo()
+    state = useDungeonStore.getState()
+    expect(Object.keys(state.wallOpenings)).toHaveLength(2)
+
+    state.redo()
+    state = useDungeonStore.getState()
+    expect(Object.keys(state.wallOpenings)).toHaveLength(1)
+  })
+
+  it('adds and removes inner wall segments in a single history step', () => {
+    useDungeonStore.getState().paintCells([[0, 0], [1, 0]])
+
+    const added = useDungeonStore.getState().setInnerWallSegments(['0:0:east'], true)
+    let state = useDungeonStore.getState()
+
+    expect(added).toBe(1)
+    expect(state.innerWalls['0:0:east']).toMatchObject({ wallKey: '0:0:east' })
+
+    state.undo()
+    state = useDungeonStore.getState()
+    expect(state.innerWalls['0:0:east']).toBeUndefined()
+
+    state.redo()
+    state = useDungeonStore.getState()
+    expect(state.innerWalls['0:0:east']).toBeDefined()
+
+    const removed = state.setInnerWallSegments(['0:0:east'], false)
+    expect(removed).toBe(1)
+    expect(useDungeonStore.getState().innerWalls['0:0:east']).toBeUndefined()
   })
 
   it('undo/redo works for placeOpening', () => {

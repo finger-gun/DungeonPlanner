@@ -9,6 +9,7 @@ export const dungeonBoxStackedAsset = createDungeonAsset({
   modelName: 'box_stacked',
   transform: DUNGEON_PROP_TRANSFORM,
   metadata: {
+    snapsTo: 'GRID',
     connectors: [
       {
         point: [0, 0, 0],

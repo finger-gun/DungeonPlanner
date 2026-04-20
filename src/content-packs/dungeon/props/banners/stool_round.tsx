@@ -9,10 +9,11 @@ export const dungeonStoolRoundAsset = createDungeonAsset({
   modelName: 'stool_round',
   transform: DUNGEON_PROP_TRANSFORM,
   metadata: {
+    snapsTo: 'FREE',
     connectors: [
       {
         point: [0, 0, 0],
-        type: 'WALL',
+        type: 'FLOOR',
       },
     ],
     blocksLineOfSight: false,

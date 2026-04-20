@@ -1,5 +1,6 @@
 import type { ContentPackModelTransform } from '../../types'
 import { createDungeonAsset } from '../shared/createDungeonAsset'
+import { createDungeonFlameEffectGetter, createDungeonFlameLightGetter } from '../shared/flame'
 
 
 const transform: ContentPackModelTransform = {
@@ -25,15 +26,8 @@ export const dungeonTorchMountedAsset = createDungeonAsset({
     ],
     blocksLineOfSight: false,
   },
-  getLight: (objectProps) => {
-    const lit = objectProps?.lit === true
-    return lit ? {
-      color: '#ff9944',
-      intensity: 1.5,
-      distance: 8,
-      decay: 2,
-      offset: [0, 1.5, 0],
-      flicker: true,
-    } : null
-  },
+  getLight: createDungeonFlameLightGetter(),
+  getEffect: createDungeonFlameEffectGetter({
+    emitters: [{ offset: [0, 1.48, 0], scale: 1.1, intensity: 1.1 }],
+  }),
 })

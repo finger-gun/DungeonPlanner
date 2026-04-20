@@ -1,5 +1,6 @@
 import { createDungeonAsset } from '../shared/createDungeonAsset'
 import { DUNGEON_PROP_TRANSFORM } from '../shared/dungeonConstants'
+import { createDungeonFlameEffectGetter, createDungeonFlameLightGetter } from '../shared/flame'
 
 export const dungeonCandleLitAsset = createDungeonAsset({
   id: 'dungeon.props_candle_lit',
@@ -17,15 +18,16 @@ export const dungeonCandleLitAsset = createDungeonAsset({
     ],
     blocksLineOfSight: false,
   },
-  getLight: (objectProps) => {
-    const lit = objectProps?.lit === true
-    return lit ? {
-      color: '#ff9944',
-      intensity: 1.5,
-      distance: 8,
-      decay: 2,
-      offset: [0, 1.5, 0],
-      flicker: true,
-    } : null
-  },
+  getLight: createDungeonFlameLightGetter({
+    defaultLit: true,
+    light: {
+      intensity: 0.85,
+      distance: 4.5,
+      offset: [0, 0.58, 0],
+    },
+  }),
+  getEffect: createDungeonFlameEffectGetter({
+    defaultLit: true,
+    emitters: [{ offset: [0, 0.56, 0], scale: 0.46, intensity: 0.72 }],
+  }),
 })

@@ -78,6 +78,22 @@ export type PropLight = {
   castShadow?: boolean
 }
 
+export type ContentPackEffectPreset = 'fire'
+
+export type ContentPackEffectEmitter = {
+  /** Position of the effect emitter in local object space. */
+  offset?: [number, number, number]
+  /** Scales particle size and motion for this emitter. */
+  scale?: number
+  /** Multiplies the preset brightness/density for this emitter. */
+  intensity?: number
+}
+
+export type ContentPackEffect = {
+  preset: ContentPackEffectPreset
+  emitters?: ContentPackEffectEmitter[]
+}
+
 export type TileSpan = {
   /** How many grid cells wide this tile spans (1 cell = GRID_SIZE units). */
   gridWidth: 1 | 2 | 4
@@ -100,6 +116,8 @@ export type ContentPackAssetMetadata = {
   light?: PropLight
   /** Whether this asset blocks play-mode line of sight when placed on a floor cell. */
   blocksLineOfSight?: boolean
+  /** Whether this asset's meshes cast shadows. Defaults to true when omitted. */
+  castShadow?: boolean
   /** Whether this asset's meshes receive shadows. Defaults to true when omitted. */
   receiveShadow?: boolean
   /** Width in wall segments for category='wall'. Default 1. */
@@ -137,6 +155,7 @@ export type ContentPackAsset = {
   }
   batchRender?: ContentPackBatchRender
   getLight?: (objectProps: Record<string, unknown>) => PropLight | null
+  getEffect?: (objectProps: Record<string, unknown>) => ContentPackEffect | null
   getPlayModeNextProps?: (objectProps: Record<string, unknown>) => Record<string, unknown> | null
 }
 

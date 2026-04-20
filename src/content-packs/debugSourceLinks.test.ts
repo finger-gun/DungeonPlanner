@@ -15,15 +15,19 @@ describe('debugSourceLinks', () => {
   })
 
   it('resolves nested dungeon asset folders without importing the asset module', () => {
-    expect(getContentPackAssetSourcePath('dungeon.props_banner_blue')).toContain(
+    expect(getContentPackAssetSourcePath('dungeon.props_banners_banner_blue')).toContain(
       '/src/content-packs/dungeon/props/banners/banner_blue.tsx',
     )
-    expect(getContentPackAssetSourcePath('dungeon.props_bar_straight_A')).toContain(
+    expect(getContentPackAssetSourcePath('dungeon.props_bars_bar_straight_A')).toContain(
       '/src/content-packs/dungeon/props/bars/bar_straight_A.tsx',
+    )
+    expect(getContentPackAssetSourcePath('dungeon.props_banners_stool_round')).toContain(
+      '/src/content-packs/dungeon/props/banners/stool_round.tsx',
     )
   })
 
   it('returns null when an asset does not have a local content pack module', () => {
+    expect(getContentPackAssetSourcePath('dungeon.props_banner_blue')).toBeNull()
     expect(getContentPackAssetSourcePath('generated.player.test')).toBeNull()
     expect(getContentPackAssetSourceLink('generated.player.test')).toBeNull()
   })

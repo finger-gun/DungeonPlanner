@@ -1,5 +1,10 @@
 import { createDungeonAsset } from '../shared/createDungeonAsset'
-import { DUNGEON_PROP_TRANSFORM } from '../shared/dungeonConstants'
+import { type ContentPackModelTransform } from '../../types'
+
+const transform: ContentPackModelTransform = {
+  position: [0, 0, -0.5],
+  rotation: [0, 0, 0],
+} 
 
 export const dungeonShelvesAsset = createDungeonAsset({
   id: 'dungeon.props_shelves',
@@ -7,13 +12,14 @@ export const dungeonShelvesAsset = createDungeonAsset({
   name: 'Dungeon Shelves',
   category: 'prop',
   modelName: 'shelves',
-  transform: DUNGEON_PROP_TRANSFORM,
+  transform: transform,
   metadata: {
     snapsTo: 'GRID',
     blocksLineOfSight: false,
+    propSurface: true,
     connectors: [
       {
-        point: [0, 0, 0.25],
+        point: [0, 0, 0],
         type: 'WALL',
         rotation: [0, 0, 0],  // Faces outward from wall
       },

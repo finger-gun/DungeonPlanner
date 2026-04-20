@@ -9,10 +9,15 @@ export const dungeonBottleABrownAsset = createDungeonAsset({
   modelName: 'bottle_A_brown',
   transform: DUNGEON_PROP_TRANSFORM,
   metadata: {
+    snapsTo: 'FREE',
     connectors: [
       {
         point: [0, 0, 0],
         type: 'FLOOR',
+      },
+      {
+        point: [0, 0, 0],
+        type: 'SURFACE',
       },
     ],
     blocksLineOfSight: false,

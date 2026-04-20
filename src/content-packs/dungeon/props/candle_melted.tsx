@@ -1,5 +1,6 @@
 import { createDungeonAsset } from '../shared/createDungeonAsset'
 import { DUNGEON_PROP_TRANSFORM } from '../shared/dungeonConstants'
+import { createDungeonFlameEffectGetter, createDungeonFlameLightGetter } from '../shared/flame'
 
 export const dungeonCandleMeltedAsset = createDungeonAsset({
   id: 'dungeon.props_candle_melted',
@@ -17,15 +18,14 @@ export const dungeonCandleMeltedAsset = createDungeonAsset({
     ],
     blocksLineOfSight: false,
   },
-  getLight: (objectProps) => {
-    const lit = objectProps?.lit === true
-    return lit ? {
-      color: '#ff9944',
-      intensity: 1.5,
-      distance: 8,
-      decay: 2,
-      offset: [0, 1.5, 0],
-      flicker: true,
-    } : null
-  },
+  getLight: createDungeonFlameLightGetter({
+    light: {
+      intensity: 0.75,
+      distance: 4,
+      offset: [0, 0.42, 0],
+    },
+  }),
+  getEffect: createDungeonFlameEffectGetter({
+    emitters: [{ offset: [0, 0.4, 0], scale: 0.35, intensity: 0.6 }],
+  }),
 })

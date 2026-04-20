@@ -11,6 +11,8 @@ import { DungeonObject } from './DungeonObject'
 import { PlayerSelectionRing } from './DungeonObject'
 import { DungeonRoom } from './DungeonRoom'
 import { WebGPUPostProcessing } from './WebGPUPostProcessing'
+import { FireEffectPreloader } from './effects/ObjectEffect'
+import { PropLightPool } from './propLightPool'
 import { useDungeonStore, type DungeonObjectRecord } from '../../store/useDungeonStore'
 import { usePlayVisibility } from './playVisibility'
 import { ContentPackInstance } from './ContentPackInstance'
@@ -176,6 +178,14 @@ function GlobalContent() {
       />
 
       {effectiveFloorViewMode === 'active' && <Grid playMode={tool === 'play'} />}
+      <FireEffectPreloader />
+      <pointLight
+        position={[0, -1000, 0]}
+        intensity={0.0001}
+        distance={0.25}
+        decay={2}
+        color="#ff9944"
+      />
       <Controls />
       <FloorTransitionController />
       <CameraPresetManager />
@@ -190,6 +200,7 @@ type FloorRenderEntry = {
   level: number
   data: DungeonRoomData
   objects: DungeonObjectRecord[]
+  topLevelObjects: DungeonObjectRecord[]
   childrenByParent: Record<string, DungeonObjectRecord[]>
 }
 
@@ -225,6 +236,7 @@ function SceneOverviewContent() {
   const layers = useDungeonStore((state) => state.layers)
   const rooms = useDungeonStore((state) => state.rooms)
   const wallOpenings = useDungeonStore((state) => state.wallOpenings)
+  const innerWalls = useDungeonStore((state) => state.innerWalls)
   const placedObjects = useDungeonStore((state) => state.placedObjects)
   const floorTileAssetIds = useDungeonStore((state) => state.floorTileAssetIds)
   const wallSurfaceAssetIds = useDungeonStore((state) => state.wallSurfaceAssetIds)
@@ -253,13 +265,15 @@ function SceneOverviewContent() {
             layers,
             rooms,
             wallOpenings,
+            innerWalls,
             placedObjects,
             floorTileAssetIds,
             wallSurfaceAssetIds,
             globalFloorAssetId,
             globalWallAssetId,
           },
-          objects: getTopLevelObjects(visibleObjects),
+          objects: visibleObjects,
+          topLevelObjects: getTopLevelObjects(visibleObjects),
           childrenByParent: buildObjectChildrenIndex(visibleObjects),
         }]
       }
@@ -273,16 +287,18 @@ function SceneOverviewContent() {
         level: floor.level,
         data: {
           paintedCells: snapshot.paintedCells,
-          layers: snapshot.layers,
-            rooms: snapshot.rooms,
-            wallOpenings: snapshot.wallOpenings,
-            placedObjects: snapshot.placedObjects,
+            layers: snapshot.layers,
+             rooms: snapshot.rooms,
+             wallOpenings: snapshot.wallOpenings,
+             innerWalls: snapshot.innerWalls,
+             placedObjects: snapshot.placedObjects,
             floorTileAssetIds: snapshot.floorTileAssetIds,
             wallSurfaceAssetIds: snapshot.wallSurfaceAssetIds,
-            globalFloorAssetId: snapshot.selectedAssetIds.floor,
-            globalWallAssetId: snapshot.selectedAssetIds.wall,
+             globalFloorAssetId: snapshot.selectedAssetIds.floor,
+             globalWallAssetId: snapshot.selectedAssetIds.wall,
         },
-        objects: getTopLevelObjects(visibleObjects),
+        objects: visibleObjects,
+        topLevelObjects: getTopLevelObjects(visibleObjects),
         childrenByParent: buildObjectChildrenIndex(visibleObjects),
       }]
     })
@@ -298,6 +314,7 @@ function SceneOverviewContent() {
     floorTileAssetIds,
     rooms,
     wallOpenings,
+    innerWalls,
     wallSurfaceAssetIds,
   ])
 
@@ -307,7 +324,8 @@ function SceneOverviewContent() {
       {floorEntries.map((entry) => (
         <group key={entry.id} position={[0, entry.level * SCENE_OVERVIEW_FLOOR_HEIGHT_UNIT, 0]}>
           <DungeonRoom data={entry.data} visibility={ALWAYS_VISIBLE} enableBuildAnimation={false} />
-          {entry.objects
+          <PropLightPool objects={entry.objects} visibility={ALWAYS_VISIBLE} />
+          {entry.topLevelObjects
             .filter((object) => !isDownStairAssetId(object.assetId))
             .map((object) => (
               <DungeonObject
@@ -506,6 +524,7 @@ function FloorContent({ startY = 0 }: { startY?: number }) {
       )}
       <DungeonRoom visibility={visibility} />
       <RoomResizeOverlay />
+      <PropLightPool objects={objects} visibility={visibility} />
       {visibility.active && visibility.mask && (
         <>
           {showLosDebugMask && <PlayVisibilityMask mask={visibility.mask} mode="debug" />}

@@ -5,7 +5,7 @@
  * Outline uses depth-buffer edge detection (silhouette pixels only),
  * so alphaOver compositing is correct — non-edge pixels are transparent.
  */
-import { useEffect, useRef } from 'react'
+import { useEffect, useLayoutEffect, useRef } from 'react'
 import { useThree, useFrame } from '@react-three/fiber'
 import * as THREE from 'three/webgpu'
 import { pass, uniform } from 'three/tsl'
@@ -76,72 +76,58 @@ export function WebGPUPostProcessing({
   }, [selection])
 
   // Build / rebuild the TSL pipeline when renderer / scene / camera / size change
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!renderer || !scene || !camera) return
 
-    let cancelled = false
+    const baseScenePass = pass(scene as any, camera as any) as any
+    const baseSceneDepth = baseScenePass.getTextureNode('depth') as any
+    const shouldApplyBlur = settings.enabled && activeCameraMode !== 'top-down'
+    let outputNode = shouldApplyBlur
+      ? tiltShift(scene, camera, {
+          focusDistance: focusDistanceUniform.current,
+          nearFocusRange: nearFocusRangeUniform.current,
+          farFocusRange: farFocusRangeUniform.current,
+          blurRadius: blurRadiusUniform.current,
+        })
+      : baseScenePass.getTextureNode()
 
-    // Pre-warm all material pipelines currently in the scene so Three.js
-    // doesn't try to compile them for the first time mid-postprocessing-render
-    // (which triggers the WebGPU pipeline error on initial load when effects are enabled).
-    ;(renderer as any).compileAsync?.(scene, camera)
-      .catch(() => {/* best-effort */})
-      .finally(() => {
-        if (cancelled) return
+    const outlineCamera = (camera as any).clone() as THREE.Camera
+    ;(outlineCamera as any).layers.disableAll()
+    ;(outlineCamera as any).layers.enable(SELECTION_OUTLINE_LAYER)
+    outlineCameraRef.current = outlineCamera
 
-        const baseScenePass = pass(scene as any, camera as any) as any
-        const baseSceneDepth = baseScenePass.getTextureNode('depth') as any
-        // Apply tilt-shift blur only when enabled AND not in top-down view
-        const shouldApplyBlur = settings.enabled && activeCameraMode !== 'top-down'
-        let outputNode = shouldApplyBlur
-            ? tiltShift(scene, camera, {
-               focusDistance: focusDistanceUniform.current,
-               nearFocusRange: nearFocusRangeUniform.current,
-               farFocusRange: farFocusRangeUniform.current,
-               blurRadius: blurRadiusUniform.current,
-             })
-          : baseScenePass.getTextureNode()
+    if (settings.enabled) {
+      outputNode = alphaOver(outputNode, selectionOutline(scene, outlineCamera))
+    }
 
-        // Clone camera restricted to layer 31 for the selection outline pass
-        const outlineCamera = (camera as any).clone() as THREE.Camera
-        ;(outlineCamera as any).layers.disableAll()
-        ;(outlineCamera as any).layers.enable(SELECTION_OUTLINE_LAYER)
-        outlineCameraRef.current = outlineCamera
+    if (lineOfSightActive) {
+      const visibleLosCamera = (camera as any).clone() as THREE.Camera
+      ;(visibleLosCamera as any).layers.disableAll()
+      ;(visibleLosCamera as any).layers.enable(LINE_OF_SIGHT_MASK_LAYER)
+      visibleLosCameraRef.current = visibleLosCamera
 
-        if (settings.enabled) {
-          outputNode = alphaOver(outputNode, selectionOutline(scene, outlineCamera))
-        }
+      const exploredLosCamera = (camera as any).clone() as THREE.Camera
+      ;(exploredLosCamera as any).layers.disableAll()
+      ;(exploredLosCamera as any).layers.enable(EXPLORED_MEMORY_MASK_LAYER)
+      exploredLosCameraRef.current = exploredLosCamera
 
-        if (lineOfSightActive) {
-          const visibleLosCamera = (camera as any).clone() as THREE.Camera
-          ;(visibleLosCamera as any).layers.disableAll()
-          ;(visibleLosCamera as any).layers.enable(LINE_OF_SIGHT_MASK_LAYER)
-          visibleLosCameraRef.current = visibleLosCamera
+      outputNode = applyLineOfSightMask(
+        outputNode,
+        geometryLayerMask(scene, visibleLosCamera, baseSceneDepth),
+        geometryLayerMask(scene, exploredLosCamera, baseSceneDepth),
+      )
+    } else {
+      visibleLosCameraRef.current = null
+      exploredLosCameraRef.current = null
+    }
 
-          const exploredLosCamera = (camera as any).clone() as THREE.Camera
-          ;(exploredLosCamera as any).layers.disableAll()
-          ;(exploredLosCamera as any).layers.enable(EXPLORED_MEMORY_MASK_LAYER)
-          exploredLosCameraRef.current = exploredLosCamera
-
-          outputNode = applyLineOfSightMask(
-            outputNode,
-            geometryLayerMask(scene, visibleLosCamera, baseSceneDepth),
-            geometryLayerMask(scene, exploredLosCamera, baseSceneDepth),
-          )
-        } else {
-          visibleLosCameraRef.current = null
-          exploredLosCameraRef.current = null
-        }
-
-        const postProcessing = new THREE.PostProcessing(
-          renderer as unknown as THREE.WebGPURenderer,
-        )
-        postProcessing.outputNode = outputNode
-        postProcessingRef.current = postProcessing
-      })
+    const postProcessing = new THREE.PostProcessing(
+      renderer as unknown as THREE.WebGPURenderer,
+    )
+    postProcessing.outputNode = outputNode
+    postProcessingRef.current = postProcessing
 
     return () => {
-      cancelled = true
       postProcessingRef.current = null
       outlineCameraRef.current  = null
       visibleLosCameraRef.current = null
@@ -161,12 +147,13 @@ export function WebGPUPostProcessing({
     settings.bokehScale,
   ])
 
-  // Priority=1: R3F skips its own gl.render(); we drive the frame.
   useFrame((frameState, delta) => {
-    if (!postProcessingRef.current) return
+    if (!postProcessingRef.current) {
+      return
+    }
+
     const cam = frameState.camera as any
 
-    // Sync outline camera to live camera before render
     const oc = outlineCameraRef.current as any
     if (oc) {
       const src = cam as any

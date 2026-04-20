@@ -19,6 +19,7 @@ import { ScenePanel } from './components/editor/ScenePanel'
 import { CharacterSheetOverlay } from './components/editor/CharacterSheetOverlay'
 import { getDebugCameraPose, projectDebugWorldPoint } from './components/canvas/debugCameraBridge'
 import { useDungeonStore } from './store/useDungeonStore'
+import { shouldRotateSelectionFromShortcut } from './rotationShortcuts'
 import {
   cellToWorldPosition,
   getCellKey,
@@ -168,7 +169,11 @@ function App() {
       return
     }
 
-    if ((event.key === 'r' || event.key === 'R') && state.selection) {
+    if (
+      (event.key === 'r' || event.key === 'R') &&
+      state.selection &&
+      shouldRotateSelectionFromShortcut(state.tool)
+    ) {
       event.preventDefault()
       state.rotateSelection()
       return
@@ -283,7 +288,9 @@ function App() {
         : tool === 'room'
           ? roomEditMode === 'rooms'
             ? 'Click room to select · drag room edges to resize · rectangular rooms also show corner handles · left-drag empty space to build · right-drag to erase'
-            : roomEditMode === 'floor-variants'
+            : roomEditMode === 'walls'
+              ? 'Top-down wall editing · drag to preview an axis-locked wall run · release to add or remove it'
+              : roomEditMode === 'floor-variants'
               ? 'Pick a floor variant · click a painted tile to apply it · right-click to clear the tile override'
               : 'Pick a wall variant · click a wall segment to apply it · right-click to clear the wall override'
         : tool === 'character'

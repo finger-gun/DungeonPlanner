@@ -10,6 +10,7 @@ export const dungeonBarStraightAAsset = createDungeonAsset({
   transform: DUNGEON_PROP_TRANSFORM,
   metadata: {
     snapsTo: 'FREE',
+    propSurface: true,
     connectors: [
       {
         point: [0, 0, 0],

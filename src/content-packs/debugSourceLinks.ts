@@ -39,11 +39,19 @@ function getDungeonAssetModulePath(assetId: string) {
 function getDungeonAssetModulePathCandidates(assetId: string) {
   if (assetId.startsWith('dungeon.props_')) {
     const name = assetId.slice('dungeon.props_'.length)
+    const nestedFolderCandidates = [
+      ['banners_', './dungeon/props/banners/'],
+      ['bars_', './dungeon/props/bars/'],
+      ['pillars_', './dungeon/props/pillars/'],
+    ].flatMap(([prefix, folder]) =>
+      name.startsWith(prefix)
+        ? [`${folder}${name.slice(prefix.length)}.tsx`]
+        : [],
+    )
+
     return [
       `./dungeon/props/${name}.tsx`,
-      `./dungeon/props/banners/${name}.tsx`,
-      `./dungeon/props/bars/${name}.tsx`,
-      `./dungeon/props/pillars/${name}.tsx`,
+      ...nestedFolderCandidates,
     ]
   }
 

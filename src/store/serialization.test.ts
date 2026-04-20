@@ -21,6 +21,7 @@ function emptyFloorSnapshot() {
     wallSurfaceAssetIds: {},
     placedObjects: {},
     wallOpenings: {},
+    innerWalls: {},
     occupancy: {},
     nextRoomNumber: 1,
   }

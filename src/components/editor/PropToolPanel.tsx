@@ -41,7 +41,6 @@ const SUBCATEGORY_LABELS: Record<AssetBrowserSubcategory, string> = {
 export function PropToolPanel() {
   const selectedAssetIds = useDungeonStore((state) => state.selectedAssetIds)
   const surfaceBrushAssetIds = useDungeonStore((state) => state.surfaceBrushAssetIds)
-  const wallConnectionMode = useDungeonStore((state) => state.wallConnectionMode)
   const assetBrowser = useDungeonStore((state) => state.assetBrowser)
   const selection = useDungeonStore((state) => state.selection)
   const selectedObject = useDungeonStore((state) =>
@@ -50,7 +49,6 @@ export function PropToolPanel() {
   const selectedOpening = useDungeonStore((state) =>
     selection ? state.wallOpenings[selection] : null,
   )
-  const setTool = useDungeonStore((state) => state.setTool)
   const setSelectedAsset = useDungeonStore((state) => state.setSelectedAsset)
   const setSurfaceBrushAsset = useDungeonStore((state) => state.setSurfaceBrushAsset)
   const setWallConnectionMode = useDungeonStore((state) => state.setWallConnectionMode)
@@ -67,15 +65,9 @@ export function PropToolPanel() {
   ].filter((asset) => asset.category !== 'player')
 
   const categoryAssets = allAssets.filter((asset) => getAssetBrowserCategory(asset) === assetBrowser.category)
-  const openingCatalogAssets =
-    assetBrowser.category === 'openings' && wallConnectionMode === 'door'
-      ? categoryAssets
-      : assetBrowser.category === 'openings'
-        ? []
-        : categoryAssets
+  const openingCatalogAssets = categoryAssets
   const subcategorySections = buildSections(openingCatalogAssets)
-  const shouldShowOpeningCatalog =
-    assetBrowser.category !== 'openings' || wallConnectionMode === 'door'
+  const shouldShowOpeningCatalog = true
   const filteredSections = assetBrowser.subcategory
     ? subcategorySections.filter((section) => section.id === assetBrowser.subcategory)
     : subcategorySections
@@ -111,7 +103,12 @@ export function PropToolPanel() {
               <button
                 key={id}
                 type="button"
-                onClick={() => setAssetBrowserCategory(id)}
+                onClick={() => {
+                  setAssetBrowserCategory(id)
+                  if (id === 'openings') {
+                    setWallConnectionMode('door')
+                  }
+                }}
                 className={`rounded-2xl border px-3 py-2 text-xs font-medium uppercase tracking-[0.2em] transition ${
                   active
                     ? 'border-teal-300/35 bg-teal-400/10 text-teal-200'
@@ -163,42 +160,6 @@ export function PropToolPanel() {
         </section>
       )}
 
-      {assetBrowser.category === 'openings' && (
-        <section>
-          <p className="mb-3 text-xs font-semibold uppercase tracking-[0.3em] text-amber-200/70">
-            Connections
-          </p>
-          <div className="grid grid-cols-3 gap-2">
-            {([
-              ['wall', 'Wall'],
-              ['door', 'Door'],
-              ['open', 'Open'],
-            ] as const).map(([mode, label]) => {
-              const active = wallConnectionMode === mode
-              return (
-                <button
-                  key={mode}
-                  type="button"
-                  aria-pressed={active}
-                  onClick={() => {
-                    setTool('prop')
-                    setWallConnectionMode(mode)
-                    setAssetBrowserSubcategory(null)
-                  }}
-                  className={`rounded-2xl border px-3 py-2 text-xs font-medium uppercase tracking-[0.2em] transition ${
-                    active
-                      ? 'border-teal-300/35 bg-teal-400/10 text-teal-200'
-                      : 'border-stone-800 bg-stone-950/60 text-stone-400 hover:border-stone-700 hover:text-stone-200'
-                  }`}
-                >
-                  {label}
-                </button>
-              )
-            })}
-          </div>
-        </section>
-      )}
-
       {shouldShowOpeningCatalog && visibleSections.length === 0 ? (
         <p className="rounded-2xl border border-stone-800 bg-stone-950/50 px-4 py-3 text-xs text-stone-500">
           No assets available in this category.
@@ -231,7 +192,7 @@ export function PropToolPanel() {
         <p className="font-medium text-stone-300">Asset Tool</p>
         <p className="mt-1">
           {assetBrowser.category === 'openings'
-            ? 'Browse doors and stairs here. Door assets keep wall replacement behavior, while stairs place as floor-linked assets.'
+            ? 'Browse doors and stairs here. Shared-wall editing now lives under Room -> Walls.'
             : assetBrowser.category === 'surfaces'
               ? 'Browse floor and wall variants here. Selecting a surface asset keeps the faster brush workflow on the canvas.'
               : 'Browse props by category and subcategory. Wall, floor, and surface-aware placement still comes from asset metadata.'}

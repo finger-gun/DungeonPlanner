@@ -65,26 +65,16 @@ describe('PropToolPanel', () => {
     expect(useDungeonStore.getState().selectedAssetIds.opening).toBe(openingAsset!.id)
   })
 
-  it('hides the openings catalog outside door mode', () => {
-    useDungeonStore.getState().setWallConnectionMode('door')
+  it('always shows the openings catalog inside the unified openings category', () => {
+    useDungeonStore.getState().setWallConnectionMode('open')
     render(<PropToolPanel />)
 
     fireEvent.click(getButtonByLabel('Openings')!)
     expect(screen.getByText('Asset Catalogue')).toBeInTheDocument()
-
-    fireEvent.click(getButtonByLabel('Wall')!)
-    expect(screen.queryByText('Asset Catalogue')).not.toBeInTheDocument()
-    expect(getButtonByLabel('Wall')).toHaveAttribute('aria-pressed', 'true')
-
-    fireEvent.click(getButtonByLabel('Open')!)
-    expect(screen.queryByText('Asset Catalogue')).not.toBeInTheDocument()
-    expect(getButtonByLabel('Open')).toHaveAttribute('aria-pressed', 'true')
-
-    fireEvent.click(getButtonByLabel('Door')!)
-    expect(screen.getByText('Asset Catalogue')).toBeInTheDocument()
+    expect(useDungeonStore.getState().wallConnectionMode).toBe('door')
   })
 
-  it('resets a stale stairs subcategory when switching back to door mode', () => {
+  it('keeps stairs visible when reopening the unified openings category', () => {
     const stairAsset = getContentPackAssetsByCategory('opening').find((asset) =>
       !metadataSupportsConnectorType(asset.metadata, 'WALL'),
     )
@@ -95,8 +85,8 @@ describe('PropToolPanel', () => {
 
     fireEvent.click(getButtonByLabel('Openings')!)
     fireEvent.click(getCatalogButtonByAssetName(stairAsset!.name)!)
-    fireEvent.click(getButtonByLabel('Wall')!)
-    fireEvent.click(getButtonByLabel('Door')!)
+    fireEvent.click(getButtonByLabel('Furniture')!)
+    fireEvent.click(getButtonByLabel('Openings')!)
 
     expect(screen.getByText('Asset Catalogue')).toBeInTheDocument()
     expect(getCatalogButtonByAssetName(stairAsset!.name)).not.toBeNull()

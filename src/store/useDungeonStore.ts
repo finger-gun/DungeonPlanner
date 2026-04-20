@@ -16,6 +16,10 @@ import { serializeDungeon, deserializeDungeon } from './serialization'
 import { sanitizePersistedAssetReferences } from './assetReferences'
 import { getOpeningSegments } from './openingSegments'
 import { getPairedStairAssetId, getStairDirectionForAssetId } from './stairAssets'
+import {
+  getCanonicalInnerWallKey,
+  type InnerWallRecord,
+} from './manualWalls'
 import { getCanonicalWallKey, getInheritedWallAssetIdForWallKey } from './wallSegments'
 import {
   getRoomBounds,
@@ -31,12 +35,14 @@ import {
   normalizePostProcessingSettings,
 } from '../postprocessing/tiltShiftMath'
 
+export type { InnerWallRecord } from './manualWalls'
+
 export { getOpeningSegments } from './openingSegments'
 
 export type DungeonTool = 'move' | 'room' | 'prop' | 'character' | 'opening' | 'select' | 'play'
 export type CameraMode = 'orbit'
 export type CameraPreset = 'perspective' | 'isometric' | 'top-down'
-export type RoomEditMode = 'rooms' | 'floor-variants' | 'wall-variants'
+export type RoomEditMode = 'rooms' | 'walls' | 'floor-variants' | 'wall-variants'
 export type SelectedAssetIds = Record<ContentPackCategory, string | null>
 export type SurfaceBrushAssetIds = {
   floor: string | null
@@ -123,6 +129,7 @@ type DungeonSnapshot = {
   wallSurfaceAssetIds: Record<string, string>
   placedObjects: Record<string, DungeonObjectRecord>
   wallOpenings: Record<string, OpeningRecord>
+  innerWalls: Record<string, InnerWallRecord>
   occupancy: Record<string, string>
   tool: DungeonTool
   selectedAssetIds: SelectedAssetIds
@@ -142,6 +149,7 @@ type PlaceObjectInput = Pick<
   localRotation?: DungeonObjectRecord['localRotation']
   parentObjectId?: DungeonObjectRecord['parentObjectId']
   supportCellKey?: DungeonObjectRecord['supportCellKey']
+  selectPlaced?: boolean
 }
 
 type MutableObjectMaps = {
@@ -212,6 +220,7 @@ type DungeonState = DungeonSnapshot & {
   setRoomEditMode: (mode: RoomEditMode) => void
   setWallConnectionMode: (mode: WallConnectionMode) => void
   setWallConnectionWidth: (width: 1 | 2 | 3) => void
+  setInnerWallSegments: (wallKeys: string[], present: boolean) => number
   setSelectedAsset: (category: ContentPackCategory, assetId: string) => void
   setSurfaceBrushAsset: (category: keyof SurfaceBrushAssetIds, assetId: string) => void
   setAssetBrowserCategory: (category: AssetBrowserCategory) => void
@@ -271,6 +280,7 @@ type DungeonState = DungeonSnapshot & {
   // Opening actions
   placeOpening: (input: PlaceOpeningInput) => string | null
   placeOpenPassages: (wallKeys: string[]) => void
+  restoreOpenPassages: (wallKeys: string[]) => number
   removeOpening: (id: string) => void
   // Persistence
   dungeonName: string
@@ -332,6 +342,9 @@ function cloneSnapshot(snapshot: DungeonSnapshot): DungeonSnapshot {
     wallOpenings: Object.fromEntries(
       Object.entries(snapshot.wallOpenings).map(([id, opening]) => [id, { ...opening }]),
     ),
+    innerWalls: Object.fromEntries(
+      Object.entries(snapshot.innerWalls).map(([wallKey, innerWall]) => [wallKey, { ...innerWall }]),
+    ),
     occupancy: { ...snapshot.occupancy },
     tool: snapshot.tool,
     selectedAssetIds: { ...snapshot.selectedAssetIds },
@@ -364,6 +377,15 @@ function isGeneratedCharacterInUse(
   })
 }
 
+function objectConsumesOccupancy(assetId: string | null, connector: unknown) {
+  const asset = assetId ? getContentPackAssetById(assetId) : null
+  if (asset?.metadata?.snapsTo === 'FREE') {
+    return false
+  }
+
+  return connector !== 'FREE'
+}
+
 function createEmptySnapshot(): DungeonSnapshot {
   const defaultLayer = createDefaultLayer()
   return {
@@ -373,6 +395,7 @@ function createEmptySnapshot(): DungeonSnapshot {
     wallSurfaceAssetIds: {},
     placedObjects: {},
     wallOpenings: {},
+    innerWalls: {},
     occupancy: {},
     tool: 'move',
     selectedAssetIds: {
@@ -442,6 +465,23 @@ function addOpeningRecord(
   }
 
   return id
+}
+
+function collectOpenPassageIdsForWallKeys(
+  wallOpenings: Record<string, OpeningRecord>,
+  wallKeys: string[],
+) {
+  if (wallKeys.length === 0) {
+    return []
+  }
+
+  const targetSegments = new Set(wallKeys)
+  return Object.values(wallOpenings)
+    .filter((opening) =>
+      opening.assetId === null &&
+      getOpeningSegments(opening.wallKey, opening.width).some((segment) => targetSegments.has(segment)),
+    )
+    .map((opening) => opening.id)
 }
 
 function collectAnchorKeysForCell(cell: GridCell) {
@@ -626,7 +666,7 @@ function isPropAnchorValid(
 }
 
 function pruneInvalidConnectedProps(
-  current: Pick<DungeonSnapshot, 'placedObjects' | 'occupancy' | 'selection' | 'wallOpenings'>,
+  current: Pick<DungeonSnapshot, 'placedObjects' | 'occupancy' | 'selection' | 'wallOpenings' | 'innerWalls'>,
   paintedCells: PaintedCells,
   changedCells: GridCell[],
 ) {
@@ -703,7 +743,11 @@ function pruneInvalidConnectedProps(
     if (!stillValid) delete wallOpenings[opening.id]
   })
 
-  return { placedObjects, occupancy, selection, wallOpenings }
+  const innerWalls = Object.fromEntries(
+    Object.entries(current.innerWalls).filter(([wallKey]) => Boolean(getCanonicalInnerWallKey(wallKey, paintedCells))),
+  )
+
+  return { placedObjects, occupancy, selection, wallOpenings, innerWalls }
 }
 
 function pruneInvalidSurfaceOverrides(
@@ -813,6 +857,7 @@ export const useDungeonStore = create<DungeonState>()(
         occupancy,
         selection,
         wallOpenings,
+        innerWalls,
       } = pruneInvalidConnectedProps(current, paintedCells, nextCells)
       const { floorTileAssetIds, wallSurfaceAssetIds } = pruneInvalidSurfaceOverrides(
         current,
@@ -826,6 +871,7 @@ export const useDungeonStore = create<DungeonState>()(
         wallSurfaceAssetIds,
         placedObjects,
         wallOpenings,
+        innerWalls,
         occupancy,
         selection,
         rooms,
@@ -865,6 +911,7 @@ export const useDungeonStore = create<DungeonState>()(
         occupancy,
         selection,
         wallOpenings,
+        innerWalls,
       } = pruneInvalidConnectedProps(current, paintedCells, removedCells)
       const { floorTileAssetIds, wallSurfaceAssetIds } = pruneInvalidSurfaceOverrides(
         current,
@@ -878,6 +925,7 @@ export const useDungeonStore = create<DungeonState>()(
         wallSurfaceAssetIds,
         placedObjects,
         wallOpenings,
+        innerWalls,
         occupancy,
         selection,
         history: [...current.history, previousSnapshot],
@@ -889,7 +937,7 @@ export const useDungeonStore = create<DungeonState>()(
   },
   placeObject: (input) => {
     const state = get()
-    const consumesOccupancy = input.props.connector !== 'FREE'
+    const consumesOccupancy = objectConsumesOccupancy(input.assetId, input.props.connector)
     if (input.parentObjectId && !state.placedObjects[input.parentObjectId]) {
       return null
     }
@@ -954,7 +1002,7 @@ export const useDungeonStore = create<DungeonState>()(
         ...current,
         placedObjects,
         occupancy,
-        selection: nextId,
+        selection: input.selectPlaced === false ? current.selection : nextId,
         history: [...current.history, previousSnapshot],
         future: [],
       }
@@ -979,11 +1027,13 @@ export const useDungeonStore = create<DungeonState>()(
       return false
     }
 
+    const consumesOccupancy = objectConsumesOccupancy(object.assetId, object.props.connector)
+
     if (!state.paintedCells[getCellKey(input.cell)]) {
       return false
     }
 
-    const occupantId = state.occupancy[input.cellKey]
+    const occupantId = consumesOccupancy ? state.occupancy[input.cellKey] : null
     if (occupantId && occupantId !== id) {
       return false
     }
@@ -1018,8 +1068,12 @@ export const useDungeonStore = create<DungeonState>()(
       }
       const occupancy = { ...current.occupancy }
 
-      delete occupancy[currentObject.cellKey]
-      occupancy[input.cellKey] = id
+      if (consumesOccupancy) {
+        if (occupancy[currentObject.cellKey] === id) {
+          delete occupancy[currentObject.cellKey]
+        }
+        occupancy[input.cellKey] = id
+      }
       updateDescendantWorldTransforms(placedObjects, id)
 
       return {
@@ -1319,6 +1373,53 @@ export const useDungeonStore = create<DungeonState>()(
           ...current,
           wallConnectionWidth: width,
         })
+  },
+  setInnerWallSegments: (wallKeys, present) => {
+    const state = get()
+    const nextWallKeys = [...new Set(
+      wallKeys
+        .map((wallKey) => getCanonicalInnerWallKey(wallKey, state.paintedCells))
+        .filter((wallKey): wallKey is string => Boolean(wallKey)),
+    )]
+
+    if (nextWallKeys.length === 0) {
+      return 0
+    }
+
+    const changedWallKeys = nextWallKeys.filter((wallKey) =>
+      present ? !state.innerWalls[wallKey] : Boolean(state.innerWalls[wallKey]),
+    )
+
+    if (changedWallKeys.length === 0) {
+      return 0
+    }
+
+    const previousSnapshot = cloneSnapshot(state)
+
+    set((current) => {
+      const innerWalls = { ...current.innerWalls }
+
+      changedWallKeys.forEach((wallKey) => {
+        if (present) {
+          innerWalls[wallKey] = {
+            wallKey,
+            layerId: current.activeLayerId,
+          }
+          return
+        }
+
+        delete innerWalls[wallKey]
+      })
+
+      return {
+        ...current,
+        innerWalls,
+        history: [...current.history, previousSnapshot],
+        future: [],
+      }
+    })
+
+    return changedWallKeys.length
   },
   setSelectedAsset: (category, assetId) => {
     const state = get()
@@ -1850,7 +1951,7 @@ export const useDungeonStore = create<DungeonState>()(
       const rooms = { ...current.rooms }
       delete rooms[id]
 
-      const { placedObjects, occupancy, selection, wallOpenings } =
+      const { placedObjects, occupancy, selection, wallOpenings, innerWalls } =
         pruneInvalidConnectedProps(
           current,
           paintedCells,
@@ -1869,6 +1970,7 @@ export const useDungeonStore = create<DungeonState>()(
         wallSurfaceAssetIds,
         placedObjects,
         wallOpenings,
+        innerWalls,
         occupancy,
         selection,
         selectedRoomId: current.selectedRoomId === id ? null : current.selectedRoomId,
@@ -1898,6 +2000,7 @@ export const useDungeonStore = create<DungeonState>()(
         occupancy,
         selection,
         wallOpenings,
+        innerWalls,
       } = pruneInvalidConnectedProps(current, paintedCells, changedCells)
       const { floorTileAssetIds, wallSurfaceAssetIds } = pruneInvalidSurfaceOverrides(
         current,
@@ -1912,6 +2015,7 @@ export const useDungeonStore = create<DungeonState>()(
         occupancy,
         selection,
         wallOpenings,
+        innerWalls,
         history: [...current.history, previousSnapshot],
         future: [],
       }
@@ -1993,7 +2097,7 @@ export const useDungeonStore = create<DungeonState>()(
         }),
       )
 
-      const { placedObjects, occupancy, selection, wallOpenings } =
+      const { placedObjects, occupancy, selection, wallOpenings, innerWalls } =
         pruneInvalidConnectedProps(
           { ...current, wallOpenings: remappedWallOpenings },
           paintedCells,
@@ -2011,6 +2115,7 @@ export const useDungeonStore = create<DungeonState>()(
         wallSurfaceAssetIds,
         placedObjects,
         wallOpenings,
+        innerWalls,
         occupancy,
         selection,
         history: [...current.history, previousSnapshot],
@@ -2076,7 +2181,7 @@ export const useDungeonStore = create<DungeonState>()(
         }
       })
 
-      const { placedObjects, occupancy, selection, wallOpenings } =
+      const { placedObjects, occupancy, selection, wallOpenings, innerWalls } =
         pruneInvalidConnectedProps(current, paintedCells, changedCells)
       const { floorTileAssetIds, wallSurfaceAssetIds } = pruneInvalidSurfaceOverrides(
         current,
@@ -2090,6 +2195,7 @@ export const useDungeonStore = create<DungeonState>()(
         wallSurfaceAssetIds,
         placedObjects,
         wallOpenings,
+        innerWalls,
         occupancy,
         selection,
         history: [...current.history, previousSnapshot],
@@ -2422,6 +2528,34 @@ export const useDungeonStore = create<DungeonState>()(
       }
     })
   },
+  restoreOpenPassages: (wallKeys) => {
+    if (wallKeys.length === 0) {
+      return 0
+    }
+
+    let removedCount = 0
+    set((current) => {
+      const openingIds = collectOpenPassageIdsForWallKeys(current.wallOpenings, wallKeys)
+      if (openingIds.length === 0) {
+        return current
+      }
+
+      const previousSnapshot = cloneSnapshot(current)
+      const wallOpenings = { ...current.wallOpenings }
+      openingIds.forEach((openingId) => {
+        delete wallOpenings[openingId]
+      })
+      removedCount = openingIds.length
+
+      return {
+        ...current,
+        wallOpenings,
+        history: [...current.history, previousSnapshot],
+        future: [],
+      }
+    })
+    return removedCount
+  },
   removeOpening: (id) => {
     set((current) => {
       if (!current.wallOpenings[id]) return current
@@ -2467,6 +2601,7 @@ export const useDungeonStore = create<DungeonState>()(
       wallSurfaceAssetIds: state.wallSurfaceAssetIds,
       placedObjects: state.placedObjects,
       wallOpenings: state.wallOpenings,
+      innerWalls: state.innerWalls,
       occupancy: state.occupancy,
       nextRoomNumber: state.nextRoomNumber,
       floors: floorsWithCurrent,
@@ -2525,6 +2660,7 @@ export const useDungeonStore = create<DungeonState>()(
         wallSurfaceAssetIds: state.wallSurfaceAssetIds,
         placedObjects: state.placedObjects,
         wallOpenings: state.wallOpenings,
+        innerWalls: state.innerWalls,
         occupancy: state.occupancy,
         layers: state.layers,
         layerOrder: state.layerOrder,
@@ -2547,6 +2683,10 @@ export const useDungeonStore = create<DungeonState>()(
         }
 
         Object.assign(state, sanitizePersistedAssetReferences(state))
+        state.innerWalls = state.innerWalls ?? {}
+        Object.values(state.floors ?? {}).forEach((floor) => {
+          floor.snapshot.innerWalls = floor.snapshot.innerWalls ?? {}
+        })
         if (state.tool === 'opening') {
           state.tool = 'prop'
         }

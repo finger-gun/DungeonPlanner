@@ -9,6 +9,7 @@ export const dungeonKegAsset = createDungeonAsset({
   modelName: 'keg',
   transform: DUNGEON_PROP_TRANSFORM,
   metadata: {
+    snapsTo: 'FREE',
     connectors: [
       {
         point: [0, 0, 0],

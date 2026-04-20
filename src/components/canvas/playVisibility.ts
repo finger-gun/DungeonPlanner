@@ -9,6 +9,7 @@ import type { DungeonObjectRecord, Layer } from '../../store/useDungeonStore'
 import { getRegisteredObject, useObjectRegistryVersion } from './objectRegistry'
 import { isGeneratedCharacterAssetId } from '../../content-packs/runtimeRegistry'
 import type { GeneratedCharacterRecord } from '../../generated-characters/types'
+import { computePlayVisibilityData as computePlayVisibilityDataCore } from './playVisibilityCore'
 
 const PLAYER_VISION_RANGE = 8
 const MASK_BASE_SAMPLE_COUNT = 1024
@@ -42,10 +43,11 @@ const blockerBounds = new THREE.Box3()
 type PlayVisibilityWorkerInput = {
   paintedCells: PaintedCells
   wallOpenings: Record<string, OpeningRecord>
+  innerWalls: ReturnType<typeof useDungeonStore.getState>['innerWalls']
   origins: GridCell[]
   range: number
   blockingCellKeys: string[]
-  blockerLookupEntries: Array<[string, BlockerLookupValue]>
+  blockerLookupEntries: Array<[string, BlockerCellEntry]>
 }
 
 type PlayVisibilityComputation = {
@@ -110,6 +112,7 @@ export function usePlayVisibility(): PlayVisibility {
   const paintedCells = useDungeonStore((state) => state.paintedCells)
   const exploredCells = useDungeonStore((state) => state.exploredCells)
   const wallOpenings = useDungeonStore((state) => state.wallOpenings)
+  const innerWalls = useDungeonStore((state) => state.innerWalls)
   const placedObjects = useDungeonStore((state) => state.placedObjects)
   const layers = useDungeonStore((state) => state.layers)
   const generatedCharacters = useDungeonStore((state) => state.generatedCharacters)
@@ -127,12 +130,16 @@ export function usePlayVisibility(): PlayVisibility {
     return {
       paintedCells,
       wallOpenings,
+      innerWalls,
       origins: playerOrigins,
       range: PLAYER_VISION_RANGE,
       blockingCellKeys: [...blockerLookup.keys()],
-      blockerLookupEntries: [...blockerLookup.entries()],
+      blockerLookupEntries: [...blockerLookup.entries()].flatMap(([cellKey, value]) => {
+        const blockerEntry = getBlockerCellEntry(value)
+        return blockerEntry ? [[cellKey, blockerEntry] as const] : []
+      }),
     } satisfies PlayVisibilityWorkerInput
-  }, [generatedCharacters, layers, objectRegistryVersion, paintedCells, placedObjects, tool, wallOpenings])
+  }, [generatedCharacters, innerWalls, layers, objectRegistryVersion, paintedCells, placedObjects, tool, wallOpenings])
   const [visibilityData, setVisibilityData] = useState<PlayVisibilityComputation>({
     visibleCellKeys: [],
     mask: null,
@@ -144,7 +151,7 @@ export function usePlayVisibility(): PlayVisibility {
       return
     }
 
-    setVisibilityData(computePlayVisibilityData(workerInput))
+    setVisibilityData(computePlayVisibilityDataCore(workerInput))
   }, [tool, workerInput])
 
   const mask = useMemo(
