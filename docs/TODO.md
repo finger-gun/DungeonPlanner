@@ -13,3 +13,9 @@
 ## General
 - Scene starter, DM chooses environment for his scene: dungeon, forrest, village, crypt, etc
 - Build a catalogue of default npcs and characters
+
+## Maps
+
+### Outdoors
+
+- Make map elevation more grid friendly, e.g. elevation is done in square chunks.
