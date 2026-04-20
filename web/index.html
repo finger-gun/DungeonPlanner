@@ -16,6 +16,33 @@
       rel="stylesheet"
     />
     <link rel="stylesheet" href="./styles.css" />
+    <!-- Google tag (gtag.js) -->
+    <script async src="https://www.googletagmanager.com/gtag/js?id=G-4TZCSBF6LN"></script>
+    <script>
+      window.dataLayer = window.dataLayer || [];
+      function gtag() { dataLayer.push(arguments); }
+      gtag('js', new Date());
+
+      gtag('consent', 'default', {
+        ad_storage: 'denied',
+        ad_user_data: 'denied',
+        ad_personalization: 'denied',
+        analytics_storage: 'denied',
+        wait_for_update: 500,
+      });
+
+      const consentChoice = localStorage.getItem('dp_cookie_consent');
+      if (consentChoice === 'granted') {
+        gtag('consent', 'update', {
+          ad_storage: 'granted',
+          ad_user_data: 'granted',
+          ad_personalization: 'granted',
+          analytics_storage: 'granted',
+        });
+      }
+
+      gtag('config', 'G-4TZCSBF6LN');
+    </script>
   </head>
   <body>
 
@@ -140,8 +167,47 @@
           <a href="https://fingergun.dev/" target="_blank" rel="noreferrer">Finger Gun</a>
           project, making nothing into something.
         </p>
+        <p class="footer-links">
+          <a href="./privacy-cookie-policy.html">Privacy &amp; Cookie Policy</a>
+        </p>
       </div>
     </footer>
+
+    <div id="cookie-consent-banner" class="cookie-consent-banner" hidden>
+      <div class="cookie-consent-content">
+        <p class="cookie-consent-text">
+          We use cookies for traffic analytics. Read our
+          <a href="./privacy-cookie-policy.html">Privacy &amp; Cookie Policy</a>.
+        </p>
+        <div class="cookie-consent-actions">
+          <button id="cookie-consent-reject" class="cookie-consent-btn cookie-consent-btn-reject" type="button">Reject</button>
+          <button id="cookie-consent-accept" class="cookie-consent-btn cookie-consent-btn-accept" type="button">Accept</button>
+        </div>
+      </div>
+    </div>
+    <script>
+      const consentBanner = document.getElementById('cookie-consent-banner');
+      const acceptCookies = document.getElementById('cookie-consent-accept');
+      const rejectCookies = document.getElementById('cookie-consent-reject');
+
+      const applyConsent = (granted) => {
+        localStorage.setItem('dp_cookie_consent', granted ? 'granted' : 'denied');
+        gtag('consent', 'update', {
+          ad_storage: granted ? 'granted' : 'denied',
+          ad_user_data: granted ? 'granted' : 'denied',
+          ad_personalization: granted ? 'granted' : 'denied',
+          analytics_storage: granted ? 'granted' : 'denied',
+        });
+        consentBanner.hidden = true;
+      };
+
+      if (!localStorage.getItem('dp_cookie_consent')) {
+        consentBanner.hidden = false;
+      }
+
+      acceptCookies.addEventListener('click', () => applyConsent(true));
+      rejectCookies.addEventListener('click', () => applyConsent(false));
+    </script>
 
   </body>
 </html>
