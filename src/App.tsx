@@ -1,4 +1,4 @@
-import { Suspense, lazy, useEffect, useEffectEvent, useState } from 'react'
+import { Suspense, lazy, useEffect, useEffectEvent, useRef, useState } from 'react'
 import { overlayDomRef } from './components/canvas/floorTransition'
 import { getDefaultAssetIdByCategory } from './content-packs/registry'
 import { getContentPackAssetById } from './content-packs/registry'
@@ -18,6 +18,7 @@ import { LayerPanel } from './components/editor/LayerPanel'
 import { ScenePanel } from './components/editor/ScenePanel'
 import { CharacterSheetOverlay } from './components/editor/CharacterSheetOverlay'
 import { getDebugCameraPose, projectDebugWorldPoint } from './components/canvas/debugCameraBridge'
+import { migrateLegacyGeneratedCharacters } from './generated-characters/migration'
 import { useDungeonStore } from './store/useDungeonStore'
 import { shouldRotateSelectionFromShortcut } from './rotationShortcuts'
 import {
@@ -308,6 +309,7 @@ function App() {
 
   return (
     <div className="min-h-screen bg-stone-950 text-stone-100">
+      <GeneratedCharacterMigrationBootstrap />
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(245,158,11,0.08),_transparent_40%),linear-gradient(180deg,_rgba(28,25,23,0.35),_rgba(12,10,9,0.95))]" />
       <div className="relative flex h-screen">
         {/* Narrow vertical icon toolbar */}
@@ -406,6 +408,29 @@ function App() {
 }
 
 export default App
+
+function GeneratedCharacterMigrationBootstrap() {
+  const generatedCharacters = useDungeonStore((state) => state.generatedCharacters)
+  const updateGeneratedCharacter = useDungeonStore((state) => state.updateGeneratedCharacter)
+  const migrationScheduledRef = useRef(false)
+
+  useEffect(() => {
+    if (migrationScheduledRef.current) {
+      return
+    }
+
+    migrationScheduledRef.current = true
+    queueMicrotask(() => {
+      migrationScheduledRef.current = false
+      void migrateLegacyGeneratedCharacters({
+        getCharacters: () => useDungeonStore.getState().generatedCharacters,
+        updateCharacter: updateGeneratedCharacter,
+      })
+    })
+  }, [generatedCharacters, updateGeneratedCharacter])
+
+  return null
+}
 
 function formatCount(count: number, singular: string) {
   return `${count} ${count === 1 ? singular : `${singular}s`}`

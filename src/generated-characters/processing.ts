@@ -54,21 +54,22 @@ export async function processGeneratedCharacterImage(sourceImageDataUrl: string)
   }
   keepDominantSubjectComponent(alphaMask, sourceImageData.data, width, height, SUBJECT_ALPHA_THRESHOLD)
   removeGreenEdgeFringe(alphaMask, sourceImageData.data, width, height, SUBJECT_ALPHA_THRESHOLD)
-  const cropBounds = getMaskBounds(alphaMask, width, height, SUBJECT_ALPHA_THRESHOLD)
+  const cropBounds = getHorizontallyCenteredMaskBounds(
+    alphaMask,
+    width,
+    height,
+    SUBJECT_ALPHA_THRESHOLD,
+    OUTLINE_RADIUS + 8,
+    OUTLINE_RADIUS + 8,
+  )
 
   if (!cropBounds) {
     throw new Error('The generated image did not contain a visible subject after background cleanup.')
   }
 
   const outlineMask = buildOutlineMask(alphaMask, width, height, OUTLINE_RADIUS, SUBJECT_ALPHA_THRESHOLD)
-  const paddedCropBounds = {
-    minX: Math.max(0, cropBounds.minX - (OUTLINE_RADIUS + 8)),
-    minY: Math.max(0, cropBounds.minY - (OUTLINE_RADIUS + 8)),
-    maxX: Math.min(width - 1, cropBounds.maxX + (OUTLINE_RADIUS + 8)),
-    maxY: Math.min(height - 1, cropBounds.maxY + (OUTLINE_RADIUS + 8)),
-  }
-  const cropWidth = paddedCropBounds.maxX - paddedCropBounds.minX + 1
-  const cropHeight = paddedCropBounds.maxY - paddedCropBounds.minY + 1
+  const cropWidth = cropBounds.maxX - cropBounds.minX + 1
+  const cropHeight = cropBounds.maxY - cropBounds.minY + 1
 
   const outputCanvas = document.createElement('canvas')
   outputCanvas.width = cropWidth
@@ -80,12 +81,12 @@ export async function processGeneratedCharacterImage(sourceImageDataUrl: string)
 
   const compositedImageData = outputContext.createImageData(cropWidth, cropHeight)
 
-  for (let y = paddedCropBounds.minY; y <= paddedCropBounds.maxY; y += 1) {
-    for (let x = paddedCropBounds.minX; x <= paddedCropBounds.maxX; x += 1) {
-      const sourceIndex = (y * width) + x
-      const targetIndex = ((y - paddedCropBounds.minY) * cropWidth + (x - paddedCropBounds.minX)) * 4
-      const alpha = alphaMask[sourceIndex]
-      const outline = outlineMask[sourceIndex]
+    for (let y = cropBounds.minY; y <= cropBounds.maxY; y += 1) {
+      for (let x = cropBounds.minX; x <= cropBounds.maxX; x += 1) {
+        const sourceIndex = (y * width) + x
+        const targetIndex = ((y - cropBounds.minY) * cropWidth + (x - cropBounds.minX)) * 4
+        const alpha = alphaMask[sourceIndex]
+        const outline = outlineMask[sourceIndex]
 
       if (outline > 0 && alpha <= SUBJECT_ALPHA_THRESHOLD) {
         compositedImageData.data[targetIndex] = 255
@@ -105,6 +106,17 @@ export async function processGeneratedCharacterImage(sourceImageDataUrl: string)
   }
 
   outputContext.putImageData(compositedImageData, 0, 0)
+
+  const alphaMaskCanvas = document.createElement('canvas')
+  alphaMaskCanvas.width = cropWidth
+  alphaMaskCanvas.height = cropHeight
+  const alphaMaskContext = alphaMaskCanvas.getContext('2d')
+  if (!alphaMaskContext) {
+    throw new Error('Canvas 2D context is unavailable.')
+  }
+  const alphaMaskImageData = alphaMaskContext.createImageData(cropWidth, cropHeight)
+  alphaMaskImageData.data.set(createGeneratedCharacterAlphaMaskPixels(alphaMask, width, cropBounds))
+  alphaMaskContext.putImageData(alphaMaskImageData, 0, 0)
 
   const thumbnailCanvas = document.createElement('canvas')
   thumbnailCanvas.width = THUMBNAIL_SIZE
@@ -128,6 +140,7 @@ export async function processGeneratedCharacterImage(sourceImageDataUrl: string)
 
   return {
     processedImageDataUrl: outputCanvas.toDataURL('image/png'),
+    alphaMaskDataUrl: alphaMaskCanvas.toDataURL('image/png'),
     thumbnailDataUrl: thumbnailCanvas.toDataURL('image/png'),
     width: cropWidth,
     height: cropHeight,
@@ -149,6 +162,63 @@ export function estimateGeneratedCharacterStorageBytes(
   characters: Record<string, CreateGeneratedCharacterInput | { [key: string]: unknown }>,
 ) {
   return new Blob([JSON.stringify(characters)]).size
+}
+
+export function createGeneratedCharacterAlphaMaskPixels(
+  mask: Uint8ClampedArray,
+  width: number,
+  cropBounds: { minX: number; minY: number; maxX: number; maxY: number },
+) {
+  const cropWidth = cropBounds.maxX - cropBounds.minX + 1
+  const cropHeight = cropBounds.maxY - cropBounds.minY + 1
+  const alphaPixels = new Uint8ClampedArray(cropWidth * cropHeight * 4)
+
+  for (let y = cropBounds.minY; y <= cropBounds.maxY; y += 1) {
+    for (let x = cropBounds.minX; x <= cropBounds.maxX; x += 1) {
+      const sourceIndex = (y * width) + x
+      const targetIndex = ((y - cropBounds.minY) * cropWidth + (x - cropBounds.minX)) * 4
+      const alpha = mask[sourceIndex]
+      alphaPixels[targetIndex] = alpha
+      alphaPixels[targetIndex + 1] = alpha
+      alphaPixels[targetIndex + 2] = alpha
+      alphaPixels[targetIndex + 3] = 255
+    }
+  }
+
+  return alphaPixels
+}
+
+export async function deriveGeneratedCharacterAlphaMaskDataUrl(sourceImageDataUrl: string) {
+  const image = await loadImage(sourceImageDataUrl)
+  const width = image.naturalWidth || image.width
+  const height = image.naturalHeight || image.height
+  const canvas = document.createElement('canvas')
+  canvas.width = width
+  canvas.height = height
+  const context = canvas.getContext('2d', { willReadFrequently: true })
+  if (!context) {
+    throw new Error('Canvas 2D context is unavailable.')
+  }
+
+  context.drawImage(image, 0, 0, width, height)
+  const imageData = context.getImageData(0, 0, width, height)
+  imageData.data.set(createGeneratedCharacterAlphaMaskPixelsFromImageData(imageData.data))
+  context.putImageData(imageData, 0, 0)
+  return canvas.toDataURL('image/png')
+}
+
+export function createGeneratedCharacterAlphaMaskPixelsFromImageData(imageData: Uint8ClampedArray) {
+  const alphaPixels = new Uint8ClampedArray(imageData.length)
+
+  for (let index = 0; index < imageData.length; index += 4) {
+    const alpha = imageData[index + 3]
+    alphaPixels[index] = alpha
+    alphaPixels[index + 1] = alpha
+    alphaPixels[index + 2] = alpha
+    alphaPixels[index + 3] = 255
+  }
+
+  return alphaPixels
 }
 
 function downscaleDimensions(width: number, height: number, maxDimension: number) {
@@ -254,6 +324,73 @@ function getMaskBounds(mask: Uint8ClampedArray, width: number, height: number, t
   return maxX < minX || maxY < minY
     ? null
     : { minX, minY, maxX, maxY }
+}
+
+export function getMaskHorizontalCenterOfMass(
+  mask: Uint8ClampedArray,
+  width: number,
+  threshold: number,
+) {
+  let weightedX = 0
+  let totalWeight = 0
+
+  for (let index = 0; index < mask.length; index += 1) {
+    const alpha = mask[index]
+    if (alpha <= threshold) {
+      continue
+    }
+
+    const x = index % width
+    weightedX += (x + 0.5) * alpha
+    totalWeight += alpha
+  }
+
+  return totalWeight > 0 ? weightedX / totalWeight : null
+}
+
+export function getHorizontallyCenteredMaskBounds(
+  mask: Uint8ClampedArray,
+  width: number,
+  height: number,
+  threshold: number,
+  paddingX: number,
+  paddingY: number,
+) {
+  const bounds = getMaskBounds(mask, width, height, threshold)
+  if (!bounds) {
+    return null
+  }
+
+  const centerOfMassX = getMaskHorizontalCenterOfMass(mask, width, threshold)
+    ?? (bounds.minX + bounds.maxX + 1) * 0.5
+  const leftSpan = centerOfMassX - bounds.minX
+  const rightSpan = (bounds.maxX + 1) - centerOfMassX
+  const desiredWidth = Math.min(
+    width,
+    Math.max(
+      bounds.maxX - bounds.minX + 1,
+      Math.ceil(Math.max(leftSpan, rightSpan) * 2),
+    ) + (paddingX * 2),
+  )
+
+  let minX = Math.floor(centerOfMassX - (desiredWidth * 0.5))
+  let maxX = minX + desiredWidth - 1
+  if (minX < 0) {
+    maxX = Math.min(width - 1, maxX - minX)
+    minX = 0
+  }
+  if (maxX >= width) {
+    const overflow = maxX - (width - 1)
+    minX = Math.max(0, minX - overflow)
+    maxX = width - 1
+  }
+
+  return {
+    minX,
+    minY: Math.max(0, bounds.minY - paddingY),
+    maxX,
+    maxY: Math.min(height - 1, bounds.maxY + paddingY),
+  }
 }
 
 function removeEdgeConnectedForeground(

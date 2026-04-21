@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import {
   buildOutlineMask,
+  createGeneratedCharacterAlphaMaskPixels,
+  createGeneratedCharacterAlphaMaskPixelsFromImageData,
+  getHorizontallyCenteredMaskBounds,
+  getMaskHorizontalCenterOfMass,
   isGreenishBackgroundPixel,
   keepDominantSubjectComponent,
   removeGreenEdgeFringe,
@@ -224,6 +228,82 @@ describe('generated character processing', () => {
     expect(outline[(2 * width) + 2]).toBeGreaterThan(0)
     expect(outline[(2 * width) + 2]).toBeLessThan(255)
     expect(outline[0]).toBe(0)
+  })
+
+  it('computes a horizontal center of mass from the cleaned subject mask', () => {
+    const width = 8
+    const mask = new Uint8ClampedArray([
+      0, 0, 0, 0, 0, 0, 0, 0,
+      0, 0, 0, 0, 255, 255, 0, 0,
+      0, 0, 0, 0, 255, 255, 255, 0,
+    ])
+
+    expect(getMaskHorizontalCenterOfMass(mask, width, 18)).toBeCloseTo(5.3, 5)
+  })
+
+  it('centers horizontal crop bounds around the subject mass instead of the raw bbox', () => {
+    const width = 12
+    const height = 8
+    const mask = new Uint8ClampedArray(width * height)
+
+    for (let y = 2; y <= 6; y += 1) {
+      for (let x = 6; x <= 8; x += 1) {
+        mask[(y * width) + x] = 255
+      }
+    }
+
+    for (let x = 1; x <= 5; x += 1) {
+      mask[(5 * width) + x] = 255
+    }
+
+    const cropBounds = getHorizontallyCenteredMaskBounds(mask, width, height, 18, 0, 0)
+
+    expect(cropBounds).toEqual({
+      minX: 1,
+      minY: 2,
+      maxX: 11,
+      maxY: 6,
+    })
+    expect((((cropBounds?.minX ?? 0) + (cropBounds?.maxX ?? 0) + 1) * 0.5)).toBeCloseTo(
+      getMaskHorizontalCenterOfMass(mask, width, 18) ?? 0,
+      1,
+    )
+  })
+
+  it('builds a cropped grayscale alpha-mask image payload from the processed subject mask', () => {
+    const width = 4
+    const mask = new Uint8ClampedArray([
+      0, 32, 64, 0,
+      0, 128, 255, 0,
+      0, 0, 200, 0,
+    ])
+
+    const pixels = createGeneratedCharacterAlphaMaskPixels(mask, width, {
+      minX: 1,
+      minY: 0,
+      maxX: 2,
+      maxY: 2,
+    })
+
+    expect([...pixels]).toEqual([
+      32, 32, 32, 255, 64, 64, 64, 255,
+      128, 128, 128, 255, 255, 255, 255, 255,
+      0, 0, 0, 255, 200, 200, 200, 255,
+    ])
+  })
+
+  it('derives a grayscale alpha-mask image from an RGBA texture payload', () => {
+    const pixels = createGeneratedCharacterAlphaMaskPixelsFromImageData(new Uint8ClampedArray([
+      10, 20, 30, 0,
+      40, 50, 60, 64,
+      70, 80, 90, 255,
+    ]))
+
+    expect([...pixels]).toEqual([
+      0, 0, 0, 255,
+      64, 64, 64, 255,
+      255, 255, 255, 255,
+    ])
   })
 
   it('treats low-alpha fringe as background when building the outline mask', () => {

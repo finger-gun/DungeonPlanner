@@ -21,12 +21,14 @@ export class GeneratedCharacterStorageError extends Error {
 type SaveGeneratedCharacterAssetsInput = {
   originalImageDataUrl?: unknown
   processedImageDataUrl?: unknown
+  alphaMaskDataUrl?: unknown
   thumbnailDataUrl?: unknown
 }
 
 export async function saveGeneratedCharacterAssets(input: SaveGeneratedCharacterAssetsInput) {
   const originalImageDataUrl = expectImageDataUrl(input.originalImageDataUrl, 'originalImageDataUrl')
   const processedImageDataUrl = expectImageDataUrl(input.processedImageDataUrl, 'processedImageDataUrl')
+  const alphaMaskDataUrl = expectImageDataUrl(input.alphaMaskDataUrl, 'alphaMaskDataUrl')
   const thumbnailDataUrl = expectImageDataUrl(input.thumbnailDataUrl, 'thumbnailDataUrl')
   const storageId = randomUUID()
   const storageDir = path.join(GENERATED_CHARACTER_STORAGE_DIR, storageId)
@@ -35,15 +37,18 @@ export async function saveGeneratedCharacterAssets(input: SaveGeneratedCharacter
 
   const original = decodeImageDataUrl(originalImageDataUrl)
   const processed = decodeImageDataUrl(processedImageDataUrl)
+  const alphaMask = decodeImageDataUrl(alphaMaskDataUrl)
   const thumbnail = decodeImageDataUrl(thumbnailDataUrl)
 
   const originalFileName = `original.${original.extension}`
   const processedFileName = `processed.${processed.extension}`
+  const alphaMaskFileName = `alpha-mask.${alphaMask.extension}`
   const thumbnailFileName = `thumbnail.${thumbnail.extension}`
 
   await Promise.all([
     writeFile(path.join(storageDir, originalFileName), original.buffer),
     writeFile(path.join(storageDir, processedFileName), processed.buffer),
+    writeFile(path.join(storageDir, alphaMaskFileName), alphaMask.buffer),
     writeFile(path.join(storageDir, thumbnailFileName), thumbnail.buffer),
   ])
 
@@ -51,6 +56,7 @@ export async function saveGeneratedCharacterAssets(input: SaveGeneratedCharacter
     storageId,
     originalImageUrl: `${GENERATED_CHARACTER_ASSET_PUBLIC_PATH}/${storageId}/${originalFileName}`,
     processedImageUrl: `${GENERATED_CHARACTER_ASSET_PUBLIC_PATH}/${storageId}/${processedFileName}`,
+    alphaMaskUrl: `${GENERATED_CHARACTER_ASSET_PUBLIC_PATH}/${storageId}/${alphaMaskFileName}`,
     thumbnailUrl: `${GENERATED_CHARACTER_ASSET_PUBLIC_PATH}/${storageId}/${thumbnailFileName}`,
   }
 }

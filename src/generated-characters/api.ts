@@ -17,6 +17,7 @@ type GeneratedCharacterAssetPayload = {
   storageId?: string
   originalImageUrl?: string
   processedImageUrl?: string
+  alphaMaskUrl?: string
   thumbnailUrl?: string
 }
 
@@ -103,6 +104,7 @@ export async function saveGeneratedCharacterAssets(
   images: {
     originalImageDataUrl: string
     processedImageDataUrl: string
+    alphaMaskDataUrl: string
     thumbnailDataUrl: string
   },
   fetchImpl: typeof fetch = fetch,
@@ -131,7 +133,13 @@ export async function saveGeneratedCharacterAssets(
     ))
   }
 
-  if (!payload.storageId || !payload.originalImageUrl || !payload.processedImageUrl || !payload.thumbnailUrl) {
+  if (
+    !payload.storageId
+    || !payload.originalImageUrl
+    || !payload.processedImageUrl
+    || !payload.alphaMaskUrl
+    || !payload.thumbnailUrl
+  ) {
     throw new Error('Generated character storage failed because the response was incomplete.')
   }
 
@@ -139,6 +147,7 @@ export async function saveGeneratedCharacterAssets(
     storageId: payload.storageId,
     originalImageUrl: payload.originalImageUrl,
     processedImageUrl: payload.processedImageUrl,
+    alphaMaskUrl: payload.alphaMaskUrl,
     thumbnailUrl: payload.thumbnailUrl,
   }
 }
