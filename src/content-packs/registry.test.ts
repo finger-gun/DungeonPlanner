@@ -166,10 +166,10 @@ describe('content pack registry', () => {
     expect(typeof woodDownTransform).not.toBe('function')
     expect(typeof woodUpTransform).not.toBe('function')
     if (woodDownTransform && typeof woodDownTransform !== 'function') {
-      expect(woodDownTransform.position).toEqual([0, -1.5, 0])
+      expect(woodDownTransform.position).toEqual([0, -2, -1])
     }
     if (woodUpTransform && typeof woodUpTransform !== 'function') {
-      expect(woodUpTransform.position).toEqual([0, 0, -0.8])
+      expect(woodUpTransform.position).toEqual([0, 0, -1])
     }
     expect(getContentPackAssetById('dungeon.stairs_stairs_modular_center')).toBeNull()
     expect(getContentPackAssetById('dungeon.stairs_stairs_modular_left')).toBeNull()
