@@ -11,6 +11,7 @@ export type GeneratedCharacterRecord = {
   size: GeneratedCharacterSize
   originalImageUrl: string | null
   processedImageUrl: string | null
+  alphaMaskUrl: string | null
   thumbnailUrl: string | null
   width: number | null
   height: number | null
@@ -38,6 +39,7 @@ export function createDefaultGeneratedCharacterInput(): CreateGeneratedCharacter
     size: DEFAULT_GENERATED_CHARACTER_SIZE,
     originalImageUrl: null,
     processedImageUrl: null,
+    alphaMaskUrl: null,
     thumbnailUrl: null,
     width: null,
     height: null,
@@ -84,6 +86,9 @@ export function normalizeGeneratedCharacterRecord(
       : null,
     processedImageUrl: typeof input.processedImageUrl === 'string' && input.processedImageUrl.trim()
       ? input.processedImageUrl
+      : null,
+    alphaMaskUrl: typeof input.alphaMaskUrl === 'string' && input.alphaMaskUrl.trim()
+      ? input.alphaMaskUrl
       : null,
     thumbnailUrl: typeof input.thumbnailUrl === 'string' && input.thumbnailUrl.trim()
       ? input.thumbnailUrl

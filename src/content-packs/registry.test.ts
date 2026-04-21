@@ -56,6 +56,7 @@ describe('content pack registry', () => {
         size: 'M',
         originalImageUrl: 'data:image/png;base64,abc',
         processedImageUrl: 'data:image/png;base64,abc',
+        alphaMaskUrl: 'data:image/png;base64,def',
         thumbnailUrl: 'data:image/png;base64,abc',
         width: 300,
         height: 600,
@@ -69,6 +70,9 @@ describe('content pack registry', () => {
       name: 'Generated Ranger',
       category: 'player',
       thumbnailUrl: 'data:image/png;base64,abc',
+      metadata: {
+        connectors: [{ point: [0, 0, 0], type: 'FLOOR' }],
+      },
     })
 
     syncGeneratedCharacterAssets({})

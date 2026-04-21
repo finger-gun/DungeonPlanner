@@ -12,17 +12,18 @@ type CanvasImageSourceWithDimensions = CanvasImageSource & {
 type AlphaTextureCacheEntry = {
   texture: THREE.CanvasTexture
   refCount: number
-  disposeRafId: number | null
-  disposeTimeoutId: number | null
+  lastUsedAt: number
 }
 
 const alphaTextureCache = new Map<string, AlphaTextureCacheEntry>()
+const MAX_LEGACY_ALPHA_TEXTURES = 24
+let accessCounter = 0
 
 export function acquireGeneratedCharacterAlphaTexture(cacheKey: string, sourceTexture: THREE.Texture) {
   const existingEntry = alphaTextureCache.get(cacheKey)
   if (existingEntry) {
-    cancelScheduledDispose(existingEntry)
     existingEntry.refCount += 1
+    existingEntry.lastUsedAt = ++accessCounter
     return existingEntry.texture
   }
 
@@ -69,9 +70,9 @@ export function acquireGeneratedCharacterAlphaTexture(cacheKey: string, sourceTe
   alphaTextureCache.set(cacheKey, {
     texture: alphaTexture,
     refCount: 1,
-    disposeRafId: null,
-    disposeTimeoutId: null,
+    lastUsedAt: ++accessCounter,
   })
+  pruneLegacyGeneratedCharacterAlphaTextures()
 
   return alphaTexture
 }
@@ -83,19 +84,16 @@ export function releaseGeneratedCharacterAlphaTexture(cacheKey: string) {
   }
 
   entry.refCount = Math.max(0, entry.refCount - 1)
-  if (entry.refCount > 0) {
-    return
-  }
-
-  scheduleDispose(cacheKey, entry)
+  entry.lastUsedAt = ++accessCounter
+  pruneLegacyGeneratedCharacterAlphaTextures()
 }
 
 export function resetGeneratedCharacterAlphaTextureCacheForTests() {
   alphaTextureCache.forEach((entry) => {
-    cancelScheduledDispose(entry)
     entry.texture.dispose()
   })
   alphaTextureCache.clear()
+  accessCounter = 0
 }
 
 function getImageSourceDimensions(source: CanvasImageSourceWithDimensions) {
@@ -117,37 +115,20 @@ function getImageSourceDimensions(source: CanvasImageSourceWithDimensions) {
   }
 }
 
-function scheduleDispose(cacheKey: string, entry: AlphaTextureCacheEntry) {
-  const dispose = () => {
-    entry.disposeRafId = null
-    entry.disposeTimeoutId = null
-
-    const currentEntry = alphaTextureCache.get(cacheKey)
-    if (currentEntry !== entry || entry.refCount > 0) {
-      return
-    }
-
-    entry.texture.dispose()
-    alphaTextureCache.delete(cacheKey)
-  }
-
-  if (typeof requestAnimationFrame === 'function' && typeof cancelAnimationFrame === 'function') {
-    entry.disposeRafId = requestAnimationFrame(() => {
-      entry.disposeRafId = requestAnimationFrame(dispose)
-    })
+function pruneLegacyGeneratedCharacterAlphaTextures() {
+  if (alphaTextureCache.size <= MAX_LEGACY_ALPHA_TEXTURES) {
     return
   }
 
-  entry.disposeTimeoutId = window.setTimeout(dispose, 32)
-}
+  const candidates = [...alphaTextureCache.entries()]
+    .filter(([, entry]) => entry.refCount === 0)
+    .sort((left, right) => left[1].lastUsedAt - right[1].lastUsedAt)
 
-function cancelScheduledDispose(entry: AlphaTextureCacheEntry) {
-  if (entry.disposeRafId !== null && typeof cancelAnimationFrame === 'function') {
-    cancelAnimationFrame(entry.disposeRafId)
+  for (const [cacheKey, entry] of candidates) {
+    if (alphaTextureCache.size <= MAX_LEGACY_ALPHA_TEXTURES) {
+      break
+    }
+    entry.texture.dispose()
+    alphaTextureCache.delete(cacheKey)
   }
-  if (entry.disposeTimeoutId !== null) {
-    window.clearTimeout(entry.disposeTimeoutId)
-  }
-  entry.disposeRafId = null
-  entry.disposeTimeoutId = null
 }

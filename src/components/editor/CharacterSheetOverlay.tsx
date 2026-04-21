@@ -105,6 +105,7 @@ export function CharacterSheetOverlay() {
       const savedAssets = await saveGeneratedCharacterAssets({
         originalImageDataUrl: payload.imageDataUrl,
         processedImageDataUrl: processed.processedImageDataUrl,
+        alphaMaskDataUrl: processed.alphaMaskDataUrl,
         thumbnailDataUrl: processed.thumbnailDataUrl,
       })
 
@@ -113,6 +114,7 @@ export function CharacterSheetOverlay() {
         model: payload.model,
         originalImageUrl: savedAssets.originalImageUrl,
         processedImageUrl: savedAssets.processedImageUrl,
+        alphaMaskUrl: savedAssets.alphaMaskUrl,
         thumbnailUrl: savedAssets.thumbnailUrl,
         width: processed.width,
         height: processed.height,

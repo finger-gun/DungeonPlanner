@@ -81,6 +81,7 @@ describe('requestGeneratedCharacterImage', () => {
         storageId: 'storage-test',
         originalImageUrl: '/generated-character-assets/storage-test/original.png',
         processedImageUrl: '/generated-character-assets/storage-test/processed.png',
+        alphaMaskUrl: '/generated-character-assets/storage-test/alpha-mask.png',
         thumbnailUrl: '/generated-character-assets/storage-test/thumbnail.png',
       }), {
         status: 200,
@@ -93,11 +94,13 @@ describe('requestGeneratedCharacterImage', () => {
     await expect(saveGeneratedCharacterAssets({
       originalImageDataUrl: 'data:image/png;base64,abc',
       processedImageDataUrl: 'data:image/png;base64,def',
+      alphaMaskDataUrl: 'data:image/png;base64,jkl',
       thumbnailDataUrl: 'data:image/png;base64,ghi',
     }, fetchImpl)).resolves.toEqual({
       storageId: 'storage-test',
       originalImageUrl: '/generated-character-assets/storage-test/original.png',
       processedImageUrl: '/generated-character-assets/storage-test/processed.png',
+      alphaMaskUrl: '/generated-character-assets/storage-test/alpha-mask.png',
       thumbnailUrl: '/generated-character-assets/storage-test/thumbnail.png',
     })
   })
@@ -108,6 +111,7 @@ describe('requestGeneratedCharacterImage', () => {
     await expect(saveGeneratedCharacterAssets({
       originalImageDataUrl: 'data:image/png;base64,abc',
       processedImageDataUrl: 'data:image/png;base64,def',
+      alphaMaskDataUrl: 'data:image/png;base64,jkl',
       thumbnailDataUrl: 'data:image/png;base64,ghi',
     }, fetchImpl)).rejects.toThrow(STORAGE_UNAVAILABLE_MESSAGE)
   })

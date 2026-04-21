@@ -44,7 +44,7 @@ function createGeneratedCharacterAsset(character: GeneratedCharacterRecord): Con
     thumbnailUrl: character.thumbnailUrl ?? undefined,
     Component: (props) => <GeneratedStandeePlayer character={character} {...props} />,
     metadata: {
-      connectsTo: 'FLOOR',
+      connectors: [{ point: [0, 0, 0], type: 'FLOOR' }],
     },
   }
 }
