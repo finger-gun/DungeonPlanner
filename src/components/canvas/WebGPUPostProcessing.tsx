@@ -4,8 +4,17 @@
  *
  * Outline uses depth-buffer edge detection (silhouette pixels only),
  * so alphaOver compositing is correct — non-edge pixels are transparent.
+ *
+ * The entire pipeline shares a single pass(scene, camera) node. Each effect
+ * reads color/depth/viewZ from that node rather than creating its own
+ * pass(scene, camera). This avoids simultaneous shader compilation for two
+ * separate scene render targets, which was causing GPU pipeline errors when
+ * point lights were present.
+ *
+ * A one-frame RAF delay gates rendering after each pipeline rebuild to give
+ * Three.js time to kick off initial shader compilation before the first draw.
  */
-import { useEffect, useRef } from 'react'
+import { useEffect, useLayoutEffect, useRef } from 'react'
 import { useThree, useFrame } from '@react-three/fiber'
 import * as THREE from 'three/webgpu'
 import { pass, uniform } from 'three/tsl'
@@ -21,6 +30,7 @@ import {
 import { useDungeonStore } from '../../store/useDungeonStore'
 import { getRegisteredObject } from './objectRegistry'
 import { resolveAutofocusTarget } from './autofocusTarget'
+import { shouldApplyWebGpuLensBlur } from './webgpuPostProcessingMode'
 
 export { SELECTION_OUTLINE_LAYER }
 
@@ -29,8 +39,12 @@ export function WebGPUPostProcessing({
 }: {
   lineOfSightActive?: boolean
 }) {
-  const { gl: renderer, scene, camera, size } = useThree()
+  const { gl: renderer, scene, camera, size, invalidate } = useThree()
   const postProcessingRef = useRef<THREE.PostProcessing | null>(null)
+  // Gates rendering for one RAF tick after each pipeline rebuild so Three.js
+  // can begin shader compilation before the first draw. Avoids a black first
+  // frame without touching the GPU directly (no compileAsync).
+  const pipelineReadyRef = useRef(false)
   const outlineCameraRef  = useRef<THREE.Camera | null>(null)
   const visibleLosCameraRef = useRef<THREE.Camera | null>(null)
   const exploredLosCameraRef = useRef<THREE.Camera | null>(null)
@@ -41,6 +55,7 @@ export function WebGPUPostProcessing({
   const blurRadiusUniform  = useRef(uniform(6))
 
   const settings  = useDungeonStore((state) => state.postProcessing)
+  const activeCameraMode = useDungeonStore((state) => state.activeCameraMode)
   const selection = useDungeonStore((state) => state.selection)
   const showLensFocusDebugPoint = useDungeonStore((state) => state.showLensFocusDebugPoint)
   const focusMarkerRef = useRef<THREE.Group | null>(null)
@@ -54,17 +69,14 @@ export function WebGPUPostProcessing({
   const prevSelectionRef = useRef<string | null>(null)
 
   // Keep layer-31 membership in sync with the current selection.
-  // Uses the object registry for O(1) lookup instead of scene.traverse() for O(n).
   useEffect(() => {
     const prev = prevSelectionRef.current
     if (prev !== selection) {
-      // Disable outline on previously selected object
       if (prev) {
         getRegisteredObject(prev)?.traverse((obj) => {
           if ((obj as THREE.Mesh).isMesh) (obj as any).layers.disable(SELECTION_OUTLINE_LAYER)
         })
       }
-      // Enable outline on newly selected object
       if (selection) {
         getRegisteredObject(selection)?.traverse((obj) => {
           if ((obj as THREE.Mesh).isMesh) (obj as any).layers.enable(SELECTION_OUTLINE_LAYER)
@@ -74,78 +86,101 @@ export function WebGPUPostProcessing({
     }
   }, [selection])
 
-  // Build / rebuild the TSL pipeline when renderer / scene / camera / size change
-  useEffect(() => {
+  // Build / rebuild the TSL pipeline when renderer / scene / camera / size change.
+  useLayoutEffect(() => {
     if (!renderer || !scene || !camera) return
 
-    let cancelled = false
+    // Single shared scene pass — tiltShift, LoS, and outline all read from
+    // this one node so the scene is only rendered once per frame.
+    const baseScenePass = pass(scene as any, camera as any) as any
+    const baseSceneColor = baseScenePass.getTextureNode() as any
+    const baseSceneDepth = baseScenePass.getTextureNode('depth') as any
 
-    // Pre-warm all material pipelines currently in the scene so Three.js
-    // doesn't try to compile them for the first time mid-postprocessing-render
-    // (which triggers the WebGPU pipeline error on initial load when effects are enabled).
-    ;(renderer as any).compileAsync?.(scene, camera)
-      .catch(() => {/* best-effort */})
-      .finally(() => {
-        if (cancelled) return
+    const shouldApplyBlur = shouldApplyWebGpuLensBlur({
+      activeCameraMode,
+      lensEnabled: settings.enabled,
+    })
+    let outputNode = shouldApplyBlur
+      ? tiltShift(baseSceneColor, baseScenePass.getViewZNode(), {
+          focusDistance: focusDistanceUniform.current,
+          nearFocusRange: nearFocusRangeUniform.current,
+          farFocusRange: farFocusRangeUniform.current,
+          blurRadius: blurRadiusUniform.current,
+        })
+      : baseSceneColor
 
-        const baseScenePass = pass(scene as any, camera as any) as any
-        const baseSceneDepth = baseScenePass.getTextureNode('depth') as any
-        let outputNode = settings.enabled
-            ? tiltShift(scene, camera, {
-               focusDistance: focusDistanceUniform.current,
-               nearFocusRange: nearFocusRangeUniform.current,
-               farFocusRange: farFocusRangeUniform.current,
-               blurRadius: blurRadiusUniform.current,
-             })
-          : baseScenePass.getTextureNode()
+    const outlineCamera = (camera as any).clone() as THREE.Camera
+    ;(outlineCamera as any).layers.disableAll()
+    ;(outlineCamera as any).layers.enable(SELECTION_OUTLINE_LAYER)
+    outlineCameraRef.current = outlineCamera
 
-        // Clone camera restricted to layer 31 for the selection outline pass
-        const outlineCamera = (camera as any).clone() as THREE.Camera
-        ;(outlineCamera as any).layers.disableAll()
-        ;(outlineCamera as any).layers.enable(SELECTION_OUTLINE_LAYER)
-        outlineCameraRef.current = outlineCamera
+    if (settings.enabled) {
+      outputNode = alphaOver(outputNode, selectionOutline(scene, outlineCamera))
+    }
 
-        if (settings.enabled) {
-          outputNode = alphaOver(outputNode, selectionOutline(scene, outlineCamera))
-        }
+    if (lineOfSightActive) {
+      const visibleLosCamera = (camera as any).clone() as THREE.Camera
+      ;(visibleLosCamera as any).layers.disableAll()
+      ;(visibleLosCamera as any).layers.enable(LINE_OF_SIGHT_MASK_LAYER)
+      visibleLosCameraRef.current = visibleLosCamera
 
-        if (lineOfSightActive) {
-          const visibleLosCamera = (camera as any).clone() as THREE.Camera
-          ;(visibleLosCamera as any).layers.disableAll()
-          ;(visibleLosCamera as any).layers.enable(LINE_OF_SIGHT_MASK_LAYER)
-          visibleLosCameraRef.current = visibleLosCamera
+      const exploredLosCamera = (camera as any).clone() as THREE.Camera
+      ;(exploredLosCamera as any).layers.disableAll()
+      ;(exploredLosCamera as any).layers.enable(EXPLORED_MEMORY_MASK_LAYER)
+      exploredLosCameraRef.current = exploredLosCamera
 
-          const exploredLosCamera = (camera as any).clone() as THREE.Camera
-          ;(exploredLosCamera as any).layers.disableAll()
-          ;(exploredLosCamera as any).layers.enable(EXPLORED_MEMORY_MASK_LAYER)
-          exploredLosCameraRef.current = exploredLosCamera
+      outputNode = applyLineOfSightMask(
+        outputNode,
+        geometryLayerMask(scene, visibleLosCamera, baseSceneDepth),
+        geometryLayerMask(scene, exploredLosCamera, baseSceneDepth),
+      )
+    } else {
+      visibleLosCameraRef.current = null
+      exploredLosCameraRef.current = null
+    }
 
-          outputNode = applyLineOfSightMask(
-            outputNode,
-            geometryLayerMask(scene, visibleLosCamera, baseSceneDepth),
-            geometryLayerMask(scene, exploredLosCamera, baseSceneDepth),
-          )
-        } else {
-          visibleLosCameraRef.current = null
-          exploredLosCameraRef.current = null
-        }
-
-        const postProcessing = new THREE.PostProcessing(
-          renderer as unknown as THREE.WebGPURenderer,
-        )
-        postProcessing.outputNode = outputNode
-        postProcessingRef.current = postProcessing
-      })
+    const postProcessing = new THREE.PostProcessing(
+      renderer as unknown as THREE.WebGPURenderer,
+    )
+    postProcessing.outputNode = outputNode
+    postProcessingRef.current = postProcessing
+    pipelineReadyRef.current = false
 
     return () => {
-      cancelled = true
+      ;(postProcessing as unknown as { dispose?: () => void }).dispose?.()
       postProcessingRef.current = null
+      pipelineReadyRef.current = false
       outlineCameraRef.current  = null
       visibleLosCameraRef.current = null
       exploredLosCameraRef.current = null
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [camera, lineOfSightActive, renderer, scene, settings.enabled, size])
+  }, [camera, lineOfSightActive, renderer, scene, settings.enabled, activeCameraMode, size])
+
+  // Multi-frame delay after each pipeline rebuild — lets Three.js begin WebGPU
+  // shader compilation (especially for complex scenes with many lights) before
+  // the first draw call. A single frame is often not enough when 12+ point
+  // lights are present. While waiting, useFrame falls back to a plain
+  // gl.render() so the canvas never goes black.
+  useEffect(() => {
+    pipelineReadyRef.current = false
+    let remaining = 3
+    let rafId: number
+    const tick = () => {
+      if (--remaining <= 0) {
+        pipelineReadyRef.current = true
+        invalidate()
+      } else {
+        rafId = requestAnimationFrame(tick)
+      }
+    }
+    rafId = requestAnimationFrame(tick)
+    return () => {
+      cancelAnimationFrame(rafId)
+      pipelineReadyRef.current = false
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [camera, lineOfSightActive, renderer, scene, settings.enabled, activeCameraMode, size, invalidate])
 
   // Update shader uniforms only when settings actually change — not every frame.
   useEffect(() => {
@@ -158,12 +193,16 @@ export function WebGPUPostProcessing({
     settings.bokehScale,
   ])
 
-  // Priority=1: R3F skips its own gl.render(); we drive the frame.
   useFrame((frameState, delta) => {
-    if (!postProcessingRef.current) return
+    if (!postProcessingRef.current || !pipelineReadyRef.current) {
+      // Priority-1 useFrame suppresses R3F's default render. Show plain scene
+      // while the PostProcessing pipeline warms up to avoid a black canvas.
+      ;(frameState.gl as any).render(frameState.scene, frameState.camera)
+      return
+    }
+
     const cam = frameState.camera as any
 
-    // Sync outline camera to live camera before render
     const oc = outlineCameraRef.current as any
     if (oc) {
       const src = cam as any

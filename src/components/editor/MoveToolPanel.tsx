@@ -116,36 +116,39 @@ export function MoveToolPanel() {
         </div>
       </section>
 
-      {mapMode === 'outdoor' && (
-        <section>
-          <p className="mb-3 text-xs font-semibold uppercase tracking-[0.3em] text-amber-200/70">
-            Environment
-          </p>
-          <div className="rounded-2xl border border-stone-800 bg-stone-950/60 px-4 py-4">
-            <div className="mb-2 flex items-center justify-between">
-              <label htmlFor="outdoor-time-of-day" className="text-xs uppercase tracking-[0.22em] text-stone-400">
-                Time of Day
-              </label>
-              <span className="text-xs tabular-nums text-stone-300">{Math.round(outdoorTimeOfDay * 100)}%</span>
-            </div>
-            <input
-              id="outdoor-time-of-day"
-              type="range"
-              min={0}
-              max={1}
-              step={0.01}
-              value={outdoorTimeOfDay}
-              onChange={(event) => setOutdoorTimeOfDay(Number(event.target.value))}
-              className="w-full accent-amber-300"
-            />
-            <div className="mt-1 flex justify-between text-[10px] text-stone-600">
-              <span>Dawn</span>
-              <span>Noon</span>
-              <span>Night</span>
-            </div>
+      <section>
+        <p className="mb-3 text-xs font-semibold uppercase tracking-[0.3em] text-amber-200/70">
+          Environment
+        </p>
+        <div className="rounded-2xl border border-stone-800 bg-stone-950/60 px-4 py-4">
+          <div className="mb-2 flex items-center justify-between">
+            <label htmlFor="outdoor-time-of-day" className="text-xs uppercase tracking-[0.22em] text-stone-400">
+              Time of Day
+            </label>
+            <span className="text-xs tabular-nums text-stone-300">{Math.round(outdoorTimeOfDay * 100)}%</span>
           </div>
-        </section>
-      )}
+          <input
+            id="outdoor-time-of-day"
+            type="range"
+            min={0}
+            max={1}
+            step={0.01}
+            value={outdoorTimeOfDay}
+            onChange={(event) => setOutdoorTimeOfDay(Number(event.target.value))}
+            className="w-full accent-amber-300"
+          />
+          <div className="mt-1 flex justify-between text-[10px] text-stone-600">
+            <span>Dawn</span>
+            <span>Noon</span>
+            <span>Night</span>
+          </div>
+          <p className="mt-3 text-xs text-stone-500">
+            {mapMode === 'outdoor'
+              ? 'Affects sky, fog, and sunlight outdoors.'
+              : 'Affects the dungeon ambience, fog tint, and interior light balance.'}
+          </p>
+        </div>
+      </section>
 
       {/* Lens */}
       <section>

@@ -117,6 +117,7 @@ export function ContentPackInstance({
   const asset = assetId ? getContentPackAssetById(assetId) : null
   const assetPath = asset?.assetUrl
   const AssetComponent = asset?.Component ?? null
+  const castShadow = asset?.metadata?.castShadow !== false
   const receiveShadow = asset?.metadata?.receiveShadow !== false
 
   useEffect(() => {
@@ -169,6 +170,7 @@ export function ContentPackInstance({
             playerAnimationState,
           )}
           receiveShadow={receiveShadow}
+          castShadow={castShadow}
           selected={selected}
            tint={tint}
            tintOpacity={tintOpacity}
@@ -180,8 +182,9 @@ export function ContentPackInstance({
        ) : (
         <GLTFModel
           assetPath={assetPath!}
-          receiveShadow={receiveShadow}
-          selected={selected}
+           receiveShadow={receiveShadow}
+           castShadow={castShadow}
+           selected={selected}
           tint={tint}
           tintOpacity={tintOpacity}
           overlayOnly={overlayOnly}
@@ -212,6 +215,7 @@ function getComponentProps(
 function GLTFModel({
   assetPath,
   receiveShadow,
+  castShadow,
   selected,
   tint,
   tintOpacity,
@@ -223,6 +227,7 @@ function GLTFModel({
 }: ThreeElements['group'] & {
   assetPath: string
   receiveShadow: boolean
+  castShadow: boolean
   selected?: boolean
   tint?: string
   tintOpacity?: number
@@ -236,12 +241,12 @@ function GLTFModel({
     const clone = gltf.scene.clone()
     clone.traverse((obj) => {
       if (obj instanceof THREE.Mesh) {
-        obj.castShadow = true
+        obj.castShadow = castShadow
         obj.receiveShadow = receiveShadow
       }
     })
     return clone
-  }, [gltf.scene, receiveShadow])
+  }, [castShadow, gltf.scene, receiveShadow])
 
   useEffect(() => {
     setLosLayers(scene, visibility ?? 'visible')
@@ -277,6 +282,7 @@ function ComponentAsset({
   Component,
   componentProps,
   receiveShadow,
+  castShadow,
   selected,
   tint,
   tintOpacity,
@@ -288,6 +294,7 @@ function ComponentAsset({
   Component: ComponentType<ContentPackComponentProps>
   componentProps: ContentPackComponentProps
   receiveShadow: boolean
+  castShadow: boolean
   selected?: boolean
   tint?: string
   tintOpacity?: number
@@ -307,11 +314,11 @@ function ComponentAsset({
   useEffect(() => {
     contentRef.current?.traverse((obj) => {
       if (obj instanceof THREE.Mesh) {
-        obj.castShadow = true
+        obj.castShadow = castShadow
         obj.receiveShadow = receiveShadow
       }
     })
-  }, [receiveShadow])
+  }, [castShadow, receiveShadow])
 
   useEffect(() => {
     if (contentRef.current) {
@@ -368,6 +375,7 @@ function FallbackMesh({
   overlayOnly,
   variant,
   receiveShadow,
+  castShadow = true,
   visibility = 'visible',
   useLineOfSightPostMask = false,
 }: {
@@ -377,6 +385,7 @@ function FallbackMesh({
   overlayOnly?: boolean
   variant: ContentPackInstanceVariant
   receiveShadow: boolean
+  castShadow?: boolean
   visibility?: PlayVisibilityState
   useLineOfSightPostMask?: boolean
 }) {
@@ -415,7 +424,7 @@ function FallbackMesh({
     <mesh
       ref={meshRef}
       position={[0, yOffset, 0]}
-      castShadow={!overlayOnly}
+      castShadow={!overlayOnly && castShadow}
       receiveShadow={!overlayOnly && receiveShadow}
     >
       <boxGeometry args={geometry} />

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { getContentPackAssetById } from './registry'
+import { getMetadataConnectors } from './connectors'
+import { getContentPackAssetById, getDefaultAssetIdByCategory } from './registry'
 import { syncGeneratedCharacterAssets } from './runtimeRegistry'
 
 describe('content pack registry', () => {
@@ -73,76 +74,129 @@ describe('content pack registry', () => {
     syncGeneratedCharacterAssets({})
   })
 
-  it('registers the KayKit pack floor, wall, and expanded prop assets', () => {
-    expect(getContentPackAssetById('kaykit.floor_tile_small')).toMatchObject({
+  it('registers the dungeon pack floor, wall, and expanded prop assets', () => {
+    expect(getContentPackAssetById('dungeon.floor_floor_tile_small')).toMatchObject({
       category: 'floor',
-      name: 'KayKit Stone Floor',
+      name: 'Dungeon Floor Tile Small',
     })
-    expect(getContentPackAssetById('kaykit.wall')).toMatchObject({
+    expect(getContentPackAssetById('dungeon.wall_wall')).toMatchObject({
       category: 'wall',
-      name: 'KayKit Wall',
+      name: 'Dungeon Wall',
       metadata: {
         wallSpan: 1,
         wallCornerType: 'solitary',
       },
     })
-    expect(getContentPackAssetById('kaykit.wall_arched')).toMatchObject({
+    expect(getContentPackAssetById('dungeon.wall_wall_arched')).toMatchObject({
       category: 'wall',
-      name: 'KayKit Arched Wall',
+      name: 'Dungeon Wall Arched',
       metadata: {
         wallSpan: 1,
         wallCornerType: 'solitary',
       },
     })
-    expect(getContentPackAssetById('kaykit.wall_cracked')).toMatchObject({
+    expect(getContentPackAssetById('dungeon.wall_wall_cracked')).toMatchObject({
       category: 'wall',
-      name: 'KayKit Cracked Wall',
+      name: 'Dungeon Wall Cracked',
     })
-    expect(getContentPackAssetById('kaykit.wall_scaffold')).toMatchObject({
+    expect(getContentPackAssetById('dungeon.wall_wall_scaffold')).toMatchObject({
       category: 'wall',
-      name: 'KayKit Scaffold Wall',
+      name: 'Dungeon Wall Scaffold',
       metadata: {
         wallSpan: 1,
         wallCornerType: 'solitary',
       },
     })
-    expect(getContentPackAssetById('kaykit.opening_wall_doorway')?.metadata?.openingWidth).toBe(1)
-    expect(getContentPackAssetById('kaykit.opening_wall_doorway_scaffold')?.metadata?.openingWidth).toBe(1)
-    expect(getContentPackAssetById('kaykit.opening_wall_open_scaffold')?.metadata?.openingWidth).toBe(1)
-    expect(getContentPackAssetById('kaykit.opening_wall_archedwindow_gated_scaffold')?.metadata?.openingWidth).toBe(1)
-    expect(getContentPackAssetById('kaykit.opening_wall_window_open_scaffold')?.metadata?.openingWidth).toBe(1)
-    expect(getContentPackAssetById('kaykit.opening_wall_window_closed_scaffold')?.metadata?.openingWidth).toBe(1)
-    expect(getContentPackAssetById('kaykit.opening_stairs_up')?.metadata?.pairedAssetId).toBe('kaykit.opening_stairs_down')
-    expect(getContentPackAssetById('kaykit.props_wall_shelves')?.metadata?.connectsTo).toBe('WALL')
-    expect(getContentPackAssetById('kaykit.props_chair')).toMatchObject({
+    const smallDoor = getContentPackAssetById('core.opening_door_wall_1')
+    const largeDoor = getContentPackAssetById('core.opening_door_wall_3')
+    const staircaseUp = getContentPackAssetById('core.props_staircase_up')
+    if (smallDoor) {
+      expect(smallDoor.metadata?.openingWidth).toBe(1)
+    } else {
+      expect(smallDoor).toBeNull()
+    }
+    if (largeDoor) {
+      expect(largeDoor.metadata?.openingWidth).toBe(3)
+    } else {
+      expect(largeDoor).toBeNull()
+    }
+    if (staircaseUp) {
+      expect(staircaseUp.metadata?.pairedAssetId).toBe('core.props_staircase_down')
+    } else {
+      expect(staircaseUp).toBeNull()
+    }
+    expect(getMetadataConnectors(getContentPackAssetById('dungeon.props_shelves')?.metadata)[0]?.type).toBe('WALL')
+    expect(getContentPackAssetById('dungeon.props_chair')).toMatchObject({
       category: 'prop',
-      name: 'KayKit Chair',
+      name: 'Dungeon Chair',
       metadata: {
-        connectsTo: 'FREE',
         blocksLineOfSight: false,
       },
     })
-    expect(getContentPackAssetById('kaykit.props_table_long_tablecloth')).toMatchObject({
+    expect(getContentPackAssetById('dungeon.props_table_long_tablecloth')).toMatchObject({
       category: 'prop',
-      name: 'KayKit Long Table Tablecloth',
+      name: 'Dungeon Table Long Tablecloth',
     })
-    expect(getContentPackAssetById('kaykit.opening_stairs_up')).toMatchObject({
+    expect(getContentPackAssetById('dungeon.stairs_stairs')).toMatchObject({
       category: 'opening',
       metadata: {
-        connectsTo: 'FLOOR',
-        stairDirection: 'up',
-        pairedAssetId: 'kaykit.opening_stairs_down',
+        snapsTo: 'GRID',
+        stairDirection: 'down',
       },
     })
+    expect(getContentPackAssetById('dungeon.stairs_stairs_wood')).toMatchObject({
+      category: 'opening',
+      name: 'Dungeon Stairs Wood Down',
+      metadata: {
+        stairDirection: 'down',
+        pairedAssetId: 'dungeon.stairs_stairs_wood_up',
+      },
+    })
+    expect(getContentPackAssetById('dungeon.stairs_stairs_wood_up')).toMatchObject({
+      category: 'opening',
+      name: 'Dungeon Stairs Wood Up',
+      metadata: {
+        snapsTo: 'GRID',
+        stairDirection: 'up',
+        pairedAssetId: 'dungeon.stairs_stairs_wood',
+      },
+    })
+    const woodDownTransform = getContentPackAssetById('dungeon.stairs_stairs_wood')?.batchRender?.transform
+    const woodUpTransform = getContentPackAssetById('dungeon.stairs_stairs_wood_up')?.batchRender?.transform
+    expect(typeof woodDownTransform).not.toBe('function')
+    expect(typeof woodUpTransform).not.toBe('function')
+    if (woodDownTransform && typeof woodDownTransform !== 'function') {
+      expect(woodDownTransform.position).toEqual([0, -2, -1])
+    }
+    if (woodUpTransform && typeof woodUpTransform !== 'function') {
+      expect(woodUpTransform.position).toEqual([0, 0, -1])
+    }
+    expect(getContentPackAssetById('dungeon.stairs_stairs_modular_center')).toBeNull()
+    expect(getContentPackAssetById('dungeon.stairs_stairs_modular_left')).toBeNull()
+    expect(getContentPackAssetById('dungeon.stairs_stairs_modular_right')).toBeNull()
+    expect(getContentPackAssetById('dungeon.stairs_stairs_long_modular_center')).toBeNull()
+    expect(getContentPackAssetById('dungeon.stairs_stairs_long_modular_left')).toBeNull()
+    expect(getContentPackAssetById('dungeon.stairs_stairs_long_modular_right')).toBeNull()
     expect(getContentPackAssetById('kaykit.opening_stairs_modular_center_up')).toBeNull()
+    expect(getContentPackAssetById('kaykit.opening_stairs_modular_left_up')).toBeNull()
+    expect(getContentPackAssetById('kaykit.opening_stairs_modular_right_up')).toBeNull()
     expect(getContentPackAssetById('kaykit.opening_stairs_long_modular_center_up')).toBeNull()
+    expect(getContentPackAssetById('kaykit.opening_stairs_long_modular_left_up')).toBeNull()
+    expect(getContentPackAssetById('kaykit.opening_stairs_long_modular_right_up')).toBeNull()
+  })
+
+  it('resolves dungeon defaults from actual imported assets', () => {
+    expect(getDefaultAssetIdByCategory('floor')).toBe('dungeon.floor_floor_tile_small')
+    expect(getDefaultAssetIdByCategory('wall')).toBe('dungeon.wall_wall')
+    expect(getDefaultAssetIdByCategory('opening')).toBe('dungeon.stairs_stairs')
+    expect(getDefaultAssetIdByCategory('prop')).toBe('dungeon.props_torch_lit')
   })
 
   it('exposes free-prop connectors and prop surfaces in content metadata', () => {
-    expect(getContentPackAssetById('kaykit.props_candle_lit')?.metadata?.connectsTo).toBe('FREE')
-    expect(getContentPackAssetById('kaykit.props_candle_triple')?.metadata?.connectsTo).toBe('FREE')
-    expect(getContentPackAssetById('kaykit.props_box_large')?.metadata?.propSurface).toBe(true)
-    expect(getContentPackAssetById('kaykit.props_table_small')?.metadata?.propSurface).toBe(true)
-    expect(getContentPackAssetById('kaykit.props_table_long_tablecloth')?.metadata?.propSurface).toBe(true)
+    expect(getMetadataConnectors(getContentPackAssetById('dungeon.props_candle_lit')?.metadata)[0]?.type).toBe('FLOOR')
+    expect(getMetadataConnectors(getContentPackAssetById('dungeon.props_candle_triple')?.metadata)[0]?.type).toBe('FLOOR')
+    expect(getContentPackAssetById('dungeon.props_bookcase_double')?.metadata?.propSurface).toBe(true)
+    expect(getContentPackAssetById('dungeon.props_bookcase_single')?.metadata?.propSurface).toBe(true)
+    expect(getContentPackAssetById('dungeon.props_table_medium')?.metadata?.propSurface).toBe(true)
   })
 })

@@ -11,6 +11,8 @@ import { DungeonObject } from './DungeonObject'
 import { PlayerSelectionRing } from './DungeonObject'
 import { DungeonRoom } from './DungeonRoom'
 import { WebGPUPostProcessing } from './WebGPUPostProcessing'
+import { FireEffectPreloader } from './effects/ObjectEffect'
+import { DEFAULT_POOLED_PROP_LIGHTS, PropLightPool } from './propLightPool'
 import { useDungeonStore, type DungeonObjectRecord } from '../../store/useDungeonStore'
 import { usePlayVisibility } from './playVisibility'
 import { ContentPackInstance } from './ContentPackInstance'
@@ -23,6 +25,7 @@ import { getEffectiveFloorViewMode } from './floorViewMode'
 import type { DungeonRoomData } from './DungeonRoom'
 import { isDownStairAssetId } from '../../store/stairAssets'
 import { OutdoorGround } from './OutdoorGround'
+import { getEnvironmentLightingState } from './environmentLighting'
 
 const SCENE_OVERVIEW_FLOOR_HEIGHT_UNIT = 3
 const PLAYER_ANIMATION_MS = {
@@ -156,44 +159,19 @@ function GlobalContent() {
   const floorViewMode = useDungeonStore((state) => state.floorViewMode)
   const effectiveFloorViewMode = getEffectiveFloorViewMode(floorViewMode, tool)
   const outdoorBlend = outdoorTimeOfDay
-  const ambientColor = mapMode === 'outdoor'
-    ? mapOutdoorColor(outdoorBlend, [
-      [0, '#ffc89a'],
-      [0.5, '#e8f5ff'],
-      [1, '#5c74b3'],
-    ])
-    : new THREE.Color('#ffe4c7')
-  const keyColor = mapMode === 'outdoor'
-    ? mapOutdoorColor(outdoorBlend, [
-      [0, '#ffd7a6'],
-      [0.5, '#fff2cc'],
-      [1, '#9db4ff'],
-    ])
-    : new THREE.Color('#ffd29d')
-  const fillColor = mapMode === 'outdoor'
-    ? mapOutdoorColor(outdoorBlend, [
-      [0, '#ff9f6e'],
-      [0.5, '#9bd5ff'],
-      [1, '#3f5ca8'],
-    ])
-    : new THREE.Color('#89dceb')
-  const skyColor = mapMode === 'outdoor'
-    ? mapOutdoorColor(outdoorBlend, [
-      [0, '#ff9f6e'],
-      [0.5, '#76c8ff'],
-      [1, '#09152c'],
-    ])
-    : new THREE.Color('#120f0e')
-  const fogNear = mapMode === 'outdoor' ? 34 : 26
-  const fogFar = mapMode === 'outdoor' ? 92 : 74
-  const keyMultiplier = mapMode === 'outdoor'
-    ? mapOutdoorNumber(outdoorBlend, [
-      [0, 1.3],
-      [0.5, 2.2],
-      [1, 0.35],
-    ])
-    : 2
-  const fillMultiplier = mapMode === 'outdoor' ? 0.7 : 0.85
+  const {
+    ambientColor,
+    keyColor,
+    fillColor,
+    skyColor,
+    fogNear,
+    fogFar,
+    keyMultiplier,
+    fillMultiplier,
+  } = useMemo(
+    () => getEnvironmentLightingState(mapMode, outdoorBlend),
+    [mapMode, outdoorBlend],
+  )
   const sunPosition = useMemo(() => {
     const angle = outdoorBlend * Math.PI
     return [
@@ -237,6 +215,14 @@ function GlobalContent() {
       />
 
       {effectiveFloorViewMode === 'active' && <Grid playMode={tool === 'play'} />}
+      <FireEffectPreloader />
+      <pointLight
+        position={[0, -1000, 0]}
+        intensity={0.0001}
+        distance={0.25}
+        decay={2}
+        color="#ff9944"
+      />
       <Controls />
       <FloorTransitionController />
       <CameraPresetManager />
@@ -246,73 +232,12 @@ function GlobalContent() {
   )
 }
 
-function mapOutdoorColor(time: number, keyframes: Array<[number, string]>) {
-  if (keyframes.length === 0) {
-    return new THREE.Color('#ffffff')
-  }
-
-  const clamped = Math.min(1, Math.max(0, time))
-  const first = keyframes[0]
-  const last = keyframes.at(-1) ?? first
-
-  if (clamped <= first[0]) {
-    return new THREE.Color(first[1])
-  }
-  if (clamped >= last[0]) {
-    return new THREE.Color(last[1])
-  }
-
-  for (let index = 1; index < keyframes.length; index += 1) {
-    const previous = keyframes[index - 1]
-    const current = keyframes[index]
-    if (clamped > current[0]) {
-      continue
-    }
-
-    const range = Math.max(1e-6, current[0] - previous[0])
-    const mix = (clamped - previous[0]) / range
-    return new THREE.Color(previous[1]).lerp(new THREE.Color(current[1]), mix)
-  }
-
-  return new THREE.Color(last[1])
-}
-
-function mapOutdoorNumber(time: number, keyframes: Array<[number, number]>) {
-  if (keyframes.length === 0) {
-    return 1
-  }
-
-  const clamped = Math.min(1, Math.max(0, time))
-  const first = keyframes[0]
-  const last = keyframes.at(-1) ?? first
-
-  if (clamped <= first[0]) {
-    return first[1]
-  }
-  if (clamped >= last[0]) {
-    return last[1]
-  }
-
-  for (let index = 1; index < keyframes.length; index += 1) {
-    const previous = keyframes[index - 1]
-    const current = keyframes[index]
-    if (clamped > current[0]) {
-      continue
-    }
-
-    const range = Math.max(1e-6, current[0] - previous[0])
-    const mix = (clamped - previous[0]) / range
-    return previous[1] + (current[1] - previous[1]) * mix
-  }
-
-  return last[1]
-}
-
 type FloorRenderEntry = {
   id: string
   level: number
   data: DungeonRoomData
   objects: DungeonObjectRecord[]
+  topLevelObjects: DungeonObjectRecord[]
   childrenByParent: Record<string, DungeonObjectRecord[]>
 }
 
@@ -348,6 +273,7 @@ function SceneOverviewContent() {
   const layers = useDungeonStore((state) => state.layers)
   const rooms = useDungeonStore((state) => state.rooms)
   const wallOpenings = useDungeonStore((state) => state.wallOpenings)
+  const innerWalls = useDungeonStore((state) => state.innerWalls)
   const placedObjects = useDungeonStore((state) => state.placedObjects)
   const floorTileAssetIds = useDungeonStore((state) => state.floorTileAssetIds)
   const wallSurfaceAssetIds = useDungeonStore((state) => state.wallSurfaceAssetIds)
@@ -376,13 +302,15 @@ function SceneOverviewContent() {
             layers,
             rooms,
             wallOpenings,
+            innerWalls,
             placedObjects,
             floorTileAssetIds,
             wallSurfaceAssetIds,
             globalFloorAssetId,
             globalWallAssetId,
           },
-          objects: getTopLevelObjects(visibleObjects),
+          objects: visibleObjects,
+          topLevelObjects: getTopLevelObjects(visibleObjects),
           childrenByParent: buildObjectChildrenIndex(visibleObjects),
         }]
       }
@@ -396,16 +324,18 @@ function SceneOverviewContent() {
         level: floor.level,
         data: {
           paintedCells: snapshot.paintedCells,
-          layers: snapshot.layers,
-            rooms: snapshot.rooms,
-            wallOpenings: snapshot.wallOpenings,
-            placedObjects: snapshot.placedObjects,
+            layers: snapshot.layers,
+             rooms: snapshot.rooms,
+             wallOpenings: snapshot.wallOpenings,
+             innerWalls: snapshot.innerWalls,
+             placedObjects: snapshot.placedObjects,
             floorTileAssetIds: snapshot.floorTileAssetIds,
             wallSurfaceAssetIds: snapshot.wallSurfaceAssetIds,
-            globalFloorAssetId: snapshot.selectedAssetIds.floor,
-            globalWallAssetId: snapshot.selectedAssetIds.wall,
+             globalFloorAssetId: snapshot.selectedAssetIds.floor,
+             globalWallAssetId: snapshot.selectedAssetIds.wall,
         },
-        objects: getTopLevelObjects(visibleObjects),
+        objects: visibleObjects,
+        topLevelObjects: getTopLevelObjects(visibleObjects),
         childrenByParent: buildObjectChildrenIndex(visibleObjects),
       }]
     })
@@ -421,6 +351,7 @@ function SceneOverviewContent() {
     floorTileAssetIds,
     rooms,
     wallOpenings,
+    innerWalls,
     wallSurfaceAssetIds,
   ])
 
@@ -430,7 +361,8 @@ function SceneOverviewContent() {
       {floorEntries.map((entry) => (
         <group key={entry.id} position={[0, entry.level * SCENE_OVERVIEW_FLOOR_HEIGHT_UNIT, 0]}>
           <DungeonRoom data={entry.data} visibility={ALWAYS_VISIBLE} enableBuildAnimation={false} />
-          {entry.objects
+          <PropLightPool objects={entry.objects} visibility={ALWAYS_VISIBLE} />
+          {entry.topLevelObjects
             .filter((object) => !isDownStairAssetId(object.assetId))
             .map((object) => (
               <DungeonObject
@@ -472,6 +404,14 @@ function FloorContent({ startY = 0 }: { startY?: number }) {
   )
   const topLevelObjects = useMemo(() => getTopLevelObjects(objects), [objects])
   const childrenByParent = useMemo(() => buildObjectChildrenIndex(objects), [objects])
+  const lineOfSightActive = visibility.active && visibility.mask !== null
+  const showPostProcessing = postProcessingEnabled || showLensFocusDebugPoint || lineOfSightActive
+  // lineOfSightActive is intentionally excluded from this key: the pipeline
+  // updates in-place via useLayoutEffect deps in WebGPUPostProcessing, so a
+  // full remount (which forces re-compilation of all 12+ light shaders) is
+  // unnecessary and was causing permanent black-screen when compilation took
+  // more than one RAF frame.
+  const postProcessingKey = `${postProcessingEnabled ? 'post' : 'raw'}:${showLensFocusDebugPoint ? 'focus' : 'nofocus'}`
 
   const groupRef = useRef<THREE.Group>(null)
   const animYRef = useRef(startY)
@@ -651,11 +591,15 @@ function FloorContent({ startY = 0 }: { startY?: number }) {
 
   return (
     <group ref={groupRef} position={[0, startY, 0]}>
-      {(postProcessingEnabled || showLensFocusDebugPoint) && (
-        <WebGPUPostProcessing />
+      {showPostProcessing && (
+        <WebGPUPostProcessing
+          key={postProcessingKey}
+          lineOfSightActive={lineOfSightActive}
+        />
       )}
       <DungeonRoom visibility={visibility} />
       <RoomResizeOverlay />
+      <PropLightPool objects={objects} visibility={visibility} maxLights={DEFAULT_POOLED_PROP_LIGHTS} />
       {visibility.active && visibility.mask && (
         <>
           <PlayVisibilityMask mask={visibility.mask} mode="occlusion" />

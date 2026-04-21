@@ -1,16 +1,17 @@
 import { memo, useRef, useLayoutEffect } from 'react'
-import { useFrame, type ThreeEvent } from '@react-three/fiber'
-import type { Group, PointLight } from 'three'
+import { type ThreeEvent } from '@react-three/fiber'
+import type { Group } from 'three'
 import { useDungeonStore, type DungeonObjectRecord } from '../../store/useDungeonStore'
 import { ContentPackInstance } from './ContentPackInstance'
 import { getContentPackAssetById } from '../../content-packs/registry'
-import type { PropLight } from '../../content-packs/types'
 import { registerObject, unregisterObject } from './objectRegistry'
+import { shouldAllowObjectContextDelete } from './openPassageInteraction'
 import type { PlayVisibility } from './playVisibility'
 import { ProjectedGroundDecal } from './ProjectedGroundDecal'
 import { DEFAULT_GENERATED_CHARACTER_SIZE } from '../../generated-characters/types'
 import { getGeneratedCharacterIndicatorSize } from '../../generated-characters/rendering'
 import { shouldRenderLineOfSightLight } from './losRendering'
+import { ObjectEffect } from './effects/ObjectEffect'
 
 type DungeonObjectProps = {
   object: DungeonObjectRecord
@@ -33,6 +34,7 @@ export const DungeonObject = memo(function DungeonObject({
   const setObjectProps = useDungeonStore((state) => state.setObjectProps)
   const ppEnabled = useDungeonStore((state) => state.postProcessing.enabled)
   const tool = useDungeonStore((state) => state.tool)
+  const assetBrowserCategory = useDungeonStore((state) => state.assetBrowser.category)
   const selected = selection === object.id
   const visibilityState = visibility.getObjectVisibility(object)
   const useLineOfSightPostMask = visibility.active && visibility.mask !== null
@@ -44,7 +46,7 @@ export const DungeonObject = memo(function DungeonObject({
   }, [object.id])
 
   const asset = object.assetId ? getContentPackAssetById(object.assetId) : null
-  const light = asset?.getLight?.(object.props) ?? asset?.metadata?.light ?? null
+  const effect = asset?.getEffect?.(object.props) ?? null
 
   function handleClick(event: ThreeEvent<MouseEvent>) {
     if (tool === 'play') {
@@ -77,7 +79,10 @@ export const DungeonObject = memo(function DungeonObject({
   }
 
   function handleContextMenu(event: ThreeEvent<PointerEvent>) {
-    if (tool === 'play') {
+    if (
+      tool === 'play'
+      || !shouldAllowObjectContextDelete(tool, assetBrowserCategory)
+    ) {
       return
     }
     event.stopPropagation()
@@ -109,8 +114,8 @@ export const DungeonObject = memo(function DungeonObject({
         variant="prop"
       />
       {showPlayerSelectionRing && <PlayerSelectionRing assetId={object.assetId} />}
-      {light && shouldRenderLineOfSightLight(visibilityState, useLineOfSightPostMask) && (
-        <PropPointLight light={light} />
+      {effect && shouldRenderLineOfSightLight(visibilityState, useLineOfSightPostMask) && (
+        <ObjectEffect effect={effect} effectKey={object.id} />
       )}
       {childObjects.map((childObject) => (
         <DungeonObject
@@ -141,33 +146,6 @@ export function PlayerSelectionRing({
     <ProjectedGroundDecal
       color={color}
       size={getGeneratedCharacterIndicatorSize(characterSize)}
-    />
-  )
-}
-
-function PropPointLight({ light }: { light: PropLight }) {
-  const ref = useRef<PointLight>(null)
-
-  useFrame(({ clock }) => {
-    if (!ref.current || !light.flicker) return
-    const t = clock.elapsedTime
-    // Layered sin waves at different frequencies give organic, non-repeating flicker
-    const noise =
-      Math.sin(t * 11.3) * 0.10 +
-      Math.sin(t * 7.1)  * 0.08 +
-      Math.sin(t * 23.7) * 0.05
-    ref.current.intensity = light.intensity * (1 + noise)
-  })
-
-  return (
-    <pointLight
-      ref={ref}
-      position={light.offset ?? [0, 0, 0]}
-      color={light.color}
-      intensity={light.intensity}
-      distance={light.distance}
-      decay={light.decay ?? 2}
-      castShadow={light.castShadow ?? false}
     />
   )
 }

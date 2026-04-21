@@ -43,7 +43,7 @@ function makeOrthoCamera(aspect: number): THREE.OrthographicCamera {
 }
 
 export function CameraPresetManager() {
-  const { camera, set, size } = useThree()
+  const { camera, set, size, scene, controls } = useThree()
   const cameraPreset = useDungeonStore((state) => state.cameraPreset)
   const clearCameraPreset = useDungeonStore((state) => state.clearCameraPreset)
 
@@ -51,6 +51,8 @@ export function CameraPresetManager() {
   const perspCamRef    = useRef<THREE.PerspectiveCamera | null>(null)
   const orthoCamRef    = useRef<THREE.OrthographicCamera | null>(null)
   const isOrthoActive  = useRef(false)
+  const raycasterRef   = useRef(new THREE.Raycaster())
+  const targetOrbitPosRef = useRef<THREE.Vector3 | null>(null)
 
   // Capture the original perspective camera once on mount
   useEffect(() => {
@@ -78,8 +80,37 @@ export function CameraPresetManager() {
 
     const dest = PRESET_TARGETS[cameraPreset]
 
+    // When switching presets, find what's at screen center and make that the orbit target
+    // This keeps the view centered on the same spot across preset changes
+    if (controls) {
+      const raycaster = raycasterRef.current
+      raycaster.setFromCamera(new THREE.Vector2(0, 0), camera) // (0,0) = screen center in NDC
+      const intersects = raycaster.intersectObjects(scene.children, true)
+      
+      // Find first mesh intersection (ignore helpers, lights, etc.)
+      const hit = intersects.find(i => (i.object as THREE.Mesh).isMesh)
+      
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const orbitControls = controls as any
+      
+      if (hit) {
+        // Store the target position - we'll apply it every frame during animation
+        targetOrbitPosRef.current = hit.point.clone()
+        
+        // Also set it immediately
+        if (orbitControls?.target) {
+          orbitControls.target.copy(hit.point)
+        }
+      } else {
+        // Keep current orbit target
+        if (orbitControls?.target) {
+          targetOrbitPosRef.current = orbitControls.target.clone()
+        }
+      }
+    }
+
     if (cameraPreset === 'top-down' && !isOrthoActive.current) {
-      // Create ortho camera lazily, copy position so there's no visible jump
+      // Create ortho camera lazily
       const aspect = size.width / size.height
       if (!orthoCamRef.current) {
         orthoCamRef.current = makeOrthoCamera(aspect)
@@ -92,8 +123,19 @@ export function CameraPresetManager() {
         orthoCamRef.current.bottom = -f
       }
       const ortho = orthoCamRef.current
-      ortho.position.copy(camera.position)
-      ortho.quaternion.copy(camera.quaternion)
+      
+      // Position ortho camera directly above the orbit target
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const orbitTarget = (controls as any)?.target as THREE.Vector3 | undefined
+      if (orbitTarget) {
+        // Start the camera at current perspective position for smooth transition
+        ortho.position.copy(camera.position)
+        ortho.quaternion.copy(camera.quaternion)
+      } else {
+        ortho.position.copy(camera.position)
+        ortho.quaternion.copy(camera.quaternion)
+      }
+      
       ortho.zoom = 1.0
       ortho.updateProjectionMatrix()
       set({ camera: ortho })
@@ -112,7 +154,7 @@ export function CameraPresetManager() {
 
     destRef.current = dest
     clearCameraPreset()
-  }, [cameraPreset, clearCameraPreset, camera, set, size])
+  }, [cameraPreset, clearCameraPreset, camera, set, size, scene, controls])
 
   useFrame((state) => {
     if (!destRef.current) return
@@ -121,9 +163,16 @@ export function CameraPresetManager() {
     const activeCamera = state.camera
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const orbitControls = state.controls as any
-    const orbitTarget   = (orbitControls?.target as THREE.Vector3) ?? ORIGIN
+    
+    // Force orbit target to our stored target position during animation
+    // This prevents orbit controls from resetting it
+    if (targetOrbitPosRef.current && orbitControls?.target) {
+      orbitControls.target.copy(targetOrbitPosRef.current)
+    }
+    
+    const orbitTarget = (orbitControls?.target as THREE.Vector3) ?? ORIGIN
 
-    // Read current spherical coords
+    // Read current spherical coords relative to current orbit target
     const offset = activeCamera.position.clone().sub(orbitTarget)
     const cur    = new THREE.Spherical().setFromVector3(offset)
 
@@ -159,22 +208,21 @@ export function CameraPresetManager() {
     const finalPhi   = arrived ? dest.phi   : newPhi
     const finalTheta = arrived ? dest.theta : newTheta
 
+    // Keep orbit target fixed - camera rotates around current target position
     activeCamera.position
       .copy(orbitTarget)
       .add(new THREE.Vector3().setFromSpherical(
         new THREE.Spherical(finalR, Math.max(0.0001, finalPhi), finalTheta),
       ))
 
-    if (orbitControls?.target) {
-      if (arrived) {
-        (orbitControls.target as THREE.Vector3).copy(ORIGIN)
-      } else {
-        (orbitControls.target as THREE.Vector3).lerp(ORIGIN, LERP_FACTOR)
-      }
+    if (orbitControls) {
       orbitControls.update()
     }
 
-    if (arrived) destRef.current = null
+    if (arrived) {
+      destRef.current = null
+      targetOrbitPosRef.current = null // Clear stored target when animation completes
+    }
   })
 
   return null

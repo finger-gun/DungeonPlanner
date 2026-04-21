@@ -1,5 +1,6 @@
 import { getContentPackAssetById, getContentPackAssetsByCategory } from '../../content-packs/registry'
 import type { ContentPackAsset } from '../../content-packs/types'
+import { metadataSupportsConnectorType } from '../../content-packs/connectors'
 import { useDungeonStore } from '../../store/useDungeonStore'
 import { AssetCatalog } from './AssetCatalog'
 
@@ -20,11 +21,11 @@ export function OpeningToolPanel() {
   const openingCatalogSections = [
     {
       title: 'Doors',
-      assets: openingAssets.filter((asset) => asset.metadata?.connectsTo === 'WALL'),
+      assets: openingAssets.filter((asset) => metadataSupportsConnectorType(asset.metadata, 'WALL')),
     },
     {
       title: 'Stairs',
-      assets: openingAssets.filter((asset) => asset.metadata?.connectsTo !== 'WALL'),
+      assets: openingAssets.filter((asset) => !metadataSupportsConnectorType(asset.metadata, 'WALL')),
     },
   ].filter((section) => section.assets.length > 0)
 
@@ -142,7 +143,7 @@ function getOpeningBadgeLabel(asset: ContentPackAsset, active: boolean) {
     return 'Selected'
   }
 
-  return asset.metadata?.connectsTo === 'WALL'
+  return metadataSupportsConnectorType(asset.metadata, 'WALL')
     ? `w${asset.metadata?.openingWidth ?? 1}`
     : 'floor'
 }
@@ -152,7 +153,7 @@ function getOpeningBadgeClassName(asset: ContentPackAsset, active: boolean) {
     return 'bg-teal-300/15 text-teal-100'
   }
 
-  return asset.metadata?.connectsTo === 'WALL'
+  return metadataSupportsConnectorType(asset.metadata, 'WALL')
     ? 'bg-violet-400/10 text-violet-200'
     : 'bg-amber-400/10 text-amber-200'
 }

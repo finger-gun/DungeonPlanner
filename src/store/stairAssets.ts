@@ -1,4 +1,5 @@
 import { getContentPackAssetById } from '../content-packs/registry'
+import { metadataSupportsConnectorType } from '../content-packs/connectors'
 
 export type StairDirection = 'up' | 'down'
 
@@ -8,7 +9,7 @@ function getStairAssetMetadata(assetId: string | null | undefined) {
   }
 
   const asset = getContentPackAssetById(assetId)
-  if (!asset || asset.category !== 'opening' || asset.metadata?.connectsTo !== 'FLOOR') {
+  if (!asset || asset.category !== 'opening' || !metadataSupportsConnectorType(asset.metadata, 'FLOOR')) {
     return null
   }
 
@@ -21,8 +22,13 @@ export function getStairDirectionForAssetId(assetId: string | null | undefined):
 }
 
 export function getPairedStairAssetId(assetId: string | null | undefined): string | null {
-  const pairedAssetId = getStairAssetMetadata(assetId)?.pairedAssetId
-  return typeof pairedAssetId === 'string' && pairedAssetId.length > 0 ? pairedAssetId : null
+  const metadata = getStairAssetMetadata(assetId)
+  const pairedAssetId = metadata?.pairedAssetId
+  if (typeof pairedAssetId === 'string' && pairedAssetId.length > 0) {
+    return pairedAssetId
+  }
+
+  return metadata?.stairDirection ? assetId ?? null : null
 }
 
 export function isDownStairAssetId(assetId: string | null | undefined) {

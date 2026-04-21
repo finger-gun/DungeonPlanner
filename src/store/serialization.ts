@@ -16,6 +16,7 @@ import type {
   DungeonObjectRecord,
   DungeonObjectType,
   FloorRecord,
+  InnerWallRecord,
   Layer,
   MapMode,
   OutdoorTerrainDensity,
@@ -94,6 +95,7 @@ type SerializedFloor = {
   wallSurfaceAssetIds?: Record<string, string>
   objects: SerializedObject[]
   openings: SerializedOpening[]
+  innerWalls?: string[]
   nextRoomNumber: number
 }
 
@@ -153,6 +155,7 @@ export type SerializableState = {
   wallSurfaceAssetIds: Record<string, string>
   placedObjects: Record<string, DungeonObjectRecord>
   wallOpenings: Record<string, OpeningRecord>
+  innerWalls: Record<string, InnerWallRecord>
   occupancy: Record<string, string>
   nextRoomNumber: number
   // Multi-floor data
@@ -178,10 +181,11 @@ function serializeFloorData(
     outdoorGroundTextureCells: OutdoorGroundTextureCells
     exploredCells: Record<string, true>
     floorTileAssetIds: Record<string, string>
-    wallSurfaceAssetIds: Record<string, string>
-    placedObjects: Record<string, DungeonObjectRecord>
-    wallOpenings: Record<string, OpeningRecord>
-    nextRoomNumber: number
+      wallSurfaceAssetIds: Record<string, string>
+      placedObjects: Record<string, DungeonObjectRecord>
+      wallOpenings: Record<string, OpeningRecord>
+      innerWalls: Record<string, InnerWallRecord>
+      nextRoomNumber: number
   },
 ): SerializedFloor {
   return {
@@ -215,6 +219,7 @@ function serializeFloorData(
       id: o.id, assetId: o.assetId, wallKey: o.wallKey, width: o.width,
       flipped: o.flipped ?? false, layerId: o.layerId,
     })),
+    innerWalls: Object.values(snapshot.innerWalls).map((innerWall) => innerWall.wallKey),
     nextRoomNumber: snapshot.nextRoomNumber,
   }
 }
@@ -246,6 +251,7 @@ export function serializeDungeon(state: SerializableState): string {
       wallSurfaceAssetIds: state.wallSurfaceAssetIds,
       placedObjects: state.placedObjects,
       wallOpenings: state.wallOpenings,
+      innerWalls: state.innerWalls,
       nextRoomNumber: state.nextRoomNumber,
     }))
   }
@@ -409,8 +415,12 @@ export function deserializeDungeon(json: string): SerializableState | null {
       outdoorTimeOfDay: typeof r.outdoorTimeOfDay === 'number' ? r.outdoorTimeOfDay : 0.5,
       floors: Array.isArray(r.floors)
         ? (r.floors as unknown[]).map((floor) =>
-            isObject(floor) && !Array.isArray(floor.blockedCells)
-              ? { ...floor, blockedCells: [] }
+            isObject(floor)
+              ? {
+                  ...floor,
+                  blockedCells: Array.isArray(floor.blockedCells) ? floor.blockedCells : [],
+                  innerWalls: Array.isArray(floor.innerWalls) ? floor.innerWalls : [],
+                }
               : floor,
           )
         : r.floors,
@@ -506,6 +516,7 @@ function parseFloorData(raw: Record<string, unknown>): {
   wallSurfaceAssetIds: Record<string, string>
   placedObjects: Record<string, DungeonObjectRecord>
   wallOpenings: Record<string, OpeningRecord>
+  innerWalls: Record<string, InnerWallRecord>
   occupancy: Record<string, string>
   nextRoomNumber: number
 } {
@@ -665,6 +676,12 @@ function parseFloorData(raw: Record<string, unknown>): {
     }
   }
 
+  const innerWalls = Object.fromEntries(
+    (Array.isArray(raw.innerWalls) ? raw.innerWalls : [])
+      .filter((wallKey): wallKey is string => typeof wallKey === 'string')
+      .map((wallKey) => [wallKey, { wallKey, layerId: activeLayerId } satisfies InnerWallRecord]),
+  ) as Record<string, InnerWallRecord>
+
   return {
     layers, layerOrder, activeLayerId, rooms,
     paintedCells,
@@ -674,7 +691,10 @@ function parseFloorData(raw: Record<string, unknown>): {
     exploredCells,
     floorTileAssetIds,
     wallSurfaceAssetIds,
-    placedObjects, wallOpenings, occupancy,
+    placedObjects,
+    wallOpenings,
+    innerWalls,
+    occupancy,
     nextRoomNumber: typeof raw.nextRoomNumber === 'number' && raw.nextRoomNumber >= 1
       ? raw.nextRoomNumber : 1,
   }

@@ -3,8 +3,8 @@ import {
   useDungeonStore,
   type OutdoorBrushMode,
   type OutdoorGroundTextureType,
-  type OutdoorTerrainSculptMode,
   type OutdoorTerrainDensity,
+  type OutdoorTerrainSculptMode,
   type OutdoorTerrainType,
   type RoomEditMode,
 } from '../../store/useDungeonStore'
@@ -16,8 +16,9 @@ const wallAssets = getContentPackAssetsByCategory('wall')
 
 const ROOM_EDIT_MODES: Array<{ id: RoomEditMode; label: string }> = [
   { id: 'rooms', label: 'Rooms' },
+  { id: 'walls', label: 'Walls' },
   { id: 'floor-variants', label: 'Floor' },
-  { id: 'wall-variants', label: 'Walls' },
+  { id: 'wall-variants', label: 'Wall Variants' },
 ]
 
 const TERRAIN_TYPES: Array<{ id: OutdoorTerrainType; label: string }> = [
@@ -82,18 +83,20 @@ export function RoomToolPanel() {
     <div className="space-y-5">
       <section>
         <p className="mb-3 text-xs font-semibold uppercase tracking-[0.3em] text-amber-200/70">
-          {mapMode === 'outdoor' ? 'Terrain Mode' : 'Surface Mode'}
+          {mapMode === 'outdoor' ? 'Terrain Mode' : 'Room Tools'}
         </p>
-        <div className={`grid gap-2 ${mapMode === 'outdoor' ? 'grid-cols-1' : 'grid-cols-3'}`}>
+        <div className={`grid gap-2 ${mapMode === 'outdoor' ? 'grid-cols-1' : 'grid-cols-2'}`}>
           {ROOM_EDIT_MODES.map((mode) => {
             if (mapMode === 'outdoor' && mode.id !== 'rooms') {
               return null
             }
+
             const active = roomEditMode === mode.id
             return (
               <button
                 key={mode.id}
                 type="button"
+                aria-pressed={active}
                 onClick={() => setRoomEditMode(mode.id)}
                 className={`rounded-2xl border px-3 py-2 text-xs font-medium uppercase tracking-[0.2em] transition ${
                   active
@@ -117,10 +120,10 @@ export function RoomToolPanel() {
                 ? 'Left-drag to paint ground textures. Right-drag to erase texture paint.'
                 : outdoorBrushMode === 'terrain-sculpt'
                   ? 'Left-drag to sculpt with the selected terrain mode. Right-drag uses the opposite mode for quick raise/lower edits.'
-                : 'Left-drag to paint terrain surroundings. Right-drag to erase. Painted areas auto-place terrain props and remain inaccessible.'
+                  : 'Left-drag to paint terrain surroundings. Right-drag to erase. Painted areas auto-place terrain props and remain inaccessible.'
               : 'Left-drag to paint rooms. Right-drag to erase.'}
           </p>
-          {mapMode === 'outdoor' && (
+          {mapMode === 'outdoor' ? (
             <div className="mt-4 space-y-3 text-xs">
               <div>
                 <p className="mb-1 uppercase tracking-[0.2em] text-stone-500">Global Ground Texture</p>
@@ -217,66 +220,75 @@ export function RoomToolPanel() {
                 </div>
               ) : (
                 <>
-              <div>
-                <p className="mb-1 uppercase tracking-[0.2em] text-stone-500">Terrain Type</p>
-                <div className="grid grid-cols-1 gap-2">
-                  {TERRAIN_TYPES.map((terrainType) => {
-                    const active = outdoorTerrainType === terrainType.id
-                    return (
-                      <button
-                        key={terrainType.id}
-                        type="button"
-                        onClick={() => setOutdoorTerrainType(terrainType.id)}
-                        className={`rounded-xl border px-2 py-1.5 transition ${
-                          active
-                            ? 'border-teal-300/35 bg-teal-400/10 text-teal-200'
-                            : 'border-stone-800 bg-stone-950/60 text-stone-400 hover:border-stone-700 hover:text-stone-200'
-                        }`}
-                      >
-                        {terrainType.label}
-                      </button>
-                    )
-                  })}
-                </div>
-              </div>
-              <div>
-                <p className="mb-1 uppercase tracking-[0.2em] text-stone-500">
-                  {TERRAIN_TYPES.find((type) => type.id === outdoorTerrainType)?.label} Settings
-                </p>
-                <p className="mb-2 text-stone-500">Density</p>
-                <div className="grid grid-cols-3 gap-2">
-                  {TERRAIN_DENSITIES.map((density) => {
-                    const active = outdoorTerrainDensity === density.id
-                    return (
-                      <button
-                        key={density.id}
-                        type="button"
-                        onClick={() => setOutdoorTerrainDensity(density.id)}
-                        className={`rounded-xl border px-2 py-1.5 transition ${
-                          active
-                            ? 'border-teal-300/35 bg-teal-400/10 text-teal-200'
-                            : 'border-stone-800 bg-stone-950/60 text-stone-400 hover:border-stone-700 hover:text-stone-200'
-                        }`}
-                      >
-                        {density.label}
-                      </button>
-                    )
-                  })}
-                </div>
-              </div>
-              <label className="flex cursor-pointer items-center gap-2 text-stone-300">
-                <input
-                  type="checkbox"
-                  checked={outdoorOverpaintRegenerate}
-                  onChange={(event) => setOutdoorOverpaintRegenerate(event.target.checked)}
-                  className="h-4 w-4 rounded border-stone-700 bg-stone-950 text-teal-400"
-                />
-                Regenerate on overpaint
-              </label>
+                  <div>
+                    <p className="mb-1 uppercase tracking-[0.2em] text-stone-500">Terrain Type</p>
+                    <div className="grid grid-cols-1 gap-2">
+                      {TERRAIN_TYPES.map((terrainType) => {
+                        const active = outdoorTerrainType === terrainType.id
+                        return (
+                          <button
+                            key={terrainType.id}
+                            type="button"
+                            onClick={() => setOutdoorTerrainType(terrainType.id)}
+                            className={`rounded-xl border px-2 py-1.5 transition ${
+                              active
+                                ? 'border-teal-300/35 bg-teal-400/10 text-teal-200'
+                                : 'border-stone-800 bg-stone-950/60 text-stone-400 hover:border-stone-700 hover:text-stone-200'
+                            }`}
+                          >
+                            {terrainType.label}
+                          </button>
+                        )
+                      })}
+                    </div>
+                  </div>
+                  <div>
+                    <p className="mb-1 uppercase tracking-[0.2em] text-stone-500">
+                      {TERRAIN_TYPES.find((type) => type.id === outdoorTerrainType)?.label} Settings
+                    </p>
+                    <p className="mb-2 text-stone-500">Density</p>
+                    <div className="grid grid-cols-3 gap-2">
+                      {TERRAIN_DENSITIES.map((density) => {
+                        const active = outdoorTerrainDensity === density.id
+                        return (
+                          <button
+                            key={density.id}
+                            type="button"
+                            onClick={() => setOutdoorTerrainDensity(density.id)}
+                            className={`rounded-xl border px-2 py-1.5 transition ${
+                              active
+                                ? 'border-teal-300/35 bg-teal-400/10 text-teal-200'
+                                : 'border-stone-800 bg-stone-950/60 text-stone-400 hover:border-stone-700 hover:text-stone-200'
+                            }`}
+                          >
+                            {density.label}
+                          </button>
+                        )
+                      })}
+                    </div>
+                  </div>
+                  <label className="flex cursor-pointer items-center gap-2 text-stone-300">
+                    <input
+                      type="checkbox"
+                      checked={outdoorOverpaintRegenerate}
+                      onChange={(event) => setOutdoorOverpaintRegenerate(event.target.checked)}
+                      className="h-4 w-4 rounded border-stone-700 bg-stone-950 text-teal-400"
+                    />
+                    Regenerate on overpaint
+                  </label>
                 </>
               )}
             </div>
+          ) : (
+            <p className="text-xs">Click room to select, drag room edges to resize, or paint empty space to build new rooms.</p>
           )}
+        </section>
+      ) : roomEditMode === 'walls' ? (
+        <section className="rounded-2xl border border-stone-800 bg-stone-950/50 p-4 text-sm leading-6 text-stone-400">
+          <p className="font-medium text-stone-300">Wall Tool</p>
+          <p className="mt-1 text-xs">Click and drag to preview a locked wall run. Release to add or remove the whole run.</p>
+          <p className="text-xs">Left-drag adds inner wall runs. Right-drag removes inner or shared wall runs.</p>
+          <p className="text-xs">This mode is for structure editing in top-down view, not asset placement.</p>
         </section>
       ) : (
         <>

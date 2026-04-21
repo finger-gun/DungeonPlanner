@@ -7,6 +7,10 @@ import {
   GENERATED_CHARACTER_BASE_RADIUS,
   getGeneratedCharacterScale,
 } from './rendering'
+import {
+  acquireGeneratedCharacterAlphaTexture,
+  releaseGeneratedCharacterAlphaTexture,
+} from './alphaTextureCache'
 
 const BASE_RADIUS = GENERATED_CHARACTER_BASE_RADIUS
 const BASE_HEIGHT = 0.08
@@ -21,80 +25,21 @@ export function GeneratedStandeePlayer({
   ...props
 }: ContentPackComponentProps & { character: GeneratedCharacterRecord }) {
   const texture = useTexture(character.processedImageUrl ?? '')
+  const alphaTextureCacheKey = `${character.assetId}:${character.updatedAt}:${character.processedImageUrl ?? ''}`
   texture.colorSpace = THREE.SRGBColorSpace
   texture.anisotropy = 8
   texture.wrapS = THREE.ClampToEdgeWrapping
   texture.wrapT = THREE.ClampToEdgeWrapping
   const characterScale = getGeneratedCharacterScale(character.size)
 
-  const alphaTexture = useMemo(() => {
-    const source = texture.image
-    if (!source || typeof source !== 'object' || typeof document === 'undefined') {
-      return null
-    }
-
-    const sourceWithDimensions = source as {
-      naturalWidth?: number
-      naturalHeight?: number
-      videoWidth?: number
-      videoHeight?: number
-      width?: number
-      height?: number
-    } & CanvasImageSource
-
-    const width = typeof sourceWithDimensions.naturalWidth === 'number'
-      ? sourceWithDimensions.naturalWidth
-      : typeof sourceWithDimensions.videoWidth === 'number'
-        ? sourceWithDimensions.videoWidth
-        : typeof sourceWithDimensions.width === 'number'
-          ? sourceWithDimensions.width
-          : 0
-    const height = typeof sourceWithDimensions.naturalHeight === 'number'
-      ? sourceWithDimensions.naturalHeight
-      : typeof sourceWithDimensions.videoHeight === 'number'
-        ? sourceWithDimensions.videoHeight
-        : typeof sourceWithDimensions.height === 'number'
-          ? sourceWithDimensions.height
-          : 0
-
-    if (width <= 0 || height <= 0) {
-      return null
-    }
-
-    const canvas = document.createElement('canvas')
-    canvas.width = width
-    canvas.height = height
-    const context = canvas.getContext('2d', { willReadFrequently: true })
-    if (!context) {
-      return null
-    }
-
-    context.drawImage(sourceWithDimensions, 0, 0, width, height)
-    const imageData = context.getImageData(0, 0, width, height)
-    const { data } = imageData
-    for (let index = 0; index < data.length; index += 4) {
-      const alpha = data[index + 3]
-      data[index] = alpha
-      data[index + 1] = alpha
-      data[index + 2] = alpha
-      data[index + 3] = 255
-    }
-    context.putImageData(imageData, 0, 0)
-
-    const nextAlphaTexture = new THREE.CanvasTexture(canvas)
-    nextAlphaTexture.wrapS = THREE.ClampToEdgeWrapping
-    nextAlphaTexture.wrapT = THREE.ClampToEdgeWrapping
-    nextAlphaTexture.flipY = texture.flipY
-    nextAlphaTexture.minFilter = texture.minFilter
-    nextAlphaTexture.magFilter = texture.magFilter
-    nextAlphaTexture.colorSpace = THREE.NoColorSpace
-    nextAlphaTexture.needsUpdate = true
-    return nextAlphaTexture
-  }, [texture])
+  const alphaTexture = useMemo(
+    () => acquireGeneratedCharacterAlphaTexture(alphaTextureCacheKey, texture),
+    [alphaTextureCacheKey, texture],
+  )
 
   useEffect(() => () => {
-    alphaTexture?.dispose()
-  }, [alphaTexture])
+    releaseGeneratedCharacterAlphaTexture(alphaTextureCacheKey)
+  }, [alphaTextureCacheKey])
 
   const { cardWidth, cardHeight } = useMemo(() => {
     const aspect =
