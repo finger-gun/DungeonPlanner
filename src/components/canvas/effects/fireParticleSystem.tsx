@@ -15,7 +15,6 @@ import {
   uniform,
   vec2,
   vec3,
-  vec4,
 } from 'three/tsl'
 import { getContentPackAssetById } from '../../../content-packs/registry'
 import type { DungeonObjectRecord } from '../../../store/useDungeonStore'
