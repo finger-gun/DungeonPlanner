@@ -21,7 +21,18 @@ export type ParticleEmitterDefinition = {
   layers: ParticleLayerDefinition[]
 }
 
-const FIRE_LAYERS: ParticleLayerDefinition[] = [
+export type ParticleSeed = {
+  basePhase: number
+  speed: number
+  wobblePhase: number
+  radialAngle: number
+  radialOffset: number
+  size: number
+  height: number
+  sway: number
+}
+
+export const FIRE_LAYERS: ParticleLayerDefinition[] = [
   {
     count: 8,
     size: [0.14, 0.34],

@@ -4,13 +4,14 @@ import { useGLTF } from '@react-three/drei'
 import propsStairCaseAssetUrl from '../../../assets/models/core/staircase.glb'
 import propsStairCaseThumbnailUrl from '../../../assets/models/core/staircase.png'
 import type { ContentPackAsset, ContentPackComponentProps } from '../../types'
+import { cloneSceneWithNodeMaterials } from '../../../rendering/nodeMaterialUtils'
 
 // Same orientation as StaircaseUp — hole and floor-tile skip handled in StaircaseHole.tsx
 const PROP_PIVOT_OFFSET = [-1, -3, -1] as const
 
 export function PropsStairCaseDown(props: ContentPackComponentProps) {
   const gltf = useGLTF(propsStairCaseAssetUrl)
-  const scene = useMemo(() => gltf.scene.clone(), [gltf.scene])
+  const scene = useMemo(() => cloneSceneWithNodeMaterials(gltf.scene), [gltf.scene])
 
   return (
     <group position={PROP_PIVOT_OFFSET}>

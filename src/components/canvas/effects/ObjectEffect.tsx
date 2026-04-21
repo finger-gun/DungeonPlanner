@@ -2,24 +2,13 @@ import { useEffect, useMemo, useRef } from 'react'
 import { useFrame, useThree } from '@react-three/fiber'
 import * as THREE from 'three'
 import type { ContentPackEffect } from '../../../content-packs/types'
-import { buildParticleEmitters, type ParticleEmitterDefinition, type ParticleLayerDefinition } from './presets'
+import { buildParticleEmitters, type ParticleEmitterDefinition, type ParticleLayerDefinition, type ParticleSeed } from './presets'
 
 const matrixObject = new THREE.Object3D()
 const colorScratch = new THREE.Color()
 const colorEndScratch = new THREE.Color()
-const SHARED_PARTICLE_GEOMETRY = new THREE.PlaneGeometry(1, 1)
-const sharedMaterialCache = new Map<number, THREE.MeshBasicMaterial>()
-
-type ParticleSeed = {
-  basePhase: number
-  speed: number
-  wobblePhase: number
-  radialAngle: number
-  radialOffset: number
-  size: number
-  height: number
-  sway: number
-}
+export const SHARED_PARTICLE_GEOMETRY = new THREE.PlaneGeometry(1, 1)
+export const sharedMaterialCache = new Map<number, THREE.MeshBasicMaterial>()
 
 export function ObjectEffect({
   effect,
@@ -155,7 +144,7 @@ function ParticleLayer({
   )
 }
 
-function getSharedParticleMaterial(opacity: number) {
+export function getSharedParticleMaterial(opacity: number) {
   const materialKey = Math.round(opacity * 1000)
   const cachedMaterial = sharedMaterialCache.get(materialKey)
   if (cachedMaterial) {
@@ -211,7 +200,7 @@ function getSharedSoftParticleTexture() {
   return sharedSoftParticleTexture
 }
 
-function createParticleSeeds(effectKey: string, layer: ParticleLayerDefinition) {
+export function createParticleSeeds(effectKey: string, layer: ParticleLayerDefinition) {
   const rng = createRng(effectKey)
 
   return Array.from({ length: layer.count }, () => ({

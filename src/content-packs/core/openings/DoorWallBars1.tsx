@@ -4,12 +4,13 @@ import { useGLTF } from '@react-three/drei'
 import doorWallBars1AssetUrl from '../../../assets/models/core/door_wall_bars_1.glb'
 import doorWallBars1ThumbnailUrl from '../../../assets/models/core/door_wall_bars_1.png'
 import type { ContentPackAsset, ContentPackComponentProps } from '../../types'
+import { cloneSceneWithNodeMaterials } from '../../../rendering/nodeMaterialUtils'
 
 const PROP_PIVOT_OFFSET = [0, 1, 0] as const
 
 export function OpeningDoorWallBars1(props: ContentPackComponentProps) {
   const gltf = useGLTF(doorWallBars1AssetUrl)
-  const scene = useMemo(() => gltf.scene.clone(), [gltf.scene])
+  const scene = useMemo(() => cloneSceneWithNodeMaterials(gltf.scene), [gltf.scene])
 
   return (
     <group position={PROP_PIVOT_OFFSET}>

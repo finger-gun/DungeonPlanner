@@ -31,6 +31,9 @@ import type {
   CameraPreset,
 } from './store/useDungeonStore'
 import { RotateCcw } from 'lucide-react'
+import { RendererErrorBoundary } from './components/RendererErrorBoundary'
+import { WebGpuRequiredNotice } from './components/WebGpuRequiredNotice'
+import { getWebGpuSupportMessage, isWebGpuSupported } from './rendering/webgpuSupport'
 
 const Scene = lazy(() =>
   import('./components/canvas/Scene').then((module) => ({
@@ -131,6 +134,7 @@ function App() {
   const debugAsset = debugAssetId ? getContentPackAssetById(debugAssetId) : null
   const debugAssetSourcePath = debugAssetId ? getContentPackAssetSourcePath(debugAssetId) : null
   const debugAssetSourceLink = debugAssetId ? getContentPackAssetSourceLink(debugAssetId) : null
+  const webGpuSupported = isWebGpuSupported()
 
   const onWindowKeyDown = useEffectEvent((event: KeyboardEvent) => {
     if (event.ctrlKey && event.shiftKey && event.key === 'F12') {
@@ -331,7 +335,13 @@ function App() {
                 </div>
               }
             >
-              <Scene />
+              {webGpuSupported ? (
+                <RendererErrorBoundary title="Scene unavailable">
+                  <Scene />
+                </RendererErrorBoundary>
+              ) : (
+                <WebGpuRequiredNotice message={getWebGpuSupportMessage()} />
+              )}
             </Suspense>
 
             {!isPlayMode && <CharacterSheetOverlay />}
@@ -390,9 +400,11 @@ function App() {
               {formatCount(propCount, 'prop')}
             </div>
 
-            <Suspense fallback={null}>
-              <FpsOverlay />
-            </Suspense>
+            {webGpuSupported && (
+              <Suspense fallback={null}>
+                <FpsOverlay />
+              </Suspense>
+            )}
           </section>
 
           {/* Right panel */}

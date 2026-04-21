@@ -39,7 +39,7 @@ export function WebGPUPostProcessing({
 }: {
   lineOfSightActive?: boolean
 }) {
-  const { gl: renderer, scene, camera, size, invalidate } = useThree()
+  const { gl: renderer, scene, camera, invalidate } = useThree()
   const postProcessingRef = useRef<THREE.PostProcessing | null>(null)
   // Gates rendering for one RAF tick after each pipeline rebuild so Three.js
   // can begin shader compilation before the first draw. Avoids a black first
@@ -86,7 +86,9 @@ export function WebGPUPostProcessing({
     }
   }, [selection])
 
-  // Build / rebuild the TSL pipeline when renderer / scene / camera / size change.
+  // Build / rebuild the TSL pipeline when renderer / scene / camera / settings change.
+  // NOTE: `size` is intentionally omitted — DepthOfFieldNode.updateBefore() calls setSize()
+  // automatically each frame from texture dimensions, so resize is handled without a rebuild.
   useLayoutEffect(() => {
     if (!renderer || !scene || !camera) return
 
@@ -155,7 +157,7 @@ export function WebGPUPostProcessing({
       exploredLosCameraRef.current = null
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [camera, lineOfSightActive, renderer, scene, settings.enabled, activeCameraMode, size])
+  }, [camera, lineOfSightActive, renderer, scene, settings.enabled, activeCameraMode])
 
   // Multi-frame delay after each pipeline rebuild — lets Three.js begin WebGPU
   // shader compilation (especially for complex scenes with many lights) before
@@ -180,7 +182,7 @@ export function WebGPUPostProcessing({
       pipelineReadyRef.current = false
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [camera, lineOfSightActive, renderer, scene, settings.enabled, activeCameraMode, size, invalidate])
+  }, [camera, lineOfSightActive, renderer, scene, settings.enabled, activeCameraMode, invalidate])
 
   // Update shader uniforms only when settings actually change — not every frame.
   useEffect(() => {

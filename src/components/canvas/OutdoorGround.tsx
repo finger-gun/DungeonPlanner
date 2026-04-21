@@ -2,6 +2,7 @@ import { useEffect, useMemo } from 'react'
 import { useTexture } from '@react-three/drei'
 import * as THREE from 'three'
 import { GRID_SIZE } from '../../hooks/useSnapToGrid'
+import { createStandardCompatibleMaterial } from '../../rendering/nodeMaterialUtils'
 import {
   type OutdoorGroundTextureCells,
   type OutdoorGroundTextureType,
@@ -110,8 +111,15 @@ export function OutdoorGround({
   outdoorGroundTextureCells?: OutdoorGroundTextureCells
   outdoorTerrainHeights: OutdoorTerrainHeightfield
 }) {
-  const groundTextureCells = outdoorGroundTextureCells ?? {}
+  const groundTextureCells = useMemo(
+    () => outdoorGroundTextureCells ?? {},
+    [outdoorGroundTextureCells],
+  )
   const textures = useTexture(TERRAIN_TEXTURE_PATHS)
+  const groundColor = useMemo(
+    () => new THREE.Color('#5f7f45').lerp(new THREE.Color('#2f3f2d'), outdoorBlend),
+    [outdoorBlend],
+  )
   const terrainGeometry = useMemo(() => {
     const geometry = new THREE.PlaneGeometry(
       OUTDOOR_GROUND_SIZE,
@@ -141,30 +149,52 @@ export function OutdoorGround({
     }),
     [groundTextureCells],
   )
+  const baseMaterial = useMemo(
+    () => createStandardCompatibleMaterial({
+      map: textures['short-grass'],
+      color: groundColor,
+      roughness: 1,
+      metalness: 0,
+    }),
+    [groundColor, textures],
+  )
+  const overlayMaterials = useMemo(
+    () => Object.fromEntries(
+      OVERLAY_TEXTURE_TYPES.map((textureType, index) => [
+        textureType,
+        createStandardCompatibleMaterial({
+          map: textures[textureType],
+          alphaMap: maskTextures[textureType],
+          transparent: true,
+          depthWrite: false,
+          polygonOffset: true,
+          polygonOffsetFactor: -1 - index,
+          polygonOffsetUnits: -1,
+          roughness: 1,
+          metalness: 0,
+        }),
+      ]),
+    ) as Record<OverlayTextureType, THREE.Material>,
+    [maskTextures, textures],
+  )
 
   useEffect(() => () => terrainGeometry.dispose(), [terrainGeometry])
   useEffect(() => () => {
     Object.values(maskTextures).forEach((texture) => texture.dispose())
   }, [maskTextures])
+  useEffect(() => () => baseMaterial.dispose(), [baseMaterial])
+  useEffect(() => () => {
+    Object.values(overlayMaterials).forEach((material) => material.dispose())
+  }, [overlayMaterials])
 
   useEffect(() => {
     Object.values(textures).forEach(configureGroundTexture)
   }, [textures])
 
-  const groundColor = useMemo(
-    () => new THREE.Color('#5f7f45').lerp(new THREE.Color('#2f3f2d'), outdoorBlend),
-    [outdoorBlend],
-  )
-
   return (
     <group>
       <mesh geometry={terrainGeometry} receiveShadow>
-        <meshStandardMaterial
-          map={textures['short-grass']}
-          color={groundColor}
-          roughness={1}
-          metalness={0}
-        />
+        <primitive object={baseMaterial} attach="material" />
       </mesh>
       {OVERLAY_TEXTURE_TYPES.map((textureType, index) => (
         <mesh
@@ -173,17 +203,7 @@ export function OutdoorGround({
           receiveShadow
           renderOrder={index + 1}
         >
-          <meshStandardMaterial
-            map={textures[textureType]}
-            alphaMap={maskTextures[textureType]}
-            transparent
-            depthWrite={false}
-            polygonOffset
-            polygonOffsetFactor={-1 - index}
-            polygonOffsetUnits={-1}
-            roughness={1}
-            metalness={0}
-          />
+          <primitive object={overlayMaterials[textureType]} attach="material" />
         </mesh>
       ))}
     </group>

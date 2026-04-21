@@ -10,12 +10,16 @@ import { GRID_SIZE } from '../../hooks/useSnapToGrid'
 import type { PlayVisibilityState } from './playVisibility'
 import { shouldRenderLineOfSightGeometry } from './losRendering'
 import { setLosLayers } from './losLayers'
+import {
+  cloneSceneWithNodeMaterials,
+  createStandardCompatibleMaterial,
+} from '../../rendering/nodeMaterialUtils'
 
 /** Inverted-hull outline: a slightly scaled-up back-face clone with a
  *  bright emissive rim material. Works with any geometry/GLTF. */
 function SelectionOutline({ source }: { source: THREE.Object3D }) {
   const outline = useMemo(() => {
-    const mat = new THREE.MeshStandardMaterial({
+    const mat = createStandardCompatibleMaterial({
       color: '#ff4444',
       emissive: '#ff2222',
       emissiveIntensity: 1.5,
@@ -238,7 +242,7 @@ function GLTFModel({
 }) {
   const gltf = useGLTF(assetPath)
   const scene = useMemo(() => {
-    const clone = gltf.scene.clone()
+    const clone = cloneSceneWithNodeMaterials(gltf.scene)
     clone.traverse((obj) => {
       if (obj instanceof THREE.Mesh) {
         obj.castShadow = castShadow
@@ -409,12 +413,26 @@ function FallbackMesh({
         ? 0.45
         : 1
   const meshRef = useRef<THREE.Mesh>(null)
+  const material = useMemo(
+    () => createStandardCompatibleMaterial({
+      color,
+      transparent: opacity < 1,
+      opacity,
+      roughness: 0.45,
+      metalness: 0.05,
+      emissive: selected ? emissive : '#000000',
+      emissiveIntensity: selected ? 0.18 : 0,
+    }),
+    [color, emissive, opacity, selected],
+  )
 
   useEffect(() => {
     if (meshRef.current) {
       setLosLayers(meshRef.current, visibility)
     }
   }, [visibility])
+
+  useEffect(() => () => material.dispose(), [material])
 
   if (!overlayOnly && !shouldRenderLineOfSightGeometry(visibility, useLineOfSightPostMask)) {
     return null
@@ -436,15 +454,7 @@ function FallbackMesh({
           depthWrite={false}
         />
       ) : (
-        <meshStandardMaterial
-          color={color}
-          transparent={opacity < 1}
-          opacity={opacity}
-          roughness={0.45}
-          metalness={0.05}
-          emissive={selected ? emissive : '#000000'}
-          emissiveIntensity={selected ? 0.18 : 0}
-        />
+        <primitive object={material} attach="material" />
       )}
     </mesh>
   )

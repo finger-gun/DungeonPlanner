@@ -8,6 +8,7 @@ import rubble002AssetUrl from '../../../assets/models/core/rubble_002.glb'
 import rubble003AssetUrl from '../../../assets/models/core/rubble_003.glb'
 
 import type { ContentPackAsset, ContentPackComponentProps } from '../../types'
+import { cloneSceneWithNodeMaterials } from '../../../rendering/nodeMaterialUtils'
 
 // Adjust this to compensate for the authored pivot of the prop.
 const PROP_PIVOT_OFFSET = [0, 0, 0] as const
@@ -22,7 +23,7 @@ const RUBBLE_VARIANT_URLS = [
 export function PropsRubble({ variantKey, ...props }: ContentPackComponentProps) {
   const assetUrl = RUBBLE_VARIANT_URLS[getVariantIndex(variantKey, RUBBLE_VARIANT_URLS.length)]
   const gltf = useGLTF(assetUrl)
-  const scene = useMemo(() => gltf.scene.clone(), [gltf.scene])
+  const scene = useMemo(() => cloneSceneWithNodeMaterials(gltf.scene), [gltf.scene])
 
   return (
     <group position={PROP_PIVOT_OFFSET}>

@@ -10,8 +10,6 @@ import type { PlayVisibility } from './playVisibility'
 import { ProjectedGroundDecal } from './ProjectedGroundDecal'
 import { DEFAULT_GENERATED_CHARACTER_SIZE } from '../../generated-characters/types'
 import { getGeneratedCharacterIndicatorSize } from '../../generated-characters/rendering'
-import { shouldRenderLineOfSightLight } from './losRendering'
-import { ObjectEffect } from './effects/ObjectEffect'
 
 type DungeonObjectProps = {
   object: DungeonObjectRecord
@@ -46,7 +44,6 @@ export const DungeonObject = memo(function DungeonObject({
   }, [object.id])
 
   const asset = object.assetId ? getContentPackAssetById(object.assetId) : null
-  const effect = asset?.getEffect?.(object.props) ?? null
 
   function handleClick(event: ThreeEvent<MouseEvent>) {
     if (tool === 'play') {
@@ -114,9 +111,6 @@ export const DungeonObject = memo(function DungeonObject({
         variant="prop"
       />
       {showPlayerSelectionRing && <PlayerSelectionRing assetId={object.assetId} />}
-      {effect && shouldRenderLineOfSightLight(visibilityState, useLineOfSightPostMask) && (
-        <ObjectEffect effect={effect} effectKey={object.id} />
-      )}
       {childObjects.map((childObject) => (
         <DungeonObject
           key={childObject.id}

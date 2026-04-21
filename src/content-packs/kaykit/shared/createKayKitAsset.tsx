@@ -8,6 +8,7 @@ import type {
   ContentPackModelTransform,
   PropLight,
 } from '../../types'
+import { cloneSceneWithNodeMaterials } from '../../../rendering/nodeMaterialUtils'
 
 const MODEL_URLS = import.meta.glob('../../../assets/models/kaykit/*.glb', {
   eager: true,
@@ -95,7 +96,7 @@ function createStaticModelComponent(assetUrl: string, transform?: KayKitTransfor
 
   function KayKitModel(props: ContentPackComponentProps) {
     const gltf = useGLTF(assetUrl)
-    const scene = useMemo(() => gltf.scene.clone(), [gltf.scene])
+    const scene = useMemo(() => cloneSceneWithNodeMaterials(gltf.scene), [gltf.scene])
 
     return (
       <group {...props}>
