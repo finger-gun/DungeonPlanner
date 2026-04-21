@@ -16,6 +16,8 @@ declare global {
       reset: () => void
       setCameraPreset: (preset: CameraPreset) => void
       getObjectScreenPosition: (id: string) => { x: number; y: number } | null
+      getCellScreenPosition: (cell: GridCell) => { x: number; y: number } | null
+      getAssetSourceLink: (assetId: string) => string | null
     }
   }
 }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { getDefaultAssetIdByCategory } from '../content-packs/registry'
+import { getContentPackAssetById, getDefaultAssetIdByCategory } from '../content-packs/registry'
 import {
   sanitizePersistedAssetReferences,
   sanitizeSelectedAssetIds,
@@ -47,6 +47,7 @@ function createSnapshot() {
         layerId: 'default',
       },
     },
+    innerWalls: {},
     occupancy: {},
     nextRoomNumber: 1,
   }
@@ -80,17 +81,22 @@ describe('asset reference sanitization', () => {
   })
 
   it('realigns opening widths to current asset metadata', () => {
+    const wallOpeningAsset = getContentPackAssetById('core.opening_door_wall_1')
     const snapshot = createSnapshot()
     snapshot.wallOpenings.opening1 = {
       ...snapshot.wallOpenings.opening1,
-      assetId: 'kaykit.opening_wall_doorway',
+      assetId: 'core.opening_door_wall_1',
       width: 2,
     }
 
     const sanitized = sanitizeSnapshotAssetReferences(snapshot)
 
-    expect(sanitized.wallOpenings.opening1.assetId).toBe('kaykit.opening_wall_doorway')
-    expect(sanitized.wallOpenings.opening1.width).toBe(1)
+    if (wallOpeningAsset) {
+      expect(sanitized.wallOpenings.opening1.assetId).toBe('core.opening_door_wall_1')
+      expect(sanitized.wallOpenings.opening1.width).toBe(1)
+    } else {
+      expect(sanitized.wallOpenings.opening1.assetId).toBeNull()
+    }
   })
 
   it('drops invalid floor and wall surface overrides', () => {

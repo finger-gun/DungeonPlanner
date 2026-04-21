@@ -130,6 +130,9 @@ function sendJson(res: ServerResponse, status: number, payload: unknown) {
 export default defineConfig({
   // When deploying to a subfolder on GitHub Pages, set VITE_BASE_PATH=/dungeonplanner/
   base: process.env.VITE_BASE_PATH ?? '/',
+  define: {
+    __PROJECT_ROOT__: JSON.stringify(process.cwd()),
+  },
   assetsInclude: ['**/*.glb', '**/*.gltf', '**/*.bin'],
   plugins: [generatedCharacterDevFallback(), react(), tailwindcss(), stripThreeDebugImport()],
   resolve: {

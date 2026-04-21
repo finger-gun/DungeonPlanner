@@ -1,14 +1,12 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import {
   Fn,
-  pass,
   mix,
   screenUV,
   step,
   uniform,
 } from 'three/tsl'
 import { dof } from 'three/addons/tsl/display/DepthOfFieldNode.js'
-import type * as THREE from 'three'
 
 type TSLNode = ReturnType<typeof uniform>
 export { depthFocusRangeFromFocalLength } from './tiltShiftMath'
@@ -20,14 +18,20 @@ export type TiltShiftOptions = {
   blurRadius: TSLNode // artistic bokeh size multiplier
 }
 
+/**
+ * Applies a tilt-shift depth-of-field effect to an already-rendered scene pass.
+ *
+ * Accepts the scene color and view-Z nodes from an existing PassNode rather than
+ * creating its own pass(scene, camera) internally. This avoids a duplicate scene
+ * render — the caller (WebGPUPostProcessing) owns the single PassNode that the
+ * whole pipeline shares, which prevents simultaneous shader compilation contention
+ * when point lights are in the scene.
+ */
 export function tiltShift(
-  scene: THREE.Scene,
-  camera: THREE.Camera,
+  sceneColor: any,
+  sceneViewZ: any,
   opts: TiltShiftOptions,
 ): any {
-  const scenePass = pass(scene as any, camera as any) as any
-  const sceneColor = scenePass.getTextureNode() as any
-  const sceneViewZ = scenePass.getViewZNode() as any
   const currentDistance = sceneViewZ.negate()
   const signedDistanceFromFocus = currentDistance.sub(opts.focusDistance as any)
   const nearMask = step(signedDistanceFromFocus, 0)

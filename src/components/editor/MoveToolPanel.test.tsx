@@ -19,8 +19,10 @@ describe('MoveToolPanel', () => {
     expect(screen.getByLabelText('Time of Day')).toBeInTheDocument()
   })
 
-  it('does not show outdoor time-of-day controls for indoor maps', () => {
+  it('shows time-of-day controls for indoor maps too', () => {
     render(<MoveToolPanel />)
-    expect(screen.queryByText('Environment')).not.toBeInTheDocument()
+    expect(screen.getByText('Environment')).toBeInTheDocument()
+    expect(screen.getByLabelText('Time of Day')).toBeInTheDocument()
+    expect(screen.getByText(/dungeon ambience/i)).toBeInTheDocument()
   })
 })

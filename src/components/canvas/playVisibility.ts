@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import * as THREE from 'three'
 import { getContentPackAssetById } from '../../content-packs/registry'
+import { metadataSupportsConnectorType } from '../../content-packs/connectors'
 import { GRID_SIZE, getCellKey, type GridCell } from '../../hooks/useSnapToGrid'
 import { getOpeningSegments } from '../../store/openingSegments'
 import { useDungeonStore, type OpeningRecord, type PaintedCells } from '../../store/useDungeonStore'
@@ -8,6 +9,7 @@ import type { DungeonObjectRecord, Layer } from '../../store/useDungeonStore'
 import { getRegisteredObject, useObjectRegistryVersion } from './objectRegistry'
 import { isGeneratedCharacterAssetId } from '../../content-packs/runtimeRegistry'
 import type { GeneratedCharacterRecord } from '../../generated-characters/types'
+import { computePlayVisibilityData as computePlayVisibilityDataCore } from './playVisibilityCore'
 
 const PLAYER_VISION_RANGE = 8
 const MASK_BASE_SAMPLE_COUNT = 1024
@@ -41,10 +43,11 @@ const blockerBounds = new THREE.Box3()
 type PlayVisibilityWorkerInput = {
   paintedCells: PaintedCells
   wallOpenings: Record<string, OpeningRecord>
+  innerWalls: ReturnType<typeof useDungeonStore.getState>['innerWalls']
   origins: GridCell[]
   range: number
   blockingCellKeys: string[]
-  blockerLookupEntries: Array<[string, BlockerLookupValue]>
+  blockerLookupEntries: Array<[string, BlockerCellEntry]>
 }
 
 type PlayVisibilityComputation = {
@@ -110,6 +113,7 @@ export function usePlayVisibility(): PlayVisibility {
   const paintedCells = useDungeonStore((state) => state.paintedCells)
   const exploredCells = useDungeonStore((state) => state.exploredCells)
   const wallOpenings = useDungeonStore((state) => state.wallOpenings)
+  const innerWalls = useDungeonStore((state) => state.innerWalls)
   const placedObjects = useDungeonStore((state) => state.placedObjects)
   const layers = useDungeonStore((state) => state.layers)
   const generatedCharacters = useDungeonStore((state) => state.generatedCharacters)
@@ -127,12 +131,26 @@ export function usePlayVisibility(): PlayVisibility {
     return {
       paintedCells,
       wallOpenings,
+      innerWalls,
       origins: playerOrigins,
       range: PLAYER_VISION_RANGE,
       blockingCellKeys: [...blockerLookup.keys()],
-      blockerLookupEntries: [...blockerLookup.entries()],
+      blockerLookupEntries: [...blockerLookup.entries()].flatMap(([cellKey, value]) => {
+        const blockerEntry = getBlockerCellEntry(value)
+        return blockerEntry ? [[cellKey, blockerEntry] as const] : []
+      }),
     } satisfies PlayVisibilityWorkerInput
-  }, [generatedCharacters, layers, mapMode, objectRegistryVersion, paintedCells, placedObjects, tool, wallOpenings])
+  }, [
+    generatedCharacters,
+    innerWalls,
+    layers,
+    mapMode,
+    objectRegistryVersion,
+    paintedCells,
+    placedObjects,
+    tool,
+    wallOpenings,
+  ])
   const [visibilityData, setVisibilityData] = useState<PlayVisibilityComputation>({
     visibleCellKeys: [],
     mask: null,
@@ -144,7 +162,7 @@ export function usePlayVisibility(): PlayVisibility {
       return
     }
 
-    setVisibilityData(computePlayVisibilityData(workerInput))
+    setVisibilityData(computePlayVisibilityDataCore(workerInput))
   }, [tool, workerInput])
 
   const mask = useMemo(
@@ -529,7 +547,7 @@ export function computeVisibilityMask(
   blockerLookup: BlockerLookup = new Map(),
 ): PlayVisibilityMask | null {
   const paintedCellKeys = Object.keys(paintedCells)
-  if (paintedCellKeys.length === 0) {
+  if (paintedCellKeys.length === 0 || origins.length === 0) {
     return null
   }
 
@@ -569,6 +587,9 @@ export function computeVisibilityMask(
       }
     })
     .filter((source): source is VisibilitySource => source !== null)
+  if (sources.length === 0) {
+    return null
+  }
   const polygons = sources.flatMap((source) => source.sectors)
 
   const cells = Object.values(paintedCells)
@@ -1096,7 +1117,7 @@ function getBlockingObjectIdsByCell(
     }
 
     const asset = object.assetId ? getContentPackAssetById(object.assetId) : null
-    if (!asset?.metadata?.blocksLineOfSight || asset.metadata.connectsTo !== 'FLOOR') {
+    if (!asset?.metadata?.blocksLineOfSight || !metadataSupportsConnectorType(asset.metadata, 'FLOOR')) {
       continue
     }
 

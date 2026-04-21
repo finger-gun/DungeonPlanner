@@ -30,6 +30,6 @@ export const applyLineOfSightMask = Fn(([base, visibleMask, exploredMask]: any[]
   const exploredColor = (base.xyz as any).mul(float(EXPLORED_BRIGHTNESS))
   const rememberedColor = mix(float(0.0).xxx, exploredColor, exploredMask.w)
   const finalColor = mix(rememberedColor, base.xyz, visibleMask.w)
-  const finalAlpha = (base.w as any).mul(max(visibleMask.w, exploredMask.w))
+  const finalAlpha = max(visibleMask.w, exploredMask.w)
   return vec4(finalColor, finalAlpha)
 })

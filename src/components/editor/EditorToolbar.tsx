@@ -1,7 +1,6 @@
 import { useRef, useState, useEffect } from 'react'
 import {
   Box,
-  DoorOpen,
   FolderOpen,
   FilePlus2,
   Download,
@@ -21,8 +20,7 @@ const TOOLS: { id: DungeonTool; Icon: React.ComponentType<{ size?: number; strok
   { id: 'select',  Icon: MousePointer2, label: 'Select' },
   { id: 'room',    Icon: Blocks,        label: 'Room' },
   { id: 'character', Icon: Users,       label: 'Character' },
-  { id: 'prop',    Icon: Box,           label: 'Prop' },
-  { id: 'opening', Icon: DoorOpen,      label: 'Opening' },
+  { id: 'prop',    Icon: Box,           label: 'Assets' },
 ]
 
 export function EditorToolbar() {

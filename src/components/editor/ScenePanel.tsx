@@ -1,6 +1,7 @@
 import { useState, useRef, useMemo } from 'react'
 import { ChevronRight, Trash2 } from 'lucide-react'
 import { useDungeonStore, type FloorRecord } from '../../store/useDungeonStore'
+import { getAssetBrowserCategory, getAssetBrowserSubcategory } from '../../content-packs/browserMetadata'
 import { getContentPackAssetById } from '../../content-packs/registry'
 import { isGeneratedCharacterAssetId } from '../../content-packs/runtimeRegistry'
 import { requestFloorTransition } from '../canvas/floorTransition'
@@ -25,6 +26,8 @@ export function ScenePanel() {
   const selection    = useDungeonStore((s) => s.selection)
   const selectObject = useDungeonStore((s) => s.selectObject)
   const setTool      = useDungeonStore((s) => s.setTool)
+  const setAssetBrowserCategory = useDungeonStore((s) => s.setAssetBrowserCategory)
+  const setAssetBrowserSubcategory = useDungeonStore((s) => s.setAssetBrowserSubcategory)
   const setFloorViewMode = useDungeonStore((s) => s.setFloorViewMode)
   const removeRoom   = useDungeonStore((s) => s.removeRoom)
   const renameRoom   = useDungeonStore((s) => s.renameRoom)
@@ -111,12 +114,25 @@ export function ScenePanel() {
                 selectObject(id)
                 const assetId = data.placedObjects[id]?.assetId
                 const asset = assetId ? getContentPackAssetById(assetId) : null
+                if (asset) {
+                  setAssetBrowserCategory(getAssetBrowserCategory(asset))
+                  setAssetBrowserSubcategory(getAssetBrowserSubcategory(asset))
+                }
                 setTool(asset?.category === 'player' || isGeneratedCharacterAssetId(asset?.id) ? 'character' : 'prop')
               }}
               onSelectOpening={(id) => {
                 if (floorViewMode !== 'scene' && !isEditingFloor) requestFloorTransition(floorId)
                 selectObject(id)
-                setTool('opening')
+                const openingAssetId = data.wallOpenings[id]?.assetId
+                const asset = openingAssetId ? getContentPackAssetById(openingAssetId) : null
+                if (asset) {
+                  setAssetBrowserCategory(getAssetBrowserCategory(asset))
+                  setAssetBrowserSubcategory(getAssetBrowserSubcategory(asset))
+                } else {
+                  setAssetBrowserCategory('openings')
+                  setAssetBrowserSubcategory(null)
+                }
+                setTool('prop')
               }}
               onRenameRoom={(roomId, name) => {
                 if (isEditingFloor) renameRoom(roomId, name)
@@ -176,7 +192,7 @@ function FloorNode({
 
   // Compute rooms with their props/openings
   const roomList = Object.values(data.rooms)
-  const propsByRoom = useMemoGroupBy(data.placedObjects, data.paintedCells, 'prop')
+  const propsByRoom = useMemoGroupBy(data.placedObjects, data.paintedCells)
   const openingsByRoom = useMemoGroupByOpening(data.wallOpenings, data.paintedCells)
 
   return (
@@ -271,7 +287,6 @@ function FloorNode({
 function useMemoGroupBy(
   placedObjects: FloorData['placedObjects'],
   paintedCells: PaintedCells,
-  _type: string,
 ) {
   return useMemo(() => {
     const acc: Record<string, typeof placedObjects[string][]> = {}

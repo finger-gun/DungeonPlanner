@@ -14,6 +14,7 @@ import { getContentPackAssetById } from '../../content-packs/registry'
 import {
   useDungeonStore,
   type DungeonObjectRecord,
+  type InnerWallRecord,
   type Layer,
   type OpeningRecord,
   type PaintedCells,
@@ -28,6 +29,7 @@ import {
   wallKeyToWorldPosition,
   type BoundaryWallSegment,
 } from '../../store/wallSegments'
+import { getInnerWallOwnerRecord } from '../../store/manualWalls'
 import { isDownStairAssetId } from '../../store/stairAssets'
 import { ContentPackInstance } from './ContentPackInstance'
 import { BatchedTileEntries, type StaticTileEntry } from './BatchedTileEntries'
@@ -85,6 +87,7 @@ export type DungeonRoomData = {
   layers: Record<string, Layer>
   rooms: Record<string, Room>
   wallOpenings: Record<string, OpeningRecord>
+  innerWalls: Record<string, InnerWallRecord>
   placedObjects: Record<string, DungeonObjectRecord>
   floorTileAssetIds: Record<string, string>
   wallSurfaceAssetIds: Record<string, string>
@@ -105,6 +108,7 @@ export function DungeonRoom({
   const liveLayers = useDungeonStore((state) => state.layers)
   const liveRooms = useDungeonStore((state) => state.rooms)
   const liveWallOpenings = useDungeonStore((state) => state.wallOpenings)
+  const liveInnerWalls = useDungeonStore((state) => state.innerWalls)
   const livePlacedObjects = useDungeonStore((state) => state.placedObjects)
   const liveFloorTileAssetIds = useDungeonStore((state) => state.floorTileAssetIds)
   const liveWallSurfaceAssetIds = useDungeonStore((state) => state.wallSurfaceAssetIds)
@@ -115,6 +119,7 @@ export function DungeonRoom({
     layers: liveLayers,
     rooms: liveRooms,
     wallOpenings: liveWallOpenings,
+    innerWalls: liveInnerWalls,
     placedObjects: livePlacedObjects,
     floorTileAssetIds: liveFloorTileAssetIds,
     wallSurfaceAssetIds: liveWallSurfaceAssetIds,
@@ -126,6 +131,7 @@ export function DungeonRoom({
     layers,
     rooms,
     wallOpenings,
+    innerWalls,
     placedObjects,
     floorTileAssetIds,
     wallSurfaceAssetIds,
@@ -199,8 +205,9 @@ export function DungeonRoom({
         globalWallAssetId,
         wallSurfaceAssetIds,
         suppressedWallKeys,
+        innerWalls,
       ),
-    [globalWallAssetId, rooms, suppressedWallKeys, visiblePaintedCells, wallSurfaceAssetIds],
+    [globalWallAssetId, innerWalls, rooms, suppressedWallKeys, visiblePaintedCells, wallSurfaceAssetIds],
   )
   const corners = useMemo(
     () =>
@@ -210,8 +217,9 @@ export function DungeonRoom({
         globalWallAssetId,
         wallSurfaceAssetIds,
         suppressedWallKeys,
+        innerWalls,
       ),
-    [globalWallAssetId, rooms, suppressedWallKeys, visiblePaintedCells, wallSurfaceAssetIds],
+    [globalWallAssetId, innerWalls, rooms, suppressedWallKeys, visiblePaintedCells, wallSurfaceAssetIds],
   )
   const useLineOfSightPostMask = visibility.active && visibility.mask !== null
   const staticWallEntries = useMemo<StaticTileEntry[]>(
@@ -649,13 +657,16 @@ function deriveWallInstances(
   globalWallAssetId: string | null,
   wallSurfaceAssetIds: Record<string, string>,
   suppressedWallKeys: Set<string>,
+  innerWalls: Record<string, InnerWallRecord>,
 ): RoomWallInstance[] {
-  const wallSegments = collectBoundaryWallSegments(paintedCells, { suppressedWallKeys }).map((segment) => ({
-    ...segment,
-    assetId:
-      wallSurfaceAssetIds[segment.key] ??
-      getInheritedWallAssetIdForWallKey(segment.key, paintedCells, rooms, globalWallAssetId),
-  }))
+  const wallSegments = collectRenderableWallSegments(
+    paintedCells,
+    rooms,
+    globalWallAssetId,
+    wallSurfaceAssetIds,
+    suppressedWallKeys,
+    innerWalls,
+  )
 
   const groups = new Map<string, BoundaryWallSegmentWithAsset[]>()
   wallSegments.forEach((segment) => {
@@ -718,13 +729,16 @@ function deriveVisibleWallCorners(
   globalWallAssetId: string | null,
   wallSurfaceAssetIds: Record<string, string>,
   suppressedWallKeys: Set<string>,
+  innerWalls: Record<string, InnerWallRecord>,
 ): RoomCornerRenderInstance[] {
-  const wallSegments = collectBoundaryWallSegments(paintedCells, { suppressedWallKeys }).map((segment) => ({
-    ...segment,
-    assetId:
-      wallSurfaceAssetIds[segment.key] ??
-      getInheritedWallAssetIdForWallKey(segment.key, paintedCells, rooms, globalWallAssetId),
-  }))
+  const wallSegments = collectRenderableWallSegments(
+    paintedCells,
+    rooms,
+    globalWallAssetId,
+    wallSurfaceAssetIds,
+    suppressedWallKeys,
+    innerWalls,
+  )
   const wallAssetIdsByKey = new Map(wallSegments.map((segment) => [segment.key, segment.assetId]))
 
   return deriveWallCornersFromSegments(wallSegments)
@@ -737,6 +751,46 @@ function deriveVisibleWallCorners(
 
       return assetId ? [{ ...corner, assetId }] : []
     })
+}
+
+function collectRenderableWallSegments(
+  paintedCells: PaintedCells,
+  rooms: Record<string, Room>,
+  globalWallAssetId: string | null,
+  wallSurfaceAssetIds: Record<string, string>,
+  suppressedWallKeys: Set<string>,
+  innerWalls: Record<string, InnerWallRecord>,
+) {
+  const boundarySegments = collectBoundaryWallSegments(paintedCells, { suppressedWallKeys }).map((segment) => ({
+    ...segment,
+    assetId:
+      wallSurfaceAssetIds[segment.key] ??
+      getInheritedWallAssetIdForWallKey(segment.key, paintedCells, rooms, globalWallAssetId),
+  }))
+
+  const explicitInnerSegments = Object.keys(innerWalls).flatMap<BoundaryWallSegmentWithAsset>((wallKey) => {
+    const ownerRecord = getInnerWallOwnerRecord(wallKey, paintedCells)
+    if (!ownerRecord) {
+      return []
+    }
+
+    const room = ownerRecord.roomId ? rooms[ownerRecord.roomId] : null
+    const parts = wallKey.split(':')
+    const direction = parts[2] as BoundaryWallSegment['direction']
+    const index =
+      direction === 'north' || direction === 'south'
+        ? ownerRecord.cell[0]
+        : ownerRecord.cell[1]
+
+    return [{
+      key: wallKey,
+      direction,
+      index,
+      assetId: room?.wallAssetId ?? globalWallAssetId,
+    }]
+  })
+
+  return [...boundarySegments, ...explicitInnerSegments]
 }
 
 function OpeningRenderer({

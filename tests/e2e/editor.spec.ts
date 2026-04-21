@@ -1,5 +1,8 @@
 import { expect, test, type Page } from '@playwright/test'
 
+const TEST_IMAGE_DATA_URL =
+  'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4////fwAJ+wP9KobjigAAAABJRU5ErkJggg=='
+
 async function waitForDebugBridge(page: Page) {
   await page.waitForFunction(() => Boolean(window.__DUNGEON_DEBUG__))
 }
@@ -19,10 +22,12 @@ test.describe('Dungeon editor smoke flow', () => {
     await page.goto('/')
     await waitForDebugBridge(page)
     // "Scene" heading is always visible at the top of the right panel (ScenePanel)
-    await expect(page.getByText('Scene', { exact: true })).toBeVisible()
+    await expect(
+      page.getByTestId('editor-right-panel').locator('p').filter({ hasText: /^Scene$/ }).first(),
+    ).toBeVisible()
     // Room tool button is present in the toolbar
     await expect(page.getByRole('button', { name: 'Room' })).toBeVisible()
-    await expect(page.locator('canvas').first()).toBeVisible()
+    await expect(page.getByTestId('editor-canvas-shell')).toBeVisible()
 
     expect(pageErrors).toEqual([])
     expect(consoleErrors).toEqual([])
@@ -96,10 +101,23 @@ test.describe('Dungeon editor smoke flow', () => {
     await page.goto('/')
     await waitForDebugBridge(page)
 
-    await page.evaluate(() => {
+    await page.evaluate((imageUrl) => {
       const debug = window.__DUNGEON_DEBUG__
       const state = debug?.getSnapshot() as {
         paintCells: (cells: Array<[number, number]>) => number
+        createGeneratedCharacter: (input: {
+          storageId: string | null
+          name: string
+          kind: 'player'
+          prompt: string
+          model: string
+          size: 'M'
+          originalImageUrl: string
+          processedImageUrl: string
+          thumbnailUrl: string
+          width: number
+          height: number
+        }) => string
         placeObject: (input: {
           type: 'player'
           assetId: string
@@ -112,16 +130,29 @@ test.describe('Dungeon editor smoke flow', () => {
       }
 
       state.paintCells([[0, 0]])
+      const assetId = state.createGeneratedCharacter({
+        storageId: 'barbarian-storage',
+        name: 'Barbarian',
+        kind: 'player',
+        prompt: 'A barbarian standee on white background',
+        model: 'x/z-image-turbo',
+        size: 'M',
+        originalImageUrl: imageUrl,
+        processedImageUrl: imageUrl,
+        thumbnailUrl: imageUrl,
+        width: 300,
+        height: 600,
+      })
       state.placeObject({
         type: 'player',
-        assetId: 'core.player_barbarian',
+        assetId,
         position: [1, 0, 1],
         rotation: [0, 0, 0],
         props: {},
         cell: [0, 0],
         cellKey: '0:0:floor',
       })
-    })
+    }, TEST_IMAGE_DATA_URL)
 
     await page.getByRole('button', { name: 'Select' }).click()
 
@@ -141,9 +172,22 @@ test.describe('Dungeon editor smoke flow', () => {
     await page.goto('/')
     await waitForDebugBridge(page)
 
-    await page.evaluate(() => {
+    await page.evaluate((imageUrl) => {
       const state = window.__DUNGEON_DEBUG__?.getSnapshot() as {
         paintCells: (cells: Array<[number, number]>) => number
+        createGeneratedCharacter: (input: {
+          storageId: string | null
+          name: string
+          kind: 'player'
+          prompt: string
+          model: string
+          size: 'M'
+          originalImageUrl: string
+          processedImageUrl: string
+          thumbnailUrl: string
+          width: number
+          height: number
+        }) => string
         placeObject: (input: {
           type: 'player'
           assetId: string
@@ -156,16 +200,29 @@ test.describe('Dungeon editor smoke flow', () => {
       }
 
       state.paintCells([[0, 0]])
+      const assetId = state.createGeneratedCharacter({
+        storageId: 'barbarian-rotate-storage',
+        name: 'Barbarian',
+        kind: 'player',
+        prompt: 'A barbarian standee on white background',
+        model: 'x/z-image-turbo',
+        size: 'M',
+        originalImageUrl: imageUrl,
+        processedImageUrl: imageUrl,
+        thumbnailUrl: imageUrl,
+        width: 300,
+        height: 600,
+      })
       state.placeObject({
         type: 'player',
-        assetId: 'core.player_barbarian',
+        assetId,
         position: [1, 0, 1],
         rotation: [0, 0, 0],
         props: { connector: 'FLOOR', direction: null },
         cell: [0, 0],
         cellKey: '0:0:floor',
       })
-    })
+    }, TEST_IMAGE_DATA_URL)
 
     await page.getByRole('button', { name: 'Select' }).click()
 
@@ -270,9 +327,22 @@ test.describe('Dungeon editor smoke flow', () => {
     await page.goto('/')
     await waitForDebugBridge(page)
 
-    const playerId = await page.evaluate(() => {
+    const playerId = await page.evaluate((imageUrl) => {
       const state = window.__DUNGEON_DEBUG__?.getSnapshot() as {
         paintCells: (cells: Array<[number, number]>) => number
+        createGeneratedCharacter: (input: {
+          storageId: string | null
+          name: string
+          kind: 'player'
+          prompt: string
+          model: string
+          size: 'M'
+          originalImageUrl: string
+          processedImageUrl: string
+          thumbnailUrl: string
+          width: number
+          height: number
+        }) => string
         placeObject: (input: {
           type: 'player'
           assetId: string
@@ -286,16 +356,29 @@ test.describe('Dungeon editor smoke flow', () => {
 
       window.__DUNGEON_DEBUG__?.setCameraPreset('top-down')
       state.paintCells([[0, 0], [1, 0]])
+      const assetId = state.createGeneratedCharacter({
+        storageId: 'barbarian-drag-storage',
+        name: 'Barbarian',
+        kind: 'player',
+        prompt: 'A barbarian standee on white background',
+        model: 'x/z-image-turbo',
+        size: 'M',
+        originalImageUrl: imageUrl,
+        processedImageUrl: imageUrl,
+        thumbnailUrl: imageUrl,
+        width: 300,
+        height: 600,
+      })
       return state.placeObject({
         type: 'player',
-        assetId: 'core.player_barbarian',
+        assetId,
         position: [1, 0, 1],
         rotation: [0, 0, 0],
         props: { connector: 'FLOOR', direction: null },
         cell: [0, 0],
         cellKey: '0:0:floor',
       })
-    })
+    }, TEST_IMAGE_DATA_URL)
     expect(playerId).toBeTruthy()
 
     await page.getByRole('button', { name: 'Play' }).click()
@@ -307,11 +390,13 @@ test.describe('Dungeon editor smoke flow', () => {
     )
 
     const start = await page.evaluate((id) => window.__DUNGEON_DEBUG__?.getObjectScreenPosition(id), playerId)
+    const target = await page.evaluate(() => window.__DUNGEON_DEBUG__?.getCellScreenPosition([1, 0]))
     expect(start).not.toBeNull()
+    expect(target).not.toBeNull()
 
     await page.mouse.move(start!.x, start!.y)
     await page.mouse.down()
-    await page.mouse.move(start!.x + 64, start!.y, { steps: 12 })
+    await page.mouse.move(target!.x, target!.y, { steps: 12 })
     await page.mouse.up()
 
     await page.waitForFunction(() => {

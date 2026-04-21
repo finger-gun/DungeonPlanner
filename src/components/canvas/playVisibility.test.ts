@@ -3,6 +3,7 @@ import * as THREE from 'three'
 import {
   buildPortalLookup,
   castVisibilityMaskRay,
+  computeVisibilityMask,
   computeVisibilitySamples,
   computeVisibleCellKeys,
   getObjectVisibilityState,
@@ -369,6 +370,17 @@ describe('computeVisibilitySamples', () => {
     for (let index = 1; index < samples.length; index += 1) {
       expect(samples[index - 1]!.angle).toBeLessThanOrEqual(samples[index]!.angle)
     }
+  })
+})
+
+describe('computeVisibilityMask', () => {
+  it('returns null when there are no player origins', () => {
+    const paintedCells = makeCells([
+      { cell: [0, 0], roomId: 'room-a' },
+      { cell: [1, 0], roomId: 'room-a' },
+    ])
+
+    expect(computeVisibilityMask(paintedCells, {}, {}, [], 4, [])).toBeNull()
   })
 })
 

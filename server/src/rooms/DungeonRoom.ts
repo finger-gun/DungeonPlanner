@@ -1,5 +1,4 @@
 import { Room, Client } from 'colyseus'
-import { MapSchema } from '@colyseus/schema'
 import { DungeonState, Entity } from '../schema/DungeonStateSchema.js'
 import { GRID_SIZE } from '../utils/grid.js'
 
