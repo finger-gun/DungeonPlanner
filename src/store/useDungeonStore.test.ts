@@ -51,6 +51,198 @@ describe('useDungeonStore history', () => {
     expect(Object.keys(state.paintedCells)).toHaveLength(2)
   })
 
+  it('creates an outdoor map with surrounding paint defaults', () => {
+    useDungeonStore.getState().newDungeon('outdoor')
+    const state = useDungeonStore.getState()
+    expect(state.mapMode).toBe('outdoor')
+    expect(state.tool).toBe('room')
+    expect(state.roomEditMode).toBe('rooms')
+    expect(state.outdoorTimeOfDay).toBe(0.5)
+    expect(state.outdoorTerrainType).toBe('mixed')
+    expect(state.outdoorTerrainDensity).toBe('medium')
+    expect(state.outdoorOverpaintRegenerate).toBe(false)
+    expect(state.outdoorBrushMode).toBe('surroundings')
+    expect(state.outdoorTerrainSculptMode).toBe('raise')
+    expect(state.outdoorTerrainHeights).toEqual({})
+  })
+
+  it('sculpts outdoor terrain heights only in outdoor mode', () => {
+    expect(useDungeonStore.getState().sculptOutdoorTerrain([[2, 2]], 'raise')).toBe(0)
+
+    useDungeonStore.getState().newDungeon('outdoor')
+    expect(useDungeonStore.getState().sculptOutdoorTerrain([[2, 2]], 'raise')).toBe(1)
+
+    const state = useDungeonStore.getState()
+    expect(state.outdoorTerrainHeights['2:2']?.height).toBeGreaterThan(0)
+    expect(state.outdoorTerrainHeights['1:2']?.height).toBeGreaterThan(0)
+  })
+
+  it('reanchors outdoor placed objects after terrain sculpting', () => {
+    useDungeonStore.getState().newDungeon('outdoor')
+    const assetId = createTestGeneratedCharacter('Terrain Scout')
+    const placedId = useDungeonStore.getState().placeObject({
+      type: 'player',
+      assetId,
+      position: [1, 0, 1],
+      rotation: [0, 0, 0],
+      props: { connector: 'FLOOR', direction: null },
+      cell: [0, 0],
+      cellKey: '0:0:floor',
+      supportCellKey: '0:0',
+    })
+
+    expect(useDungeonStore.getState().placedObjects[placedId!]?.position[1]).toBe(0)
+
+    useDungeonStore.getState().sculptOutdoorTerrain([[0, 0]], 'raise')
+
+    expect(useDungeonStore.getState().placedObjects[placedId!]?.position[1]).toBeGreaterThan(0)
+  })
+
+  it('paints and erases outdoor surrounding cells with generated forest props', () => {
+    useDungeonStore.getState().newDungeon('outdoor')
+    expect(useDungeonStore.getState().paintBlockedCells([[2, 2], [3, 2]])).toBe(2)
+    let state = useDungeonStore.getState()
+    expect(Object.keys(state.blockedCells)).toHaveLength(2)
+    const generated = Object.values(state.placedObjects).filter(
+      (object) => object.props.generatedBy === 'surrounding-forest',
+    )
+    expect(generated.length).toBeGreaterThanOrEqual(2)
+
+    expect(useDungeonStore.getState().eraseBlockedCells([[2, 2]])).toBe(1)
+    state = useDungeonStore.getState()
+    expect(state.blockedCells['2:2']).toBeUndefined()
+    const erasedCellObjects = Object.values(state.placedObjects).filter(
+      (object) => object.supportCellKey === '2:2' && object.props.generatedBy === 'surrounding-forest',
+    )
+    expect(erasedCellObjects).toHaveLength(0)
+  })
+
+  it('paints and erases outdoor ground texture cells', () => {
+    useDungeonStore.getState().newDungeon('outdoor')
+    useDungeonStore.getState().setOutdoorGroundTextureBrush('rough-stone')
+
+    expect(useDungeonStore.getState().paintOutdoorGroundTextureCells([[2, 1], [3, 1]])).toBe(2)
+    let state = useDungeonStore.getState()
+    expect(state.outdoorGroundTextureCells['2:1']).toMatchObject({
+      cell: [2, 1],
+      textureType: 'rough-stone',
+    })
+
+    useDungeonStore.getState().setOutdoorGroundTextureBrush('wet-dirt')
+    expect(useDungeonStore.getState().paintOutdoorGroundTextureCells([[2, 1]])).toBe(1)
+    state = useDungeonStore.getState()
+    expect(state.outdoorGroundTextureCells['2:1']?.textureType).toBe('wet-dirt')
+
+    expect(useDungeonStore.getState().eraseOutdoorGroundTextureCells([[2, 1]])).toBe(1)
+    state = useDungeonStore.getState()
+    expect(state.outdoorGroundTextureCells['2:1']).toBeUndefined()
+  })
+
+  it('does not paint outdoor ground textures while indoor mode is active', () => {
+    expect(useDungeonStore.getState().paintOutdoorGroundTextureCells([[0, 0]])).toBe(0)
+    expect(Object.keys(useDungeonStore.getState().outdoorGroundTextureCells)).toHaveLength(0)
+  })
+
+  it('supports rock-only terrain preset for surrounding paint', () => {
+    useDungeonStore.getState().newDungeon('outdoor')
+    useDungeonStore.getState().setOutdoorTerrainType('rocks')
+    useDungeonStore.getState().paintBlockedCells([[4, 4]])
+
+    const generated = Object.values(useDungeonStore.getState().placedObjects).filter(
+      (object) =>
+        object.supportCellKey === '4:4' &&
+        object.props.generatedBy === 'surrounding-forest',
+    )
+
+    expect(generated.length).toBeGreaterThan(0)
+    generated.forEach((object) => {
+      expect(object.assetId).toMatch(/^kaykit\.forest_rock_/)
+    })
+  })
+
+  it('supports dead-forest terrain preset for surrounding paint', () => {
+    useDungeonStore.getState().newDungeon('outdoor')
+    useDungeonStore.getState().setOutdoorTerrainType('dead-forest')
+    useDungeonStore.getState().paintBlockedCells([[5, 5]])
+
+    const generated = Object.values(useDungeonStore.getState().placedObjects).filter(
+      (object) =>
+        object.supportCellKey === '5:5' &&
+        object.props.generatedBy === 'surrounding-forest',
+    )
+
+    expect(generated.length).toBeGreaterThan(0)
+    generated.forEach((object) => {
+      expect(object.assetId).toMatch(/^kaykit\.forest_(tree_bare_|rock_|grass_)/)
+    })
+  })
+
+  it('keeps terrain settings per terrain type', () => {
+    useDungeonStore.getState().newDungeon('outdoor')
+    useDungeonStore.getState().setOutdoorTerrainDensity('dense')
+    useDungeonStore.getState().setOutdoorOverpaintRegenerate(true)
+
+    useDungeonStore.getState().setOutdoorTerrainType('rocks')
+    expect(useDungeonStore.getState().outdoorTerrainDensity).toBe('medium')
+    expect(useDungeonStore.getState().outdoorOverpaintRegenerate).toBe(false)
+
+    useDungeonStore.getState().setOutdoorTerrainDensity('sparse')
+    useDungeonStore.getState().setOutdoorOverpaintRegenerate(true)
+    useDungeonStore.getState().setOutdoorTerrainType('mixed')
+
+    expect(useDungeonStore.getState().outdoorTerrainDensity).toBe('dense')
+    expect(useDungeonStore.getState().outdoorOverpaintRegenerate).toBe(true)
+  })
+
+  it('uses density to control surrounding prop count', () => {
+    const cells = Array.from({ length: 40 }, (_, index) => [index, 8] as [number, number])
+
+    useDungeonStore.getState().newDungeon('outdoor')
+    useDungeonStore.getState().setOutdoorTerrainDensity('sparse')
+    useDungeonStore.getState().paintBlockedCells(cells)
+    const sparseCount = Object.values(useDungeonStore.getState().placedObjects).filter(
+      (object) => object.props.generatedBy === 'surrounding-forest',
+    ).length
+
+    useDungeonStore.getState().reset()
+    useDungeonStore.getState().newDungeon('outdoor')
+    useDungeonStore.getState().setOutdoorTerrainDensity('dense')
+    useDungeonStore.getState().paintBlockedCells(cells)
+    const denseCount = Object.values(useDungeonStore.getState().placedObjects).filter(
+      (object) => object.props.generatedBy === 'surrounding-forest',
+    ).length
+
+    expect(denseCount).toBeGreaterThan(sparseCount)
+  })
+
+  it('can regenerate already painted terrain when overpaint regenerate is enabled', () => {
+    useDungeonStore.getState().newDungeon('outdoor')
+    expect(useDungeonStore.getState().paintBlockedCells([[10, 10]])).toBe(1)
+    expect(useDungeonStore.getState().paintBlockedCells([[10, 10]])).toBe(0)
+
+    useDungeonStore.getState().setOutdoorOverpaintRegenerate(true)
+    expect(useDungeonStore.getState().paintBlockedCells([[10, 10]])).toBe(1)
+  })
+
+  it('does not remove manually placed props when erasing surroundings', () => {
+    useDungeonStore.getState().newDungeon('outdoor')
+
+    const manualId = useDungeonStore.getState().placeObject({
+      type: 'prop',
+      assetId: 'kaykit.forest_tree_1_a',
+      position: [1, 0, 1],
+      rotation: [0, 0, 0],
+      props: { connector: 'FREE', direction: null },
+      cell: [0, 0],
+      cellKey: '0:0:manual',
+    })
+
+    useDungeonStore.getState().paintBlockedCells([[0, 0]])
+    useDungeonStore.getState().eraseBlockedCells([[0, 0]])
+
+    expect(useDungeonStore.getState().placedObjects[manualId!]).toBeDefined()
+  })
+
   it('places a prop into a snapped cell and selects it', () => {
     const placedId = useDungeonStore.getState().placeObject({
       type: 'prop',
@@ -253,6 +445,30 @@ describe('useDungeonStore history', () => {
     expect(state.occupancy['0:0:floor']).toBe(firstId)
     expect(state.occupancy['1:0:floor']).toBe(secondId)
     expect(state.placedObjects[firstId!]?.cell).toEqual([0, 0])
+  })
+
+  it('does not move a player into blocked outdoor terrain', () => {
+    useDungeonStore.getState().newDungeon('outdoor')
+    const assetId = createTestGeneratedCharacter('Generated Ranger')
+
+    const placedId = useDungeonStore.getState().placeObject({
+      type: 'player',
+      assetId,
+      position: [1, 0, 1],
+      rotation: [0, 0, 0],
+      props: { connector: 'FLOOR', direction: null },
+      cell: [0, 0],
+      cellKey: '0:0:floor',
+    })
+    useDungeonStore.getState().paintBlockedCells([[1, 0]])
+
+    const moved = useDungeonStore.getState().moveObject(placedId!, {
+      position: [3, 0, 1],
+      cell: [1, 0],
+      cellKey: '1:0:floor',
+    })
+
+    expect(moved).toBe(false)
   })
 
   it('creates generated character assets that appear in the registry', () => {

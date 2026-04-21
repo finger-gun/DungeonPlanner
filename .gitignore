@@ -39,3 +39,6 @@ Thumbs.db
 playwright-report
 test-results
 server/certs/
+
+
+forrest-assets-tmp/

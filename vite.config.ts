@@ -133,7 +133,7 @@ export default defineConfig({
   define: {
     __PROJECT_ROOT__: JSON.stringify(process.cwd()),
   },
-  assetsInclude: ['**/*.glb'],
+  assetsInclude: ['**/*.glb', '**/*.gltf', '**/*.bin'],
   plugins: [generatedCharacterDevFallback(), react(), tailwindcss(), stripThreeDebugImport()],
   resolve: {
     alias: {

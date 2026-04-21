@@ -12,19 +12,19 @@ const viewportSize = 320
 
 async function main() {
   const { targetDir, filter, missingOnly } = parseArgs(process.argv.slice(2))
-  const allGlbFiles = readdirSync(targetDir)
-    .filter((file) => file.endsWith('.glb'))
+  const allModelFiles = readdirSync(targetDir)
+    .filter((file) => file.endsWith('.glb') || file.endsWith('.gltf'))
     .filter((file) => !filter || file.includes(filter))
     .sort((left, right) => left.localeCompare(right))
-  const glbFiles = missingOnly
-    ? allGlbFiles.filter((file) => shouldGenerateThumbnail(targetDir, file))
-    : allGlbFiles
+  const modelFiles = missingOnly
+    ? allModelFiles.filter((file) => shouldGenerateThumbnail(targetDir, file))
+    : allModelFiles
 
-  if (allGlbFiles.length === 0) {
-    throw new Error(`No GLB files found in ${targetDir}`)
+  if (allModelFiles.length === 0) {
+    throw new Error(`No GLB/GLTF files found in ${targetDir}`)
   }
 
-  if (glbFiles.length === 0) {
+  if (modelFiles.length === 0) {
     console.log(`No thumbnails to generate in ${targetDir}`)
     return
   }
@@ -38,9 +38,9 @@ async function main() {
       deviceScaleFactor: 1,
     })
 
-    for (const fileName of glbFiles) {
+    for (const fileName of modelFiles) {
       const assetPath = path.join(targetDir, fileName)
-      const outputPath = assetPath.replace(/\.glb$/i, '.png')
+      const outputPath = assetPath.replace(/\.(glb|gltf)$/i, '.png')
       const assetUrl = toViteFsUrl(assetPath)
       const renderUrl = `${baseUrl}/?thumbnail-renderer=1&asset=${encodeURIComponent(assetUrl)}`
 
@@ -139,7 +139,7 @@ async function main() {
     }
 
     await browser.close()
-    console.log(`Generated ${glbFiles.length} thumbnails in ${targetDir}`)
+    console.log(`Generated ${modelFiles.length} thumbnails in ${targetDir}`)
   } finally {
     await stopServer(server)
   }
@@ -184,7 +184,7 @@ function resolveContentPackDir(input) {
 
 function shouldGenerateThumbnail(targetDir, fileName) {
   const assetPath = path.join(targetDir, fileName)
-  const outputPath = assetPath.replace(/\.glb$/i, '.png')
+  const outputPath = assetPath.replace(/\.(glb|gltf)$/i, '.png')
 
   if (!existsSync(outputPath)) {
     return true

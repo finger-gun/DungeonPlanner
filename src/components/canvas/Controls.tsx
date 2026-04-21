@@ -14,6 +14,7 @@ const PLAYER_LOOK_AT_ANIMATION_DURATION = 0.42
 const TRACKED_KEYS = new Set([
   'w', 'a', 's', 'd',
   'arrowup', 'arrowdown', 'arrowleft', 'arrowright',
+  'z', 'x',
   'q', 'e',
 ])
 
@@ -115,6 +116,8 @@ function KeyboardCameraControls() {
     if (keys.has('s') || keys.has('arrowdown'))  delta.addScaledVector(forward, -speed)
     if (keys.has('d') || keys.has('arrowright')) delta.addScaledVector(right,    speed)
     if (keys.has('a') || keys.has('arrowleft'))  delta.addScaledVector(right,   -speed)
+    if (keys.has('z'))                           delta.y += speed
+    if (keys.has('x'))                           delta.y -= speed
 
     if (delta.lengthSq() > 0) {
       camera.position.add(delta)

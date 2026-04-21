@@ -39,6 +39,7 @@ const SUBCATEGORY_LABELS: Record<AssetBrowserSubcategory, string> = {
 }
 
 export function PropToolPanel() {
+  const mapMode = useDungeonStore((state) => state.mapMode)
   const selectedAssetIds = useDungeonStore((state) => state.selectedAssetIds)
   const surfaceBrushAssetIds = useDungeonStore((state) => state.surfaceBrushAssetIds)
   const assetBrowser = useDungeonStore((state) => state.assetBrowser)
@@ -120,6 +121,16 @@ export function PropToolPanel() {
             )
           })}
         </div>
+      </section>
+
+      <section className="rounded-2xl border border-stone-800 bg-stone-950/50 p-4 text-xs leading-6 text-stone-400">
+        <p className="font-medium text-stone-300">Placement Tool</p>
+        <p className="mt-1">
+          {mapMode === 'outdoor'
+            ? 'Click terrain to place. Right-click to remove.'
+            : 'Click a room cell to place. Right-click to remove.'}
+        </p>
+        <p>Hold <kbd>Alt</kbd> + click to inspect.</p>
       </section>
 
       {shouldShowOpeningCatalog && subcategorySections.length > 1 && (

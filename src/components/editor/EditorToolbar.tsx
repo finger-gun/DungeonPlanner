@@ -13,7 +13,7 @@ import {
   Upload,
   Users,
 } from 'lucide-react'
-import { useDungeonStore, type DungeonTool } from '../../store/useDungeonStore'
+import { useDungeonStore, type DungeonTool, type MapMode } from '../../store/useDungeonStore'
 
 const TOOLS: { id: DungeonTool; Icon: React.ComponentType<{ size?: number; strokeWidth?: number }>; label: string }[] = [
   { id: 'play',    Icon: Joystick,      label: 'Play' },
@@ -25,6 +25,7 @@ const TOOLS: { id: DungeonTool; Icon: React.ComponentType<{ size?: number; strok
 
 export function EditorToolbar() {
   const tool = useDungeonStore((state) => state.tool)
+  const mapMode = useDungeonStore((state) => state.mapMode)
   const setTool = useDungeonStore((state) => state.setTool)
   const undo = useDungeonStore((state) => state.undo)
   const redo = useDungeonStore((state) => state.redo)
@@ -42,6 +43,9 @@ export function EditorToolbar() {
         {/* Tool icons */}
         <div className="flex flex-col items-center gap-1">
           {TOOLS.map(({ id, Icon, label }) => {
+            if (mapMode === 'outdoor' && id === 'opening') {
+              return null
+            }
             const active = tool === id
             return (
               <button
@@ -149,9 +153,8 @@ function FileMenuButton() {
     setOpen(false)
   }
 
-  function handleNew() {
-    if (!confirmNew) { setConfirmNew(true); return }
-    newDungeon()
+  function handleNew(mode: MapMode) {
+    newDungeon(mode)
     setOpen(false)
     setConfirmNew(false)
   }
@@ -174,7 +177,13 @@ function FileMenuButton() {
           {/* New */}
           <button
             type="button"
-            onClick={handleNew}
+            onClick={() => {
+              if (!confirmNew) {
+                setConfirmNew(true)
+                return
+              }
+              handleNew('indoor')
+            }}
             className={`flex w-full items-center gap-3 px-3 py-2 text-left text-sm transition ${
               confirmNew
                 ? 'bg-red-900/40 text-red-300 hover:bg-red-900/60'
@@ -182,8 +191,19 @@ function FileMenuButton() {
             }`}
           >
             <FilePlus2 size={14} strokeWidth={1.5} className="shrink-0" />
-            {confirmNew ? 'Confirm — clear all?' : 'New Dungeon'}
+            {confirmNew ? 'New Indoor Dungeon' : 'New Dungeon'}
           </button>
+
+          {confirmNew && (
+            <button
+              type="button"
+              onClick={() => handleNew('outdoor')}
+              className="flex w-full items-center gap-3 px-3 py-2 text-left text-sm text-emerald-200 transition hover:bg-emerald-900/40"
+            >
+              <FilePlus2 size={14} strokeWidth={1.5} className="shrink-0" />
+              New Outdoor Map
+            </button>
+          )}
 
           <div className="my-1 mx-3 h-px bg-stone-800" />
 

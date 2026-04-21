@@ -16,6 +16,18 @@ const MODEL_URLS = import.meta.glob('../../../assets/models/kaykit/*.glb', {
 
 const GLTF_URLS = import.meta.glob('../../../assets/models/kaykit/*.gltf', {
   eager: true,
+  query: '?raw',
+  import: 'default',
+}) as Record<string, string>
+
+const BINARY_URLS = import.meta.glob('../../../assets/models/kaykit/*.bin', {
+  eager: true,
+  query: '?url',
+  import: 'default',
+}) as Record<string, string>
+
+const TEXTURE_URLS = import.meta.glob('../../../assets/models/kaykit/*.{png,jpg,jpeg,webp}', {
+  eager: true,
   import: 'default',
 }) as Record<string, string>
 
@@ -51,7 +63,7 @@ const DEFAULT_ROTATION = [0, 0, 0] as const
 export const KAYKIT_BASE_SCALE = 0.5
 
 export function createKayKitAsset(definition: KayKitAssetDefinition): ContentPackAsset {
-  const assetUrl = resolveKayKitModelAssetUrl(definition.modelName)
+  const assetUrl = requireKayKitModelAssetUrl(definition.modelName)
   const thumbnailUrl = resolveKayKitAssetUrl(definition.thumbnailName ?? definition.modelName, 'png')
   const resolvedTransform = resolveTransform(definition.transform)
   const Component = createStaticModelComponent(assetUrl, definition.transform)
@@ -109,7 +121,116 @@ export function resolveKayKitAssetUrl(name: string, extension: 'glb' | 'png') {
 }
 
 export function resolveKayKitModelAssetUrl(name: string) {
-  return resolveKayKitAssetUrl(name, 'glb') ?? GLTF_URLS[`../../../assets/models/kaykit/${name}.gltf`]
+  const modelUrl = resolveKayKitAssetUrl(name, 'glb')
+  if (modelUrl) {
+    return modelUrl
+  }
+
+  const gltfKey = `../../../assets/models/kaykit/${name}.gltf`
+  const source = GLTF_URLS[gltfKey]
+  if (!source) {
+    return undefined
+  }
+
+  const parsed = JSON.parse(source) as {
+    buffers?: Array<{ uri?: string }>
+    images?: Array<{ uri?: string }>
+  }
+  const patched = {
+    ...parsed,
+    buffers: parsed.buffers?.map((buffer) => ({
+      ...buffer,
+      uri: resolveExternalGltfUri(buffer.uri),
+    })),
+    images: parsed.images?.map((image) => ({
+      ...image,
+      uri: resolveExternalGltfUri(image.uri),
+    })),
+  }
+  return `data:model/gltf+json;base64,${encodeBase64(JSON.stringify(patched))}`
+}
+
+export function requireKayKitModelAssetUrl(name: string) {
+  const url = resolveKayKitModelAssetUrl(name)
+  if (url) {
+    return url
+  }
+
+  throw new Error(`Missing KayKit model asset: ${name}`)
+}
+
+function resolveExternalGltfUri(uri: string | undefined) {
+  if (!uri || isExternalUri(uri)) {
+    return uri
+  }
+
+  const clean = uri.split('?')[0]?.split('#')[0] ?? uri
+  const fileName = clean.split('/').at(-1)
+  if (!fileName) {
+    return uri
+  }
+
+  const key = `../../../assets/models/kaykit/${fileName}`
+  const extension = fileName.split('.').at(-1)?.toLowerCase()
+  if (extension === 'bin') {
+    return toAbsoluteAssetUrl(BINARY_URLS[key]) ?? uri
+  }
+
+  if (extension === 'png' || extension === 'jpg' || extension === 'jpeg' || extension === 'webp') {
+    return toAbsoluteAssetUrl(TEXTURE_URLS[key] ?? THUMBNAIL_URLS[key]) ?? uri
+  }
+
+  return uri
+}
+
+function isExternalUri(uri: string) {
+  return (
+    uri.startsWith('data:') ||
+    uri.startsWith('blob:') ||
+    uri.startsWith('http://') ||
+    uri.startsWith('https://')
+  )
+}
+
+function encodeBase64(value: string) {
+  const bufferCtor = (
+    globalThis as {
+      Buffer?: {
+        from: (input: string, encoding: 'utf-8') => { toString: (encoding: 'base64') => string }
+      }
+    }
+  ).Buffer
+
+  if (bufferCtor) {
+    return bufferCtor.from(value, 'utf-8').toString('base64')
+  }
+
+  const bytes = new TextEncoder().encode(value)
+  let binary = ''
+  for (const byte of bytes) {
+    binary += String.fromCharCode(byte)
+  }
+  return btoa(binary)
+}
+
+function toAbsoluteAssetUrl(url: string | undefined) {
+  if (!url) {
+    return undefined
+  }
+
+  if (isExternalUri(url)) {
+    return url
+  }
+
+  if (!url.startsWith('/')) {
+    return url
+  }
+
+  if (typeof window !== 'undefined' && window.location?.origin) {
+    return new URL(url, window.location.origin).href
+  }
+
+  return url
 }
 
 function resolveTransform(transform?: KayKitTransform) {

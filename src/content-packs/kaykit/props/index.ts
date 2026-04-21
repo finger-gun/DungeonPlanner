@@ -39,6 +39,16 @@ import { kaykitBannerRedAsset } from './BannerRed'
 import { kaykitBannerWhiteAsset } from './BannerWhite'
 import { kaykitBannerYellowAsset } from './BannerYellow'
 import { kaykitWallShelvesAsset } from './WallShelves'
+import { kaykitForestTree1AAsset } from './ForestTree1A'
+import { kaykitForestTree2AAsset } from './ForestTree2A'
+import { kaykitForestTreeBare1AAsset } from './ForestTreeBare1A'
+import { kaykitForestRock1AAsset } from './ForestRock1A'
+import { kaykitForestRock2AAsset } from './ForestRock2A'
+import { kaykitForestRock3AAsset } from './ForestRock3A'
+import { kaykitForestBush1AAsset } from './ForestBush1A'
+import { kaykitForestBush2AAsset } from './ForestBush2A'
+import { kaykitForestBush3AAsset } from './ForestBush3A'
+import { kaykitAdditionalForestAssets } from './ForestAdditionalAssets'
 
 export const kaykitPropAssets = [
   kaykitBarrelSmallAsset,
@@ -82,4 +92,14 @@ export const kaykitPropAssets = [
   kaykitBannerWhiteAsset,
   kaykitBannerYellowAsset,
   kaykitWallShelvesAsset,
+  kaykitForestTree1AAsset,
+  kaykitForestTree2AAsset,
+  kaykitForestTreeBare1AAsset,
+  kaykitForestRock1AAsset,
+  kaykitForestRock2AAsset,
+  kaykitForestRock3AAsset,
+  kaykitForestBush1AAsset,
+  kaykitForestBush2AAsset,
+  kaykitForestBush3AAsset,
+  ...kaykitAdditionalForestAssets,
 ]

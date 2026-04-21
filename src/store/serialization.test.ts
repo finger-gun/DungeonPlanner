@@ -16,6 +16,9 @@ function emptyFloorSnapshot() {
     activeLayerId: 'default',
     rooms: {},
     paintedCells: {},
+    blockedCells: {},
+    outdoorTerrainHeights: {},
+    outdoorGroundTextureCells: {},
     exploredCells: {},
     floorTileAssetIds: {},
     wallSurfaceAssetIds: {},
@@ -42,6 +45,16 @@ function baseState(): SerializableState {
   const groundId = 'floor-1'
   return {
     name: 'Test Dungeon',
+    mapMode: 'indoor',
+    outdoorTimeOfDay: 0.5,
+    outdoorTerrainProfiles: {
+      mixed: { density: 'medium', overpaintRegenerate: false },
+      rocks: { density: 'medium', overpaintRegenerate: false },
+      'dead-forest': { density: 'medium', overpaintRegenerate: false },
+    },
+    outdoorTerrainDensity: 'medium',
+    outdoorTerrainType: 'mixed',
+    outdoorOverpaintRegenerate: false,
     sceneLighting: { intensity: 1.5 },
     postProcessing: { ...DEFAULT_POST_PROCESSING_SETTINGS },
     ...emptyFloorSnapshot(),
@@ -66,6 +79,35 @@ describe('serializeDungeon / deserializeDungeon roundtrip', () => {
     expect(result!.postProcessing.bokehScale).toBe(0.5)
   })
 
+  it('preserves map mode and outdoor time of day', () => {
+    const state = baseState()
+    state.mapMode = 'outdoor'
+    state.outdoorTimeOfDay = 0.8
+    const result = deserializeDungeon(serializeDungeon(state))
+    expect(result).not.toBeNull()
+    expect(result!.mapMode).toBe('outdoor')
+    expect(result!.outdoorTimeOfDay).toBe(0.8)
+  })
+
+  it('preserves outdoor terrain brush settings', () => {
+    const state = baseState()
+    state.mapMode = 'outdoor'
+    state.outdoorTerrainDensity = 'dense'
+    state.outdoorTerrainType = 'dead-forest'
+    state.outdoorOverpaintRegenerate = true
+    state.outdoorTerrainProfiles = {
+      mixed: { density: 'dense', overpaintRegenerate: true },
+      rocks: { density: 'sparse', overpaintRegenerate: false },
+      'dead-forest': { density: 'dense', overpaintRegenerate: true },
+    }
+    const result = deserializeDungeon(serializeDungeon(state))
+    expect(result).not.toBeNull()
+    expect(result!.outdoorTerrainDensity).toBe('dense')
+    expect(result!.outdoorTerrainType).toBe('dead-forest')
+    expect(result!.outdoorOverpaintRegenerate).toBe(true)
+    expect(result!.outdoorTerrainProfiles?.rocks?.density).toBe('sparse')
+  })
+
   it('preserves painted cells', () => {
     const state = baseState()
     state.floors!['floor-1'].snapshot.paintedCells['2:3'] = {
@@ -79,6 +121,55 @@ describe('serializeDungeon / deserializeDungeon roundtrip', () => {
     // Active floor data is returned at top level for the store to spread
     const cells = result!.paintedCells ?? result!.floors?.['floor-1']?.snapshot?.paintedCells
     expect(cells?.['2:3']).toMatchObject({ cell: [2, 3] })
+  })
+
+  it('preserves blocked cells', () => {
+    const state = baseState()
+    state.floors!['floor-1'].snapshot.blockedCells['4:5'] = {
+      cell: [4, 5],
+      layerId: 'default',
+      roomId: null,
+    }
+
+    const result = deserializeDungeon(serializeDungeon(state))
+    expect(result).not.toBeNull()
+    const blocked = result!.blockedCells ?? result!.floors?.['floor-1']?.snapshot?.blockedCells
+    expect(blocked?.['4:5']).toMatchObject({ cell: [4, 5], layerId: 'default' })
+  })
+
+  it('preserves outdoor ground texture paint cells', () => {
+    const state = baseState()
+    state.floors!['floor-1'].snapshot.outdoorGroundTextureCells['6:7'] = {
+      cell: [6, 7],
+      layerId: 'default',
+      textureType: 'rough-stone',
+    }
+
+    const result = deserializeDungeon(serializeDungeon(state))
+    expect(result).not.toBeNull()
+    const outdoorGroundTextureCells = result!.outdoorGroundTextureCells
+      ?? result!.floors?.['floor-1']?.snapshot?.outdoorGroundTextureCells
+    expect(outdoorGroundTextureCells?.['6:7']).toMatchObject({
+      cell: [6, 7],
+      textureType: 'rough-stone',
+    })
+  })
+
+  it('preserves outdoor terrain heights', () => {
+    const state = baseState()
+    state.floors!['floor-1'].snapshot.outdoorTerrainHeights['3:4'] = {
+      cell: [3, 4],
+      height: 1.25,
+    }
+
+    const result = deserializeDungeon(serializeDungeon(state))
+    expect(result).not.toBeNull()
+    const outdoorTerrainHeights = result!.outdoorTerrainHeights
+      ?? result!.floors?.['floor-1']?.snapshot?.outdoorTerrainHeights
+    expect(outdoorTerrainHeights?.['3:4']).toMatchObject({
+      cell: [3, 4],
+      height: 1.25,
+    })
   })
 
   it('preserves explored cells', () => {
@@ -251,5 +342,38 @@ describe('deserializeDungeon version migrations', () => {
     const result = deserializeDungeon(v1File)
     expect(result).not.toBeNull()
     expect(result!.name).toBe('Very Old')
+    expect(result!.mapMode).toBe('indoor')
+    expect(result!.outdoorTimeOfDay).toBe(0.5)
+  })
+
+  it('v12→v13: adds empty outdoor terrain heights when missing', () => {
+    const v12File = JSON.stringify({
+      version: 12,
+      name: 'Legacy Outdoor',
+      mapMode: 'outdoor',
+      sceneLighting: { intensity: 1 },
+      postProcessing: { ...DEFAULT_POST_PROCESSING_SETTINGS },
+      activeFloorId: 'floor-1',
+      floorOrder: ['floor-1'],
+      floors: [{
+        id: 'floor-1',
+        name: 'Ground Floor',
+        level: 0,
+        layers: [{ id: 'default', name: 'Default', visible: true, locked: false }],
+        layerOrder: ['default'],
+        activeLayerId: 'default',
+        rooms: [],
+        cells: [],
+        blockedCells: [],
+        exploredCells: [],
+        objects: [],
+        openings: [],
+        nextRoomNumber: 1,
+      }],
+    })
+
+    const result = deserializeDungeon(v12File)
+    expect(result).not.toBeNull()
+    expect(result!.outdoorTerrainHeights).toEqual({})
   })
 })

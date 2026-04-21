@@ -7,6 +7,7 @@ const rootDir = path.resolve(__dirname, '..')
 const docsSourceDir = path.join(rootDir, 'docs')
 const docsWebDir = path.join(rootDir, 'docs-web')
 const docsOutDir = path.join(docsWebDir, 'dist')
+const GA_MEASUREMENT_ID = 'G-4TZCSBF6LN'
 
 const DOC_FILE_ORDER = [
   'index.md',
@@ -58,10 +59,104 @@ const docsIndexHtml = `<!doctype html>
         background: var(--theme-color) !important;
         color: #111827 !important;
       }
+      .cookie-consent-banner {
+        position: fixed;
+        left: 16px;
+        right: 16px;
+        bottom: 16px;
+        z-index: 2147483000;
+        background: rgba(15, 18, 25, 0.96);
+        color: #e2e8f0;
+        border: 1px solid rgba(148, 163, 184, 0.3);
+        border-radius: 12px;
+        padding: 14px 16px;
+        box-shadow: 0 18px 50px rgba(2, 6, 23, 0.5);
+      }
+      .cookie-consent-content {
+        display: flex;
+        gap: 12px;
+        align-items: center;
+        justify-content: space-between;
+        flex-wrap: wrap;
+      }
+      .cookie-consent-text {
+        margin: 0;
+        font-size: 14px;
+      }
+      .cookie-consent-text a {
+        color: #f59e0b;
+      }
+      .cookie-consent-actions {
+        display: flex;
+        gap: 8px;
+      }
+      .cookie-consent-btn {
+        border: 1px solid transparent;
+        border-radius: 8px;
+        font-size: 13px;
+        font-weight: 600;
+        padding: 8px 12px;
+        cursor: pointer;
+      }
+      .cookie-consent-btn-accept {
+        background: #f59e0b;
+        color: #0f172a;
+      }
+      .cookie-consent-btn-reject {
+        background: transparent;
+        color: #e2e8f0;
+        border-color: rgba(148, 163, 184, 0.4);
+      }
+      @media (min-width: 900px) {
+        .cookie-consent-banner {
+          left: 24px;
+          right: auto;
+          max-width: 540px;
+        }
+      }
     </style>
+    <!-- Google tag (gtag.js) -->
+    <script async src="https://www.googletagmanager.com/gtag/js?id=${GA_MEASUREMENT_ID}"></script>
+    <script>
+      window.dataLayer = window.dataLayer || [];
+      function gtag() { dataLayer.push(arguments); }
+      gtag('js', new Date());
+
+      gtag('consent', 'default', {
+        ad_storage: 'denied',
+        ad_user_data: 'denied',
+        ad_personalization: 'denied',
+        analytics_storage: 'denied',
+        wait_for_update: 500,
+      });
+
+      const consentChoice = localStorage.getItem('dp_cookie_consent');
+      if (consentChoice === 'granted') {
+        gtag('consent', 'update', {
+          ad_storage: 'granted',
+          ad_user_data: 'granted',
+          ad_personalization: 'granted',
+          analytics_storage: 'granted',
+        });
+      }
+
+      gtag('config', '${GA_MEASUREMENT_ID}');
+    </script>
   </head>
   <body>
     <div id="app"></div>
+    <div id="cookie-consent-banner" class="cookie-consent-banner" hidden>
+      <div class="cookie-consent-content">
+        <p class="cookie-consent-text">
+          We use cookies for traffic analytics. Read our
+          <a href="https://dungeonplanner.com/privacy-cookie-policy.html" target="_blank" rel="noreferrer">Privacy &amp; Cookie Policy</a>.
+        </p>
+        <div class="cookie-consent-actions">
+          <button id="cookie-consent-reject" class="cookie-consent-btn cookie-consent-btn-reject" type="button">Reject</button>
+          <button id="cookie-consent-accept" class="cookie-consent-btn cookie-consent-btn-accept" type="button">Accept</button>
+        </div>
+      </div>
+    </div>
     <script>
       window.$docsify = {
         name: 'DungeonPlanner Docs',
@@ -74,6 +169,28 @@ const docsIndexHtml = `<!doctype html>
         subMaxLevel: 2,
         themeColor: '#f59e0b',
       };
+
+      const consentBanner = document.getElementById('cookie-consent-banner');
+      const acceptCookies = document.getElementById('cookie-consent-accept');
+      const rejectCookies = document.getElementById('cookie-consent-reject');
+
+      const applyConsent = (granted) => {
+        localStorage.setItem('dp_cookie_consent', granted ? 'granted' : 'denied');
+        gtag('consent', 'update', {
+          ad_storage: granted ? 'granted' : 'denied',
+          ad_user_data: granted ? 'granted' : 'denied',
+          ad_personalization: granted ? 'granted' : 'denied',
+          analytics_storage: granted ? 'granted' : 'denied',
+        });
+        consentBanner.hidden = true;
+      };
+
+      if (!localStorage.getItem('dp_cookie_consent')) {
+        consentBanner.hidden = false;
+      }
+
+      acceptCookies.addEventListener('click', () => applyConsent(true));
+      rejectCookies.addEventListener('click', () => applyConsent(false));
     </script>
     <script src="https://cdn.jsdelivr.net/npm/docsify@4/lib/docsify.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/docsify@4/lib/plugins/search.min.js"></script>
