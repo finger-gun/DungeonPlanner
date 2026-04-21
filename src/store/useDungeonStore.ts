@@ -202,6 +202,11 @@ export type SceneLighting = {
   intensity: number // multiplier applied to all scene lights, 0–2
 }
 
+export type LightBenchmarkSettings = {
+  enabled: boolean
+  count: 64 | 128 | 256
+}
+
 export type PostProcessingSettings = {
   enabled: boolean
   focusDistance: number // legacy saved manual focus value retained for backward compatibility
@@ -235,6 +240,7 @@ type DungeonState = DungeonSnapshot & {
   selectedRoomId: string | null
   surfaceBrushAssetIds: SurfaceBrushAssetIds
   sceneLighting: SceneLighting
+  lightBenchmark: LightBenchmarkSettings
   postProcessing: PostProcessingSettings
   showGrid: boolean
   showLosDebugMask: boolean
@@ -287,6 +293,8 @@ type DungeonState = DungeonSnapshot & {
   setPaintingStrokeActive: (active: boolean) => void
   setObjectDragActive: (active: boolean) => void
   setSceneLightingIntensity: (intensity: number) => void
+  setLightBenchmarkEnabled: (enabled: boolean) => void
+  setLightBenchmarkCount: (count: 64 | 128 | 256) => void
   setPostProcessing: (settings: Partial<PostProcessingSettings>) => void
   setOutdoorTimeOfDay: (value: number) => void
   setOutdoorTerrainDensity: (value: OutdoorTerrainDensity) => void
@@ -300,6 +308,8 @@ type DungeonState = DungeonSnapshot & {
   setShowLosDebugRays: (show: boolean) => void
   setShowLensFocusDebugPoint: (show: boolean) => void
   setShowProjectionDebugMesh: (show: boolean) => void
+  particleEffectsEnabled: boolean
+  setParticleEffectsEnabled: (enabled: boolean) => void
   setFloorViewMode: (mode: FloorViewMode) => void
   createGeneratedCharacter: (input: CreateGeneratedCharacterInput) => string
   createGeneratedCharacterDraft: () => string
@@ -506,6 +516,52 @@ function cloneSnapshot(snapshot: DungeonSnapshot): DungeonSnapshot {
     rooms: Object.fromEntries(
       Object.entries(snapshot.rooms).map(([id, room]) => [id, { ...room }]),
     ),
+    nextRoomNumber: snapshot.nextRoomNumber,
+  }
+}
+
+function cloneSnapshotForObjectPlacement(snapshot: DungeonSnapshot): DungeonSnapshot {
+  return {
+    // Object placement only replaces placedObjects/occupancy/selection. Sharing the
+    // untouched collections keeps placement cheap while undo/redo still deep-clone
+    // the restored snapshot through cloneSnapshot().
+    paintedCells: snapshot.paintedCells,
+    blockedCells: snapshot.blockedCells,
+    outdoorTerrainHeights: snapshot.outdoorTerrainHeights,
+    outdoorGroundTextureCells: snapshot.outdoorGroundTextureCells,
+    exploredCells: snapshot.exploredCells,
+    floorTileAssetIds: snapshot.floorTileAssetIds,
+    wallSurfaceAssetIds: snapshot.wallSurfaceAssetIds,
+    placedObjects: Object.fromEntries(
+      Object.entries(snapshot.placedObjects).map(([id, object]) => [
+        id,
+        {
+          ...object,
+          position: [...object.position] as DungeonObjectRecord['position'],
+          rotation: [...object.rotation] as DungeonObjectRecord['rotation'],
+          localPosition: object.localPosition
+            ? [...object.localPosition] as DungeonObjectRecord['localPosition']
+            : object.localPosition ?? null,
+          localRotation: object.localRotation
+            ? [...object.localRotation] as DungeonObjectRecord['localRotation']
+            : object.localRotation ?? null,
+          parentObjectId: object.parentObjectId ?? null,
+          supportCellKey: object.supportCellKey ?? getCellKey(object.cell),
+          cell: [...object.cell] as GridCell,
+          props: { ...object.props },
+        },
+      ]),
+    ),
+    wallOpenings: snapshot.wallOpenings,
+    innerWalls: snapshot.innerWalls,
+    occupancy: { ...snapshot.occupancy },
+    tool: snapshot.tool,
+    selectedAssetIds: { ...snapshot.selectedAssetIds },
+    selection: snapshot.selection,
+    layers: snapshot.layers,
+    layerOrder: [...snapshot.layerOrder],
+    activeLayerId: snapshot.activeLayerId,
+    rooms: snapshot.rooms,
     nextRoomNumber: snapshot.nextRoomNumber,
   }
 }
@@ -1236,12 +1292,14 @@ export const useDungeonStore = create<DungeonState>()(
     wall: getDefaultAssetIdByCategory('wall'),
   },
   sceneLighting: { intensity: 1 },
+  lightBenchmark: { enabled: false, count: 128 },
   postProcessing: { ...DEFAULT_POST_PROCESSING_SETTINGS },
   showGrid: true,
   showLosDebugMask: false,
   showLosDebugRays: false,
   showLensFocusDebugPoint: false,
   showProjectionDebugMesh: false,
+  particleEffectsEnabled: true,
   floorViewMode: 'active' as FloorViewMode,
   generatedCharacters: {},
   characterSheet: {
@@ -1275,7 +1333,7 @@ export const useDungeonStore = create<DungeonState>()(
       return 0
     }
 
-    const previousSnapshot = cloneSnapshot(state)
+    const previousSnapshot = cloneSnapshotForObjectPlacement(state)
 
     set((current) => {
       // Auto-create a room for the new cells
@@ -1614,7 +1672,7 @@ export const useDungeonStore = create<DungeonState>()(
     }
 
     const nextId = createObjectId()
-    const previousSnapshot = cloneSnapshot(state)
+    const previousSnapshot = cloneSnapshotForObjectPlacement(state)
     const groundedOutdoorObject =
       state.mapMode === 'outdoor' &&
       !input.parentObjectId &&
@@ -1714,7 +1772,7 @@ export const useDungeonStore = create<DungeonState>()(
       return true
     }
 
-    const previousSnapshot = cloneSnapshot(state)
+    const previousSnapshot = cloneSnapshotForObjectPlacement(state)
 
     set((current) => {
       const currentObject = current.placedObjects[id]
@@ -1765,7 +1823,7 @@ export const useDungeonStore = create<DungeonState>()(
       return true
     }
 
-    const previousSnapshot = cloneSnapshot(state)
+    const previousSnapshot = cloneSnapshotForObjectPlacement(state)
 
     set((current) => {
       const currentObject = current.placedObjects[id]
@@ -1835,7 +1893,7 @@ export const useDungeonStore = create<DungeonState>()(
       return
     }
 
-    const previousSnapshot = cloneSnapshot(state)
+    const previousSnapshot = cloneSnapshotForObjectPlacement(state)
 
     set((current) => {
       const placedObjects = { ...current.placedObjects }
@@ -1895,7 +1953,7 @@ export const useDungeonStore = create<DungeonState>()(
         connector === 'WALL' || connector === 'WALLFLOOR'
           ? Math.PI
           : Math.PI / 2
-      const previousSnapshot = cloneSnapshot(state)
+      const previousSnapshot = cloneSnapshotForObjectPlacement(state)
 
       set((current) => {
         const currentSelection = current.placedObjects[selection]
@@ -2276,6 +2334,18 @@ export const useDungeonStore = create<DungeonState>()(
   setSceneLightingIntensity: (intensity) => {
     set((state) => ({ ...state, sceneLighting: { ...state.sceneLighting, intensity } }))
   },
+  setLightBenchmarkEnabled: (enabled) => {
+    set((state) => ({
+      ...state,
+      lightBenchmark: { ...state.lightBenchmark, enabled },
+    }))
+  },
+  setLightBenchmarkCount: (count) => {
+    set((state) => ({
+      ...state,
+      lightBenchmark: { ...state.lightBenchmark, count },
+    }))
+  },
   setPostProcessing: (settings) => {
     set((state) => ({
       ...state,
@@ -2365,6 +2435,9 @@ export const useDungeonStore = create<DungeonState>()(
   },
   setShowProjectionDebugMesh: (show) => {
     set((state) => ({ ...state, showProjectionDebugMesh: show }))
+  },
+  setParticleEffectsEnabled: (enabled) => {
+    set((state) => ({ ...state, particleEffectsEnabled: enabled }))
   },
   setFloorViewMode: (mode) => {
     set((state) => (state.floorViewMode === mode ? state : { ...state, floorViewMode: mode }))
@@ -2543,6 +2616,7 @@ export const useDungeonStore = create<DungeonState>()(
           floor: getDefaultAssetIdByCategory('floor'),
           wall: getDefaultAssetIdByCategory('wall'),
         },
+        lightBenchmark: { enabled: false, count: 128 },
         floorViewMode: 'active',
         tool: 'move',
         characterSheet: { open: false, assetId: null },
@@ -2571,10 +2645,10 @@ export const useDungeonStore = create<DungeonState>()(
          outdoorTerrainSculptStep: DEFAULT_OUTDOOR_TERRAIN_SCULPT_STEP,
          outdoorTerrainSculptRadius: DEFAULT_OUTDOOR_TERRAIN_SCULPT_RADIUS,
          outdoorGroundTextureBrush: 'short-grass',
-        // UI / tool state
-        isPaintingStrokeActive: false,
-        isObjectDragActive: false,
-        selectedRoomId: null,
+         // UI / tool state
+         isPaintingStrokeActive: false,
+         isObjectDragActive: false,
+         selectedRoomId: null,
         roomEditMode: 'rooms',
         surfaceBrushAssetIds: {
           floor: getDefaultAssetIdByCategory('floor'),
@@ -2582,6 +2656,7 @@ export const useDungeonStore = create<DungeonState>()(
         },
         cameraMode: 'orbit',
         tool: mode === 'outdoor' ? 'room' : fresh.tool,
+        lightBenchmark: { enabled: false, count: 128 },
       floorViewMode: 'active',
       characterSheet: { open: false, assetId: null },
       assetBrowser: createDefaultAssetBrowserState(),

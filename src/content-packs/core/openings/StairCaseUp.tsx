@@ -4,13 +4,14 @@ import { useGLTF } from '@react-three/drei'
 import propsStairCaseUpAssetUrl from '../../../assets/models/core/staircase.glb'
 import propsStairCaseUpThumbnailUrl from '../../../assets/models/core/staircase.png'
 import type { ContentPackAsset, ContentPackComponentProps } from '../../types'
+import { cloneSceneWithNodeMaterials } from '../../../rendering/nodeMaterialUtils'
 
 // Adjust this to compensate for the authored pivot of the prop.
 const PROP_PIVOT_OFFSET = [-1, 0, -1] as const
 
 export function PropsStairCaseUp(props: ContentPackComponentProps) {
   const gltf = useGLTF(propsStairCaseUpAssetUrl)
-  const scene = useMemo(() => gltf.scene.clone(), [gltf.scene])
+  const scene = useMemo(() => cloneSceneWithNodeMaterials(gltf.scene), [gltf.scene])
 
   return (
     <group position={PROP_PIVOT_OFFSET}>

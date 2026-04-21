@@ -1,7 +1,6 @@
 import { Canvas, useFrame, useThree, type ThreeEvent } from '@react-three/fiber'
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import * as THREE from 'three'
-import { WebGPURenderer } from 'three/webgpu'
 import { FpsMeterNode } from './FpsCounter'
 import { Grid } from './Grid'
 import { Controls } from './Controls'
@@ -11,8 +10,13 @@ import { DungeonObject } from './DungeonObject'
 import { PlayerSelectionRing } from './DungeonObject'
 import { DungeonRoom } from './DungeonRoom'
 import { WebGPUPostProcessing } from './WebGPUPostProcessing'
-import { FireEffectPreloader } from './effects/ObjectEffect'
-import { DEFAULT_POOLED_PROP_LIGHTS, PropLightPool } from './propLightPool'
+import { FireParticleSystem } from './effects/fireParticleSystem'
+import {
+  distributeForwardPlusLightBudget,
+  getDesiredPropLightPoolSize,
+  precomputeLightSources,
+  PropLightPool,
+} from './propLightPool'
 import { useDungeonStore, type DungeonObjectRecord } from '../../store/useDungeonStore'
 import { usePlayVisibility } from './playVisibility'
 import { ContentPackInstance } from './ContentPackInstance'
@@ -26,6 +30,9 @@ import type { DungeonRoomData } from './DungeonRoom'
 import { isDownStairAssetId } from '../../store/stairAssets'
 import { OutdoorGround } from './OutdoorGround'
 import { getEnvironmentLightingState } from './environmentLighting'
+import { createWebGpuRenderer } from '../../rendering/createWebGpuRenderer'
+import { MAX_FORWARD_PLUS_POINT_LIGHTS } from '../../rendering/forwardPlusConfig'
+import { createSyntheticLightBenchmarkObjects } from './lightBenchmark'
 
 const SCENE_OVERVIEW_FLOOR_HEIGHT_UNIT = 3
 const PLAYER_ANIMATION_MS = {
@@ -39,63 +46,6 @@ const ALWAYS_VISIBLE: ReturnType<typeof usePlayVisibility> = {
   getObjectVisibility: () => 'visible',
   getWallVisibility: () => 'visible',
   mask: null,
-}
-
-async function createPreferredRenderer(props: THREE.WebGLRendererParameters) {
-  const powerPreference =
-    props.powerPreference === 'high-performance' ? 'high-performance' : 'low-power'
-
-  const canvas = props.canvas as HTMLCanvasElement | undefined
-
-  // Query the WebGPU adapter for its actual texture-binding limit before
-  // creating the renderer. The WebGPU default (16) is too low for scenes with
-  // many shadow-casting point lights + PBR textures. Modern GPUs support 96+.
-  const requiredLimits: Record<string, number> = {}
-  try {
-    const adapter = await navigator.gpu?.requestAdapter({ powerPreference })
-    if (adapter) {
-      const max = adapter.limits.maxSampledTexturesPerShaderStage
-      // Request the full adapter maximum so shadow maps don't consume all slots
-      requiredLimits.maxSampledTexturesPerShaderStage = max
-    }
-  } catch {
-    // Non-WebGPU environment — limit is irrelevant for the WebGL fallback
-  }
-
-  try {
-    const renderer = new WebGPURenderer({
-      canvas,
-      antialias: true,
-      alpha: true,
-      powerPreference,
-      requiredLimits,
-    } as ConstructorParameters<typeof WebGPURenderer>[0])
-
-    await renderer.init()
-    renderer.shadowMap.enabled = true
-    renderer.shadowMap.type = THREE.PCFSoftShadowMap
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
-    renderer.setSize(window.innerWidth, window.innerHeight, false)
-    return renderer
-  } catch {
-    // WebGPU not available — fall back to the WebGL backend of WebGPURenderer
-    // so that TSL NodeMaterials are still fully supported.
-    console.warn('WebGPU unavailable, falling back to WebGL with node-material support.')
-    const renderer = new WebGPURenderer({
-      canvas,
-      antialias: true,
-      alpha: true,
-      powerPreference,
-      forceWebGL: true,
-    } as ConstructorParameters<typeof WebGPURenderer>[0])
-
-    await renderer.init()
-    renderer.shadowMap.enabled = true
-    renderer.shadowMap.type = THREE.PCFSoftShadowMap
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
-    renderer.setSize(window.innerWidth, window.innerHeight, false)
-    return renderer
-  }
 }
 
 export function Scene() {
@@ -128,7 +78,7 @@ export function Scene() {
       shadows
       dpr={[1, 2]}
       camera={{ position: [9, 11, 9], fov: 42, near: 0.1, far: 140 }}
-      gl={createPreferredRenderer}
+      gl={createWebGpuRenderer}
       frameloop="demand"
     >
       <Suspense fallback={null}>
@@ -213,7 +163,6 @@ function GlobalContent() {
       />
 
       {effectiveFloorViewMode === 'active' && <Grid playMode={tool === 'play'} />}
-      <FireEffectPreloader />
       <pointLight
         position={[0, -1000, 0]}
         intensity={0.0001}
@@ -235,6 +184,7 @@ type FloorRenderEntry = {
   level: number
   data: DungeonRoomData
   objects: DungeonObjectRecord[]
+  lightSourceCount: number
   topLevelObjects: DungeonObjectRecord[]
   childrenByParent: Record<string, DungeonObjectRecord[]>
 }
@@ -308,6 +258,7 @@ function SceneOverviewContent() {
             globalWallAssetId,
           },
           objects: visibleObjects,
+          lightSourceCount: precomputeLightSources(visibleObjects).length,
           topLevelObjects: getTopLevelObjects(visibleObjects),
           childrenByParent: buildObjectChildrenIndex(visibleObjects),
         }]
@@ -333,6 +284,7 @@ function SceneOverviewContent() {
              globalWallAssetId: snapshot.selectedAssetIds.wall,
         },
         objects: visibleObjects,
+        lightSourceCount: precomputeLightSources(visibleObjects).length,
         topLevelObjects: getTopLevelObjects(visibleObjects),
         childrenByParent: buildObjectChildrenIndex(visibleObjects),
       }]
@@ -352,14 +304,27 @@ function SceneOverviewContent() {
     innerWalls,
     wallSurfaceAssetIds,
   ])
+  const floorLightBudgets = useMemo(
+    () => distributeForwardPlusLightBudget(
+      floorEntries.map((entry) => getDesiredPropLightPoolSize(entry.lightSourceCount)),
+      MAX_FORWARD_PLUS_POINT_LIGHTS,
+    ),
+    [floorEntries],
+  )
 
   return (
     <>
       {postProcessingEnabled && <WebGPUPostProcessing />}
-      {floorEntries.map((entry) => (
+      {floorEntries.map((entry, index) => (
         <group key={entry.id} position={[0, entry.level * SCENE_OVERVIEW_FLOOR_HEIGHT_UNIT, 0]}>
           <DungeonRoom data={entry.data} visibility={ALWAYS_VISIBLE} enableBuildAnimation={false} />
-          <PropLightPool objects={entry.objects} visibility={ALWAYS_VISIBLE} />
+          {floorLightBudgets[index] > 0 && (
+            <PropLightPool
+              objects={entry.objects}
+              visibility={ALWAYS_VISIBLE}
+              maxLights={floorLightBudgets[index]}
+            />
+          )}
           {entry.topLevelObjects
             .filter((object) => !isDownStairAssetId(object.assetId))
             .map((object) => (
@@ -393,6 +358,7 @@ function FloorContent({ startY = 0 }: { startY?: number }) {
   const selectObject = useDungeonStore((state) => state.selectObject)
   const setObjectDragActive = useDungeonStore((state) => state.setObjectDragActive)
   const postProcessingEnabled = useDungeonStore((state) => state.postProcessing.enabled)
+  const lightBenchmark = useDungeonStore((state) => state.lightBenchmark)
   const visibility = usePlayVisibility()
   const [releaseAnimationIds, setReleaseAnimationIds] = useState<Record<string, true>>({})
 
@@ -400,8 +366,23 @@ function FloorContent({ startY = 0 }: { startY?: number }) {
     () => Object.values(placedObjects).filter((obj) => layers[obj.layerId]?.visible !== false),
     [placedObjects, layers],
   )
+  const objectLightCount = useMemo(() => precomputeLightSources(objects).length, [objects])
   const topLevelObjects = useMemo(() => getTopLevelObjects(objects), [objects])
   const childrenByParent = useMemo(() => buildObjectChildrenIndex(objects), [objects])
+  const syntheticBenchmarkObjects = useMemo(
+    () => lightBenchmark.enabled ? createSyntheticLightBenchmarkObjects(lightBenchmark.count) : [],
+    [lightBenchmark.count, lightBenchmark.enabled],
+  )
+  const [propLightBudget, syntheticLightBudget] = useMemo(
+    () => distributeForwardPlusLightBudget(
+      [
+        getDesiredPropLightPoolSize(objectLightCount),
+        syntheticBenchmarkObjects.length,
+      ],
+      MAX_FORWARD_PLUS_POINT_LIGHTS,
+    ),
+    [objectLightCount, syntheticBenchmarkObjects.length],
+  )
   const lineOfSightActive = visibility.active && visibility.mask !== null
   const showPostProcessing = postProcessingEnabled || showLensFocusDebugPoint || lineOfSightActive
   // lineOfSightActive is intentionally excluded from this key: the pipeline
@@ -597,7 +578,16 @@ function FloorContent({ startY = 0 }: { startY?: number }) {
       )}
       <DungeonRoom visibility={visibility} />
       <RoomResizeOverlay />
-      <PropLightPool objects={objects} visibility={visibility} maxLights={DEFAULT_POOLED_PROP_LIGHTS} />
+      {propLightBudget > 0 && (
+        <PropLightPool objects={objects} visibility={visibility} maxLights={propLightBudget} />
+      )}
+      {syntheticLightBudget > 0 && (
+        <PropLightPool
+          objects={syntheticBenchmarkObjects}
+          visibility={ALWAYS_VISIBLE}
+          maxLights={syntheticLightBudget}
+        />
+      )}
       {visibility.active && visibility.mask && (
         <>
           <PlayVisibilityMask mask={visibility.mask} mode="occlusion" />
@@ -628,6 +618,7 @@ function FloorContent({ startY = 0 }: { startY?: number }) {
           <PlayerSelectionRing assetId={dragState.assetId} color={dragState.valid ? '#d4a72c' : '#ef4444'} />
         </group>
       )}
+      <FireParticleSystem objects={objects} visibility={visibility} />
     </group>
   )
 }

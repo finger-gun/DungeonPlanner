@@ -6,6 +6,7 @@ import {
   requireKayKitModelAssetUrl,
   resolveKayKitAssetUrl,
 } from './createKayKitAsset'
+import { cloneSceneWithNodeMaterials } from '../../../rendering/nodeMaterialUtils'
 
 type KayKitWallAssetDefinition = {
   id: string
@@ -37,7 +38,7 @@ export function createKayKitWallAsset(definition: KayKitWallAssetDefinition): Co
     const kind = objectProps?.kind === 'corner' ? 'corner' : 'wall'
     const modelUrl = kind === 'corner' ? cornerAssetUrl : assetUrl
     const gltf = useGLTF(modelUrl)
-    const scene = useMemo(() => gltf.scene.clone(), [gltf.scene])
+    const scene = useMemo(() => cloneSceneWithNodeMaterials(gltf.scene), [gltf.scene])
     const transform = kind === 'corner'
       ? { position: [0, 0, 0] as const, rotation: WALL_CORNER_ROTATION, scale: WALL_CORNER_SCALE }
       : WALL_DEFAULT_TRANSFORM

@@ -4,6 +4,10 @@ import type { DungeonObjectRecord } from '../../store/useDungeonStore'
 import type { PropLight } from '../../content-packs/types'
 import {
   buildPropLightPoolAssignments,
+  buildVisiblePropLightAssignments,
+  distributeForwardPlusLightBudget,
+  getDesiredPropLightPoolSize,
+  getPropLightRenderCapacity,
   getPropLightWorldPosition,
   precomputeLightSources,
   type PropLightSource,
@@ -114,6 +118,40 @@ describe('propLightPool', () => {
     ]
     expect(precomputeLightSources(objects)).toHaveLength(0)
   })
+
+  it('does not allocate pooled lights when there are no light sources', () => {
+    expect(getDesiredPropLightPoolSize(0)).toBe(0)
+  })
+
+  it('grows render capacity in stable 32-light chunks', () => {
+    expect(getPropLightRenderCapacity(0)).toBe(0)
+    expect(getPropLightRenderCapacity(1)).toBe(32)
+    expect(getPropLightRenderCapacity(32)).toBe(32)
+    expect(getPropLightRenderCapacity(33)).toBe(64)
+  })
+
+  it('distributes the renderer light budget across multiple light groups', () => {
+    expect(distributeForwardPlusLightBudget([40, 128], 256)).toEqual([40, 128])
+    expect(distributeForwardPlusLightBudget([200, 128], 256)).toEqual([200, 56])
+    expect(distributeForwardPlusLightBudget([128, 128, 128], 256)).toEqual([128, 128, 0])
+  })
+
+  it('builds a stable visible light list without camera input', () => {
+    const assignments = buildVisiblePropLightAssignments({
+      lightSources: [
+        createLightSource('dim', [12, 0, 0], { ...CANDLE_LIGHT, intensity: 0.5 }),
+        createLightSource('bright', [1, 0, 0], { ...CANDLE_LIGHT, intensity: 2 }),
+        createLightSource('hidden', [4, 0, 0]),
+      ],
+      visibility: {
+        getObjectVisibility: (object) => object.id === 'hidden' ? 'hidden' : 'visible',
+      },
+      useLineOfSightPostMask: false,
+      maxLights: 2,
+    })
+
+    expect(assignments.map((assignment) => assignment.key)).toEqual(['bright', 'dim'])
+  })
 })
 
 function createObject(
@@ -134,11 +172,15 @@ function createObject(
   }
 }
 
-function createLightSource(id: string, position: [number, number, number]): PropLightSource {
+function createLightSource(
+  id: string,
+  position: [number, number, number],
+  light: PropLight = CANDLE_LIGHT,
+): PropLightSource {
   return {
     key: id,
     object: createObject(id, position, null),
-    light: CANDLE_LIGHT,
+    light,
   }
 }
 

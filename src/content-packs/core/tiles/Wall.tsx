@@ -8,6 +8,7 @@ import wall003AssetUrl from '../../../assets/models/core/wall_003.glb'
 import wall004AssetUrl from '../../../assets/models/core/wall_004.glb'
 import wall005AssetUrl from '../../../assets/models/core/wall_005.glb'
 import type { ContentPackAsset, ContentPackComponentProps } from '../../types'
+import { cloneSceneWithNodeMaterials } from '../../../rendering/nodeMaterialUtils'
 
 // Adjust this to compensate for the authored pivot of the wall set.
 const WALL_PIVOT_OFFSET = [0, 0, 0] as const
@@ -28,7 +29,7 @@ export function Wall({
   const assetUrl =
     WALL_VARIANT_URLS[getVariantIndex(variantKey, WALL_VARIANT_URLS.length)]
   const gltf = useGLTF(assetUrl)
-  const scene = useMemo(() => gltf.scene.clone(), [gltf.scene])
+  const scene = useMemo(() => cloneSceneWithNodeMaterials(gltf.scene), [gltf.scene])
 
   return (
     <group position={WALL_PIVOT_OFFSET}>

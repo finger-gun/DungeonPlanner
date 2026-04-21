@@ -4,13 +4,14 @@ import { useGLTF } from '@react-three/drei'
 import propsPillarWallAssetUrl from '../../../assets/models/core/pillar.glb'
 import propsPillarWallThumbnailUrl from '../../../assets/models/core/pillar.png'
 import type { ContentPackAsset, ContentPackComponentProps } from '../../types'
+import { cloneSceneWithNodeMaterials } from '../../../rendering/nodeMaterialUtils'
 
 // Adjust this to compensate for the authored pivot of the prop.
 const PROP_PIVOT_OFFSET = [0, 0, 0] as const
 
 export function PropsPillarWall(props: ContentPackComponentProps) {
   const gltf = useGLTF(propsPillarWallAssetUrl)
-  const scene = useMemo(() => gltf.scene.clone(), [gltf.scene])
+  const scene = useMemo(() => cloneSceneWithNodeMaterials(gltf.scene), [gltf.scene])
 
   return (
     <group position={PROP_PIVOT_OFFSET}>

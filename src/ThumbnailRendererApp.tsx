@@ -4,6 +4,11 @@ import { OrthographicCamera, useGLTF } from '@react-three/drei'
 import * as THREE from 'three'
 import { SkeletonUtils } from 'three-stdlib'
 import { getThumbnailLayout } from './thumbnail/thumbnailLayout'
+import { upgradeStandardMaterialsToNodeMaterials } from './rendering/nodeMaterialUtils'
+import { RendererErrorBoundary } from './components/RendererErrorBoundary'
+import { WebGpuRequiredNotice } from './components/WebGpuRequiredNotice'
+import { getWebGpuSupportMessage, isWebGpuSupported } from './rendering/webgpuSupport'
+import { createWebGpuRenderer } from './rendering/createWebGpuRenderer'
 
 function getRenderableBounds(root: THREE.Object3D) {
   root.updateWorldMatrix(true, true)
@@ -51,7 +56,7 @@ function ThumbnailModel({
   assetUrl: string
 }) {
   const gltf = useGLTF(assetUrl)
-  const scene = useMemo(() => SkeletonUtils.clone(gltf.scene), [gltf.scene])
+  const scene = useMemo(() => upgradeStandardMaterialsToNodeMaterials(SkeletonUtils.clone(gltf.scene)), [gltf.scene])
   const groupRef = useRef<THREE.Group>(null)
   const { camera, invalidate, size } = useThree()
 
@@ -104,13 +109,13 @@ function ThumbnailViewport({ assetUrl }: { assetUrl: string }) {
   return (
     <Canvas
       data-testid="thumbnail-canvas"
-      gl={{ alpha: true, antialias: true, preserveDrawingBuffer: true }}
+      gl={createWebGpuRenderer}
       dpr={1}
-      >
-        <OrthographicCamera
-          makeDefault
-          position={[3, 2, 3]}
-          left={-1}
+    >
+      <OrthographicCamera
+        makeDefault
+        position={[3, 2, 3]}
+        left={-1}
         right={1}
         top={1}
         bottom={-1}
@@ -129,6 +134,7 @@ function ThumbnailViewport({ assetUrl }: { assetUrl: string }) {
 export default function ThumbnailRendererApp() {
   const params = new URLSearchParams(window.location.search)
   const assetUrl = params.get('asset')
+  const webGpuSupported = isWebGpuSupported()
 
   useEffect(() => {
     window.__THUMBNAIL_READY__ = false
@@ -141,9 +147,17 @@ export default function ThumbnailRendererApp() {
 
   return (
     <div className="flex h-screen w-screen items-center justify-center bg-transparent">
-      <div className="h-[320px] w-[320px]">
-        <ThumbnailViewport assetUrl={assetUrl} />
-      </div>
+      {webGpuSupported ? (
+        <div className="h-[320px] w-[320px]">
+          <RendererErrorBoundary title="Thumbnail renderer unavailable">
+            <ThumbnailViewport assetUrl={assetUrl} />
+          </RendererErrorBoundary>
+        </div>
+      ) : (
+        <div className="relative h-[320px] w-[320px] overflow-hidden rounded-3xl border border-stone-800 bg-stone-950">
+          <WebGpuRequiredNotice message={getWebGpuSupportMessage()} />
+        </div>
+      )}
     </div>
   )
 }

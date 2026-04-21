@@ -663,6 +663,132 @@ describe('useDungeonStore history', () => {
     expect(useDungeonStore.getState().tool).toBe('prop')
   })
 
+  it('keeps placement undo history correct across later paint edits', () => {
+    const state = useDungeonStore.getState()
+
+    state.paintCells([[0, 0]])
+
+    const placedId = state.placeObject({
+      type: 'prop',
+      assetId: 'core.props_wall_torch',
+      position: [1, 0.45, 1],
+      rotation: [0, 0, 0],
+      props: {},
+      cell: [0, 0],
+      cellKey: '0:0',
+    })
+
+    state.paintCells([[1, 0]])
+
+    expect(placedId).toBeTruthy()
+    expect(useDungeonStore.getState().placedObjects[placedId!]).toBeDefined()
+    expect(useDungeonStore.getState().paintedCells['1:0']).toBeDefined()
+
+    state.undo()
+    expect(useDungeonStore.getState().placedObjects[placedId!]).toBeDefined()
+    expect(useDungeonStore.getState().paintedCells['1:0']).toBeUndefined()
+    expect(useDungeonStore.getState().paintedCells['0:0']).toBeDefined()
+
+    state.undo()
+    expect(useDungeonStore.getState().placedObjects[placedId!]).toBeUndefined()
+    expect(useDungeonStore.getState().paintedCells['0:0']).toBeDefined()
+  })
+
+  it('undo/redo removeObject is correct after a later paint edit', () => {
+    const state = useDungeonStore.getState()
+    state.paintCells([[0, 0]])
+    const placedId = state.placeObject({
+      type: 'prop',
+      assetId: 'core.props_wall_torch',
+      position: [1, 0, 1],
+      rotation: [0, 0, 0],
+      props: {},
+      cell: [0, 0],
+      cellKey: '0:0',
+    })
+    expect(placedId).toBeTruthy()
+
+    state.removeObject(placedId!)
+    state.paintCells([[1, 0]])
+
+    expect(useDungeonStore.getState().placedObjects[placedId!]).toBeUndefined()
+    expect(useDungeonStore.getState().paintedCells['1:0']).toBeDefined()
+
+    // undo paint
+    state.undo()
+    expect(useDungeonStore.getState().paintedCells['1:0']).toBeUndefined()
+    expect(useDungeonStore.getState().placedObjects[placedId!]).toBeUndefined()
+    expect(useDungeonStore.getState().paintedCells['0:0']).toBeDefined()
+
+    // undo removeObject — object should be restored; painted cells unchanged
+    state.undo()
+    expect(useDungeonStore.getState().placedObjects[placedId!]).toBeDefined()
+    expect(useDungeonStore.getState().paintedCells['0:0']).toBeDefined()
+  })
+
+  it('undo/redo setObjectProps is correct after a later paint edit', () => {
+    const state = useDungeonStore.getState()
+    state.paintCells([[0, 0]])
+    const placedId = state.placeObject({
+      type: 'prop',
+      assetId: 'core.props_wall_torch',
+      position: [1, 0, 1],
+      rotation: [0, 0, 0],
+      props: { lit: true },
+      cell: [0, 0],
+      cellKey: '0:0',
+    })
+    expect(placedId).toBeTruthy()
+
+    state.setObjectProps(placedId!, { lit: false })
+    state.paintCells([[2, 0]])
+
+    expect(useDungeonStore.getState().placedObjects[placedId!]?.props.lit).toBe(false)
+
+    // undo paint
+    state.undo()
+    expect(useDungeonStore.getState().paintedCells['2:0']).toBeUndefined()
+
+    // undo setObjectProps — prop should revert to lit: true; painted cells (0:0) unaffected
+    state.undo()
+    expect(useDungeonStore.getState().placedObjects[placedId!]?.props.lit).toBe(true)
+    expect(useDungeonStore.getState().paintedCells['0:0']).toBeDefined()
+  })
+
+  it('undo/redo moveObject is correct after a later paint edit', () => {
+    const state = useDungeonStore.getState()
+    state.paintCells([[0, 0], [1, 0]])
+    const placedId = state.placeObject({
+      type: 'prop',
+      assetId: 'core.props_wall_torch',
+      position: [0.5, 0, 0.5],
+      rotation: [0, 0, 0],
+      props: {},
+      cell: [0, 0],
+      cellKey: '0:0:floor',
+    })
+    expect(placedId).toBeTruthy()
+
+    state.moveObject(placedId!, {
+      position: [1.5, 0, 0.5],
+      cell: [1, 0],
+      cellKey: '1:0:floor',
+    })
+    state.paintCells([[2, 0]])
+
+    expect(useDungeonStore.getState().placedObjects[placedId!]?.cell).toEqual([1, 0])
+
+    // undo paint
+    state.undo()
+    expect(useDungeonStore.getState().paintedCells['2:0']).toBeUndefined()
+
+    // undo moveObject — object should be at original cell; original painted cells intact
+    state.undo()
+    expect(useDungeonStore.getState().placedObjects[placedId!]?.cell).toEqual([0, 0])
+    expect(useDungeonStore.getState().paintedCells['0:0']).toBeDefined()
+    expect(useDungeonStore.getState().paintedCells['1:0']).toBeDefined()
+  })
+
   it('toggles the projection debug mesh visibility flag', () => {
     expect(useDungeonStore.getState().showProjectionDebugMesh).toBe(false)
 

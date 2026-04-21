@@ -10,6 +10,7 @@ import type {
   PropLight,
 } from '../../types'
 import { DUNGEON_BASE_SCALE } from './dungeonConstants'
+import { cloneSceneWithNodeMaterials } from '../../../rendering/nodeMaterialUtils'
 
 const MODEL_URLS = import.meta.glob('../../../assets/models/dungeon/*.glb', {
   eager: true,
@@ -125,7 +126,7 @@ function createStaticModelComponent(assetUrl: string, transform?: DungeonTransfo
 
   function DungeonModel(props: ContentPackComponentProps) {
     const gltf = useGLTF(assetUrl)
-    const scene = useMemo(() => gltf.scene.clone(), [gltf.scene])
+    const scene = useMemo(() => cloneSceneWithNodeMaterials(gltf.scene), [gltf.scene])
 
     return (
       <group {...props}>

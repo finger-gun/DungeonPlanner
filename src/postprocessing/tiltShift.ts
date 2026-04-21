@@ -1,12 +1,11 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import {
-  Fn,
   mix,
   screenUV,
   step,
   uniform,
 } from 'three/tsl'
-import { dof } from 'three/addons/tsl/display/DepthOfFieldNode.js'
+import { dof } from './DepthOfFieldNode'
 
 type TSLNode = ReturnType<typeof uniform>
 export { depthFocusRangeFromFocalLength } from './tiltShiftMath'
@@ -34,9 +33,15 @@ export function tiltShift(
 ): any {
   const currentDistance = sceneViewZ.negate()
   const signedDistanceFromFocus = currentDistance.sub(opts.focusDistance as any)
-  const nearMask = step(signedDistanceFromFocus, 0)
-  const farMask = step(0, signedDistanceFromFocus)
-
+  const sharp = sceneColor.sample(screenUV as any)
+  const nearMask = step(
+    signedDistanceFromFocus,
+    0,
+  )
+  const farMask = step(
+    0,
+    signedDistanceFromFocus,
+  )
   const nearField = dof(
     sceneColor,
     sceneViewZ,
@@ -52,9 +57,5 @@ export function tiltShift(
     opts.blurRadius as any,
   ) as any
 
-  return Fn(() => {
-    const sharp = sceneColor.sample(screenUV as any)
-    const withFar = mix(sharp as any, farField as any, farMask)
-    return mix(withFar as any, nearField as any, nearMask)
-  })()
+  return mix(mix(sharp as any, farField as any, farMask), nearField as any, nearMask)
 }

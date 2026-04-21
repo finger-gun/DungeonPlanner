@@ -7,6 +7,7 @@ import {
   FLOOR_VARIANT_URLS,
   getFloorVariantAssetUrl,
 } from './floorVariants'
+import { cloneSceneWithNodeMaterials } from '../../../rendering/nodeMaterialUtils'
 
 export function Floor({
   variantKey,
@@ -14,7 +15,7 @@ export function Floor({
 }: ContentPackComponentProps) {
   const assetUrl = getFloorVariantAssetUrl(variantKey)
   const gltf = useGLTF(assetUrl)
-  const scene = useMemo(() => gltf.scene.clone(), [gltf.scene])
+  const scene = useMemo(() => cloneSceneWithNodeMaterials(gltf.scene), [gltf.scene])
 
   return (
     <group position={FLOOR_PIVOT_OFFSET}>

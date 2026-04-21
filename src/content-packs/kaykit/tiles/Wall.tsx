@@ -3,6 +3,7 @@ import { useMemo } from 'react'
 import { useGLTF } from '@react-three/drei'
 import type { ContentPackAsset, ContentPackComponentProps } from '../../types'
 import { KAYKIT_BASE_SCALE, resolveKayKitAssetUrl } from '../shared/createKayKitAsset'
+import { cloneSceneWithNodeMaterials } from '../../../rendering/nodeMaterialUtils'
 
 const wallAssetUrl = resolveKayKitAssetUrl('wall', 'glb')
 const wallCornerSmallAssetUrl = resolveKayKitAssetUrl('wall_corner_small', 'glb')
@@ -24,7 +25,7 @@ export function KayKitWall({ objectProps, ...props }: ContentPackComponentProps)
   const kind = objectProps?.kind === 'corner' ? 'corner' : 'wall'
   const assetUrl = kind === 'corner' ? wallCornerSmallAssetUrl : wallAssetUrl
   const gltf = useGLTF(assetUrl)
-  const scene = useMemo(() => gltf.scene.clone(), [gltf.scene])
+  const scene = useMemo(() => cloneSceneWithNodeMaterials(gltf.scene), [gltf.scene])
   const transform = kind === 'corner'
     ? { position: [0, 0, 0] as const, rotation: WALL_CORNER_ROTATION, scale: WALL_CORNER_SCALE }
     : WALL_DEFAULT_TRANSFORM

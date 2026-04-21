@@ -26,9 +26,9 @@ export function PostProcessingPanel() {
         </button>
       </div>
 
-      <div className={`flex flex-col gap-3 transition-opacity ${pp.enabled ? 'opacity-100' : 'opacity-40 pointer-events-none'}`}>
-        <div className="rounded-2xl border border-stone-800 bg-stone-950/60 px-4 py-4">
-          <p className="text-xs uppercase tracking-[0.22em] text-stone-400">Autofocus</p>
+        <div className={`flex flex-col gap-3 transition-opacity ${pp.enabled ? 'opacity-100' : 'opacity-40 pointer-events-none'}`}>
+          <div className="rounded-2xl border border-stone-800 bg-stone-950/60 px-4 py-4">
+            <p className="text-xs uppercase tracking-[0.22em] text-stone-400">Autofocus</p>
           <p className="mt-2 text-xs leading-relaxed text-stone-400">
             Focus follows whatever the camera center ray hits.
           </p>

@@ -38,7 +38,7 @@
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
     "tailwindcss": "^4.2.2",
-    "three": "^0.182.0",
+    "three": "^0.184.0",
     "three-stdlib": "^2.36.1",
     "zustand": "^5.0.12"
   },
@@ -51,7 +51,7 @@
     "@types/node": "^24.12.2",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
-    "@types/three": "^0.182.0",
+    "@types/three": "^0.184.0",
     "@vitejs/plugin-react": "^6.0.1",
     "concurrently": "^9.2.1",
     "eslint": "^9.39.4",

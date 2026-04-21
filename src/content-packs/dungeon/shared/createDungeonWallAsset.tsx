@@ -2,6 +2,7 @@ import { useMemo } from 'react'
 import { useGLTF } from '@react-three/drei'
 import type { ContentPackAsset, ContentPackComponentProps } from '../../types'
 import { DUNGEON_BASE_SCALE } from './dungeonConstants'
+import { cloneSceneWithNodeMaterials } from '../../../rendering/nodeMaterialUtils'
 
 type DungeonWallAssetDefinition = {
   id: string
@@ -46,7 +47,7 @@ export function createDungeonWallAsset(definition: DungeonWallAssetDefinition): 
     const kind = objectProps?.kind === 'corner' ? 'corner' : 'wall'
     const modelUrl = kind === 'corner' ? cornerAssetUrl : assetUrl
     const gltf = useGLTF(modelUrl)
-    const scene = useMemo(() => gltf.scene.clone(), [gltf.scene])
+    const scene = useMemo(() => cloneSceneWithNodeMaterials(gltf.scene), [gltf.scene])
     const transform = kind === 'corner'
       ? { position: [0, 0, 0] as const, rotation: WALL_CORNER_ROTATION, scale: WALL_CORNER_SCALE }
       : WALL_DEFAULT_TRANSFORM

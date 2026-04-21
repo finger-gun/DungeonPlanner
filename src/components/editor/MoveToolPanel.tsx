@@ -1,5 +1,11 @@
 import { Gauge, Grid } from 'lucide-react'
 import { useDungeonStore } from '../../store/useDungeonStore'
+import { precomputeLightSources } from '../canvas/propLightPool'
+import {
+  FORWARD_PLUS_BACKEND_LABEL,
+  FORWARD_PLUS_TILE_SIZE,
+  MAX_FORWARD_PLUS_POINT_LIGHTS,
+} from '../../rendering/forwardPlusConfig'
 
 const FPS_OPTIONS: { value: 0 | 30 | 60 | 120; label: string }[] = [
   { value: 30,  label: '30' },
@@ -8,18 +14,36 @@ const FPS_OPTIONS: { value: 0 | 30 | 60 | 120; label: string }[] = [
   { value: 0,   label: '∞' },
 ]
 
+const LIGHT_BENCHMARK_OPTIONS: Array<{ value: 64 | 128 | 256; label: string }> = [
+  { value: 64, label: '64' },
+  { value: 128, label: '128' },
+  { value: 256, label: '256' },
+]
+
 export function MoveToolPanel() {
   const mapMode = useDungeonStore((state) => state.mapMode)
   const showGrid = useDungeonStore((state) => state.showGrid)
   const setShowGrid = useDungeonStore((state) => state.setShowGrid)
   const sceneLighting = useDungeonStore((state) => state.sceneLighting)
   const setSceneLightingIntensity = useDungeonStore((state) => state.setSceneLightingIntensity)
+  const lightBenchmark = useDungeonStore((state) => state.lightBenchmark)
+  const setLightBenchmarkEnabled = useDungeonStore((state) => state.setLightBenchmarkEnabled)
+  const setLightBenchmarkCount = useDungeonStore((state) => state.setLightBenchmarkCount)
+  const placedObjects = useDungeonStore((state) => state.placedObjects)
+  const layers = useDungeonStore((state) => state.layers)
   const pp = useDungeonStore((state) => state.postProcessing)
   const setPostProcessing = useDungeonStore((state) => state.setPostProcessing)
   const outdoorTimeOfDay = useDungeonStore((state) => state.outdoorTimeOfDay)
   const setOutdoorTimeOfDay = useDungeonStore((state) => state.setOutdoorTimeOfDay)
   const fpsLimit = useDungeonStore((state) => state.fpsLimit)
   const setFpsLimit = useDungeonStore((state) => state.setFpsLimit)
+  const particleEffectsEnabled = useDungeonStore((state) => state.particleEffectsEnabled)
+  const setParticleEffectsEnabled = useDungeonStore((state) => state.setParticleEffectsEnabled)
+  const visibleObjects = Object.values(placedObjects).filter((object) => layers[object.layerId]?.visible !== false)
+  const sceneLocalLightCount = precomputeLightSources(visibleObjects).length
+  const syntheticLightCount = lightBenchmark.enabled ? lightBenchmark.count : 0
+  const totalRequestedLocalLights = sceneLocalLightCount + syntheticLightCount
+  const totalCappedLocalLights = Math.min(totalRequestedLocalLights, MAX_FORWARD_PLUS_POINT_LIGHTS)
 
   return (
     <div className="space-y-4">
@@ -52,6 +76,73 @@ export function MoveToolPanel() {
               )
             })}
           </div>
+        </div>
+        <div className="mt-3 rounded-2xl border border-stone-800 bg-stone-950/60 px-4 py-3">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-xs uppercase tracking-[0.22em] text-stone-400">Particle Effects</p>
+              <p className="mt-1 text-xs text-stone-500">
+                Fire, smoke and ambient particles on props.
+              </p>
+            </div>
+            <button
+              type="button"
+              aria-label="Particle Effects"
+              aria-pressed={particleEffectsEnabled}
+              onClick={() => setParticleEffectsEnabled(!particleEffectsEnabled)}
+              className={`relative h-4 w-7 rounded-full transition ${particleEffectsEnabled ? 'bg-amber-500' : 'bg-stone-700'}`}
+            >
+              <span className={`absolute top-0.5 h-3 w-3 rounded-full bg-white shadow transition-all ${particleEffectsEnabled ? 'left-[14px]' : 'left-0.5'}`} />
+            </button>
+          </div>
+        </div>
+        <div className="mt-3 rounded-2xl border border-stone-800 bg-stone-950/60 px-4 py-4">
+          <div className="mb-3 flex items-center justify-between">
+            <div>
+              <p className="text-xs uppercase tracking-[0.22em] text-stone-400">Synthetic Light Stress</p>
+              <p className="mt-1 text-xs text-stone-500">
+                Adds torch lights without meshes so the Forward+ tiled-lighting path is easy to measure.
+              </p>
+            </div>
+            <button
+              type="button"
+              aria-label="Synthetic Light Stress"
+              aria-pressed={lightBenchmark.enabled}
+              onClick={() => setLightBenchmarkEnabled(!lightBenchmark.enabled)}
+              className={`relative h-4 w-7 rounded-full transition ${lightBenchmark.enabled ? 'bg-amber-500' : 'bg-stone-700'}`}
+            >
+              <span className={`absolute top-0.5 h-3 w-3 rounded-full bg-white shadow transition-all ${lightBenchmark.enabled ? 'left-[14px]' : 'left-0.5'}`} />
+            </button>
+          </div>
+          <div className={`grid grid-cols-3 gap-1 transition-opacity ${lightBenchmark.enabled ? 'opacity-100' : 'pointer-events-none opacity-40'}`}>
+            {LIGHT_BENCHMARK_OPTIONS.map(({ value, label }) => {
+              const active = lightBenchmark.count === value
+              return (
+                <button
+                  key={value}
+                  type="button"
+                  onClick={() => setLightBenchmarkCount(value)}
+                  className={`rounded-xl border py-1.5 text-xs tabular-nums transition ${
+                    active
+                      ? 'border-amber-300/40 bg-amber-400/10 text-amber-200'
+                      : 'border-stone-700/60 bg-stone-900/40 text-stone-500 hover:border-stone-600 hover:text-stone-300'
+                  }`}
+                >
+                  {label}
+                </button>
+              )
+            })}
+          </div>
+          <div className="mt-3 rounded-xl border border-stone-800/70 bg-stone-950/50 px-3 py-2 text-[11px] text-stone-400">
+            <p><span className="text-stone-300">Backend:</span> {FORWARD_PLUS_BACKEND_LABEL}</p>
+            <p><span className="text-stone-300">Tile size:</span> {FORWARD_PLUS_TILE_SIZE}px</p>
+            <p><span className="text-stone-300">Scene lights:</span> {sceneLocalLightCount}</p>
+            <p><span className="text-stone-300">Synthetic lights:</span> {syntheticLightCount}</p>
+            <p><span className="text-stone-300">Renderer cap:</span> {totalCappedLocalLights}/{MAX_FORWARD_PLUS_POINT_LIGHTS}</p>
+          </div>
+          <p className="mt-3 text-xs text-stone-500">
+            Synthetic torches share the same renderer-wide Forward+ light budget as real props, so total local lights are capped at 256.
+          </p>
         </div>
       </section>
 

@@ -1,6 +1,7 @@
 import * as THREE from 'three'
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js'
 import type { ContentPackModelTransform } from '../../content-packs/types'
+import { cloneMaterialWithNodeCompatibility } from '../../rendering/nodeMaterialUtils'
 
 export type BatchedTilePlacement = {
   key: string
@@ -46,12 +47,12 @@ export function buildMergedTileGeometryMeshes({
       return
     }
 
-    mergedMeshes.push({
-      key: `${meshIndex}:${sourceMesh.uuid}`,
-      geometry: mergedGeometry,
-      material: material.clone(),
+      mergedMeshes.push({
+        key: `${meshIndex}:${sourceMesh.uuid}`,
+        geometry: mergedGeometry,
+        material: cloneMaterialWithNodeCompatibility(material),
+      })
     })
-  })
 
   return mergedMeshes
 }
