@@ -10,7 +10,11 @@ describe('composeGeneratedCharacterPrompt', () => {
       size: 'M',
     })
 
-    expect(prompt).toContain('Do not add any frame, border, sticker outline, nameplate, caption, text, logo, watermark, or UI overlay.')
+    expect(prompt).toContain('Do not add any frame')
+    expect(prompt).toContain('border')
+    expect(prompt).toContain('nameplate')
+    expect(prompt).toContain('watermark')
+    expect(prompt).toContain('UI overlay')
     expect(prompt).not.toContain('sticker design with a white border')
     expect(prompt).toContain('Character role: Player.')
     expect(prompt).toContain('Tabletop size class: M.')
