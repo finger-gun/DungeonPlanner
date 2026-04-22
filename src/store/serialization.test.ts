@@ -159,7 +159,7 @@ describe('serializeDungeon / deserializeDungeon roundtrip', () => {
     const state = baseState()
     state.floors!['floor-1'].snapshot.outdoorTerrainHeights['3:4'] = {
       cell: [3, 4],
-      height: 1.25,
+      level: 2,
     }
 
     const result = deserializeDungeon(serializeDungeon(state))
@@ -168,7 +168,7 @@ describe('serializeDungeon / deserializeDungeon roundtrip', () => {
       ?? result!.floors?.['floor-1']?.snapshot?.outdoorTerrainHeights
     expect(outdoorTerrainHeights?.['3:4']).toMatchObject({
       cell: [3, 4],
-      height: 1.25,
+      level: 2,
     })
   })
 
@@ -375,5 +375,37 @@ describe('deserializeDungeon version migrations', () => {
     const result = deserializeDungeon(v12File)
     expect(result).not.toBeNull()
     expect(result!.outdoorTerrainHeights).toEqual({})
+  })
+
+  it('v13→v14: rounds legacy outdoor terrain heights to stepped levels', () => {
+    const v13File = JSON.stringify({
+      version: 13,
+      name: 'Legacy Stepped Outdoor',
+      mapMode: 'outdoor',
+      sceneLighting: { intensity: 1 },
+      postProcessing: { ...DEFAULT_POST_PROCESSING_SETTINGS },
+      activeFloorId: 'floor-1',
+      floorOrder: ['floor-1'],
+      floors: [{
+        id: 'floor-1',
+        name: 'Ground Floor',
+        level: 0,
+        layers: [{ id: 'default', name: 'Default', visible: true, locked: false }],
+        layerOrder: ['default'],
+        activeLayerId: 'default',
+        rooms: [],
+        cells: [],
+        blockedCells: [],
+        outdoorTerrainHeights: [{ x: 3, z: 4, height: 1.25 }],
+        exploredCells: [],
+        objects: [],
+        openings: [],
+        nextRoomNumber: 1,
+      }],
+    })
+
+    const result = deserializeDungeon(v13File)
+    expect(result).not.toBeNull()
+    expect(result!.outdoorTerrainHeights['3:4']).toMatchObject({ cell: [3, 4], level: 1 })
   })
 })

@@ -36,7 +36,7 @@ const TERRAIN_DENSITIES: Array<{ id: OutdoorTerrainDensity; label: string }> = [
 const OUTDOOR_BRUSH_MODES: Array<{ id: OutdoorBrushMode; label: string }> = [
   { id: 'surroundings', label: 'Surroundings' },
   { id: 'terrain-sculpt', label: 'Terrain Sculpt' },
-  { id: 'ground-texture', label: 'Ground Texture' },
+  { id: 'ground-texture', label: 'Surface Paint' },
 ]
 
 const OUTDOOR_SCULPT_MODES: Array<{ id: OutdoorTerrainSculptMode; label: string }> = [
@@ -45,7 +45,7 @@ const OUTDOOR_SCULPT_MODES: Array<{ id: OutdoorTerrainSculptMode; label: string 
 ]
 
 const OUTDOOR_GROUND_TEXTURES: Array<{ id: OutdoorGroundTextureType; label: string }> = [
-  { id: 'short-grass', label: 'Short Grass' },
+  { id: 'short-grass', label: 'Grass' },
   { id: 'dry-dirt', label: 'Dry Dirt' },
   { id: 'rough-stone', label: 'Rough Stone' },
   { id: 'wet-dirt', label: 'Wet Dirt' },
@@ -115,9 +115,9 @@ export function RoomToolPanel() {
           <p className="mt-1 text-xs">
             {mapMode === 'outdoor'
               ? outdoorBrushMode === 'ground-texture'
-                ? 'Left-drag to paint ground textures. Right-drag to erase texture paint.'
+                ? 'Left-drag to paint terrain tops. Right-drag to erase painted surface overrides.'
                 : outdoorBrushMode === 'terrain-sculpt'
-                  ? 'Left-drag to sculpt with the selected terrain mode. Right-drag uses the opposite mode for quick raise/lower edits.'
+                  ? 'Left-drag raises stepped terrain. Right-drag lowers stepped terrain into pits and trenches.'
                   : 'Left-drag to paint terrain surroundings. Right-drag to erase. Painted areas auto-place terrain props and remain inaccessible.'
               : 'Left-drag to paint rooms. Right-drag to erase.'}
           </p>
@@ -147,7 +147,7 @@ export function RoomToolPanel() {
               </div>
               {outdoorBrushMode === 'ground-texture' ? (
                 <div>
-                  <p className="mb-1 uppercase tracking-[0.2em] text-stone-500">Ground Texture</p>
+                  <p className="mb-1 uppercase tracking-[0.2em] text-stone-500">Top Surface</p>
                   <div className="grid grid-cols-2 gap-2">
                     {OUTDOOR_GROUND_TEXTURES.map((texture) => {
                       const active = outdoorGroundTextureBrush === texture.id
@@ -191,7 +191,7 @@ export function RoomToolPanel() {
                     })}
                   </div>
                   <p className="mt-2 text-stone-500">
-                    Sculpt strokes use a soft 3x3 brush and keep older outdoor maps flat until you edit them.
+                    Each sculpt stroke changes the selected cells by one stepped terrain level and builds cliffs around raised plateaus and lowered pits.
                   </p>
                 </div>
               ) : (

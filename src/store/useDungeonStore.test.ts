@@ -73,8 +73,8 @@ describe('useDungeonStore history', () => {
     expect(useDungeonStore.getState().sculptOutdoorTerrain([[2, 2]], 'raise')).toBe(1)
 
     const state = useDungeonStore.getState()
-    expect(state.outdoorTerrainHeights['2:2']?.height).toBeGreaterThan(0)
-    expect(state.outdoorTerrainHeights['1:2']?.height).toBeGreaterThan(0)
+    expect(state.outdoorTerrainHeights['2:2']?.level).toBe(1)
+    expect(state.outdoorTerrainHeights['1:2']).toBeUndefined()
   })
 
   it('reanchors outdoor placed objects after terrain sculpting', () => {
@@ -95,7 +95,7 @@ describe('useDungeonStore history', () => {
 
     useDungeonStore.getState().sculptOutdoorTerrain([[0, 0]], 'raise')
 
-    expect(useDungeonStore.getState().placedObjects[placedId!]?.position[1]).toBeGreaterThan(0)
+    expect(useDungeonStore.getState().placedObjects[placedId!]?.position[1]).toBe(2)
   })
 
   it('paints and erases outdoor surrounding cells with generated forest props', () => {

@@ -31,8 +31,9 @@ import type {
 } from './useDungeonStore'
 import type { GridCell } from '../hooks/useSnapToGrid'
 import { getCellKey } from '../hooks/useSnapToGrid'
+import { OUTDOOR_TERRAIN_LEVEL_HEIGHT } from './outdoorTerrain'
 
-const CURRENT_VERSION = 13
+const CURRENT_VERSION = 14
 
 // ── Serialized shapes (compact, no redundant keys) ────────────────────────────
 
@@ -200,7 +201,7 @@ function serializeFloorData(
       x: r.cell[0], z: r.cell[1], layerId: r.layerId,
     })),
     outdoorTerrainHeights: Object.values(snapshot.outdoorTerrainHeights).map((record) => ({
-      x: record.cell[0], z: record.cell[1], height: record.height,
+      x: record.cell[0], z: record.cell[1], height: record.level,
     })),
     outdoorGroundTextureCells: Object.values(snapshot.outdoorGroundTextureCells).map((r) => ({
       x: r.cell[0], z: r.cell[1], layerId: r.layerId, textureType: r.textureType,
@@ -559,11 +560,14 @@ function parseFloorData(raw: Record<string, unknown>): {
       typeof record.x === 'number' ? record.x : 0,
       typeof record.z === 'number' ? record.z : 0,
     ]
-    const height = typeof record.height === 'number' ? record.height : 0
-    if (height === 0) {
+    const rawHeight = typeof record.height === 'number' ? record.height : 0
+    const level = Number.isInteger(rawHeight)
+      ? rawHeight
+      : Math.round(rawHeight / OUTDOOR_TERRAIN_LEVEL_HEIGHT)
+    if (level === 0) {
       continue
     }
-    outdoorTerrainHeights[getCellKey(cell)] = { cell, height }
+    outdoorTerrainHeights[getCellKey(cell)] = { cell, level }
   }
   const outdoorGroundTextureCells: OutdoorGroundTextureCells = {}
   const outdoorGroundTextureCellsArr = Array.isArray(raw.outdoorGroundTextureCells)

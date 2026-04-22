@@ -42,8 +42,8 @@ import {
   DEFAULT_OUTDOOR_TERRAIN_SCULPT_RADIUS,
   DEFAULT_OUTDOOR_TERRAIN_SCULPT_STEP,
   applyOutdoorTerrainSculpt,
+  getOutdoorTerrainCellHeight,
   getOutdoorTerrainWorldPosition,
-  sampleOutdoorTerrainHeight,
   type OutdoorTerrainHeightfield,
   type OutdoorTerrainSculptMode,
 } from './outdoorTerrain'
@@ -462,7 +462,7 @@ function cloneSnapshot(snapshot: DungeonSnapshot): DungeonSnapshot {
     outdoorTerrainHeights: Object.fromEntries(
       Object.entries(snapshot.outdoorTerrainHeights ?? {}).map(([key, record]) => [
         key,
-        { cell: [...record.cell] as GridCell, height: record.height },
+        { cell: [...record.cell] as GridCell, level: record.level },
       ]),
     ),
     outdoorGroundTextureCells: Object.fromEntries(
@@ -803,11 +803,12 @@ function reanchorOutdoorPlacedObjects(
       return
     }
 
-    const nextY = sampleOutdoorTerrainHeight(
-      outdoorTerrainHeights,
-      object.position[0],
-      object.position[2],
-    )
+    const [supportX, supportZ] = supportCellKey.split(':').map(Number)
+    const supportCell: GridCell = Number.isFinite(supportX) && Number.isFinite(supportZ)
+      ? [supportX, supportZ]
+      : object.cell
+
+    const nextY = getOutdoorTerrainCellHeight(outdoorTerrainHeights, supportCell)
 
     if (Math.abs(object.position[1] - nextY) < 0.0001) {
       return
@@ -1677,8 +1678,9 @@ export const useDungeonStore = create<DungeonState>()(
       state.mapMode === 'outdoor' &&
       !input.parentObjectId &&
       (input.type === 'player' || input.props.connector === 'FLOOR' || input.props.connector === 'FREE')
+    const supportCellKey = input.supportCellKey ?? getCellKey(input.cell)
     const positionY = groundedOutdoorObject
-      ? sampleOutdoorTerrainHeight(state.outdoorTerrainHeights, input.position[0], input.position[2])
+      ? getOutdoorTerrainCellHeight(state.outdoorTerrainHeights, input.cell)
       : input.position[1]
 
     set((current) => {
@@ -1702,7 +1704,7 @@ export const useDungeonStore = create<DungeonState>()(
           ? [...input.localRotation] as DungeonObjectRecord['localRotation']
           : input.localRotation ?? null,
         parentObjectId: input.parentObjectId ?? null,
-        supportCellKey: input.supportCellKey ?? getCellKey(input.cell),
+        supportCellKey,
         props: { ...input.props },
         cell: [...input.cell] as GridCell,
         cellKey: input.cellKey,
@@ -1757,7 +1759,7 @@ export const useDungeonStore = create<DungeonState>()(
 
     const nextPositionY =
       state.mapMode === 'outdoor'
-        ? sampleOutdoorTerrainHeight(state.outdoorTerrainHeights, input.position[0], input.position[2])
+        ? getOutdoorTerrainCellHeight(state.outdoorTerrainHeights, input.cell)
         : input.position[1]
 
     const unchanged =

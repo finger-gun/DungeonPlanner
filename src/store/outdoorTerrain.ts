@@ -2,7 +2,7 @@ import { GRID_SIZE, getCellKey, type GridCell } from '../hooks/useSnapToGrid'
 
 export type OutdoorTerrainHeightRecord = {
   cell: GridCell
-  height: number
+  level: number
 }
 
 export type OutdoorTerrainHeightfield = Record<string, OutdoorTerrainHeightRecord>
@@ -10,21 +10,28 @@ export type OutdoorTerrainSculptMode = 'raise' | 'lower'
 
 export const OUTDOOR_TERRAIN_WORLD_SIZE = 260
 export const OUTDOOR_TERRAIN_SEGMENTS = OUTDOOR_TERRAIN_WORLD_SIZE / GRID_SIZE
-export const DEFAULT_OUTDOOR_TERRAIN_SCULPT_STEP = 0.5
-export const DEFAULT_OUTDOOR_TERRAIN_SCULPT_RADIUS = 1
+export const OUTDOOR_TERRAIN_LEVEL_HEIGHT = GRID_SIZE
+export const DEFAULT_OUTDOOR_TERRAIN_SCULPT_STEP = 1
+export const DEFAULT_OUTDOOR_TERRAIN_SCULPT_RADIUS = 0
 
-const OUTDOOR_TERRAIN_HEIGHT_EPSILON = 0.0001
-const OUTDOOR_TERRAIN_MAX_HEIGHT = 8
+const OUTDOOR_TERRAIN_MAX_LEVEL = 8
 
-function clampHeight(height: number) {
-  return Math.max(-OUTDOOR_TERRAIN_MAX_HEIGHT, Math.min(OUTDOOR_TERRAIN_MAX_HEIGHT, height))
+function clampLevel(level: number) {
+  return Math.max(-OUTDOOR_TERRAIN_MAX_LEVEL, Math.min(OUTDOOR_TERRAIN_MAX_LEVEL, level))
+}
+
+export function getOutdoorTerrainCellLevel(
+  heightfield: OutdoorTerrainHeightfield,
+  cell: GridCell,
+) {
+  return heightfield[getCellKey(cell)]?.level ?? 0
 }
 
 export function getOutdoorTerrainCellHeight(
   heightfield: OutdoorTerrainHeightfield,
   cell: GridCell,
 ) {
-  return heightfield[getCellKey(cell)]?.height ?? 0
+  return getOutdoorTerrainCellLevel(heightfield, cell) * OUTDOOR_TERRAIN_LEVEL_HEIGHT
 }
 
 export function sampleOutdoorTerrainHeight(
@@ -32,24 +39,11 @@ export function sampleOutdoorTerrainHeight(
   worldX: number,
   worldZ: number,
 ) {
-  const sampleX = worldX / GRID_SIZE - 0.5
-  const sampleZ = worldZ / GRID_SIZE - 0.5
-  const minX = Math.floor(sampleX)
-  const minZ = Math.floor(sampleZ)
-  const maxX = minX + 1
-  const maxZ = minZ + 1
-  const tx = sampleX - minX
-  const tz = sampleZ - minZ
-
-  const h00 = getOutdoorTerrainCellHeight(heightfield, [minX, minZ])
-  const h10 = getOutdoorTerrainCellHeight(heightfield, [maxX, minZ])
-  const h01 = getOutdoorTerrainCellHeight(heightfield, [minX, maxZ])
-  const h11 = getOutdoorTerrainCellHeight(heightfield, [maxX, maxZ])
-
-  const hx0 = h00 * (1 - tx) + h10 * tx
-  const hx1 = h01 * (1 - tx) + h11 * tx
-
-  return hx0 * (1 - tz) + hx1 * tz
+  const cell: GridCell = [
+    Math.floor(worldX / GRID_SIZE),
+    Math.floor(worldZ / GRID_SIZE),
+  ]
+  return getOutdoorTerrainCellHeight(heightfield, cell)
 }
 
 export function getOutdoorTerrainWorldPosition(
@@ -68,7 +62,10 @@ export function applyOutdoorTerrainSculpt(
   step = DEFAULT_OUTDOOR_TERRAIN_SCULPT_STEP,
   radius = DEFAULT_OUTDOOR_TERRAIN_SCULPT_RADIUS,
 ) {
-  if (cells.length === 0 || step <= 0 || radius < 0) {
+  const stepLevels = Math.max(1, Math.round(step))
+  const sculptRadius = Math.max(0, Math.round(radius))
+
+  if (cells.length === 0) {
     return heightfield
   }
 
@@ -76,31 +73,22 @@ export function applyOutdoorTerrainSculpt(
   const direction = mode === 'lower' ? -1 : 1
 
   for (const [targetX, targetZ] of cells) {
-    for (let deltaX = -radius; deltaX <= radius; deltaX += 1) {
-      for (let deltaZ = -radius; deltaZ <= radius; deltaZ += 1) {
-        const distance = Math.hypot(deltaX, deltaZ)
-        if (distance > radius) {
-          continue
-        }
-
-        const weight = Math.max(0, 1 - distance / (radius + 1))
-        if (weight <= 0) {
-          continue
-        }
+    for (let deltaX = -sculptRadius; deltaX <= sculptRadius; deltaX += 1) {
+      for (let deltaZ = -sculptRadius; deltaZ <= sculptRadius; deltaZ += 1) {
 
         const cell: GridCell = [targetX + deltaX, targetZ + deltaZ]
         const key = getCellKey(cell)
-        const currentHeight = nextHeightfield[key]?.height ?? 0
-        const nextHeight = clampHeight(currentHeight + direction * step * weight)
+        const currentLevel = nextHeightfield[key]?.level ?? 0
+        const nextLevel = clampLevel(currentLevel + direction * stepLevels)
 
-        if (Math.abs(nextHeight) <= OUTDOOR_TERRAIN_HEIGHT_EPSILON) {
+        if (nextLevel === 0) {
           delete nextHeightfield[key]
           continue
         }
 
         nextHeightfield[key] = {
           cell,
-          height: nextHeight,
+          level: nextLevel,
         }
       }
     }

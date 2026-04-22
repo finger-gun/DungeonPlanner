@@ -23,13 +23,10 @@ describe('createTextureMask', () => {
 
   it('samples sculpted terrain heights from world coordinates', () => {
     const outdoorTerrainHeights = {
-      '0:0': { cell: [0, 0] as [number, number], height: 1 },
-      '1:0': { cell: [1, 0] as [number, number], height: 0 },
-      '0:1': { cell: [0, 1] as [number, number], height: 0 },
-      '1:1': { cell: [1, 1] as [number, number], height: 0 },
+      '0:0': { cell: [0, 0] as [number, number], level: 1 },
     }
 
-    expect(sampleOutdoorTerrainHeight(outdoorTerrainHeights, 1, 1)).toBe(1)
-    expect(sampleOutdoorTerrainHeight(outdoorTerrainHeights, 2, 2)).toBeCloseTo(0.25, 5)
+    expect(sampleOutdoorTerrainHeight(outdoorTerrainHeights, 1, 1)).toBe(2)
+    expect(sampleOutdoorTerrainHeight(outdoorTerrainHeights, 2, 2)).toBe(0)
   })
 })
