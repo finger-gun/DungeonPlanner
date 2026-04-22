@@ -1,6 +1,6 @@
 // @ts-nocheck
 import { useEffect, useMemo, useRef } from 'react'
-import { useFrame } from '@react-three/fiber'
+import { useFrame, useThree } from '@react-three/fiber'
 import * as THREE from 'three/webgpu'
 import {
   cos,
@@ -47,11 +47,13 @@ type ActiveFireEmitter = {
   worldZ: number
   scale: number
   intensity: number
+  color: string
 }
 
 type EmitterBuffers = {
   posScaleBuf: ReturnType<typeof instancedArray>
   intensBuf: ReturnType<typeof instancedArray>
+  colorBuf: ReturnType<typeof instancedArray>
 }
 
 function createEmitterBuffers(): EmitterBuffers {
@@ -60,6 +62,7 @@ function createEmitterBuffers(): EmitterBuffers {
     posScaleBuf: instancedArray(MAX_FIRE_EMITTERS, 'vec4'),
     // per-emitter brightness multiplier (0 = inactive)
     intensBuf: instancedArray(MAX_FIRE_EMITTERS, 'float'),
+    colorBuf: instancedArray(MAX_FIRE_EMITTERS, 'vec3'),
   }
 }
 
@@ -70,6 +73,7 @@ export function FireParticleSystem({
   objects: DungeonObjectRecord[]
   visibility: PlayVisibility
 }) {
+  const { invalidate } = useThree()
   const particleEffectsEnabled = useDungeonStore((state) => state.particleEffectsEnabled)
   const useLineOfSightPostMask = visibility.active && visibility.mask !== null
 
@@ -96,6 +100,7 @@ export function FireParticleSystem({
           worldZ: pz + oz,
           scale: em.scale ?? 1,
           intensity: em.intensity ?? 1,
+          color: em.color ?? '#ff9944',
         })
       }
     }
@@ -109,15 +114,20 @@ export function FireParticleSystem({
   useEffect(() => {
     const posArr = emitterBuffers.posScaleBuf.value.array as Float32Array
     const intArr = emitterBuffers.intensBuf.value.array as Float32Array
+    const colorArr = emitterBuffers.colorBuf.value.array as Float32Array
 
     for (let i = 0; i < MAX_FIRE_EMITTERS; i++) {
       if (i < activeEmitters.length) {
         const em = activeEmitters[i]
+        const color = new THREE.Color(em.color)
         posArr[i * 4 + 0] = em.worldX
         posArr[i * 4 + 1] = em.worldY
         posArr[i * 4 + 2] = em.worldZ
         posArr[i * 4 + 3] = em.scale
         intArr[i] = em.intensity
+        colorArr[i * 3 + 0] = color.r
+        colorArr[i * 3 + 1] = color.g
+        colorArr[i * 3 + 2] = color.b
       } else {
         // Inactive slot: drive emitter scale to 0 so particles collapse away,
         // and park the position far off-screen as a fallback.
@@ -126,12 +136,17 @@ export function FireParticleSystem({
         posArr[i * 4 + 2] = 0
         posArr[i * 4 + 3] = 0
         intArr[i] = 0
+        colorArr[i * 3 + 0] = 1
+        colorArr[i * 3 + 1] = 0.6
+        colorArr[i * 3 + 2] = 0.27
       }
     }
 
     emitterBuffers.posScaleBuf.value.needsUpdate = true
     emitterBuffers.intensBuf.value.needsUpdate = true
-  }, [activeEmitters, emitterBuffers])
+    emitterBuffers.colorBuf.value.needsUpdate = true
+    invalidate()
+  }, [activeEmitters, emitterBuffers, invalidate])
 
   return (
     <>
@@ -162,7 +177,7 @@ function FireGpuLayer({
   const totalCount = MAX_FIRE_EMITTERS * layer.count
 
   const { seedBuf1, seedBuf2, material, uTime } = useMemo(() => {
-    const { posScaleBuf, intensBuf } = emitterBuffers
+    const { posScaleBuf, intensBuf, colorBuf } = emitterBuffers
 
     // ── Seed buffers (per-particle, static after emitter assignment) ───────
     // seedBuf1: basePhase, speed, wobblePhase, sizeFactor
@@ -187,6 +202,7 @@ function FireGpuLayer({
 
     const emData = posScaleBuf.element(emIdx) // vec4: x, y, z, scale
     const emIntens = intensBuf.element(emIdx) // float: intensity (0 = inactive)
+    const emColor = colorBuf.element(emIdx) // vec3: emitter tint
     const emScale = emData.w
 
     // Life cycle: wraps [0, 1) continuously
@@ -220,7 +236,9 @@ function FireGpuLayer({
       .mul(s1.w)
     const worldScale = vec2(pSize, pSize.mul(float(1.15).add(life.mul(0.9))))
 
-    const rgb = mix(cStartNode, cEndNode, life)
+    const flameCore = mix(emColor, vec3(1.0, 0.96, 0.84), invLife.mul(0.18))
+    const flameEdge = emColor.mul(0.72)
+    const rgb = mix(flameCore, flameEdge, life)
       .mul(float(0.75).add(fade.mul(0.85)))
       .mul(emIntens)
 

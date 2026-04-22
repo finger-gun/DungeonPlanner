@@ -216,7 +216,9 @@ function SceneOverviewContent() {
   const floors = useDungeonStore((state) => state.floors)
   const floorOrder = useDungeonStore((state) => state.floorOrder)
   const activeFloorId = useDungeonStore((state) => state.activeFloorId)
-  const postProcessingEnabled = useDungeonStore((state) => state.postProcessing.enabled)
+  const postProcessingEnabled = useDungeonStore((state) =>
+    state.postProcessing.enabled || state.postProcessing.pixelateEnabled,
+  )
   const paintedCells = useDungeonStore((state) => state.paintedCells)
   const layers = useDungeonStore((state) => state.layers)
   const rooms = useDungeonStore((state) => state.rooms)
@@ -358,6 +360,7 @@ function FloorContent({ startY = 0 }: { startY?: number }) {
   const selectObject = useDungeonStore((state) => state.selectObject)
   const setObjectDragActive = useDungeonStore((state) => state.setObjectDragActive)
   const postProcessingEnabled = useDungeonStore((state) => state.postProcessing.enabled)
+  const pixelateEnabled = useDungeonStore((state) => state.postProcessing.pixelateEnabled)
   const lightBenchmark = useDungeonStore((state) => state.lightBenchmark)
   const visibility = usePlayVisibility()
   const [releaseAnimationIds, setReleaseAnimationIds] = useState<Record<string, true>>({})
@@ -384,13 +387,13 @@ function FloorContent({ startY = 0 }: { startY?: number }) {
     [objectLightCount, syntheticBenchmarkObjects.length],
   )
   const lineOfSightActive = visibility.active && visibility.mask !== null
-  const showPostProcessing = postProcessingEnabled || showLensFocusDebugPoint || lineOfSightActive
+  const showPostProcessing = postProcessingEnabled || pixelateEnabled || showLensFocusDebugPoint || lineOfSightActive
   // lineOfSightActive is intentionally excluded from this key: the pipeline
   // updates in-place via useLayoutEffect deps in WebGPUPostProcessing, so a
   // full remount (which forces re-compilation of all 12+ light shaders) is
   // unnecessary and was causing permanent black-screen when compilation took
   // more than one RAF frame.
-  const postProcessingKey = `${postProcessingEnabled ? 'post' : 'raw'}:${showLensFocusDebugPoint ? 'focus' : 'nofocus'}`
+  const postProcessingKey = `${postProcessingEnabled ? 'post' : 'raw'}:${pixelateEnabled ? 'pixel' : 'clean'}:${showLensFocusDebugPoint ? 'focus' : 'nofocus'}`
 
   const groupRef = useRef<THREE.Group>(null)
   const animYRef = useRef(startY)

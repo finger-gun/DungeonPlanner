@@ -1,5 +1,7 @@
 export type PostProcessingSettingsShape = {
   enabled: boolean
+  pixelateEnabled: boolean
+  pixelSize: number
   focusDistance: number
   focalLength: number
   backgroundFocalLength: number
@@ -10,6 +12,8 @@ export const DEFAULT_AUTOFOCUS_SMOOTH_TIME = 0.5
 
 export const DEFAULT_POST_PROCESSING_SETTINGS: PostProcessingSettingsShape = {
   enabled: true,
+  pixelateEnabled: false,
+  pixelSize: 6,
   focusDistance: 0.5,
   focalLength: 9,
   backgroundFocalLength: 9,
@@ -43,6 +47,10 @@ export function normalizePostProcessingSettings(settings?: PostProcessingSetting
 
   return {
     enabled: settings?.enabled === true,
+    pixelateEnabled: settings?.pixelateEnabled === true,
+    pixelSize: typeof settings?.pixelSize === 'number'
+      ? settings.pixelSize
+      : DEFAULT_POST_PROCESSING_SETTINGS.pixelSize,
     focusDistance: typeof settings?.focusDistance === 'number'
       ? settings.focusDistance
       : DEFAULT_POST_PROCESSING_SETTINGS.focusDistance,

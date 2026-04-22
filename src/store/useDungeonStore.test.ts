@@ -51,6 +51,17 @@ describe('useDungeonStore history', () => {
     expect(Object.keys(state.paintedCells)).toHaveLength(2)
   })
 
+  it('keeps pixelation disabled by default and allows toggling it', () => {
+    expect(useDungeonStore.getState().postProcessing.pixelateEnabled).toBe(false)
+    expect(useDungeonStore.getState().postProcessing.pixelSize).toBe(6)
+
+    useDungeonStore.getState().setPostProcessing({ pixelateEnabled: true })
+    useDungeonStore.getState().setPostProcessing({ pixelSize: 10 })
+
+    expect(useDungeonStore.getState().postProcessing.pixelateEnabled).toBe(true)
+    expect(useDungeonStore.getState().postProcessing.pixelSize).toBe(10)
+  })
+
   it('creates an outdoor map with surrounding paint defaults', () => {
     useDungeonStore.getState().newDungeon('outdoor')
     const state = useDungeonStore.getState()
@@ -807,6 +818,23 @@ describe('useDungeonStore history', () => {
 
     useDungeonStore.getState().setShowLensFocusDebugPoint(false)
     expect(useDungeonStore.getState().showLensFocusDebugPoint).toBe(false)
+  })
+
+  it('tracks transient object light previews outside persisted object props', () => {
+    useDungeonStore.getState().setObjectLightPreview('torch-1', {
+      intensity: 3,
+      color: '#ff0000',
+      flicker: false,
+    })
+
+    expect(useDungeonStore.getState().objectLightPreviewOverrides['torch-1']).toMatchObject({
+      intensity: 3,
+      color: '#ff0000',
+      flicker: false,
+    })
+
+    useDungeonStore.getState().setObjectLightPreview('torch-1', null)
+    expect(useDungeonStore.getState().objectLightPreviewOverrides['torch-1']).toBeUndefined()
   })
 
   it('switches to top-down view when entering room mode', () => {

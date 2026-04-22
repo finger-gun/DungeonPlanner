@@ -73,6 +73,10 @@ describe('dungeonContentPack', () => {
       preset: 'fire',
       emitters: [{ offset: [0, 0.3, 0] }],
     })
+    expect(litTorch?.getEffect?.({ lightOverrides: { color: '#55aaff' } })).toMatchObject({
+      preset: 'fire',
+      emitters: [{ offset: [0, 0.3, 0], color: '#55aaff' }],
+    })
     expect(litCandle?.getEffect?.({})).toMatchObject({
       preset: 'fire',
       emitters: [{ offset: [0, 0.56, 0] }],

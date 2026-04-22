@@ -7,6 +7,8 @@ import { buildParticleEmitters, type ParticleEmitterDefinition, type ParticleLay
 const matrixObject = new THREE.Object3D()
 const colorScratch = new THREE.Color()
 const colorEndScratch = new THREE.Color()
+const emitterColorScratch = new THREE.Color()
+const flameCoreScratch = new THREE.Color('#fff4d6')
 export const SHARED_PARTICLE_GEOMETRY = new THREE.PlaneGeometry(1, 1)
 export const sharedMaterialCache = new Map<number, THREE.MeshBasicMaterial>()
 
@@ -55,6 +57,7 @@ function ParticleEmitter({ emitter }: { emitter: ParticleEmitterDefinition }) {
           effectKey={`${emitter.key}:${index}`}
           emitterScale={emitter.scale}
           emitterIntensity={emitter.intensity}
+          emitterColor={emitter.color}
         />
       ))}
     </group>
@@ -66,11 +69,13 @@ function ParticleLayer({
   effectKey,
   emitterScale,
   emitterIntensity,
+  emitterColor,
 }: {
   layer: ParticleLayerDefinition
   effectKey: string
   emitterScale: number
   emitterIntensity: number
+  emitterColor?: string
 }) {
   const meshRef = useRef<THREE.InstancedMesh>(null)
   const { camera } = useThree()
@@ -123,6 +128,11 @@ function ParticleLayer({
 
       colorScratch.set(layer.colorStart)
       colorEndScratch.set(layer.colorEnd)
+      if (emitterColor) {
+        emitterColorScratch.set(emitterColor)
+        colorScratch.copy(emitterColorScratch).lerp(flameCoreScratch, 0.18 * (1 - life))
+        colorEndScratch.copy(emitterColorScratch).multiplyScalar(0.72)
+      }
       colorScratch.lerp(colorEndScratch, life)
       colorScratch.multiplyScalar((0.75 + fade * 0.85) * emitterIntensity)
       mesh.setColorAt(index, colorScratch)

@@ -18,6 +18,7 @@ export type ParticleEmitterDefinition = {
   offset: [number, number, number]
   scale: number
   intensity: number
+  color?: string
   layers: ParticleLayerDefinition[]
 }
 
@@ -82,6 +83,7 @@ export function buildParticleEmitters(effect: ContentPackEffect, effectKey: stri
     offset: emitter.offset ?? [0, 0, 0],
     scale: emitter.scale ?? 1,
     intensity: emitter.intensity ?? 1,
+    color: emitter.color,
     layers: FIRE_LAYERS,
   })) satisfies ParticleEmitterDefinition[]
 }

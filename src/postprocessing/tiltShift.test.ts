@@ -16,6 +16,8 @@ describe('tiltShift helpers', () => {
   it('defaults background focus range to the foreground range for older settings', () => {
     expect(normalizePostProcessingSettings({ enabled: false, focalLength: 4 })).toMatchObject({
       enabled: false,
+      pixelateEnabled: false,
+      pixelSize: 6,
       focusDistance: 0.5,
       focalLength: 4,
       backgroundFocalLength: 4,
@@ -23,6 +25,12 @@ describe('tiltShift helpers', () => {
     })
     expect(normalizePostProcessingSettings({ focalLength: 4, backgroundFocalLength: 7 }))
       .toMatchObject({ focalLength: 4, backgroundFocalLength: 7 })
+  })
+
+  it('keeps pixelation off by default unless explicitly enabled', () => {
+    expect(normalizePostProcessingSettings()).toMatchObject({ pixelateEnabled: false, pixelSize: 6 })
+    expect(normalizePostProcessingSettings({ pixelateEnabled: true }))
+      .toMatchObject({ pixelateEnabled: true })
   })
 
   it('smooths autofocus changes over time', () => {
