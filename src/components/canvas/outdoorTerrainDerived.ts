@@ -84,10 +84,6 @@ export function buildSteppedOutdoorTerrain(
       holeCells.push(cell)
     }
 
-    if (level !== 0 || textureType) {
-      topSurfaces.push({ cell, cellKey, level, worldY, textureType })
-    }
-
     const exposed = new Map<TerrainDirection, number>()
 
     for (const { direction, offset } of CARDINAL_DIRECTIONS) {
@@ -115,6 +111,10 @@ export function buildSteppedOutdoorTerrain(
         remainingDrop -= tall ? 2 : 1
         segmentBaseLevel += tall ? 2 : 1
       }
+    }
+
+    if (level !== 0 || textureType || exposed.size > 0) {
+      topSurfaces.push({ cell, cellKey, level, worldY, textureType })
     }
 
     for (const corner of CORNER_DEFINITIONS) {

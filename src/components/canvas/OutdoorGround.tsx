@@ -1,6 +1,7 @@
 import { useEffect, useMemo } from 'react'
 import { useTexture } from '@react-three/drei'
 import * as THREE from 'three'
+import forestTextureUrl from '../../assets/models/kaykit/forest_texture.png'
 import { GRID_SIZE, getCellKey, type GridCell } from '../../hooks/useSnapToGrid'
 import { createStandardCompatibleMaterial } from '../../rendering/nodeMaterialUtils'
 import {
@@ -26,6 +27,12 @@ const OUTDOOR_GROUND_HALF_SIZE = OUTDOOR_GROUND_SIZE / 2
 const MASK_TEXTURE_SIZE = 768
 const TERRAIN_REPEAT = 36
 const TOP_SURFACE_ELEVATION = 0.01
+const GRASS_PATCH_UV = {
+  minU: 0.030,
+  maxU: 0.062,
+  minV: 0.072,
+  maxV: 0.108,
+}
 
 type OverlayTextureType = Exclude<OutdoorGroundTextureType, 'short-grass'>
 
@@ -83,6 +90,54 @@ function configureGroundTexture(texture: THREE.Texture) {
   texture.repeat.set(TERRAIN_REPEAT, TERRAIN_REPEAT)
   texture.colorSpace = THREE.SRGBColorSpace
   texture.needsUpdate = true
+}
+
+function createGrassPatchTexture(texture: THREE.Texture) {
+  const image = texture.image as
+    | HTMLImageElement
+    | HTMLCanvasElement
+    | ImageBitmap
+    | OffscreenCanvas
+    | undefined
+
+  if (!image || typeof document === 'undefined') {
+    return null
+  }
+
+  const sourceWidth = 'width' in image ? image.width : 0
+  const sourceHeight = 'height' in image ? image.height : 0
+  if (!sourceWidth || !sourceHeight) {
+    return null
+  }
+
+  const cropX = Math.floor(sourceWidth * GRASS_PATCH_UV.minU)
+  const cropY = Math.floor(sourceHeight * GRASS_PATCH_UV.minV)
+  const cropWidth = Math.max(8, Math.ceil(sourceWidth * (GRASS_PATCH_UV.maxU - GRASS_PATCH_UV.minU)))
+  const cropHeight = Math.max(8, Math.ceil(sourceHeight * (GRASS_PATCH_UV.maxV - GRASS_PATCH_UV.minV)))
+
+  const canvas = document.createElement('canvas')
+  canvas.width = cropWidth
+  canvas.height = cropHeight
+  const context = canvas.getContext('2d')
+  if (!context) {
+    return null
+  }
+
+  context.drawImage(
+    image as CanvasImageSource,
+    cropX,
+    cropY,
+    cropWidth,
+    cropHeight,
+    0,
+    0,
+    cropWidth,
+    cropHeight,
+  )
+
+  const patchTexture = new THREE.CanvasTexture(canvas)
+  configureGroundTexture(patchTexture)
+  return patchTexture
 }
 
 function configureMaskTexture(texture: THREE.CanvasTexture) {
@@ -173,13 +228,14 @@ export function OutdoorGround({
   outdoorGroundTextureCells?: OutdoorGroundTextureCells
   outdoorTerrainHeights: OutdoorTerrainHeightfield
 }) {
+  const forestAtlasTexture = useTexture(forestTextureUrl)
   const groundTextureCells = useMemo(
     () => outdoorGroundTextureCells ?? {},
     [outdoorGroundTextureCells],
   )
   const textures = useTexture(TERRAIN_TEXTURE_PATHS)
   const defaultGrassColor = useMemo(
-    () => new THREE.Color('#8fdc4f').lerp(new THREE.Color('#3a5d2f'), outdoorBlend * 0.45),
+    () => new THREE.Color('#5aa43c').lerp(new THREE.Color('#355d2f'), outdoorBlend * 0.35),
     [outdoorBlend],
   )
   const topGeometry = useMemo(() => {
@@ -202,17 +258,22 @@ export function OutdoorGround({
     () => createCellMask(derivedTerrain.holeCells, 'holes'),
     [derivedTerrain.holeCells],
   )
+  const grassPatchTexture = useMemo(
+    () => createGrassPatchTexture(forestAtlasTexture),
+    [forestAtlasTexture],
+  )
 
   const baseMaterial = useMemo(
     () => createStandardCompatibleMaterial({
-      color: defaultGrassColor,
+      map: grassPatchTexture ?? undefined,
+      color: grassPatchTexture ? '#ffffff' : defaultGrassColor,
       alphaMap: holeMask,
       transparent: true,
       alphaTest: 0.5,
       roughness: 1,
       metalness: 0,
     }),
-    [defaultGrassColor, holeMask],
+    [defaultGrassColor, grassPatchTexture, holeMask],
   )
 
   const topMaterials = useMemo(() => ({
@@ -236,9 +297,15 @@ export function OutdoorGround({
   useEffect(() => {
     Object.values(textures).forEach(configureGroundTexture)
   }, [textures])
+  useEffect(() => {
+    if (grassPatchTexture) {
+      configureGroundTexture(grassPatchTexture)
+    }
+  }, [grassPatchTexture])
   useEffect(() => () => topGeometry.dispose(), [topGeometry])
   useEffect(() => () => baseGeometry.dispose(), [baseGeometry])
   useEffect(() => () => holeMask.dispose(), [holeMask])
+  useEffect(() => () => grassPatchTexture?.dispose(), [grassPatchTexture])
   useEffect(() => () => baseMaterial.dispose(), [baseMaterial])
   useEffect(() => () => {
     Object.values(topMaterials).forEach((material) => material.dispose())
