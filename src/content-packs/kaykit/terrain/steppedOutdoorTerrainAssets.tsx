@@ -1,6 +1,6 @@
 import { useMemo, type JSX } from 'react'
-import { useGLTF } from '@react-three/drei'
 import { cloneSceneWithNodeMaterials } from '../../../rendering/nodeMaterialUtils'
+import { useGLTF } from '../../../rendering/useGLTF'
 import { resolveKayKitModelAssetUrl } from '../shared/createKayKitAsset'
 
 export type SteppedOutdoorTerrainAssetKey =

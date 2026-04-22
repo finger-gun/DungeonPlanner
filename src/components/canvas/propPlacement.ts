@@ -3,6 +3,7 @@ import { getMetadataConnectors } from '../../content-packs/connectors'
 import { Euler, Plane, Ray, Vector3 } from 'three'
 import type { ContentPackAsset, Connector, SnapsTo } from '../../content-packs/types'
 import { GRID_SIZE, cellToWorldPosition, getCellKey, type GridCell, snapWorldPointToGrid } from '../../hooks/useSnapToGrid'
+import { sampleOutdoorTerrainHeight, type OutdoorTerrainHeightfield } from '../../store/outdoorTerrain'
 import type { PaintedCellRecord } from '../../store/useDungeonStore'
 import { isWallBoundary } from '../../store/wallSegments'
 
@@ -203,22 +204,33 @@ function findNearbyWalls(
   return walls
 }
 
-function getFloorSelectionAnchor(cursorPoint: { x: number; y: number; z: number }) {
-  const snapped = snapWorldPointToGrid(cursorPoint)
+function getFloorSelectionAnchorForCell(
+  cursorPoint: { x: number; y: number; z: number },
+  floorCellOverride?: GridCell,
+) {
+  const snapped = floorCellOverride
+    ? {
+        cell: floorCellOverride,
+        key: getCellKey(floorCellOverride),
+        position: cellToWorldPosition(floorCellOverride),
+      }
+    : snapWorldPointToGrid(cursorPoint)
   const cellCenter = cellToWorldPosition(snapped.cell)
 
   return {
     anchor: [cellCenter[0], cursorPoint.y, cellCenter[2]] as const,
     cell: snapped.cell,
     cellKey: snapped.key,
+    position: cellCenter,
   }
 }
 
 function getFloorAnchor(
   cursorPoint: { x: number; y: number; z: number },
   snapsTo: SnapsTo,
+  floorCellOverride?: GridCell,
 ): { anchor: readonly [number, number, number]; cell: GridCell; cellKey: string } {
-  const snapped = getFloorSelectionAnchor(cursorPoint)
+  const snapped = getFloorSelectionAnchorForCell(cursorPoint, floorCellOverride)
 
   if (snapsTo === 'GRID') {
     return snapped
@@ -307,9 +319,33 @@ function createFloorCandidates(
   selectionPoint: readonly [number, number, number],
   cursorPoint: { x: number; y: number; z: number },
   snapsTo: SnapsTo,
+  outdoorTerrainHeights?: OutdoorTerrainHeightfield,
+  floorCellOverride?: GridCell,
 ): SnapCandidate[] {
-  const selectionAnchor = getFloorSelectionAnchor(cursorPoint)
-  const finalAnchor = getFloorAnchor(cursorPoint, snapsTo)
+  const selectionAnchor = getFloorSelectionAnchorForCell(cursorPoint, floorCellOverride)
+  const finalAnchor = getFloorAnchor(cursorPoint, snapsTo, floorCellOverride)
+  const selectionAnchorPoint: readonly [number, number, number] = outdoorTerrainHeights
+    ? [
+        selectionAnchor.anchor[0],
+        sampleOutdoorTerrainHeight(
+          outdoorTerrainHeights,
+          floorCellOverride ? selectionAnchor.position[0] : selectionAnchor.anchor[0],
+          floorCellOverride ? selectionAnchor.position[2] : selectionAnchor.anchor[2],
+        ),
+        selectionAnchor.anchor[2],
+      ]
+    : selectionAnchor.anchor
+  const finalAnchorPoint: readonly [number, number, number] = outdoorTerrainHeights
+    ? [
+        finalAnchor.anchor[0],
+        sampleOutdoorTerrainHeight(
+          outdoorTerrainHeights,
+          floorCellOverride ? selectionAnchor.position[0] : finalAnchor.anchor[0],
+          floorCellOverride ? selectionAnchor.position[2] : finalAnchor.anchor[2],
+        ),
+        finalAnchor.anchor[2],
+      ]
+    : finalAnchor.anchor
 
   return connectors
     .filter((connector) => connector.type === 'FLOOR')
@@ -317,8 +353,8 @@ function createFloorCandidates(
       const rotation = connector.rotation ?? [0, 0, 0]
 
       return {
-        distance: getDistance(selectionAnchor.anchor, selectionPoint),
-        position: anchorObjectAtPoint(finalAnchor.anchor, connector.point, rotation),
+        distance: getDistance(selectionAnchorPoint, selectionPoint),
+        position: anchorObjectAtPoint(finalAnchorPoint, connector.point, rotation),
         rotation,
         cell: finalAnchor.cell,
         cellKey: finalAnchor.cellKey,
@@ -337,6 +373,8 @@ export function calculatePropSnapPosition(
   surfaceHit: SurfaceHit | null,
   cursorRay?: CursorRay | null,
   allowUnpaintedCells = false,
+  outdoorTerrainHeights?: OutdoorTerrainHeightfield,
+  floorCellOverride?: GridCell,
 ): SnapResult | null {
   const connectors = getAssetConnectors(asset)
   const snapsTo = asset.metadata?.snapsTo ?? 'FREE'
@@ -344,7 +382,14 @@ export function calculatePropSnapPosition(
   const candidates = [
     ...createWallCandidates(connectors, selectionPoint, cursorPoint, paintedCells, snapsTo, cursorRay),
     ...createSurfaceCandidates(connectors, selectionPoint, surfaceHit),
-    ...createFloorCandidates(connectors, selectionPoint, cursorPoint, snapsTo),
+    ...createFloorCandidates(
+      connectors,
+      selectionPoint,
+      cursorPoint,
+      snapsTo,
+      outdoorTerrainHeights,
+      floorCellOverride,
+    ),
   ]
 
   if (candidates.length === 0) {

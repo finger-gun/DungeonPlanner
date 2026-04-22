@@ -5,7 +5,7 @@ import {
 } from './steppedOutdoorTerrainAssets'
 
 describe('steppedOutdoorTerrainAssets', () => {
-  it('resolves maintained project urls for every required terrain asset', () => {
+  it('resolves maintained runtime urls for every required terrain asset', () => {
     for (const assetKey of Object.keys(STEPPED_OUTDOOR_TERRAIN_ASSETS)) {
       const url = resolveSteppedOutdoorTerrainAssetUrl(assetKey as keyof typeof STEPPED_OUTDOOR_TERRAIN_ASSETS)
       expect(url).toBeTruthy()
@@ -18,5 +18,23 @@ describe('steppedOutdoorTerrainAssets', () => {
       const url = resolveSteppedOutdoorTerrainAssetUrl(assetKey as keyof typeof STEPPED_OUTDOOR_TERRAIN_ASSETS)
       expect(url).not.toContain('forrest-assets-tmp')
     }
+  })
+
+  it('rewrites sidecar buffer and texture uris to emitted asset urls', () => {
+    const url = resolveSteppedOutdoorTerrainAssetUrl('top-center')
+    const payload = url.slice('data:model/gltf+json;base64,'.length)
+    const document = JSON.parse(atob(payload)) as {
+      buffers?: Array<{ uri?: string }>
+      images?: Array<{ uri?: string }>
+    }
+
+    expect(document.buffers?.[0]?.uri).toContain('Hill_Top_E_Center_Color1')
+    expect(document.buffers?.[0]?.uri).toContain('.bin')
+    expect(document.images?.[0]?.uri).toContain('forest_texture')
+    expect(document.images?.[0]?.uri).toContain('.png')
+    expect(document.buffers?.[0]?.uri).not.toBe('Hill_Top_E_Center_Color1.bin')
+    expect(document.images?.[0]?.uri).not.toBe('forest_texture.png')
+    expect(document.buffers?.[0]?.uri).toMatch(/^https?:\/\//)
+    expect(document.images?.[0]?.uri).toMatch(/^https?:\/\//)
   })
 })

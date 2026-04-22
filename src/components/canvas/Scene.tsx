@@ -513,9 +513,9 @@ function FloorContent({ startY = 0 }: { startY?: number }) {
         return
       }
 
-      const nextDisplayX = point.x + current.grabOffset[0]
-      const nextDisplayZ = point.z + current.grabOffset[1]
-      const snapped = snapWorldPointToGrid({ x: nextDisplayX, y: point.y, z: nextDisplayZ })
+      const nextDisplayX = nextPoint.x + current.grabOffset[0]
+      const nextDisplayZ = nextPoint.z + current.grabOffset[1]
+      const snapped = snapWorldPointToGrid({ x: nextDisplayX, y: nextPoint.y, z: nextDisplayZ })
       const targetKey = getCellKey(snapped.cell)
       const anchorKey = `${targetKey}:floor`
       const occupantId = occupancy[anchorKey]
