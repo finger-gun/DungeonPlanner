@@ -9,6 +9,13 @@ describe('shouldApplyWebGpuLensBlur', () => {
     })).toBe(false)
   })
 
+  it('disables lens blur in isometric mode', () => {
+    expect(shouldApplyWebGpuLensBlur({
+      activeCameraMode: 'isometric',
+      lensEnabled: true,
+    })).toBe(false)
+  })
+
   it('disables lens blur when the setting is off', () => {
     expect(shouldApplyWebGpuLensBlur({
       activeCameraMode: 'perspective',

@@ -4,6 +4,7 @@ import { TiledLighting } from './TiledLighting'
 import { registerMeshStandardNodeMaterial } from './nodeMaterialUtils'
 import { FORWARD_PLUS_TILE_SIZE, MAX_FORWARD_PLUS_POINT_LIGHTS } from './forwardPlusConfig'
 import { requireWebGpu } from './webgpuSupport'
+import { registerGLTFRenderer } from './useGLTF'
 
 registerMeshStandardNodeMaterial(MeshStandardNodeMaterial)
 
@@ -43,5 +44,6 @@ export async function createWebGpuRenderer(props: THREE.WebGLRendererParameters)
   renderer.shadowMap.type = THREE.PCFSoftShadowMap
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
   renderer.setSize(window.innerWidth, window.innerHeight, false)
+  registerGLTFRenderer(renderer)
   return renderer
 }

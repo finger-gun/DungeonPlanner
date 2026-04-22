@@ -23,7 +23,7 @@ type SphericalDest = {
 // phi=0 is straight up, theta=0 is "north" (+Z).
 const PRESET_TARGETS: Record<CameraPreset, SphericalDest> = {
   perspective: { r: PERSP_DIST, phi: Math.acos(11 / PERSP_DIST), theta: Math.PI / 4, fov: 42 },
-  isometric:   { r: ISO_DIST,   phi: Math.acos(1 / Math.sqrt(3)), theta: Math.PI / 4, fov: 42 },
+  isometric:   { r: ISO_DIST,   phi: Math.acos(1 / Math.sqrt(3)), theta: Math.PI / 4, orthoZoom: 3.25 },
   'top-down':  { r: 24,         phi: 0.001,                       theta: 0,           orthoZoom: 1.0 },
 }
 
@@ -40,6 +40,10 @@ function lerpAngle(a: number, b: number, t: number): number {
 function makeOrthoCamera(aspect: number): THREE.OrthographicCamera {
   const f = ORTHO_FRUSTUM
   return new THREE.OrthographicCamera(-f * aspect, f * aspect, f, -f, 0.1, 300)
+}
+
+function usesOrthographicProjection(preset: CameraPreset) {
+  return preset === 'isometric' || preset === 'top-down'
 }
 
 export function CameraPresetManager() {
@@ -109,7 +113,7 @@ export function CameraPresetManager() {
       }
     }
 
-    if (cameraPreset === 'top-down' && !isOrthoActive.current) {
+    if (usesOrthographicProjection(cameraPreset) && !isOrthoActive.current) {
       // Create ortho camera lazily
       const aspect = size.width / size.height
       if (!orthoCamRef.current) {
@@ -136,12 +140,12 @@ export function CameraPresetManager() {
         ortho.quaternion.copy(camera.quaternion)
       }
       
-      ortho.zoom = 1.0
+      ortho.zoom = dest.orthoZoom ?? 1.0
       ortho.updateProjectionMatrix()
       set({ camera: ortho })
       isOrthoActive.current = true
 
-    } else if (cameraPreset !== 'top-down' && isOrthoActive.current) {
+    } else if (!usesOrthographicProjection(cameraPreset) && isOrthoActive.current) {
       // Swap back to perspective camera, preserve position
       const persp = perspCamRef.current
       if (persp) {

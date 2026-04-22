@@ -253,6 +253,41 @@ export function MoveToolPanel() {
             <span className={`absolute top-0.5 h-3 w-3 rounded-full bg-white shadow transition-all ${pp.enabled ? 'left-[14px]' : 'left-0.5'}`} />
           </button>
         </div>
+        <div className="mb-3 rounded-2xl border border-stone-800 bg-stone-950/60 px-4 py-3">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-xs uppercase tracking-[0.22em] text-stone-400">Pixelate</p>
+              <p className="mt-1 text-xs text-stone-500">
+                WebGPU pixelation with single-pixel depth outlines.
+              </p>
+            </div>
+            <button
+              type="button"
+              aria-label="Pixelate"
+              aria-pressed={pp.pixelateEnabled}
+              onClick={() => setPostProcessing({ pixelateEnabled: !pp.pixelateEnabled })}
+              className={`relative h-4 w-7 rounded-full transition ${pp.pixelateEnabled ? 'bg-sky-500' : 'bg-stone-700'}`}
+            >
+              <span className={`absolute top-0.5 h-3 w-3 rounded-full bg-white shadow transition-all ${pp.pixelateEnabled ? 'left-[14px]' : 'left-0.5'}`} />
+            </button>
+          </div>
+          <div className={`mt-3 transition-opacity ${pp.pixelateEnabled ? 'opacity-100' : 'pointer-events-none opacity-40'}`}>
+            <div className="mb-2 flex items-center justify-between">
+              <label htmlFor="pixel-size" className="text-xs uppercase tracking-[0.22em] text-stone-400">Pixel Size</label>
+              <span className="text-xs tabular-nums text-stone-300">{pp.pixelSize.toFixed(0)}px</span>
+            </div>
+            <input
+              id="pixel-size"
+              type="range"
+              min={2}
+              max={24}
+              step={1}
+              value={pp.pixelSize}
+              onChange={(e) => setPostProcessing({ pixelSize: parseFloat(e.target.value) })}
+              className="w-full accent-sky-400"
+            />
+          </div>
+        </div>
         <div className={`rounded-2xl border border-stone-800 bg-stone-950/60 px-4 py-4 flex flex-col gap-4 transition-opacity ${pp.enabled ? 'opacity-100' : 'opacity-40 pointer-events-none'}`}>
           <div>
             <p className="text-xs uppercase tracking-[0.22em] text-stone-400">Autofocus</p>

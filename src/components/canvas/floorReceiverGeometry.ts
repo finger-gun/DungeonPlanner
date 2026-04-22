@@ -2,6 +2,7 @@ import * as THREE from 'three'
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js'
 import { cellToWorldPosition, getCellKey, type GridCell } from '../../hooks/useSnapToGrid'
 import type { ContentPackModelTransform } from '../../content-packs/types'
+import { createWebGpuCompatibleGeometry } from './webgpuGeometry'
 
 type FloorReceiverCell = {
   cell: GridCell
@@ -38,8 +39,10 @@ export function buildMergedFloorReceiverGeometry({
         return
       }
 
-      const geometry = obj.geometry.clone()
-      geometry.applyMatrix4(cellMatrix.clone().multiply(receiverMatrix).multiply(obj.matrixWorld))
+      const geometry = createWebGpuCompatibleGeometry(
+        obj.geometry,
+        cellMatrix.clone().multiply(receiverMatrix).multiply(obj.matrixWorld),
+      )
       geometries.push(geometry)
     })
   }

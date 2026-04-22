@@ -18,6 +18,7 @@ import { useEffect, useLayoutEffect, useRef } from 'react'
 import { useThree, useFrame } from '@react-three/fiber'
 import * as THREE from 'three/webgpu'
 import { pass, uniform } from 'three/tsl'
+import { pixelate } from '../../postprocessing/pixelate'
 import { tiltShift } from '../../postprocessing/tiltShift'
 import { DEFAULT_AUTOFOCUS_SMOOTH_TIME } from '../../postprocessing/tiltShiftMath'
 import { selectionOutline, alphaOver, SELECTION_OUTLINE_LAYER } from '../../postprocessing/selectionOutline'
@@ -98,18 +99,20 @@ export function WebGPUPostProcessing({
     const baseSceneColor = baseScenePass.getTextureNode() as any
     const baseSceneDepth = baseScenePass.getTextureNode('depth') as any
 
-    const shouldApplyBlur = shouldApplyWebGpuLensBlur({
+    const shouldApplyBlur = !settings.pixelateEnabled && shouldApplyWebGpuLensBlur({
       activeCameraMode,
       lensEnabled: settings.enabled,
     })
-    let outputNode = shouldApplyBlur
-      ? tiltShift(baseSceneColor, baseScenePass.getViewZNode(), {
-          focusDistance: focusDistanceUniform.current,
-          nearFocusRange: nearFocusRangeUniform.current,
-          farFocusRange: farFocusRangeUniform.current,
-          blurRadius: blurRadiusUniform.current,
-        })
-      : baseSceneColor
+    let outputNode = settings.pixelateEnabled
+      ? pixelate(baseSceneColor, baseSceneDepth, { pixelSize: settings.pixelSize })
+      : shouldApplyBlur
+        ? tiltShift(baseSceneColor, baseScenePass.getViewZNode(), {
+            focusDistance: focusDistanceUniform.current,
+            nearFocusRange: nearFocusRangeUniform.current,
+            farFocusRange: farFocusRangeUniform.current,
+            blurRadius: blurRadiusUniform.current,
+          })
+        : baseSceneColor
 
     const outlineCamera = (camera as any).clone() as THREE.Camera
     ;(outlineCamera as any).layers.disableAll()
@@ -157,7 +160,7 @@ export function WebGPUPostProcessing({
       exploredLosCameraRef.current = null
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [camera, lineOfSightActive, renderer, scene, settings.enabled, activeCameraMode])
+  }, [camera, lineOfSightActive, renderer, scene, settings.enabled, settings.pixelateEnabled, activeCameraMode])
 
   // Multi-frame delay after each pipeline rebuild — lets Three.js begin WebGPU
   // shader compilation (especially for complex scenes with many lights) before
@@ -182,7 +185,7 @@ export function WebGPUPostProcessing({
       pipelineReadyRef.current = false
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [camera, lineOfSightActive, renderer, scene, settings.enabled, activeCameraMode, invalidate])
+  }, [camera, lineOfSightActive, renderer, scene, settings.enabled, settings.pixelateEnabled, activeCameraMode, invalidate])
 
   // Update shader uniforms only when settings actually change — not every frame.
   useEffect(() => {

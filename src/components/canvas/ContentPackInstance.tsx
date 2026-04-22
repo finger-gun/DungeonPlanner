@@ -1,5 +1,4 @@
 import { Suspense, useEffect, useLayoutEffect, useRef, useMemo, useState } from 'react'
-import { useGLTF } from '@react-three/drei'
 import type { ThreeElements } from '@react-three/fiber'
 import * as THREE from 'three'
 import { SkeletonUtils } from 'three-stdlib'
@@ -14,6 +13,7 @@ import {
   cloneSceneWithNodeMaterials,
   createStandardCompatibleMaterial,
 } from '../../rendering/nodeMaterialUtils'
+import { useGLTF } from '../../rendering/useGLTF'
 
 /** Inverted-hull outline: a slightly scaled-up back-face clone with a
  *  bright emissive rim material. Works with any geometry/GLTF. */

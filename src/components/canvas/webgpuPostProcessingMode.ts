@@ -7,5 +7,5 @@ export function shouldApplyWebGpuLensBlur({
   activeCameraMode: CameraPreset
   lensEnabled: boolean
 }) {
-  return lensEnabled && activeCameraMode !== 'top-down'
+  return lensEnabled && activeCameraMode === 'perspective'
 }

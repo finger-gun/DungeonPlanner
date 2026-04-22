@@ -4,6 +4,7 @@ import { getContentPackAssetById, getContentPackAssetsByCategory } from '../../c
 import type { AssetBrowserCategory, AssetBrowserSubcategory, ContentPackAsset } from '../../content-packs/types'
 import { useDungeonStore } from '../../store/useDungeonStore'
 import { AssetCatalog, type AssetCatalogSection } from './AssetCatalog'
+import { SelectedPropInspector } from './SelectedPropInspector'
 
 const ASSET_BROWSER_CATEGORIES: Array<{ id: AssetBrowserCategory; label: string }> = [
   { id: 'furniture', label: 'Furniture' },
@@ -89,6 +90,9 @@ export function PropToolPanel() {
 
   const selectedAsset = selectedCatalogAssetId
     ? getContentPackAssetById(selectedCatalogAssetId)
+    : null
+  const selectedObjectAsset = selectedObject?.assetId
+    ? getContentPackAssetById(selectedObject.assetId)
     : null
 
   return (
@@ -215,35 +219,11 @@ export function PropToolPanel() {
       </section>
 
       {selectedObject?.type === 'prop' && assetBrowser.category !== 'openings' && (
-        <section>
-          <p className="mb-3 text-xs font-semibold uppercase tracking-[0.3em] text-sky-200/70">
-            Selected Prop
-          </p>
-          <div className="rounded-2xl border border-stone-800 bg-stone-900/80 p-4">
-            <div className="mb-3 flex items-start justify-between gap-3">
-              <div>
-                <p className="text-xs uppercase tracking-[0.24em] text-stone-500">
-                  {getContentPackAssetById(selectedObject.assetId ?? '')?.name ?? selectedObject.type}
-                </p>
-                <p className="mt-1 font-mono text-sm text-stone-200">
-                  {selectedObject.id.slice(0, 8)}
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={removeSelectedObject}
-                className="rounded-full border border-rose-400/30 bg-rose-500/10 px-3 py-1 text-xs text-rose-200 transition hover:border-rose-300/60 hover:bg-rose-500/20"
-              >
-                Delete
-              </button>
-            </div>
-            <div className="grid gap-2 text-xs">
-              <PropRow label="Position" value={selectedObject.position.map((v) => v.toFixed(2)).join(', ')} />
-              <PropRow label="Rotation" value={selectedObject.rotation.map((v) => v.toFixed(2)).join(', ')} />
-              <PropRow label="Cell" value={selectedObject.cellKey} />
-            </div>
-          </div>
-        </section>
+        <SelectedPropInspector
+          object={selectedObject}
+          asset={selectedObjectAsset}
+          onDelete={removeSelectedObject}
+        />
       )}
 
       {selectedOpening && (
