@@ -1,6 +1,6 @@
 import { Suspense, useEffect, useMemo, useRef } from 'react'
 import { Canvas, useThree } from '@react-three/fiber'
-import { OrthographicCamera, useGLTF } from '@react-three/drei'
+import { OrthographicCamera } from '@react-three/drei'
 import * as THREE from 'three'
 import { SkeletonUtils } from 'three-stdlib'
 import { getThumbnailLayout } from './thumbnail/thumbnailLayout'
@@ -9,6 +9,7 @@ import { RendererErrorBoundary } from './components/RendererErrorBoundary'
 import { WebGpuRequiredNotice } from './components/WebGpuRequiredNotice'
 import { getWebGpuSupportMessage, isWebGpuSupported } from './rendering/webgpuSupport'
 import { createWebGpuRenderer } from './rendering/createWebGpuRenderer'
+import { useGLTF } from './rendering/useGLTF'
 
 function getRenderableBounds(root: THREE.Object3D) {
   root.updateWorldMatrix(true, true)

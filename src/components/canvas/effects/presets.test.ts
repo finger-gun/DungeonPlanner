@@ -18,13 +18,13 @@ describe('particle presets', () => {
     const emitters = buildParticleEmitters({
       preset: 'fire',
       emitters: [
-        { offset: [0, 1.2, 0], scale: 1.1, intensity: 1.3 },
+        { offset: [0, 1.2, 0], scale: 1.1, intensity: 1.3, color: '#66ccff' },
         { offset: [0.25, 0.4, -0.1], scale: 0.6, intensity: 0.7 },
       ],
     }, 'candles')
 
     expect(emitters).toMatchObject([
-      { offset: [0, 1.2, 0], scale: 1.1, intensity: 1.3 },
+      { offset: [0, 1.2, 0], scale: 1.1, intensity: 1.3, color: '#66ccff' },
       { offset: [0.25, 0.4, -0.1], scale: 0.6, intensity: 0.7 },
     ])
   })

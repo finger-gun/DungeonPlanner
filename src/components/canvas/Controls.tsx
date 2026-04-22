@@ -169,7 +169,7 @@ export function Controls() {
   )
 
   const isPerspective = activeCameraMode === 'perspective'
-  const isTopDown     = activeCameraMode === 'top-down'
+  const isOrthographic = activeCameraMode === 'isometric' || activeCameraMode === 'top-down'
   const selectedPlayerId = selectedPlayer?.id ?? null
   const selectedPlayerPositionX = selectedPlayer?.position[0] ?? null
   const selectedPlayerPositionY = selectedPlayer?.position[1] ?? null
@@ -279,8 +279,8 @@ export function Controls() {
         enablePan
         enableDamping
         dampingFactor={0.08}
-        // Distance constraints for perspective/iso; zoom constraints for ortho top-down
-        {...(isTopDown
+        // Distance constraints for perspective; zoom constraints for orthographic presets
+        {...(isOrthographic
           ? { minZoom: 0.15, maxZoom: 8 }
           : { minDistance: 5, maxDistance: 48 }
         )}

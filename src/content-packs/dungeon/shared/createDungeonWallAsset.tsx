@@ -1,5 +1,5 @@
 import { useMemo } from 'react'
-import { useGLTF } from '@react-three/drei'
+import { useGLTF } from '../../../rendering/useGLTF'
 import type { ContentPackAsset, ContentPackComponentProps } from '../../types'
 import { DUNGEON_BASE_SCALE } from './dungeonConstants'
 import { cloneSceneWithNodeMaterials } from '../../../rendering/nodeMaterialUtils'

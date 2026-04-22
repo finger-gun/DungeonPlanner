@@ -1,5 +1,3 @@
-//import { coreContentPack } from './core'
-//import { kaykitContentPack } from './kaykit'
 import { dungeonContentPack } from './dungeon'
 import { warnIfUsesDeprecatedConnectsTo } from './deprecations'
 import type { ContentPackCategory } from './types'

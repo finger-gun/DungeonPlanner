@@ -1,5 +1,5 @@
 import { useMemo } from 'react'
-import { useGLTF } from '@react-three/drei'
+import { useGLTF } from '../../../rendering/useGLTF'
 import type {
   ContentPackAsset,
   ContentPackEffect,

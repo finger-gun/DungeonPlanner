@@ -38,6 +38,7 @@ import {
   DEFAULT_POST_PROCESSING_SETTINGS,
   normalizePostProcessingSettings,
 } from '../postprocessing/tiltShiftMath'
+import type { ObjectLightOverrides } from './lightOverrides'
 import {
   DEFAULT_OUTDOOR_TERRAIN_SCULPT_RADIUS,
   DEFAULT_OUTDOOR_TERRAIN_SCULPT_STEP,
@@ -209,6 +210,8 @@ export type LightBenchmarkSettings = {
 
 export type PostProcessingSettings = {
   enabled: boolean
+  pixelateEnabled: boolean
+  pixelSize: number
   focusDistance: number // legacy saved manual focus value retained for backward compatibility
   focalLength: number   // foreground blur falloff distance in world units
   backgroundFocalLength: number // background blur falloff distance in world units
@@ -254,6 +257,7 @@ type DungeonState = DungeonSnapshot & {
   activeCameraMode: CameraPreset
   cameraPreset: CameraPreset | null
   previousCameraPreset: CameraPreset | null
+  objectLightPreviewOverrides: Record<string, ObjectLightOverrides>
   history: DungeonSnapshot[]
   future: DungeonSnapshot[]
   paintCells: (cells: GridCell[]) => number
@@ -266,6 +270,7 @@ type DungeonState = DungeonSnapshot & {
   placeObject: (input: PlaceObjectInput) => string | null
   moveObject: (id: string, input: MoveObjectInput) => boolean
   setObjectProps: (id: string, props: Record<string, unknown>) => boolean
+  setObjectLightPreview: (id: string, overrides: ObjectLightOverrides | null) => void
   mergeExploredCells: (cellKeys: string[]) => void
   clearExploredCells: () => void
   removeObject: (id: string) => void
@@ -1312,6 +1317,7 @@ export const useDungeonStore = create<DungeonState>()(
   activeCameraMode: 'perspective',
   cameraPreset: null,
   previousCameraPreset: null,
+  objectLightPreviewOverrides: {},
   history: [],
   future: [],
   floors: {
@@ -1842,12 +1848,39 @@ export const useDungeonStore = create<DungeonState>()(
             props: { ...props },
           },
         },
+        objectLightPreviewOverrides: Object.fromEntries(
+          Object.entries(current.objectLightPreviewOverrides).filter(([key]) => key !== id),
+        ),
         history: [...current.history, previousSnapshot],
         future: [],
       }
     })
 
     return true
+  },
+  setObjectLightPreview: (id, overrides) => {
+    set((current) => {
+      if (overrides === null) {
+        if (!current.objectLightPreviewOverrides[id]) {
+          return current
+        }
+
+        return {
+          ...current,
+          objectLightPreviewOverrides: Object.fromEntries(
+            Object.entries(current.objectLightPreviewOverrides).filter(([key]) => key !== id),
+          ),
+        }
+      }
+
+      return {
+        ...current,
+        objectLightPreviewOverrides: {
+          ...current.objectLightPreviewOverrides,
+          [id]: overrides,
+        },
+      }
+    })
   },
   mergeExploredCells: (cellKeys) => {
     if (cellKeys.length === 0) {
@@ -2625,6 +2658,7 @@ export const useDungeonStore = create<DungeonState>()(
         assetBrowser: createDefaultAssetBrowserState(),
         activeCameraMode: 'perspective',
         cameraPreset: null,
+        objectLightPreviewOverrides: {},
         history: [],
       future: [],
     }))
@@ -2664,6 +2698,7 @@ export const useDungeonStore = create<DungeonState>()(
       assetBrowser: createDefaultAssetBrowserState(),
       activeCameraMode: 'perspective',
       cameraPreset: 'perspective', // triggers camera to home position
+      objectLightPreviewOverrides: {},
        // Settings reset to defaults
        sceneLighting: { intensity: 1 },
          postProcessing: { ...DEFAULT_POST_PROCESSING_SETTINGS },
@@ -3510,6 +3545,7 @@ export const useDungeonStore = create<DungeonState>()(
         floorViewMode: 'active',
         activeCameraMode: 'perspective',
         cameraPreset: null,
+        objectLightPreviewOverrides: {},
       history: [],
       future: [],
       floors,

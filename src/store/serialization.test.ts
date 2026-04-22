@@ -74,6 +74,8 @@ describe('serializeDungeon / deserializeDungeon roundtrip', () => {
     expect(result!.name).toBe('Test Dungeon')
     expect(result!.sceneLighting.intensity).toBe(1.5)
     expect(result!.postProcessing.enabled).toBe(true)
+    expect(result!.postProcessing.pixelateEnabled).toBe(false)
+    expect(result!.postProcessing.pixelSize).toBe(6)
     expect(result!.postProcessing.focalLength).toBe(9)
     expect(result!.postProcessing.backgroundFocalLength).toBe(9)
     expect(result!.postProcessing.bokehScale).toBe(0.5)

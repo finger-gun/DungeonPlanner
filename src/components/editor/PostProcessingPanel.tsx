@@ -26,9 +26,36 @@ export function PostProcessingPanel() {
         </button>
       </div>
 
-        <div className={`flex flex-col gap-3 transition-opacity ${pp.enabled ? 'opacity-100' : 'opacity-40 pointer-events-none'}`}>
-          <div className="rounded-2xl border border-stone-800 bg-stone-950/60 px-4 py-4">
-            <p className="text-xs uppercase tracking-[0.22em] text-stone-400">Autofocus</p>
+      <div className="mb-3 flex items-center justify-between">
+        <p className="text-xs font-semibold uppercase tracking-[0.3em] text-sky-200/70">
+          Pixelate
+        </p>
+        <button
+          type="button"
+          onClick={() => setPostProcessing({ pixelateEnabled: !pp.pixelateEnabled })}
+          className={`relative h-4 w-7 rounded-full transition ${
+            pp.pixelateEnabled ? 'bg-sky-500' : 'bg-stone-700'
+          }`}
+          title={pp.pixelateEnabled ? 'Disable pixelation' : 'Enable pixelation'}
+        >
+          <span
+            className={`absolute top-0.5 h-3 w-3 rounded-full bg-white shadow transition-all ${
+              pp.pixelateEnabled ? 'left-[14px]' : 'left-0.5'
+            }`}
+          />
+        </button>
+      </div>
+
+      <div className="mb-3 rounded-2xl border border-stone-800 bg-stone-950/60 px-4 py-4">
+        <p className="text-xs uppercase tracking-[0.22em] text-stone-400">Pixel effect</p>
+        <p className="mt-2 text-xs leading-relaxed text-stone-400">
+          Applies a WebGPU pixelation pass with single-pixel depth outlines. Off by default.
+        </p>
+      </div>
+
+      <div className={`flex flex-col gap-3 transition-opacity ${pp.enabled ? 'opacity-100' : 'pointer-events-none opacity-40'}`}>
+        <div className="rounded-2xl border border-stone-800 bg-stone-950/60 px-4 py-4">
+          <p className="text-xs uppercase tracking-[0.22em] text-stone-400">Autofocus</p>
           <p className="mt-2 text-xs leading-relaxed text-stone-400">
             Focus follows whatever the camera center ray hits.
           </p>
@@ -40,7 +67,11 @@ export function PostProcessingPanel() {
             <span className="text-xs tabular-nums text-stone-300">{pp.focalLength.toFixed(2)}</span>
           </div>
           <input
-            type="range" min={0.5} max={12} step={0.25} value={pp.focalLength}
+            type="range"
+            min={0.5}
+            max={12}
+            step={0.25}
+            value={pp.focalLength}
             onChange={(e) => setPostProcessing({ focalLength: parseFloat(e.target.value) })}
             className="w-full accent-sky-400"
           />
@@ -52,7 +83,11 @@ export function PostProcessingPanel() {
             <span className="text-xs tabular-nums text-stone-300">{pp.backgroundFocalLength.toFixed(2)}</span>
           </div>
           <input
-            type="range" min={0.5} max={12} step={0.25} value={pp.backgroundFocalLength}
+            type="range"
+            min={0.5}
+            max={12}
+            step={0.25}
+            value={pp.backgroundFocalLength}
             onChange={(e) => setPostProcessing({ backgroundFocalLength: parseFloat(e.target.value) })}
             className="w-full accent-sky-400"
           />
@@ -64,7 +99,11 @@ export function PostProcessingPanel() {
             <span className="text-xs tabular-nums text-stone-300">{pp.bokehScale.toFixed(2)}x</span>
           </div>
           <input
-            type="range" min={0.5} max={6} step={0.25} value={pp.bokehScale}
+            type="range"
+            min={0.5}
+            max={6}
+            step={0.25}
+            value={pp.bokehScale}
             onChange={(e) => setPostProcessing({ bokehScale: parseFloat(e.target.value) })}
             className="w-full accent-sky-400"
           />

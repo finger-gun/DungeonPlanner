@@ -111,6 +111,8 @@ export type DungeonFile = {
   sceneLighting: { intensity: number }
   postProcessing: {
     enabled: boolean
+    pixelateEnabled: boolean
+    pixelSize: number
     focusDistance: number
     focalLength: number
     backgroundFocalLength: number
@@ -134,6 +136,8 @@ export type SerializableState = {
   sceneLighting: { intensity: number }
   postProcessing: {
     enabled: boolean
+    pixelateEnabled: boolean
+    pixelSize: number
     focusDistance: number
     focalLength: number
     backgroundFocalLength: number

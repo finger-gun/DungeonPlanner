@@ -73,4 +73,85 @@ describe('floorReceiverGeometry', () => {
     expect(geometry!.boundingBox!.max.x).toBeCloseTo(2.5)
     geometry?.dispose()
   })
+
+  it('expands quantized receiver attributes to float buffers', () => {
+    const root = new THREE.Group()
+    const geometry = new THREE.BufferGeometry()
+    geometry.setAttribute(
+      'position',
+      new THREE.Int16BufferAttribute([
+        -32767, 0, -32767,
+        32767, 0, -32767,
+        32767, 0, 32767,
+      ], 3, true),
+    )
+    geometry.setAttribute(
+      'normal',
+      new THREE.Int8BufferAttribute([
+        0, 127, 0,
+        0, 127, 0,
+        0, 127, 0,
+      ], 3, true),
+    )
+    geometry.setIndex([0, 1, 2])
+    const material = new THREE.MeshBasicMaterial()
+    const mesh = new THREE.Mesh(geometry, material)
+    root.add(mesh)
+    root.updateWorldMatrix(true, true)
+
+    const merged = buildMergedFloorReceiverGeometry({
+      cells: [{ cell: [0, 0], receiverScene: root }],
+      blockedFloorCellKeys: new Set(),
+    })
+
+    expect(merged).not.toBeNull()
+    expect(merged!.getAttribute('position').array).toBeInstanceOf(Float32Array)
+    expect(merged!.getAttribute('position').normalized).toBe(false)
+    expect(merged!.getAttribute('normal').array).toBeInstanceOf(Float32Array)
+    expect(merged!.getAttribute('normal').normalized).toBe(false)
+
+    merged?.dispose()
+    geometry.dispose()
+    material.dispose()
+  })
+
+  it('keeps cell placement when sanitizing quantized receiver geometry', () => {
+    const root = new THREE.Group()
+    const geometry = new THREE.BufferGeometry()
+    geometry.setAttribute(
+      'position',
+      new THREE.Int16BufferAttribute([
+        -32767, 0, -32767,
+        32767, 0, -32767,
+        32767, 0, 32767,
+      ], 3, true),
+    )
+    geometry.setAttribute(
+      'normal',
+      new THREE.Int8BufferAttribute([
+        0, 127, 0,
+        0, 127, 0,
+        0, 127, 0,
+      ], 3, true),
+    )
+    geometry.setIndex([0, 1, 2])
+    const material = new THREE.MeshBasicMaterial()
+    const mesh = new THREE.Mesh(geometry, material)
+    root.add(mesh)
+    root.updateWorldMatrix(true, true)
+
+    const merged = buildMergedFloorReceiverGeometry({
+      cells: [{ cell: [1, 0], receiverScene: root }],
+      blockedFloorCellKeys: new Set(),
+    })
+
+    expect(merged).not.toBeNull()
+    merged!.computeBoundingBox()
+    expect(merged!.boundingBox!.min.x).toBeCloseTo(2)
+    expect(merged!.boundingBox!.max.x).toBeCloseTo(4)
+
+    merged?.dispose()
+    geometry.dispose()
+    material.dispose()
+  })
 })

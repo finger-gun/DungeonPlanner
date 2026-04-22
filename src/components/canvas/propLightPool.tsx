@@ -5,6 +5,12 @@ import type { PropLight } from '../../content-packs/types'
 import { getContentPackAssetById } from '../../content-packs/registry'
 import { FORWARD_PLUS_LOCAL_LIGHT_SHADOWS } from '../../rendering/forwardPlusConfig'
 import type { DungeonObjectRecord } from '../../store/useDungeonStore'
+import { useDungeonStore } from '../../store/useDungeonStore'
+import type { ObjectLightOverrides } from '../../store/lightOverrides'
+import {
+  getObjectLightOverrides,
+  mergePropLightWithOverrides,
+} from '../../store/lightOverrides'
 import type { PlayVisibility } from './playVisibility'
 import { shouldRenderLineOfSightLight } from './losRendering'
 
@@ -40,10 +46,21 @@ export type PropLightSource = {
  * Call this via useMemo so registry lookups only run when objects change,
  * not on every animation frame.
  */
-export function precomputeLightSources(objects: DungeonObjectRecord[]): PropLightSource[] {
+export function precomputeLightSources(
+  objects: DungeonObjectRecord[],
+  previewOverrides: Record<string, ObjectLightOverrides> = {},
+): PropLightSource[] {
   return objects.flatMap((object) => {
     const asset = object.assetId ? getContentPackAssetById(object.assetId) : null
-    const light = asset?.getLight?.(object.props) ?? asset?.metadata?.light ?? null
+    const baseLight = asset?.getLight?.(object.props) ?? asset?.metadata?.light ?? null
+    if (!baseLight) {
+      return []
+    }
+
+    const light = mergePropLightWithOverrides(
+      baseLight,
+      previewOverrides[object.id] ?? getObjectLightOverrides(object.props),
+    )
     return light ? [{ key: object.id, object, light }] : []
   })
 }
@@ -86,7 +103,11 @@ export function PropLightPool({
 }) {
   const { camera, invalidate, scene } = useThree()
   const refs = useRef<Array<THREE.PointLight | null>>([])
-  const lightSources = useMemo(() => precomputeLightSources(objects), [objects])
+  const objectLightPreviewOverrides = useDungeonStore((state) => state.objectLightPreviewOverrides)
+  const lightSources = useMemo(
+    () => precomputeLightSources(objects, objectLightPreviewOverrides),
+    [objects, objectLightPreviewOverrides],
+  )
   const visibleAssignments = useMemo(
     () => collectVisiblePropLightAssignments({
       lightSources,

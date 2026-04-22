@@ -119,6 +119,36 @@ describe('propLightPool', () => {
     expect(precomputeLightSources(objects)).toHaveLength(0)
   })
 
+  it('merges committed and preview light overrides into resolved light sources', () => {
+    const torch: DungeonObjectRecord = {
+      ...createObject('torch', [0, 0, 0], 'dungeon.props_torch_lit'),
+      props: {
+        lightOverrides: {
+          color: '#00ff00',
+          intensity: 2.5,
+        },
+      },
+    }
+
+    expect(precomputeLightSources([torch])[0]?.light).toMatchObject({
+      color: '#00ff00',
+      intensity: 2.5,
+      flicker: true,
+    })
+
+    expect(precomputeLightSources([torch], {
+      torch: {
+        color: '#3366ff',
+        intensity: 4,
+        flicker: false,
+      },
+    })[0]?.light).toMatchObject({
+      color: '#3366ff',
+      intensity: 4,
+      flicker: false,
+    })
+  })
+
   it('does not allocate pooled lights when there are no light sources', () => {
     expect(getDesiredPropLightPoolSize(0)).toBe(0)
   })

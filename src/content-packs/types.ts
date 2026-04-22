@@ -87,6 +87,8 @@ export type ContentPackEffectEmitter = {
   scale?: number
   /** Multiplies the preset brightness/density for this emitter. */
   intensity?: number
+  /** Optional runtime tint, typically linked to the matching light color. */
+  color?: string
 }
 
 export type ContentPackEffect = {
