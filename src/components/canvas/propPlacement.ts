@@ -335,6 +335,7 @@ export function calculatePropSnapPosition(
   paintedCells: Record<string, PaintedCellRecord>,
   surfaceHit: SurfaceHit | null,
   cursorRay?: CursorRay | null,
+  allowUnpaintedCells = false,
 ): SnapResult | null {
   const connectors = getAssetConnectors(asset)
   const snapsTo = asset.metadata?.snapsTo ?? 'FREE'
@@ -352,7 +353,7 @@ export function calculatePropSnapPosition(
   candidates.sort((left, right) => left.distance - right.distance)
   const chosen = candidates[0]
 
-  if (!chosen.parentObjectId && !paintedCells[chosen.cellKey]) {
+  if (!allowUnpaintedCells && !chosen.parentObjectId && !paintedCells[chosen.cellKey]) {
     return null
   }
 

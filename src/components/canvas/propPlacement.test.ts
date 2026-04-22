@@ -250,4 +250,28 @@ describe('calculatePropSnapPosition', () => {
     expect(placement?.position[1]).toBeCloseTo(1)
     expect(placement?.position[2]).toBeCloseTo(0.35)
   })
+
+  it('allows floor props to snap on outdoor terrain without painted indoor cells', () => {
+    const asset = createTestAsset({
+      connectsTo: 'FLOOR',
+      snapsTo: 'GRID',
+      connectors: [{ type: 'FLOOR', point: [0, 0, 0] }],
+    })
+
+    const placement = calculatePropSnapPosition(
+      asset,
+      { x: 3, y: 0, z: 5 },
+      {},
+      null,
+      null,
+      true,
+    )
+
+    expect(placement).not.toBeNull()
+    expect(placement?.connector.type).toBe('FLOOR')
+    expect(placement?.cell).toEqual([1, 2])
+    expect(placement?.cellKey).toBe('1:2')
+    expect(placement?.position[0]).toBeCloseTo(3)
+    expect(placement?.position[2]).toBeCloseTo(5)
+  })
 })

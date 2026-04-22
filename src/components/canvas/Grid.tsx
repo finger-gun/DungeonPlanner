@@ -1506,6 +1506,7 @@ export function getPropPlacement(
         cell: surfaceHit.cell,
       } : null,
       cursorRay,
+      mapMode === 'outdoor',
     )
     
     if (!snapResult) {
