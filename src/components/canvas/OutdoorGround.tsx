@@ -27,8 +27,9 @@ const MASK_TEXTURE_SIZE = 768
 const TERRAIN_REPEAT = 36
 const TOP_SURFACE_ELEVATION = 0.01
 
-const TERRAIN_TEXTURE_PATHS: Record<OutdoorGroundTextureType, string> = {
-  'short-grass': '/textures/outdoor/short-grass/albedo.png',
+type OverlayTextureType = Exclude<OutdoorGroundTextureType, 'short-grass'>
+
+const TERRAIN_TEXTURE_PATHS: Record<OverlayTextureType, string> = {
   'dry-dirt': '/textures/outdoor/dry-dirt/albedo.png',
   'rough-stone': '/textures/outdoor/rough-stone/albedo.png',
   'wet-dirt': '/textures/outdoor/wet-dirt/albedo.png',
@@ -204,7 +205,6 @@ export function OutdoorGround({
 
   const baseMaterial = useMemo(
     () => createStandardCompatibleMaterial({
-      map: textures['short-grass'],
       color: defaultGrassColor,
       alphaMap: holeMask,
       transparent: true,
@@ -212,16 +212,10 @@ export function OutdoorGround({
       roughness: 1,
       metalness: 0,
     }),
-    [defaultGrassColor, holeMask, textures],
+    [defaultGrassColor, holeMask],
   )
 
   const topMaterials = useMemo(() => ({
-    'short-grass': createStandardCompatibleMaterial({
-      map: textures['short-grass'],
-      color: defaultGrassColor,
-      roughness: 1,
-      metalness: 0,
-    }),
     'dry-dirt': createStandardCompatibleMaterial({
       map: textures['dry-dirt'],
       roughness: 1,
@@ -237,7 +231,7 @@ export function OutdoorGround({
       roughness: 1,
       metalness: 0,
     }),
-  }), [defaultGrassColor, textures])
+  }), [textures])
 
   useEffect(() => {
     Object.values(textures).forEach(configureGroundTexture)
@@ -259,9 +253,19 @@ export function OutdoorGround({
       {derivedTerrain.topSurfaces.map((surface) => {
         const [worldX, worldZ] = getCellWorldPosition(surface.cell)
         const textureType = surface.textureType ?? 'short-grass'
+        if (textureType === 'short-grass') {
+          return (
+            <SteppedOutdoorTerrainAsset
+              key={`top-center:${surface.cellKey}`}
+              assetKey="top-center"
+              position={[worldX, surface.worldY - 0.02, worldZ]}
+            />
+          )
+        }
+
         return (
           <mesh
-            key={`top-surface:${surface.cellKey}`}
+            key={`top-surface:${surface.cellKey}:${textureType}`}
             geometry={topGeometry}
             position={[worldX, surface.worldY + TOP_SURFACE_ELEVATION, worldZ]}
             receiveShadow
