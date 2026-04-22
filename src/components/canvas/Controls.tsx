@@ -5,11 +5,9 @@ import * as THREE from 'three'
 import type { OrbitControls as OrbitControlsImpl } from 'three-stdlib'
 import { useDungeonStore } from '../../store/useDungeonStore'
 import { registerDebugCameraPoseReader, registerDebugWorldProjector } from './debugCameraBridge'
-import { easePlayerCameraFocusProgress, getPlayerCameraFocusPoint } from './playerCameraFocus'
 
 const PAN_SPEED = 0.006
 const ROTATE_SPEED = 0.025
-const PLAYER_LOOK_AT_ANIMATION_DURATION = 0.42
 
 const TRACKED_KEYS = new Set([
   'w', 'a', 's', 'd',
@@ -140,106 +138,16 @@ function KeyboardCameraControls() {
 
 export function Controls() {
   const controlsRef = useRef<OrbitControlsImpl | null>(null)
-  const playerFocusStartRef = useRef(new THREE.Vector3())
-  const playerFocusTargetRef = useRef(new THREE.Vector3())
-  const playerFocusElapsedRef = useRef(0)
-  const playerFocusAnimationActiveRef = useRef(false)
   const camera = useThree((state) => state.camera)
   const gl = useThree((state) => state.gl)
-  const invalidate = useThree((state) => state.invalidate)
   const cameraMode = useDungeonStore((state) => state.cameraMode)
   const isPaintingStrokeActive = useDungeonStore(
     (state) => state.isPaintingStrokeActive,
   )
   const isObjectDragActive = useDungeonStore((state) => state.isObjectDragActive)
   const activeCameraMode = useDungeonStore((state) => state.activeCameraMode)
-  const selection = useDungeonStore((state) => state.selection)
-  const selectedPlayer = useDungeonStore((state) => {
-    if (!selection) {
-      return null
-    }
-
-    const selectedObject = state.placedObjects[selection]
-    return selectedObject?.type === 'player' ? selectedObject : null
-  })
-  const selectedPlayerSize = useDungeonStore((state) =>
-    selectedPlayer?.assetId
-      ? (state.generatedCharacters[selectedPlayer.assetId]?.size ?? null)
-      : null,
-  )
-
   const isPerspective = activeCameraMode === 'perspective'
   const isOrthographic = activeCameraMode === 'isometric' || activeCameraMode === 'top-down'
-  const selectedPlayerId = selectedPlayer?.id ?? null
-  const selectedPlayerPositionX = selectedPlayer?.position[0] ?? null
-  const selectedPlayerPositionY = selectedPlayer?.position[1] ?? null
-  const selectedPlayerPositionZ = selectedPlayer?.position[2] ?? null
-
-  useEffect(() => {
-    if (!isPerspective || !selectedPlayer || isObjectDragActive) {
-      if (!isObjectDragActive) {
-        playerFocusAnimationActiveRef.current = false
-      }
-      return
-    }
-
-    const orbitControls = controlsRef.current
-    if (!orbitControls) {
-      return
-    }
-
-    const focusPoint = getPlayerCameraFocusPoint(
-      selectedPlayer.position,
-      selectedPlayerSize ? { size: selectedPlayerSize } : null,
-    )
-
-    playerFocusStartRef.current.copy(orbitControls.target)
-    playerFocusTargetRef.current.set(focusPoint.x, focusPoint.y, focusPoint.z)
-    playerFocusElapsedRef.current = 0
-    playerFocusAnimationActiveRef.current = true
-    invalidate()
-  }, [
-    invalidate,
-    isPerspective,
-    isObjectDragActive,
-    selectedPlayer,
-    selectedPlayerId,
-    selectedPlayerPositionX,
-    selectedPlayerPositionY,
-    selectedPlayerPositionZ,
-    selectedPlayerSize,
-  ])
-
-  useFrame((_, delta) => {
-    if (!isPerspective || isObjectDragActive || !playerFocusAnimationActiveRef.current) {
-      return
-    }
-
-    const orbitControls = controlsRef.current
-    if (!orbitControls) {
-      return
-    }
-
-    playerFocusElapsedRef.current += Math.max(delta, 0)
-    const rawProgress = PLAYER_LOOK_AT_ANIMATION_DURATION <= 0
-      ? 1
-      : Math.min(playerFocusElapsedRef.current / PLAYER_LOOK_AT_ANIMATION_DURATION, 1)
-    const easedProgress = easePlayerCameraFocusProgress(rawProgress)
-
-    orbitControls.target.lerpVectors(
-      playerFocusStartRef.current,
-      playerFocusTargetRef.current,
-      easedProgress,
-    )
-
-    if (rawProgress >= 1) {
-      orbitControls.target.copy(playerFocusTargetRef.current)
-      playerFocusAnimationActiveRef.current = false
-    }
-
-    orbitControls.update()
-    invalidate()
-  })
 
   useEffect(() => {
     if (!import.meta.env.DEV) {

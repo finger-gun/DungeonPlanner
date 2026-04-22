@@ -21,8 +21,6 @@ import { useDungeonStore, type DungeonObjectRecord } from '../../store/useDungeo
 import { usePlayVisibility } from './playVisibility'
 import { ContentPackInstance } from './ContentPackInstance'
 import { getCellKey, snapWorldPointToGrid } from '../../hooks/useSnapToGrid'
-import { PlayVisibilityMask } from './PlayVisibilityMask'
-import { PlayVisibilityDebugRays } from './PlayVisibilityDebugRays'
 import { createPlayDragState, updatePlayDragState, type PlayDragState } from './playDrag'
 import { RoomResizeOverlay } from './RoomResizeOverlay'
 import { getEffectiveFloorViewMode } from './floorViewMode'
@@ -33,6 +31,7 @@ import { getEnvironmentLightingState } from './environmentLighting'
 import { createWebGpuRenderer } from '../../rendering/createWebGpuRenderer'
 import { MAX_FORWARD_PLUS_POINT_LIGHTS } from '../../rendering/forwardPlusConfig'
 import { createSyntheticLightBenchmarkObjects } from './lightBenchmark'
+import { FogOfWarProvider } from './fogOfWar'
 
 const SCENE_OVERVIEW_FLOOR_HEIGHT_UNIT = 3
 const PLAYER_ANIMATION_MS = {
@@ -45,7 +44,8 @@ const ALWAYS_VISIBLE: ReturnType<typeof usePlayVisibility> = {
   getCellVisibility: () => 'visible',
   getObjectVisibility: () => 'visible',
   getWallVisibility: () => 'visible',
-  mask: null,
+  visibleCellKeys: [],
+  playerOrigins: [],
 }
 
 export function Scene() {
@@ -353,8 +353,6 @@ function FloorContent({ startY = 0 }: { startY?: number }) {
   const occupancy = useDungeonStore((state) => state.occupancy)
   const layers = useDungeonStore((state) => state.layers)
   const tool = useDungeonStore((state) => state.tool)
-  const showLosDebugMask = useDungeonStore((state) => state.showLosDebugMask)
-  const showLosDebugRays = useDungeonStore((state) => state.showLosDebugRays)
   const showLensFocusDebugPoint = useDungeonStore((state) => state.showLensFocusDebugPoint)
   const moveObject = useDungeonStore((state) => state.moveObject)
   const selectObject = useDungeonStore((state) => state.selectObject)
@@ -386,13 +384,7 @@ function FloorContent({ startY = 0 }: { startY?: number }) {
     ),
     [objectLightCount, syntheticBenchmarkObjects.length],
   )
-  const lineOfSightActive = visibility.active && visibility.mask !== null
-  const showPostProcessing = postProcessingEnabled || pixelateEnabled || showLensFocusDebugPoint || lineOfSightActive
-  // lineOfSightActive is intentionally excluded from this key: the pipeline
-  // updates in-place via useLayoutEffect deps in WebGPUPostProcessing, so a
-  // full remount (which forces re-compilation of all 12+ light shaders) is
-  // unnecessary and was causing permanent black-screen when compilation took
-  // more than one RAF frame.
+  const showPostProcessing = postProcessingEnabled || pixelateEnabled || showLensFocusDebugPoint
   const postProcessingKey = `${postProcessingEnabled ? 'post' : 'raw'}:${pixelateEnabled ? 'pixel' : 'clean'}:${showLensFocusDebugPoint ? 'focus' : 'nofocus'}`
 
   const groupRef = useRef<THREE.Group>(null)
@@ -572,57 +564,51 @@ function FloorContent({ startY = 0 }: { startY?: number }) {
   }, [stopDrag, tool])
 
   return (
-    <group ref={groupRef} position={[0, startY, 0]}>
-      {showPostProcessing && (
-        <WebGPUPostProcessing
-          key={postProcessingKey}
-          lineOfSightActive={lineOfSightActive}
-        />
-      )}
-      <DungeonRoom visibility={visibility} />
-      <RoomResizeOverlay />
-      {propLightBudget > 0 && (
-        <PropLightPool objects={objects} visibility={visibility} maxLights={propLightBudget} />
-      )}
-      {syntheticLightBudget > 0 && (
-        <PropLightPool
-          objects={syntheticBenchmarkObjects}
-          visibility={ALWAYS_VISIBLE}
-          maxLights={syntheticLightBudget}
-        />
-      )}
-      {visibility.active && visibility.mask && (
-        <>
-          <PlayVisibilityMask mask={visibility.mask} mode="occlusion" />
-          {showLosDebugMask && <PlayVisibilityMask mask={visibility.mask} mode="debug" />}
-          {showLosDebugRays && <PlayVisibilityDebugRays mask={visibility.mask} />}
-        </>
-      )}
-      {topLevelObjects.map((object) => (
-        dragState?.objectId === object.id ? null : (
-          <DungeonObject
-            key={object.id}
-            object={object}
-            visibility={visibility}
-            childrenByParent={childrenByParent}
-            onPlayDragStart={startDrag}
-            playerAnimationState={releaseAnimationIds[object.id] ? 'release' : undefined}
+    <FogOfWarProvider visibility={visibility}>
+      <group ref={groupRef} position={[0, startY, 0]}>
+        {showPostProcessing && (
+          <WebGPUPostProcessing
+            key={postProcessingKey}
           />
-        )
-      ))}
-      {dragState && (
-        <group position={dragState.displayPosition} rotation={dragState.rotation}>
-          <ContentPackInstance
-            assetId={dragState.assetId}
-            playerAnimationState={dragState.animationState}
-            variant="prop"
-            visibility="visible"
+        )}
+        <DungeonRoom visibility={visibility} />
+        <RoomResizeOverlay />
+        {propLightBudget > 0 && (
+          <PropLightPool objects={objects} visibility={visibility} maxLights={propLightBudget} />
+        )}
+        {syntheticLightBudget > 0 && (
+          <PropLightPool
+            objects={syntheticBenchmarkObjects}
+            visibility={ALWAYS_VISIBLE}
+            maxLights={syntheticLightBudget}
           />
-          <PlayerSelectionRing assetId={dragState.assetId} color={dragState.valid ? '#d4a72c' : '#ef4444'} />
-        </group>
-      )}
-      <FireParticleSystem objects={objects} visibility={visibility} />
-    </group>
+        )}
+        {topLevelObjects.map((object) => (
+          dragState?.objectId === object.id ? null : (
+            <DungeonObject
+              key={object.id}
+              object={object}
+              visibility={visibility}
+              childrenByParent={childrenByParent}
+              onPlayDragStart={startDrag}
+              playerAnimationState={releaseAnimationIds[object.id] ? 'release' : undefined}
+            />
+          )
+        ))}
+        {dragState && (
+          <group position={dragState.displayPosition} rotation={dragState.rotation}>
+            <ContentPackInstance
+              assetId={dragState.assetId}
+              playerAnimationState={dragState.animationState}
+              variant="prop"
+              visibility="visible"
+            />
+            <PlayerSelectionRing assetId={dragState.assetId} color={dragState.valid ? '#d4a72c' : '#ef4444'} />
+          </group>
+        )}
+        <FireParticleSystem objects={objects} visibility={visibility} />
+      </group>
+    </FogOfWarProvider>
   )
 }
 

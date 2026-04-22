@@ -35,7 +35,7 @@ export const DungeonObject = memo(function DungeonObject({
   const assetBrowserCategory = useDungeonStore((state) => state.assetBrowser.category)
   const selected = selection === object.id
   const visibilityState = visibility.getObjectVisibility(object)
-  const useLineOfSightPostMask = visibility.active && visibility.mask !== null
+  const useLineOfSightPostMask = visibility.active
 
   const groupRef = useRef<Group>(null)
   useLayoutEffect(() => {

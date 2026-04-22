@@ -8,6 +8,7 @@ export type BatchedTilePlacement = {
   key: string
   position: readonly [number, number, number]
   rotation: readonly [number, number, number]
+  fogCell?: readonly [number, number]
 }
 
 export type BatchedTileGeometryMesh = {
@@ -41,6 +42,12 @@ export function buildMergedTileGeometryMeshes({
         sourceMesh.geometry,
         getPlacementMatrix(placement).multiply(transformMatrix).multiply(sourceMesh.matrixWorld),
       )
+      if (placement.fogCell) {
+        geometry.setAttribute(
+          'fogCell',
+          createRepeatedVector2Attribute(geometry.getAttribute('position').count, placement.fogCell),
+        )
+      }
       geometries.push(geometry)
     })
 
@@ -58,6 +65,16 @@ export function buildMergedTileGeometryMeshes({
     })
 
   return mergedMeshes
+}
+
+function createRepeatedVector2Attribute(count: number, value: readonly [number, number]) {
+  const array = new Float32Array(count * 2)
+  for (let index = 0; index < count; index += 1) {
+    array[index * 2] = value[0]
+    array[index * 2 + 1] = value[1]
+  }
+
+  return new THREE.Float32BufferAttribute(array, 2)
 }
 
 function * iterateBatchableMeshes(root: THREE.Object3D) {
