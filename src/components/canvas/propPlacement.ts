@@ -205,9 +205,10 @@ function findNearbyWalls(
 
 function getFloorSelectionAnchor(cursorPoint: { x: number; y: number; z: number }) {
   const snapped = snapWorldPointToGrid(cursorPoint)
+  const cellCenter = cellToWorldPosition(snapped.cell)
 
   return {
-    anchor: cellToWorldPosition(snapped.cell),
+    anchor: [cellCenter[0], cursorPoint.y, cellCenter[2]] as const,
     cell: snapped.cell,
     cellKey: snapped.key,
   }
@@ -224,7 +225,7 @@ function getFloorAnchor(
   }
 
   return {
-    anchor: [cursorPoint.x, 0, cursorPoint.z],
+    anchor: [cursorPoint.x, cursorPoint.y, cursorPoint.z],
     cell: snapped.cell,
     cellKey: snapped.cellKey,
   }
@@ -238,7 +239,7 @@ function getSelectionPoint(
     return surfaceHit.position
   }
 
-  return [cursorPoint.x, 0, cursorPoint.z]
+  return [cursorPoint.x, cursorPoint.y, cursorPoint.z]
 }
 
 function createWallCandidates(

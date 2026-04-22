@@ -395,7 +395,7 @@ function FloorContent({ startY = 0 }: { startY?: number }) {
   const groupRef = useRef<THREE.Group>(null)
   const animYRef = useRef(startY)
   const dragStateRef = useRef<PlayDragState | null>(null)
-  const { camera, gl, invalidate } = useThree()
+  const { camera, gl, invalidate, scene } = useThree()
   const [dragState, setDragState] = useState<PlayDragState | null>(null)
 
   useFrame((_, delta) => {
@@ -436,15 +436,34 @@ function FloorContent({ startY = 0 }: { startY?: number }) {
     invalidate()
   }, [invalidate, setObjectDragActive])
 
+  const getOutdoorTerrainDragPoint = useCallback((ray: THREE.Ray) => {
+    const raycaster = new THREE.Raycaster(ray.origin, ray.direction.clone().normalize())
+    const intersections = raycaster.intersectObjects(scene.children, true)
+
+    for (const intersection of intersections) {
+      let current: THREE.Object3D | null = intersection.object
+      while (current) {
+        if (current.userData.outdoorTerrainSurface === true) {
+          return intersection.point.clone()
+        }
+        current = current.parent
+      }
+    }
+
+    return null
+  }, [scene.children])
+
   const startDrag = useCallback((object: DungeonObjectRecord, event: ThreeEvent<PointerEvent>) => {
     if (tool !== 'play' || object.type !== 'player') {
       return
     }
 
-    const pointerPoint = event.ray.intersectPlane(
-      new THREE.Plane(new THREE.Vector3(0, 1, 0), 0),
-      new THREE.Vector3(),
-    )
+    const pointerPoint = mapMode === 'outdoor'
+      ? getOutdoorTerrainDragPoint(event.ray)
+      : event.ray.intersectPlane(
+          new THREE.Plane(new THREE.Vector3(0, 1, 0), 0),
+          new THREE.Vector3(),
+        )
     const nextState = createPlayDragState(
       object,
       pointerPoint,
@@ -456,14 +475,13 @@ function FloorContent({ startY = 0 }: { startY?: number }) {
     dragStateRef.current = nextState
     setObjectDragActive(true)
     invalidate()
-  }, [invalidate, mapMode, outdoorTerrainHeights, selectObject, setObjectDragActive, tool])
+  }, [getOutdoorTerrainDragPoint, invalidate, mapMode, outdoorTerrainHeights, selectObject, setObjectDragActive, tool])
 
   useEffect(() => {
     if (!dragState) {
       return
     }
 
-    const plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0)
     const raycaster = new THREE.Raycaster()
     const ndc = new THREE.Vector2()
     const point = new THREE.Vector3()
@@ -480,7 +498,10 @@ function FloorContent({ startY = 0 }: { startY?: number }) {
       )
 
       raycaster.setFromCamera(ndc, camera)
-      if (!raycaster.ray.intersectPlane(plane, point)) {
+      const nextPoint = mapMode === 'outdoor'
+        ? getOutdoorTerrainDragPoint(raycaster.ray)
+        : raycaster.ray.intersectPlane(new THREE.Plane(new THREE.Vector3(0, 1, 0), 0), point)
+      if (!nextPoint) {
         return
       }
 
@@ -499,7 +520,7 @@ function FloorContent({ startY = 0 }: { startY?: number }) {
       setDragState((current) => current
         ? updatePlayDragState(
             current,
-            point,
+            nextPoint,
             mapMode === 'outdoor'
               ? !blockedCells[targetKey]
               : Boolean(paintedCells[targetKey]),
@@ -550,6 +571,7 @@ function FloorContent({ startY = 0 }: { startY?: number }) {
     blockedCells,
     camera,
     dragState,
+    getOutdoorTerrainDragPoint,
     gl,
     invalidate,
     mapMode,

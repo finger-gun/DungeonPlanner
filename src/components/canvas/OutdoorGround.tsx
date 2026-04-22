@@ -313,7 +313,7 @@ export function OutdoorGround({
 
   return (
     <group>
-      <mesh geometry={baseGeometry} receiveShadow>
+      <mesh geometry={baseGeometry} receiveShadow userData={{ outdoorTerrainSurface: true }}>
         <primitive object={baseMaterial} attach="material" />
       </mesh>
 
@@ -326,6 +326,7 @@ export function OutdoorGround({
               key={`top-center:${surface.cellKey}`}
               assetKey="top-center"
               position={[worldX, surface.worldY - 0.02, worldZ]}
+              userData={{ outdoorTerrainSurface: true }}
             />
           )
         }
@@ -336,6 +337,7 @@ export function OutdoorGround({
             geometry={topGeometry}
             position={[worldX, surface.worldY + TOP_SURFACE_ELEVATION, worldZ]}
             receiveShadow
+            userData={{ outdoorTerrainSurface: true }}
           >
             <primitive object={topMaterials[textureType]} attach="material" />
           </mesh>
@@ -349,6 +351,7 @@ export function OutdoorGround({
             key={`top-edge:${edge.cellKey}:${edge.direction}:${edge.worldY}`}
             assetKey={TOP_EDGE_ASSET_KEYS[edge.direction as TerrainDirection]}
             position={[worldX, edge.worldY + TOP_SURFACE_ELEVATION, worldZ]}
+            userData={{ outdoorTerrainSurface: true }}
           />
         )
       })}
@@ -360,6 +363,7 @@ export function OutdoorGround({
             key={`top-corner:${corner.cellKey}:${corner.direction}:${corner.worldY}`}
             assetKey={TOP_CORNER_ASSET_KEYS[corner.direction as TerrainCorner]}
             position={[worldX, corner.worldY + TOP_SURFACE_ELEVATION, worldZ]}
+            userData={{ outdoorTerrainSurface: true }}
           />
         )
       })}

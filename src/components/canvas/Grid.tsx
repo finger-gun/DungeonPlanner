@@ -479,8 +479,26 @@ export function Grid({ size = 120, playMode = false }: GridProps) {
     }
   }, [setPaintingStrokeActive])
 
+  function getOutdoorTerrainPoint(event: ThreeEvent<PointerEvent>) {
+    if (mapMode !== 'outdoor') {
+      return null
+    }
+
+    for (const intersection of event.intersections) {
+      let current: THREE.Object3D | null = intersection.object
+      while (current) {
+        if (current.userData.outdoorTerrainSurface === true) {
+          return intersection.point.clone()
+        }
+        current = current.parent
+      }
+    }
+
+    return null
+  }
+
   function updateHoveredCell(event: ThreeEvent<PointerEvent>) {
-    const point = raycaster.pointOnPlane(event)
+    const point = getOutdoorTerrainPoint(event) ?? raycaster.pointOnPlane(event)
     const snapped = snap(point)
     const hoveredOpenWallKey = isOpenWallBrushMode
       ? getEligibleOpenPassageWallKey(point, paintedCells, eligibleOpenPassageWallKeys)
@@ -570,7 +588,7 @@ export function Grid({ size = 120, playMode = false }: GridProps) {
   }
 
   function handlePointerDown(event: ThreeEvent<PointerEvent>) {
-    const point = raycaster.pointOnPlane(event)
+    const point = getOutdoorTerrainPoint(event) ?? raycaster.pointOnPlane(event)
     const snapped = snap(point)
     const surfaceHit = resolvePlacementSurfaceHit(event.nativeEvent)
     const hoveredOpenWallKey = isOpenWallBrushMode
