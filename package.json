@@ -5,6 +5,9 @@
   "type": "module",
   "packageManager": "pnpm@10.33.0",
   "scripts": {
+    "predev": "pnpm run sync:ktx2-transcoders",
+    "prebuild:demo": "pnpm run sync:ktx2-transcoders",
+    "pregenerate:thumbnails": "pnpm run sync:ktx2-transcoders",
     "dev": "vite",
     "dev:full": "concurrently -n app,server -c blue,green \"pnpm run dev\" \"pnpm run server\"",
     "build": "pnpm run build:demo && pnpm run build:docs",
@@ -17,6 +20,9 @@
     "preview": "vite preview",
     "generate:content-pack:core": "node scripts/generate-core-pack.mjs",
     "generate:thumbnails": "node scripts/generate-thumbnails.mjs",
+    "sync:ktx2-transcoders": "node scripts/sync-ktx2-transcoders.mjs",
+    "optimize:models": "node scripts/optimize-models.mjs",
+    "import:models": "node scripts/import-models.mjs",
     "test": "vitest run",
     "test:all": "turbo run test",
     "test:watch": "vitest",
@@ -44,6 +50,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.39.4",
+    "@gltf-transform/cli": "^4.3.0",
     "@playwright/test": "^1.59.1",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.2",

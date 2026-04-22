@@ -2,6 +2,7 @@ import * as THREE from 'three'
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js'
 import type { ContentPackModelTransform } from '../../content-packs/types'
 import { cloneMaterialWithNodeCompatibility } from '../../rendering/nodeMaterialUtils'
+import { createWebGpuCompatibleGeometry } from './webgpuGeometry'
 
 export type BatchedTilePlacement = {
   key: string
@@ -36,8 +37,10 @@ export function buildMergedTileGeometryMeshes({
   sourceMeshes.forEach(({ material, mesh: sourceMesh }, meshIndex) => {
     const geometries: THREE.BufferGeometry[] = []
     placements.forEach((placement) => {
-      const geometry = sourceMesh.geometry.clone()
-      geometry.applyMatrix4(getPlacementMatrix(placement).multiply(transformMatrix).multiply(sourceMesh.matrixWorld))
+      const geometry = createWebGpuCompatibleGeometry(
+        sourceMesh.geometry,
+        getPlacementMatrix(placement).multiply(transformMatrix).multiply(sourceMesh.matrixWorld),
+      )
       geometries.push(geometry)
     })
 

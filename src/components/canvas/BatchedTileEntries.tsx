@@ -1,5 +1,4 @@
 import { Suspense, useLayoutEffect, useMemo, useRef } from 'react'
-import { useGLTF } from '@react-three/drei'
 import * as THREE from 'three'
 import type { PlayVisibilityState } from './playVisibility'
 import { ContentPackInstance } from './ContentPackInstance'
@@ -7,6 +6,7 @@ import { shouldRenderLineOfSightGeometry } from './losRendering'
 import { setLosLayers } from './losLayers'
 import { buildMergedTileGeometryMeshes, type BatchedTilePlacement } from './batchedTileGeometry'
 import { resolveBatchedTileAsset, type ResolvedBatchedTileAsset } from './tileAssetResolution'
+import { useGLTF } from '../../rendering/useGLTF'
 
 export type StaticTileEntry = BatchedTilePlacement & {
   assetId: string | null

@@ -60,4 +60,83 @@ describe('buildMergedTileGeometryMeshes', () => {
 
     merged[0]!.geometry.dispose()
   })
+
+  it('expands quantized attributes to float buffers for WebGPU-safe batching', () => {
+    const sourceGeometry = new THREE.BufferGeometry()
+    sourceGeometry.setAttribute(
+      'position',
+      new THREE.Int16BufferAttribute([
+        -32767, 0, -32767,
+        32767, 0, -32767,
+        32767, 0, 32767,
+      ], 3, true),
+    )
+    sourceGeometry.setAttribute(
+      'normal',
+      new THREE.Int8BufferAttribute([
+        0, 127, 0,
+        0, 127, 0,
+        0, 127, 0,
+      ], 3, true),
+    )
+    sourceGeometry.setIndex([0, 1, 2])
+
+    const sourceMaterial = new THREE.MeshStandardMaterial()
+    resources.push(sourceGeometry, sourceMaterial)
+
+    const scene = new THREE.Group()
+    scene.add(new THREE.Mesh(sourceGeometry, sourceMaterial))
+
+    const merged = buildMergedTileGeometryMeshes({
+      sourceScene: scene,
+      placements: [{ key: 'a', position: [0, 0, 0], rotation: [0, 0, 0] }],
+    })
+
+    expect(merged).toHaveLength(1)
+    expect(merged[0]!.geometry.getAttribute('position').array).toBeInstanceOf(Float32Array)
+    expect(merged[0]!.geometry.getAttribute('position').normalized).toBe(false)
+    expect(merged[0]!.geometry.getAttribute('normal').array).toBeInstanceOf(Float32Array)
+    expect(merged[0]!.geometry.getAttribute('normal').normalized).toBe(false)
+
+    merged[0]!.geometry.dispose()
+  })
+
+  it('keeps placement transforms when sanitizing quantized geometry', () => {
+    const sourceGeometry = new THREE.BufferGeometry()
+    sourceGeometry.setAttribute(
+      'position',
+      new THREE.Int16BufferAttribute([
+        -32767, 0, -32767,
+        32767, 0, -32767,
+        32767, 0, 32767,
+      ], 3, true),
+    )
+    sourceGeometry.setAttribute(
+      'normal',
+      new THREE.Int8BufferAttribute([
+        0, 127, 0,
+        0, 127, 0,
+        0, 127, 0,
+      ], 3, true),
+    )
+    sourceGeometry.setIndex([0, 1, 2])
+
+    const sourceMaterial = new THREE.MeshStandardMaterial()
+    resources.push(sourceGeometry, sourceMaterial)
+
+    const scene = new THREE.Group()
+    scene.add(new THREE.Mesh(sourceGeometry, sourceMaterial))
+
+    const merged = buildMergedTileGeometryMeshes({
+      sourceScene: scene,
+      placements: [{ key: 'a', position: [2, 0, 0], rotation: [0, 0, 0] }],
+    })
+
+    expect(merged).toHaveLength(1)
+    merged[0]!.geometry.computeBoundingBox()
+    expect(merged[0]!.geometry.boundingBox!.min.x).toBeCloseTo(1)
+    expect(merged[0]!.geometry.boundingBox!.max.x).toBeCloseTo(3)
+
+    merged[0]!.geometry.dispose()
+  })
 })
