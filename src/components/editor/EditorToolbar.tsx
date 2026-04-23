@@ -23,7 +23,15 @@ const TOOLS: { id: DungeonTool; Icon: React.ComponentType<{ size?: number; strok
   { id: 'prop',    Icon: Box,           label: 'Assets' },
 ]
 
-export function EditorToolbar() {
+export function EditorToolbar({
+  settingsOpen = false,
+  onOpenSettings,
+  onSelectTool,
+}: {
+  settingsOpen?: boolean
+  onOpenSettings?: () => void
+  onSelectTool?: (tool: DungeonTool) => void
+} = {}) {
   const tool = useDungeonStore((state) => state.tool)
   const mapMode = useDungeonStore((state) => state.mapMode)
   const setTool = useDungeonStore((state) => state.setTool)
@@ -52,7 +60,10 @@ export function EditorToolbar() {
                 key={id}
                 type="button"
                 title={label}
-                onClick={() => setTool(id)}
+                onClick={() => {
+                  setTool(id)
+                  onSelectTool?.(id)
+                }}
                 className={`group flex h-10 w-10 items-center justify-center rounded-xl transition ${
                   active
                     ? 'bg-amber-400/20 text-amber-300'
@@ -69,7 +80,12 @@ export function EditorToolbar() {
       {/* File menu + Undo/Redo at bottom */}
       <div className="flex flex-col items-center gap-1">
         <FileMenuButton />
-        <SettingsButton />
+        <SettingsButton
+          active={settingsOpen}
+          onOpenSettings={() => {
+            onOpenSettings?.()
+          }}
+        />
         <div className="my-1 h-px w-6 bg-stone-800" />
         <button
           type="button"
@@ -94,16 +110,12 @@ export function EditorToolbar() {
   )
 }
 
-function SettingsButton() {
-  const tool = useDungeonStore((state) => state.tool)
-  const setTool = useDungeonStore((state) => state.setTool)
-  const active = tool === 'move'
-
+function SettingsButton({ active, onOpenSettings }: { active: boolean; onOpenSettings: () => void }) {
   return (
     <button
       type="button"
       title="Settings"
-      onClick={() => setTool('move')}
+      onClick={onOpenSettings}
       className={`flex h-10 w-10 items-center justify-center rounded-xl transition ${
         active
           ? 'bg-amber-400/20 text-amber-300'
