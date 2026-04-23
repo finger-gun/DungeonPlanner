@@ -31,6 +31,7 @@ const TOP_SURFACE_ELEVATION = 0.01
 const TRANSITION_OVERLAY_ELEVATION = 0.015
 const TERRAIN_TRANSITION_OPACITY = 0.42
 const TERRAIN_EDGE_TRANSITION_DEPTH = GRID_SIZE * 0.55
+const STEPPED_TERRAIN_ROUGHNESS = 0.6000000238418579
 
 const STYLE_TEXTURE_URLS = Object.fromEntries(
   Object.entries(import.meta.glob('../../assets/models/forrest/*/forest_grass_patch.png', {
@@ -313,9 +314,8 @@ export function OutdoorGround({
       map: opaqueTextures[defaultOutdoorTerrainStyle],
       color: '#ffffff',
       alphaMap: holeMask,
-      transparent: true,
       alphaTest: 0.5,
-      roughness: 1,
+      roughness: STEPPED_TERRAIN_ROUGHNESS,
       metalness: 0,
     }),
     [defaultOutdoorTerrainStyle, holeMask, opaqueTextures],
@@ -327,7 +327,7 @@ export function OutdoorGround({
         terrainStyle,
         createStandardCompatibleMaterial({
           map: opaqueTextures[terrainStyle],
-          roughness: 1,
+          roughness: STEPPED_TERRAIN_ROUGHNESS,
           metalness: 0,
         }),
       ]),
@@ -345,7 +345,7 @@ export function OutdoorGround({
           transparent: true,
           opacity: TERRAIN_TRANSITION_OPACITY,
           depthWrite: false,
-          roughness: 1,
+          roughness: STEPPED_TERRAIN_ROUGHNESS,
           metalness: 0,
         }),
       ]),

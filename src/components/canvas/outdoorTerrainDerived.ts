@@ -108,6 +108,7 @@ export function buildSteppedOutdoorTerrain(
     const terrainStyle = getResolvedTerrainStyle(cellKey, outdoorTerrainStyleCells, defaultOutdoorTerrainStyle)
     const explicitStyle = Boolean(outdoorTerrainStyleCells[cellKey])
     const worldY = level * OUTDOOR_TERRAIN_LEVEL_HEIGHT
+    let hasElevationBoundary = false
 
     if (level < 0) {
       holeCells.push(cell)
@@ -120,6 +121,9 @@ export function buildSteppedOutdoorTerrain(
       const neighborKey = getCellKey(neighbor)
       const neighborLevel = getOutdoorTerrainCellLevel(outdoorTerrainHeights, neighbor)
       const neighborTerrainStyle = getResolvedTerrainStyle(neighborKey, outdoorTerrainStyleCells, defaultOutdoorTerrainStyle)
+      if (neighborLevel !== level) {
+        hasElevationBoundary = true
+      }
       const drop = level - neighborLevel
       if (drop > 0) {
         exposed.set(direction, drop)
@@ -154,7 +158,7 @@ export function buildSteppedOutdoorTerrain(
       }
     }
 
-    const usesSteppedAsset = level !== 0 || exposed.size > 0
+    const usesSteppedAsset = level !== 0 || exposed.size > 0 || hasElevationBoundary
 
     if (usesSteppedAsset || explicitStyle) {
       topSurfaces.push({ cell, cellKey, level, worldY, terrainStyle, explicitStyle, usesSteppedAsset })

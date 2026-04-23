@@ -38,4 +38,18 @@ describe('buildSteppedOutdoorTerrain', () => {
     expect(northSegments[0]).toMatchObject({ worldY: 0, tall: true })
     expect(northSegments[1]).toMatchObject({ worldY: 4, tall: false })
   })
+
+  it('uses stepped top assets for flat cells that border elevation changes', () => {
+    const result = buildSteppedOutdoorTerrain({
+      '0:0': { cell: [0, 0], level: 1 },
+    }, {})
+
+    expect(result.topSurfaces).toEqual(expect.arrayContaining([
+      expect.objectContaining({ cellKey: '0:0', usesSteppedAsset: true }),
+      expect.objectContaining({ cellKey: '0:-1', usesSteppedAsset: true }),
+      expect.objectContaining({ cellKey: '1:0', usesSteppedAsset: true }),
+      expect.objectContaining({ cellKey: '0:1', usesSteppedAsset: true }),
+      expect.objectContaining({ cellKey: '-1:0', usesSteppedAsset: true }),
+    ]))
+  })
 })
