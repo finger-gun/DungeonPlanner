@@ -1,21 +1,21 @@
 import * as THREE from 'three'
 import { describe, expect, it } from 'vitest'
 import {
-  createTextureMask,
+  createTerrainStyleMask,
   getTerrainEdgeTransitionTransform,
   makeTexturePixelsOpaque,
 } from './OutdoorGround'
 import { sampleOutdoorTerrainHeight } from '../../store/outdoorTerrain'
 
-describe('createTextureMask', () => {
+describe('createTerrainStyleMask', () => {
   it('disables vertical texture flipping so painted ground aligns with cursor position', () => {
-    const texture = createTextureMask({
+    const texture = createTerrainStyleMask({
       '2:1': {
         cell: [2, 1],
         layerId: 'default',
-        textureType: 'rough-stone',
+        terrainStyle: 'Color3',
       },
-    }, 'rough-stone')
+    }, 'Color3')
 
     expect(texture).toBeInstanceOf(THREE.CanvasTexture)
     expect(texture.flipY).toBe(false)

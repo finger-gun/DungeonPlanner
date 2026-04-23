@@ -1,7 +1,18 @@
 import path from 'node:path'
 
-const kaykitForestColor1SourceDir =
-  'forrest-assets-tmp/KayKit_Forest_Nature_Pack_1.0_EXTRA/Assets/gltf/Color1'
+const kaykitForestSourceDir =
+  'forrest-assets-tmp/KayKit_Forest_Nature_Pack_1.0_EXTRA/Assets/gltf'
+
+const kaykitTerrainStyles = [
+  'Color1',
+  'Color2',
+  'Color3',
+  'Color4',
+  'Color5',
+  'Color6',
+  'Color7',
+  'Color8',
+]
 
 const kaykitGrassPatchUv = {
   minU: 0.03,
@@ -16,54 +27,96 @@ const kaykitGrassStripUv = {
   v: 0.0894,
 }
 
-const kaykitTerrainAssetNames = [
-  'Hill_2x2x2_Color1',
-  'Hill_4x2x2_Color1',
-  'Hill_4x4x2_Color1',
-  'Hill_8x4x2_Color1',
-  'Hill_8x8x2_Color1',
-  'Hill_12x6x2_Color1',
-  'Hill_12x12x2_Color1',
-  'Hill_2x2x4_Color1',
-  'Hill_4x2x4_Color1',
-  'Hill_4x4x4_Color1',
-  'Hill_8x4x4_Color1',
-  'Hill_8x8x4_Color1',
-  'Hill_12x6x4_Color1',
-  'Hill_12x12x4_Color1',
-  'Hill_2x2x8_Color1',
-  'Hill_4x2x8_Color1',
-  'Hill_4x4x8_Color1',
-  'Hill_8x4x8_Color1',
-  'Hill_8x8x8_Color1',
-  'Hill_12x6x8_Color1',
-  'Hill_12x12x8_Color1',
-  'Hill_Top_E_Center_Color1',
-  'Hill_Top_B_Side_Color1',
-  'Hill_Top_D_Side_Color1',
-  'Hill_Top_F_Side_Color1',
-  'Hill_Top_H_Side_Color1',
-  'Hill_Top_A_OuterCorner_Color1',
-  'Hill_Top_C_OuterCorner_Color1',
-  'Hill_Top_G_OuterCorner_Color1',
-  'Hill_Top_I_OuterCorner_Color1',
-  'Hill_Cliff_B_Side_Color1',
-  'Hill_Cliff_D_Side_Color1',
-  'Hill_Cliff_F_Side_Color1',
-  'Hill_Cliff_H_Side_Color1',
-  'Hill_Cliff_A_OuterCorner_Color1',
-  'Hill_Cliff_C_OuterCorner_Color1',
-  'Hill_Cliff_G_OuterCorner_Color1',
-  'Hill_Cliff_I_OuterCorner_Color1',
-  'Hill_Cliff_Tall_B_Side_Color1',
-  'Hill_Cliff_Tall_D_Side_Color1',
-  'Hill_Cliff_Tall_F_Side_Color1',
-  'Hill_Cliff_Tall_H_Side_Color1',
-  'Hill_Cliff_Tall_A_OuterCorner_Color1',
-  'Hill_Cliff_Tall_C_OuterCorner_Color1',
-  'Hill_Cliff_Tall_G_OuterCorner_Color1',
-  'Hill_Cliff_Tall_I_OuterCorner_Color1',
+function getKaykitStyleIndex(style) {
+  return Number.parseInt(style.replace('Color', ''), 10) - 1
+}
+
+function getKaykitGrassPatchUvForStyle(style) {
+  const offset = getKaykitStyleIndex(style) * 0.125
+  return {
+    ...kaykitGrassPatchUv,
+    minU: kaykitGrassPatchUv.minU + offset,
+    maxU: kaykitGrassPatchUv.maxU + offset,
+  }
+}
+
+function getKaykitGrassStripUvForStyle(style) {
+  const offset = getKaykitStyleIndex(style) * 0.125
+  return {
+    ...kaykitGrassStripUv,
+    minU: kaykitGrassStripUv.minU + offset,
+    maxU: kaykitGrassStripUv.maxU + offset,
+  }
+}
+
+const kaykitTerrainAssetBaseNames = [
+  'Hill_2x2x2',
+  'Hill_4x2x2',
+  'Hill_4x4x2',
+  'Hill_8x4x2',
+  'Hill_8x8x2',
+  'Hill_12x6x2',
+  'Hill_12x12x2',
+  'Hill_2x2x4',
+  'Hill_4x2x4',
+  'Hill_4x4x4',
+  'Hill_8x4x4',
+  'Hill_8x8x4',
+  'Hill_12x6x4',
+  'Hill_12x12x4',
+  'Hill_2x2x8',
+  'Hill_4x2x8',
+  'Hill_4x4x8',
+  'Hill_8x4x8',
+  'Hill_8x8x8',
+  'Hill_12x6x8',
+  'Hill_12x12x8',
+  'Hill_Top_E_Center',
+  'Hill_Top_B_Side',
+  'Hill_Top_D_Side',
+  'Hill_Top_F_Side',
+  'Hill_Top_H_Side',
+  'Hill_Top_A_OuterCorner',
+  'Hill_Top_C_OuterCorner',
+  'Hill_Top_G_OuterCorner',
+  'Hill_Top_I_OuterCorner',
+  'Hill_Cliff_B_Side',
+  'Hill_Cliff_D_Side',
+  'Hill_Cliff_F_Side',
+  'Hill_Cliff_H_Side',
+  'Hill_Cliff_A_OuterCorner',
+  'Hill_Cliff_C_OuterCorner',
+  'Hill_Cliff_G_OuterCorner',
+  'Hill_Cliff_I_OuterCorner',
+  'Hill_Cliff_Tall_B_Side',
+  'Hill_Cliff_Tall_D_Side',
+  'Hill_Cliff_Tall_F_Side',
+  'Hill_Cliff_Tall_H_Side',
+  'Hill_Cliff_Tall_A_OuterCorner',
+  'Hill_Cliff_Tall_C_OuterCorner',
+  'Hill_Cliff_Tall_G_OuterCorner',
+  'Hill_Cliff_Tall_I_OuterCorner',
 ]
+
+const kaykitTerrainAssetNames = kaykitTerrainStyles.flatMap((style) => (
+  kaykitTerrainAssetBaseNames.map((name) => `${style}/${name}_${style}.gltf`)
+))
+
+const kaykitPreservedArtifacts = kaykitTerrainStyles.flatMap((style) => [
+  `${style}/forest_grass_patch.png`,
+  `${style}/forest_texture.png`,
+])
+
+const kaykitDerivedTextures = kaykitTerrainStyles.map((style) => ({
+  source: `${style}/forest_texture.png`,
+  output: `${style}/forest_grass_patch.png`,
+  cropUv: getKaykitGrassPatchUvForStyle(style),
+  phase: 'pre-optimize',
+  sampleMode: 'strip',
+  sampleStripUv: getKaykitGrassStripUvForStyle(style),
+  sampleBandHeightPx: 4,
+  outputSize: 32,
+}))
 
 export const corePackAssetNames = [
   'floor',
@@ -91,23 +144,11 @@ export const modelPackConfigs = {
     clean: true,
   },
   kaykit: {
-    sourceDir: kaykitForestColor1SourceDir,
+    sourceDir: kaykitForestSourceDir,
     targetDir: path.join('src', 'assets', 'models', 'forrest'),
-    include: kaykitTerrainAssetNames.map((name) => `${name}.gltf`),
-    preserveArtifacts: ['forest_grass_patch.png'],
-    derivedTextures: [
-      {
-        source: 'forest_texture.ktx2',
-        output: 'forest_grass_patch.png',
-        cropUv: kaykitGrassPatchUv,
-        phase: 'post-optimize',
-        transcode: 'rgba8',
-        sampleMode: 'strip',
-        sampleStripUv: kaykitGrassStripUv,
-        sampleBandHeightPx: 4,
-        outputSize: 32,
-      },
-    ],
+    include: kaykitTerrainAssetNames,
+    preserveArtifacts: kaykitPreservedArtifacts,
+    derivedTextures: kaykitDerivedTextures,
     clean: true,
   },
 }

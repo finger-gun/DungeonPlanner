@@ -101,7 +101,8 @@ export default Scene
 function GlobalContent() {
   const lightIntensity = useDungeonStore((state) => state.sceneLighting.intensity)
   const mapMode = useDungeonStore((state) => state.mapMode)
-  const outdoorGroundTextureCells = useDungeonStore((state) => state.outdoorGroundTextureCells)
+  const defaultOutdoorTerrainStyle = useDungeonStore((state) => state.defaultOutdoorTerrainStyle)
+  const outdoorTerrainStyleCells = useDungeonStore((state) => state.outdoorTerrainStyleCells)
   const outdoorTerrainHeights = useDungeonStore((state) => state.outdoorTerrainHeights)
   const outdoorTimeOfDay = useDungeonStore((state) => state.outdoorTimeOfDay)
   const tool = useDungeonStore((state) => state.tool)
@@ -134,8 +135,8 @@ function GlobalContent() {
     <>
       {mapMode === 'outdoor' && (
         <OutdoorGround
-          outdoorBlend={outdoorBlend}
-          outdoorGroundTextureCells={outdoorGroundTextureCells}
+          defaultOutdoorTerrainStyle={defaultOutdoorTerrainStyle}
+          outdoorTerrainStyleCells={outdoorTerrainStyleCells}
           outdoorTerrainHeights={outdoorTerrainHeights}
         />
       )}

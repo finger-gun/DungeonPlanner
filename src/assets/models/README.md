@@ -64,10 +64,10 @@ The core pack is configured in `scripts/model-packs.config.mjs`:
 
 The KayKit terrain pack is also configured in `scripts/model-packs.config.mjs`:
 
-- source directory: `forrest-assets-tmp/KayKit_Forest_Nature_Pack_1.0_EXTRA/Assets/gltf/Color1`
+- source directory: `forrest-assets-tmp/KayKit_Forest_Nature_Pack_1.0_EXTRA/Assets/gltf`
 - target directory: `src/assets/models/forrest`
-- imported files: the allowlisted terrain `.gltf` assets used by the stepped outdoor terrain runtime
-- derived assets: a generated `forest_grass_patch.png` sampled from the same narrow atlas strip used by the KayKit hill-top center mesh so `OutdoorGround` matches the terrain models at runtime
+- imported files: the allowlisted terrain `.gltf` assets for the curated `Color1`..`Color8` stepped terrain styles
+- derived assets: a generated `forest_grass_patch.png` per `ColorN/` folder sampled from the matching style atlas so `OutdoorGround` matches the terrain models at runtime
 
 ### Import a new pack or directory
 

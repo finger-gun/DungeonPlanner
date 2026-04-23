@@ -64,7 +64,7 @@ export function Grid({ size = 120, playMode = false }: GridProps) {
   const surfacePointerRef = useRef(new THREE.Vector2())
   const paintedCells = useDungeonStore((state) => state.paintedCells)
   const blockedCells = useDungeonStore((state) => state.blockedCells)
-  const outdoorGroundTextureCells = useDungeonStore((state) => state.outdoorGroundTextureCells)
+  const outdoorTerrainStyleCells = useDungeonStore((state) => state.outdoorTerrainStyleCells)
   const outdoorTerrainHeights = useDungeonStore((state) => state.outdoorTerrainHeights)
   const outdoorBrushMode = useDungeonStore((state) => state.outdoorBrushMode)
   const outdoorTerrainSculptMode = useDungeonStore((state) => state.outdoorTerrainSculptMode)
@@ -75,8 +75,8 @@ export function Grid({ size = 120, playMode = false }: GridProps) {
   const paintBlockedCells = useDungeonStore((state) => state.paintBlockedCells)
   const eraseBlockedCells = useDungeonStore((state) => state.eraseBlockedCells)
   const sculptOutdoorTerrain = useDungeonStore((state) => state.sculptOutdoorTerrain)
-  const paintOutdoorGroundTextureCells = useDungeonStore((state) => state.paintOutdoorGroundTextureCells)
-  const eraseOutdoorGroundTextureCells = useDungeonStore((state) => state.eraseOutdoorGroundTextureCells)
+  const paintOutdoorTerrainStyleCells = useDungeonStore((state) => state.paintOutdoorTerrainStyleCells)
+  const eraseOutdoorTerrainStyleCells = useDungeonStore((state) => state.eraseOutdoorTerrainStyleCells)
   const setFloorTileAsset = useDungeonStore((state) => state.setFloorTileAsset)
   const setWallSurfaceAsset = useDungeonStore((state) => state.setWallSurfaceAsset)
   const placeObject = useDungeonStore((state) => state.placeObject)
@@ -200,9 +200,9 @@ export function Grid({ size = 120, playMode = false }: GridProps) {
     if (mapMode !== 'outdoor') {
       return paintedCells
     }
-    if (outdoorBrushMode === 'ground-texture') {
+    if (outdoorBrushMode === 'terrain-style') {
       return Object.fromEntries(
-        Object.entries(outdoorGroundTextureCells).map(([cellKey, record]) => [
+        Object.entries(outdoorTerrainStyleCells).map(([cellKey, record]) => [
           cellKey,
           {
             cell: record.cell,
@@ -213,7 +213,7 @@ export function Grid({ size = 120, playMode = false }: GridProps) {
       )
     }
     return blockedCells
-  }, [blockedCells, mapMode, outdoorBrushMode, outdoorGroundTextureCells, paintedCells])
+  }, [blockedCells, mapMode, outdoorBrushMode, outdoorTerrainStyleCells, paintedCells])
 
   // R key: rotates floor-connected assets; flips wall-connected openings 180°
   useEffect(() => {
@@ -360,14 +360,14 @@ export function Grid({ size = 120, playMode = false }: GridProps) {
             mode,
             mapMode === 'outdoor' &&
               mode === 'paint' &&
-              (outdoorBrushMode === 'ground-texture' || outdoorOverpaintRegenerate),
+              (outdoorBrushMode === 'terrain-style' || outdoorOverpaintRegenerate),
           )
 
     if (cells.length > 0) {
       if (mode === 'paint') {
         if (mapMode === 'outdoor') {
-          if (outdoorBrushMode === 'ground-texture') {
-            paintOutdoorGroundTextureCells(cells)
+          if (outdoorBrushMode === 'terrain-style') {
+            paintOutdoorTerrainStyleCells(cells)
           } else if (outdoorBrushMode === 'terrain-sculpt') {
             sculptOutdoorTerrain(cells, outdoorTerrainSculptMode)
           } else {
@@ -381,8 +381,8 @@ export function Grid({ size = 120, playMode = false }: GridProps) {
         triggerBuild(cells, startCell)
       } else {
         if (mapMode === 'outdoor') {
-          if (outdoorBrushMode === 'ground-texture') {
-            eraseOutdoorGroundTextureCells(cells)
+          if (outdoorBrushMode === 'terrain-style') {
+            eraseOutdoorTerrainStyleCells(cells)
           } else if (outdoorBrushMode === 'terrain-sculpt') {
             sculptOutdoorTerrain(
               cells,

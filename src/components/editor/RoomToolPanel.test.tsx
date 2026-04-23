@@ -30,7 +30,7 @@ describe('RoomToolPanel', () => {
   it('shows outdoor texture paint controls only in outdoor mode', () => {
     render(<RoomToolPanel />)
     expect(screen.queryByText('Brush Mode')).not.toBeInTheDocument()
-    expect(screen.queryByText('Surface Paint')).not.toBeInTheDocument()
+    expect(screen.queryByText('Terrain Style Paint')).not.toBeInTheDocument()
 
     cleanup()
     useDungeonStore.getState().newDungeon('outdoor')
@@ -42,12 +42,12 @@ describe('RoomToolPanel', () => {
     useDungeonStore.getState().newDungeon('outdoor')
     render(<RoomToolPanel />)
 
-    fireEvent.click(screen.getByRole('button', { name: 'Surface Paint' }))
-    expect(useDungeonStore.getState().outdoorBrushMode).toBe('ground-texture')
-    expect(screen.getByRole('button', { name: 'Grass' })).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Terrain Style Paint' }))
+    expect(useDungeonStore.getState().outdoorBrushMode).toBe('terrain-style')
+    expect(screen.getAllByRole('button', { name: 'Color 1' })[0]).toBeInTheDocument()
 
-    fireEvent.click(screen.getByRole('button', { name: 'Rough Stone' }))
-    expect(useDungeonStore.getState().outdoorGroundTextureBrush).toBe('rough-stone')
+    fireEvent.click(screen.getAllByRole('button', { name: 'Color 4' })[0])
+    expect(useDungeonStore.getState().outdoorTerrainStyleBrush).toBe('Color4')
   })
 
   it('shows sculpt controls only for the terrain sculpt brush', () => {

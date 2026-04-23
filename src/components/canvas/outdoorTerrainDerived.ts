@@ -4,10 +4,11 @@ import {
   OUTDOOR_TERRAIN_LEVEL_HEIGHT,
   type OutdoorTerrainHeightfield,
 } from '../../store/outdoorTerrain'
-import type {
-  OutdoorGroundTextureCells,
-  OutdoorGroundTextureType,
-} from '../../store/useDungeonStore'
+import type { OutdoorTerrainStyleCells } from '../../store/useDungeonStore'
+import {
+  DEFAULT_OUTDOOR_TERRAIN_STYLE,
+  type OutdoorTerrainStyle,
+} from '../../store/outdoorTerrainStyles'
 
 export type TerrainDirection = 'north' | 'east' | 'south' | 'west'
 export type TerrainCorner = 'north-west' | 'north-east' | 'south-west' | 'south-east'
@@ -17,7 +18,9 @@ export type OutdoorTerrainTopSurface = {
   cellKey: string
   level: number
   worldY: number
-  textureType: OutdoorGroundTextureType | null
+  terrainStyle: OutdoorTerrainStyle
+  explicitStyle: boolean
+  usesSteppedAsset: boolean
 }
 
 export type OutdoorTerrainEdgeDecoration = {
@@ -26,6 +29,7 @@ export type OutdoorTerrainEdgeDecoration = {
   direction: TerrainDirection | TerrainCorner
   level: number
   worldY: number
+  terrainStyle: OutdoorTerrainStyle
 }
 
 export type OutdoorTerrainCliffSegment = {
@@ -34,6 +38,16 @@ export type OutdoorTerrainCliffSegment = {
   direction: TerrainDirection | TerrainCorner
   worldY: number
   tall: boolean
+  terrainStyle: OutdoorTerrainStyle
+}
+
+export type OutdoorTerrainStyleTransition = {
+  cell: GridCell
+  cellKey: string
+  direction: TerrainDirection
+  worldY: number
+  sourceTerrainStyle: OutdoorTerrainStyle
+  targetTerrainStyle: OutdoorTerrainStyle
 }
 
 const CARDINAL_DIRECTIONS: Array<{ direction: TerrainDirection; offset: GridCell }> = [
@@ -50,9 +64,18 @@ const CORNER_DEFINITIONS = [
   { key: 'south-east' as const, directions: ['south', 'east'] as const },
 ]
 
+function getResolvedTerrainStyle(
+  cellKey: string,
+  outdoorTerrainStyleCells: OutdoorTerrainStyleCells,
+  defaultOutdoorTerrainStyle: OutdoorTerrainStyle,
+) {
+  return outdoorTerrainStyleCells[cellKey]?.terrainStyle ?? defaultOutdoorTerrainStyle
+}
+
 export function buildSteppedOutdoorTerrain(
   outdoorTerrainHeights: OutdoorTerrainHeightfield,
-  outdoorGroundTextureCells: OutdoorGroundTextureCells,
+  outdoorTerrainStyleCells: OutdoorTerrainStyleCells,
+  defaultOutdoorTerrainStyle: OutdoorTerrainStyle = DEFAULT_OUTDOOR_TERRAIN_STYLE,
 ) {
   const candidateCells = new Map<string, GridCell>()
 
@@ -64,8 +87,12 @@ export function buildSteppedOutdoorTerrain(
     }
   }
 
-  for (const record of Object.values(outdoorGroundTextureCells)) {
+  for (const record of Object.values(outdoorTerrainStyleCells)) {
     candidateCells.set(getCellKey(record.cell), record.cell)
+    for (const { offset } of CARDINAL_DIRECTIONS) {
+      const neighbor: GridCell = [record.cell[0] + offset[0], record.cell[1] + offset[1]]
+      candidateCells.set(getCellKey(neighbor), neighbor)
+    }
   }
 
   const topSurfaces: OutdoorTerrainTopSurface[] = []
@@ -73,11 +100,13 @@ export function buildSteppedOutdoorTerrain(
   const topCorners: OutdoorTerrainEdgeDecoration[] = []
   const cliffSides: OutdoorTerrainCliffSegment[] = []
   const cliffCorners: OutdoorTerrainCliffSegment[] = []
+  const styleTransitions: OutdoorTerrainStyleTransition[] = []
   const holeCells: GridCell[] = []
 
   for (const [cellKey, cell] of candidateCells) {
     const level = getOutdoorTerrainCellLevel(outdoorTerrainHeights, cell)
-    const textureType = outdoorGroundTextureCells[cellKey]?.textureType ?? null
+    const terrainStyle = getResolvedTerrainStyle(cellKey, outdoorTerrainStyleCells, defaultOutdoorTerrainStyle)
+    const explicitStyle = Boolean(outdoorTerrainStyleCells[cellKey])
     const worldY = level * OUTDOOR_TERRAIN_LEVEL_HEIGHT
 
     if (level < 0) {
@@ -88,33 +117,47 @@ export function buildSteppedOutdoorTerrain(
 
     for (const { direction, offset } of CARDINAL_DIRECTIONS) {
       const neighbor: GridCell = [cell[0] + offset[0], cell[1] + offset[1]]
+      const neighborKey = getCellKey(neighbor)
       const neighborLevel = getOutdoorTerrainCellLevel(outdoorTerrainHeights, neighbor)
+      const neighborTerrainStyle = getResolvedTerrainStyle(neighborKey, outdoorTerrainStyleCells, defaultOutdoorTerrainStyle)
       const drop = level - neighborLevel
-      if (drop <= 0) {
-        continue
+      if (drop > 0) {
+        exposed.set(direction, drop)
+        topEdges.push({ cell, cellKey, direction, level, worldY, terrainStyle })
+
+        let remainingDrop = drop
+        let segmentBaseLevel = neighborLevel
+        while (remainingDrop > 0) {
+          const tall = remainingDrop >= 2
+          cliffSides.push({
+            cell,
+            cellKey,
+            direction,
+            worldY: segmentBaseLevel * OUTDOOR_TERRAIN_LEVEL_HEIGHT,
+            tall,
+            terrainStyle,
+          })
+          remainingDrop -= tall ? 2 : 1
+          segmentBaseLevel += tall ? 2 : 1
+        }
       }
 
-      exposed.set(direction, drop)
-      topEdges.push({ cell, cellKey, direction, level, worldY })
-
-      let remainingDrop = drop
-      let segmentBaseLevel = neighborLevel
-      while (remainingDrop > 0) {
-        const tall = remainingDrop >= 2
-        cliffSides.push({
+      if (neighborLevel === level && neighborTerrainStyle !== terrainStyle) {
+        styleTransitions.push({
           cell,
           cellKey,
           direction,
-          worldY: segmentBaseLevel * OUTDOOR_TERRAIN_LEVEL_HEIGHT,
-          tall,
+          worldY,
+          sourceTerrainStyle: terrainStyle,
+          targetTerrainStyle: neighborTerrainStyle,
         })
-        remainingDrop -= tall ? 2 : 1
-        segmentBaseLevel += tall ? 2 : 1
       }
     }
 
-    if (level !== 0 || textureType || exposed.size > 0) {
-      topSurfaces.push({ cell, cellKey, level, worldY, textureType })
+    const usesSteppedAsset = level !== 0 || exposed.size > 0
+
+    if (usesSteppedAsset || explicitStyle) {
+      topSurfaces.push({ cell, cellKey, level, worldY, terrainStyle, explicitStyle, usesSteppedAsset })
     }
 
     for (const corner of CORNER_DEFINITIONS) {
@@ -131,16 +174,11 @@ export function buildSteppedOutdoorTerrain(
         direction: corner.key,
         level,
         worldY,
+        terrainStyle,
       })
 
-      let remainingDrop = Math.max(...drops)
-      const cornerNeighborLevels = corner.directions.map((direction) => {
-        if (direction === 'north') return getOutdoorTerrainCellLevel(outdoorTerrainHeights, [cell[0], cell[1] - 1])
-        if (direction === 'east') return getOutdoorTerrainCellLevel(outdoorTerrainHeights, [cell[0] + 1, cell[1]])
-        if (direction === 'south') return getOutdoorTerrainCellLevel(outdoorTerrainHeights, [cell[0], cell[1] + 1])
-        return getOutdoorTerrainCellLevel(outdoorTerrainHeights, [cell[0] - 1, cell[1]])
-      })
-      let segmentBaseLevel = Math.min(...cornerNeighborLevels)
+      let remainingDrop = Math.min(...drops)
+      let segmentBaseLevel = worldY / OUTDOOR_TERRAIN_LEVEL_HEIGHT - Math.min(...drops)
       while (remainingDrop > 0) {
         const tall = remainingDrop >= 2
         cliffCorners.push({
@@ -149,6 +187,7 @@ export function buildSteppedOutdoorTerrain(
           direction: corner.key,
           worldY: segmentBaseLevel * OUTDOOR_TERRAIN_LEVEL_HEIGHT,
           tall,
+          terrainStyle,
         })
         remainingDrop -= tall ? 2 : 1
         segmentBaseLevel += tall ? 2 : 1
@@ -157,11 +196,12 @@ export function buildSteppedOutdoorTerrain(
   }
 
   return {
-    holeCells,
     topSurfaces,
     topEdges,
     topCorners,
     cliffSides,
     cliffCorners,
+    styleTransitions,
+    holeCells,
   }
 }

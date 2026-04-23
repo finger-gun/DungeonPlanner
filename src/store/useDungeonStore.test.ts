@@ -130,28 +130,28 @@ describe('useDungeonStore history', () => {
 
   it('paints and erases outdoor ground texture cells', () => {
     useDungeonStore.getState().newDungeon('outdoor')
-    useDungeonStore.getState().setOutdoorGroundTextureBrush('rough-stone')
+    useDungeonStore.getState().setOutdoorTerrainStyleBrush('Color3')
 
-    expect(useDungeonStore.getState().paintOutdoorGroundTextureCells([[2, 1], [3, 1]])).toBe(2)
+    expect(useDungeonStore.getState().paintOutdoorTerrainStyleCells([[2, 1], [3, 1]])).toBe(2)
     let state = useDungeonStore.getState()
-    expect(state.outdoorGroundTextureCells['2:1']).toMatchObject({
+    expect(state.outdoorTerrainStyleCells['2:1']).toMatchObject({
       cell: [2, 1],
-      textureType: 'rough-stone',
+      terrainStyle: 'Color3',
     })
 
-    useDungeonStore.getState().setOutdoorGroundTextureBrush('wet-dirt')
-    expect(useDungeonStore.getState().paintOutdoorGroundTextureCells([[2, 1]])).toBe(1)
+    useDungeonStore.getState().setOutdoorTerrainStyleBrush('Color5')
+    expect(useDungeonStore.getState().paintOutdoorTerrainStyleCells([[2, 1]])).toBe(1)
     state = useDungeonStore.getState()
-    expect(state.outdoorGroundTextureCells['2:1']?.textureType).toBe('wet-dirt')
+    expect(state.outdoorTerrainStyleCells['2:1']?.terrainStyle).toBe('Color5')
 
-    expect(useDungeonStore.getState().eraseOutdoorGroundTextureCells([[2, 1]])).toBe(1)
+    expect(useDungeonStore.getState().eraseOutdoorTerrainStyleCells([[2, 1]])).toBe(1)
     state = useDungeonStore.getState()
-    expect(state.outdoorGroundTextureCells['2:1']).toBeUndefined()
+    expect(state.outdoorTerrainStyleCells['2:1']).toBeUndefined()
   })
 
   it('does not paint outdoor ground textures while indoor mode is active', () => {
-    expect(useDungeonStore.getState().paintOutdoorGroundTextureCells([[0, 0]])).toBe(0)
-    expect(Object.keys(useDungeonStore.getState().outdoorGroundTextureCells)).toHaveLength(0)
+    expect(useDungeonStore.getState().paintOutdoorTerrainStyleCells([[0, 0]])).toBe(0)
+    expect(Object.keys(useDungeonStore.getState().outdoorTerrainStyleCells)).toHaveLength(0)
   })
 
   it('supports rock-only terrain preset for surrounding paint', () => {

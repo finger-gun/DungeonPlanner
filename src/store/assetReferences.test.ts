@@ -32,7 +32,7 @@ function createSnapshot() {
     paintedCells: {},
     blockedCells: {},
     outdoorTerrainHeights: {},
-    outdoorGroundTextureCells: {},
+    outdoorTerrainStyleCells: {},
     exploredCells: {},
     floorTileAssetIds: {},
     wallSurfaceAssetIds: {},

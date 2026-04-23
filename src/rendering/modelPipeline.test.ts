@@ -52,7 +52,7 @@ describe('model pipeline utilities', () => {
 
   it('resolves configured pack source directories from env or repo paths', () => {
     expect(resolvePackSourceDir('kaykit')).toContain(
-      'forrest-assets-tmp/KayKit_Forest_Nature_Pack_1.0_EXTRA/Assets/gltf/Color1',
+      'forrest-assets-tmp/KayKit_Forest_Nature_Pack_1.0_EXTRA/Assets/gltf',
     )
 
     expect(
@@ -66,23 +66,29 @@ describe('model pipeline utilities', () => {
     expect([...getPreservedArtifactPaths('/packs/kaykit')]).toEqual([])
     expect(
       [...getPreservedArtifactPaths('src/assets/models/forrest')].some((filePath) =>
-        filePath.endsWith('/src/assets/models/forrest/forest_grass_patch.png'),
+        filePath.endsWith('/src/assets/models/forrest/Color1/forest_grass_patch.png'),
       ),
     ).toBe(true)
   })
 
   it('builds the KayKit grass patch from the optimized atlas output', () => {
-    expect(getModelPackConfig('kaykit')?.derivedTextures).toEqual([
-      expect.objectContaining({
-        source: 'forest_texture.ktx2',
-        output: 'forest_grass_patch.png',
-        phase: 'post-optimize',
-        transcode: 'rgba8',
-        sampleMode: 'strip',
-        sampleBandHeightPx: 4,
-        outputSize: 32,
-      }),
-    ])
+    expect(getModelPackConfig('kaykit')?.derivedTextures).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          source: 'Color1/forest_texture.png',
+          output: 'Color1/forest_grass_patch.png',
+          phase: 'pre-optimize',
+          sampleMode: 'strip',
+          sampleBandHeightPx: 4,
+          outputSize: 32,
+        }),
+        expect.objectContaining({
+          source: 'Color8/forest_texture.png',
+          output: 'Color8/forest_grass_patch.png',
+          phase: 'pre-optimize',
+        }),
+      ]),
+    )
   })
 
   it('builds square grass textures from the sampled hill-top strip', () => {

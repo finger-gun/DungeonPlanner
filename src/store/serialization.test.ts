@@ -3,6 +3,7 @@ import { serializeDungeon, deserializeDungeon } from './serialization'
 import type { SerializableState } from './serialization'
 import type { FloorRecord } from './useDungeonStore'
 import { DEFAULT_POST_PROCESSING_SETTINGS } from '../postprocessing/tiltShiftMath'
+import { DEFAULT_OUTDOOR_TERRAIN_STYLE } from './outdoorTerrainStyles'
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 
@@ -18,7 +19,7 @@ function emptyFloorSnapshot() {
     paintedCells: {},
     blockedCells: {},
     outdoorTerrainHeights: {},
-    outdoorGroundTextureCells: {},
+    outdoorTerrainStyleCells: {},
     exploredCells: {},
     floorTileAssetIds: {},
     wallSurfaceAssetIds: {},
@@ -47,6 +48,7 @@ function baseState(): SerializableState {
     name: 'Test Dungeon',
     mapMode: 'indoor',
     outdoorTimeOfDay: 0.5,
+    defaultOutdoorTerrainStyle: DEFAULT_OUTDOOR_TERRAIN_STYLE,
     outdoorTerrainProfiles: {
       mixed: { density: 'medium', overpaintRegenerate: false },
       rocks: { density: 'medium', overpaintRegenerate: false },
@@ -141,19 +143,19 @@ describe('serializeDungeon / deserializeDungeon roundtrip', () => {
 
   it('preserves outdoor ground texture paint cells', () => {
     const state = baseState()
-    state.floors!['floor-1'].snapshot.outdoorGroundTextureCells['6:7'] = {
+    state.floors!['floor-1'].snapshot.outdoorTerrainStyleCells['6:7'] = {
       cell: [6, 7],
       layerId: 'default',
-      textureType: 'rough-stone',
+      terrainStyle: 'Color4',
     }
 
     const result = deserializeDungeon(serializeDungeon(state))
     expect(result).not.toBeNull()
-    const outdoorGroundTextureCells = result!.outdoorGroundTextureCells
-      ?? result!.floors?.['floor-1']?.snapshot?.outdoorGroundTextureCells
-    expect(outdoorGroundTextureCells?.['6:7']).toMatchObject({
+    const outdoorTerrainStyleCells = result!.outdoorTerrainStyleCells
+      ?? result!.floors?.['floor-1']?.snapshot?.outdoorTerrainStyleCells
+    expect(outdoorTerrainStyleCells?.['6:7']).toMatchObject({
       cell: [6, 7],
-      textureType: 'rough-stone',
+      terrainStyle: 'Color4',
     })
   })
 
