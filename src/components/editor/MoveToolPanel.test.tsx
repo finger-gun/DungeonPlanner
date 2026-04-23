@@ -67,4 +67,11 @@ describe('MoveToolPanel', () => {
 
     expect(useDungeonStore.getState().postProcessing.pixelSize).toBe(10)
   })
+
+  it('does not show a viewport section in settings', () => {
+    render(<MoveToolPanel />)
+
+    expect(screen.queryByText('Viewport')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Grid' })).not.toBeInTheDocument()
+  })
 })

@@ -292,7 +292,7 @@ function App() {
     tool === 'play'
       ? 'Drag characters to move them'
       : tool === 'move'
-      ? 'Application settings and viewport controls'
+      ? 'Application settings and performance controls'
         : tool === 'room'
           ? roomEditMode === 'rooms'
             ? mapMode === 'outdoor'

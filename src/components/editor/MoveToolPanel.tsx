@@ -1,4 +1,4 @@
-import { Gauge, Grid } from 'lucide-react'
+import { Gauge } from 'lucide-react'
 import { useDungeonStore } from '../../store/useDungeonStore'
 import { precomputeLightSources } from '../canvas/propLightPool'
 import {
@@ -22,8 +22,6 @@ const LIGHT_BENCHMARK_OPTIONS: Array<{ value: 64 | 128 | 256; label: string }> =
 
 export function MoveToolPanel() {
   const mapMode = useDungeonStore((state) => state.mapMode)
-  const showGrid = useDungeonStore((state) => state.showGrid)
-  const setShowGrid = useDungeonStore((state) => state.setShowGrid)
   const sceneLighting = useDungeonStore((state) => state.sceneLighting)
   const setSceneLightingIntensity = useDungeonStore((state) => state.setSceneLightingIntensity)
   const lightBenchmark = useDungeonStore((state) => state.lightBenchmark)
@@ -144,32 +142,6 @@ export function MoveToolPanel() {
             Synthetic torches share the same renderer-wide Forward+ light budget as real props, so total local lights are capped at 256.
           </p>
         </div>
-      </section>
-
-      {/* Viewport */}
-      <section>
-        <p className="mb-3 text-xs font-semibold uppercase tracking-[0.3em] text-amber-200/70">
-          Viewport
-        </p>
-
-        {/* Grid toggle */}
-        <button
-          type="button"
-          onClick={() => setShowGrid(!showGrid)}
-          className={`flex w-full items-center gap-3 rounded-2xl border px-4 py-3 text-left transition ${
-            showGrid
-              ? 'border-teal-300/35 bg-teal-400/10 text-teal-200'
-              : 'border-stone-800 bg-stone-950/60 text-stone-400 hover:border-stone-700 hover:bg-stone-900/60'
-          }`}
-        >
-          <Grid size={15} strokeWidth={1.5} />
-          <div>
-            <p className="text-sm font-medium">Grid</p>
-            <p className="text-[10px] uppercase tracking-[0.18em] text-stone-500">
-              {showGrid ? 'Visible' : 'Hidden'}
-            </p>
-          </div>
-        </button>
       </section>
 
       {/* Light Rig */}
