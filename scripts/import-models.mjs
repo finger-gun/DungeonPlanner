@@ -1,9 +1,11 @@
+import os from 'node:os'
 import path from 'node:path'
 import process from 'node:process'
 import { spawn } from 'node:child_process'
 import { pathToFileURL } from 'node:url'
 import sharp from 'sharp'
 import {
+  findCommandPath,
   collectModelArtifactPaths,
   copyArtifactsIntoDir,
   formatBytes,
@@ -62,7 +64,7 @@ export async function runImportModels({
     `Imported assets into ${targetDir}: ${formatBytes(beforeSize)} -> ${formatBytes(afterCopySize)}`,
   )
 
-  await generateDerivedTextures(targetDir, packConfig)
+  await generateDerivedTextures(targetDir, packConfig, 'pre-optimize')
 
   if (!skipOptimize) {
     await runOptimizeModels({
@@ -71,6 +73,10 @@ export async function runImportModels({
       textureSize,
       ktxDir,
     })
+  }
+
+  if (!skipOptimize) {
+    await generateDerivedTextures(targetDir, packConfig, 'post-optimize')
   }
 
   if (!skipThumbnails) {
@@ -88,13 +94,16 @@ export async function runImportModels({
   }
 }
 
-async function generateDerivedTextures(targetDir, packConfig) {
-  const derivedTextures = packConfig?.derivedTextures ?? []
+async function generateDerivedTextures(targetDir, packConfig, phase) {
+  const derivedTextures = (packConfig?.derivedTextures ?? []).filter((derivedTexture) => (
+    (derivedTexture.phase ?? 'pre-optimize') === phase
+  ))
 
   for (const derivedTexture of derivedTextures) {
     const sourcePath = path.join(targetDir, derivedTexture.source)
     const outputPath = path.join(targetDir, derivedTexture.output)
-    const metadata = await sharp(sourcePath).metadata()
+    const preparedSourcePath = await prepareDerivedTextureSource(sourcePath, derivedTexture)
+    const metadata = await sharp(preparedSourcePath).metadata()
     const sourceWidth = metadata.width ?? 0
     const sourceHeight = metadata.height ?? 0
 
@@ -108,7 +117,7 @@ async function generateDerivedTextures(targetDir, packConfig) {
       Math.ceil(sourceHeight * (derivedTexture.cropUv.maxV - derivedTexture.cropUv.minV)),
     )
 
-    await sharp(sourcePath)
+    await sharp(preparedSourcePath)
       .extract({
         left: Math.floor(sourceWidth * derivedTexture.cropUv.minU),
         top: Math.floor(sourceHeight * derivedTexture.cropUv.minV),
@@ -117,7 +126,64 @@ async function generateDerivedTextures(targetDir, packConfig) {
       })
       .png()
       .toFile(outputPath)
+
+    if (preparedSourcePath !== sourcePath) {
+      await safeRm(preparedSourcePath)
+    }
   }
+}
+
+async function prepareDerivedTextureSource(sourcePath, derivedTexture) {
+  if (path.extname(sourcePath).toLowerCase() !== '.ktx2') {
+    return sourcePath
+  }
+
+  const tempDir = await fsMkdtemp(path.join(os.tmpdir(), 'dungeonplanner-derived-texture-'))
+  const extractedPath = path.join(tempDir, `${path.basename(sourcePath, '.ktx2')}.png`)
+  const ktxPath = resolveKtxCommandPath()
+
+  await runCommand(ktxPath, [
+    'extract',
+    '--transcode',
+    derivedTexture.transcode ?? 'rgba8',
+    sourcePath,
+    extractedPath,
+  ], {
+    cwd: rootDir,
+    env: process.env,
+  })
+
+  return extractedPath
+}
+
+function resolveKtxCommandPath() {
+  const fallbackKtxDirs = [
+    process.env.DUNGEONPLANNER_KTX_DIR,
+    path.join(os.homedir(), '.local/bin'),
+  ].filter(Boolean)
+  const resolvedKtxPath = findCommandPath('ktx', fallbackKtxDirs)
+
+  if (!resolvedKtxPath) {
+    throw new Error(
+      [
+        'The KTX-Software CLI was not found.',
+        'Install the `ktx` command from https://github.com/KhronosGroup/KTX-Software',
+        'or set DUNGEONPLANNER_KTX_DIR to the directory containing `ktx`.',
+      ].join('\n'),
+    )
+  }
+
+  return resolvedKtxPath
+}
+
+async function fsMkdtemp(prefix) {
+  const { mkdtemp } = await import('node:fs/promises')
+  return mkdtemp(prefix)
+}
+
+async function safeRm(filePath) {
+  const { rm } = await import('node:fs/promises')
+  await rm(path.dirname(filePath), { recursive: true, force: true })
 }
 
 function runCommand(command, args, options) {

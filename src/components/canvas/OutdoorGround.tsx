@@ -86,6 +86,49 @@ function configureGroundTexture(texture: THREE.Texture) {
   texture.needsUpdate = true
 }
 
+export function makeTexturePixelsOpaque(data: Uint8ClampedArray | Uint8Array) {
+  for (let index = 3; index < data.length; index += 4) {
+    data[index] = 255
+  }
+
+  return data
+}
+
+function createOpaqueGroundTexture(texture: THREE.Texture) {
+  const image = texture.image as
+    | HTMLImageElement
+    | HTMLCanvasElement
+    | ImageBitmap
+    | OffscreenCanvas
+    | undefined
+
+  if (!image || typeof document === 'undefined') {
+    return null
+  }
+
+  const width = 'width' in image ? image.width : 0
+  const height = 'height' in image ? image.height : 0
+  if (!width || !height) {
+    return null
+  }
+
+  const canvas = document.createElement('canvas')
+  canvas.width = width
+  canvas.height = height
+  const context = canvas.getContext('2d', { willReadFrequently: true })
+  if (!context) {
+    return null
+  }
+
+  context.drawImage(image as CanvasImageSource, 0, 0, width, height)
+
+  const imageData = context.getImageData(0, 0, width, height)
+  makeTexturePixelsOpaque(imageData.data)
+  context.putImageData(imageData, 0, 0)
+
+  return new THREE.CanvasTexture(canvas)
+}
+
 function configureMaskTexture(texture: THREE.CanvasTexture) {
   texture.wrapS = THREE.ClampToEdgeWrapping
   texture.wrapT = THREE.ClampToEdgeWrapping
@@ -179,6 +222,10 @@ export function OutdoorGround({
     () => outdoorGroundTextureCells ?? {},
     [outdoorGroundTextureCells],
   )
+  const opaqueGrassPatchTexture = useMemo(
+    () => createOpaqueGroundTexture(grassPatchTexture),
+    [grassPatchTexture],
+  )
   const textures = useTexture(TERRAIN_TEXTURE_PATHS)
   const defaultGrassColor = useMemo(
     () => new THREE.Color('#5aa43c').lerp(new THREE.Color('#355d2f'), outdoorBlend * 0.35),
@@ -207,15 +254,15 @@ export function OutdoorGround({
 
   const baseMaterial = useMemo(
     () => createStandardCompatibleMaterial({
-      map: grassPatchTexture ?? undefined,
-      color: grassPatchTexture ? '#ffffff' : defaultGrassColor,
+      map: opaqueGrassPatchTexture ?? grassPatchTexture ?? undefined,
+      color: opaqueGrassPatchTexture || grassPatchTexture ? '#ffffff' : defaultGrassColor,
       alphaMap: holeMask,
       transparent: true,
       alphaTest: 0.5,
       roughness: 1,
       metalness: 0,
     }),
-    [defaultGrassColor, grassPatchTexture, holeMask],
+    [defaultGrassColor, grassPatchTexture, holeMask, opaqueGrassPatchTexture],
   )
 
   const topMaterials = useMemo(() => ({
@@ -240,14 +287,20 @@ export function OutdoorGround({
     Object.values(textures).forEach(configureGroundTexture)
   }, [textures])
   useEffect(() => {
+    if (opaqueGrassPatchTexture) {
+      configureGroundTexture(opaqueGrassPatchTexture)
+      return
+    }
+
     if (grassPatchTexture) {
       configureGroundTexture(grassPatchTexture)
     }
-  }, [grassPatchTexture])
+  }, [grassPatchTexture, opaqueGrassPatchTexture])
   useEffect(() => () => topGeometry.dispose(), [topGeometry])
   useEffect(() => () => baseGeometry.dispose(), [baseGeometry])
   useEffect(() => () => holeMask.dispose(), [holeMask])
   useEffect(() => () => baseMaterial.dispose(), [baseMaterial])
+  useEffect(() => () => opaqueGrassPatchTexture?.dispose(), [opaqueGrassPatchTexture])
   useEffect(() => () => {
     Object.values(topMaterials).forEach((material) => material.dispose())
   }, [topMaterials])

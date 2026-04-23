@@ -1,4 +1,12 @@
 declare module '*.mjs' {
+  export function getModelPackConfig(target: string): {
+    derivedTextures?: Array<{
+      source: string
+      output: string
+      phase?: string
+      transcode?: string
+    }>
+  } | null
   export function formatBytes(bytes: number): string
   export function isThumbnailForModel(filePath: string, modelBaseNames: Set<string>): boolean
   export function resolvePackSourceDir(

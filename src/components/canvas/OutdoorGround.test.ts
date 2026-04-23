@@ -1,6 +1,6 @@
 import * as THREE from 'three'
 import { describe, expect, it } from 'vitest'
-import { createTextureMask } from './OutdoorGround'
+import { createTextureMask, makeTexturePixelsOpaque } from './OutdoorGround'
 import { sampleOutdoorTerrainHeight } from '../../store/outdoorTerrain'
 
 describe('createTextureMask', () => {
@@ -28,5 +28,19 @@ describe('createTextureMask', () => {
 
     expect(sampleOutdoorTerrainHeight(outdoorTerrainHeights, 1, 1)).toBe(2)
     expect(sampleOutdoorTerrainHeight(outdoorTerrainHeights, 2, 2)).toBe(0)
+  })
+
+  it('ignores source alpha when preparing the base grass texture', () => {
+    const pixels = new Uint8ClampedArray([
+      90, 164, 60, 0,
+      75, 154, 59, 128,
+    ])
+
+    makeTexturePixelsOpaque(pixels)
+
+    expect([...pixels]).toEqual([
+      90, 164, 60, 255,
+      75, 154, 59, 255,
+    ])
   })
 })

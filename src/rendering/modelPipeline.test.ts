@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   collectLocalArtifactPathsFromGltf,
   formatBytes,
+  getModelPackConfig,
   getPreservedArtifactPaths,
   resolvePackSourceDir,
   isThumbnailForModel,
@@ -67,5 +68,16 @@ describe('model pipeline utilities', () => {
         filePath.endsWith('/src/assets/models/kaykit/forest_grass_patch.png'),
       ),
     ).toBe(true)
+  })
+
+  it('builds the KayKit grass patch from the optimized atlas output', () => {
+    expect(getModelPackConfig('kaykit')?.derivedTextures).toEqual([
+      expect.objectContaining({
+        source: 'forest_texture.ktx2',
+        output: 'forest_grass_patch.png',
+        phase: 'post-optimize',
+        transcode: 'rgba8',
+      }),
+    ])
   })
 })

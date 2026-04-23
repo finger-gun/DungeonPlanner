@@ -91,9 +91,11 @@ export const modelPackConfigs = {
     preserveArtifacts: ['forest_grass_patch.png'],
     derivedTextures: [
       {
-        source: 'forest_texture.png',
+        source: 'forest_texture.ktx2',
         output: 'forest_grass_patch.png',
         cropUv: kaykitGrassPatchUv,
+        phase: 'post-optimize',
+        transcode: 'rgba8',
       },
     ],
     clean: true,
