@@ -1,10 +1,10 @@
-const MODEL_URLS = import.meta.glob('../../../assets/models/kaykit/**/*.glb', {
+const MODEL_URLS = import.meta.glob('../../../assets/models/forrest/**/*.glb', {
   eager: true,
   import: 'default',
   query: '?url',
 }) as Record<string, string>
 
-const GLTF_SOURCES = import.meta.glob('../../../assets/models/kaykit/**/*.gltf', {
+const GLTF_SOURCES = import.meta.glob('../../../assets/models/forrest/**/*.gltf', {
   eager: true,
   import: 'default',
   query: '?raw',
@@ -12,12 +12,12 @@ const GLTF_SOURCES = import.meta.glob('../../../assets/models/kaykit/**/*.gltf',
 
 const SIDECAR_URLS = import.meta.glob(
   [
-    '../../../assets/models/kaykit/**/*.bin',
-    '../../../assets/models/kaykit/**/*.ktx2',
-    '../../../assets/models/kaykit/**/*.png',
-    '../../../assets/models/kaykit/**/*.jpg',
-    '../../../assets/models/kaykit/**/*.jpeg',
-    '../../../assets/models/kaykit/**/*.webp',
+    '../../../assets/models/forrest/**/*.bin',
+    '../../../assets/models/forrest/**/*.ktx2',
+    '../../../assets/models/forrest/**/*.png',
+    '../../../assets/models/forrest/**/*.jpg',
+    '../../../assets/models/forrest/**/*.jpeg',
+    '../../../assets/models/forrest/**/*.webp',
   ],
   {
     eager: true,

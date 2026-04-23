@@ -65,8 +65,8 @@ describe('model pipeline utilities', () => {
   it('preserves generated KayKit grass patch artifacts', () => {
     expect([...getPreservedArtifactPaths('/packs/kaykit')]).toEqual([])
     expect(
-      [...getPreservedArtifactPaths('src/assets/models/kaykit')].some((filePath) =>
-        filePath.endsWith('/src/assets/models/kaykit/forest_grass_patch.png'),
+      [...getPreservedArtifactPaths('src/assets/models/forrest')].some((filePath) =>
+        filePath.endsWith('/src/assets/models/forrest/forest_grass_patch.png'),
       ),
     ).toBe(true)
   })

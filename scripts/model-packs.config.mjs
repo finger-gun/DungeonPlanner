@@ -92,7 +92,7 @@ export const modelPackConfigs = {
   },
   kaykit: {
     sourceDir: kaykitForestColor1SourceDir,
-    targetDir: path.join('src', 'assets', 'models', 'kaykit'),
+    targetDir: path.join('src', 'assets', 'models', 'forrest'),
     include: kaykitTerrainAssetNames.map((name) => `${name}.gltf`),
     preserveArtifacts: ['forest_grass_patch.png'],
     derivedTextures: [

@@ -1,7 +1,7 @@
 import { useEffect, useMemo } from 'react'
 import { useTexture } from '@react-three/drei'
 import * as THREE from 'three'
-import forestGrassPatchTextureUrl from '../../assets/models/kaykit/forest_grass_patch.png'
+import forestGrassPatchTextureUrl from '../../assets/models/forrest/forest_grass_patch.png'
 import { GRID_SIZE, getCellKey, type GridCell } from '../../hooks/useSnapToGrid'
 import { createStandardCompatibleMaterial } from '../../rendering/nodeMaterialUtils'
 import {

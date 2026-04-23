@@ -13,7 +13,7 @@ The pipeline now does four things as a single workflow:
 
 - `src/assets/models/core/` - core pack runtime assets.
 - `src/assets/models/dungeon/` - dungeon pack runtime assets.
-- `src/assets/models/kaykit/` - KayKit runtime assets, including `.gltf` sidecars and external texture/buffer files.
+- `src/assets/models/forrest/` - forest runtime assets from the KayKit creator pack, including `.gltf` sidecars and external texture/buffer files.
 
 Pack folders are treated as generated runtime content, not raw source-asset staging areas.
 
@@ -65,7 +65,7 @@ The core pack is configured in `scripts/model-packs.config.mjs`:
 The KayKit terrain pack is also configured in `scripts/model-packs.config.mjs`:
 
 - source directory: `forrest-assets-tmp/KayKit_Forest_Nature_Pack_1.0_EXTRA/Assets/gltf/Color1`
-- target directory: `src/assets/models/kaykit`
+- target directory: `src/assets/models/forrest`
 - imported files: the allowlisted terrain `.gltf` assets used by the stepped outdoor terrain runtime
 - derived assets: a generated `forest_grass_patch.png` sampled from the same narrow atlas strip used by the KayKit hill-top center mesh so `OutdoorGround` matches the terrain models at runtime
 
