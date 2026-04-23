@@ -22,4 +22,4 @@
 - [x] 4.1 Add or update unit tests for stepped terrain derivation, lowered-pit behavior, surface painting, and migration from legacy outdoor terrain.
 - [x] 4.2 Run `pnpm run test` for targeted regression coverage after the stepped terrain changes land.
 - [x] 4.3 Run `pnpm run build` after the stepped terrain renderer, store changes, and asset registrations are complete.
-- [ ] 4.4 Run `pnpm run verify` if the final implementation changes touch multiple outdoor editing and rendering flows.
+- [x] 4.4 Run `pnpm run verify` if the final implementation changes touch multiple outdoor editing and rendering flows.
