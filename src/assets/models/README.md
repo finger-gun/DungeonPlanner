@@ -67,7 +67,7 @@ The KayKit terrain pack is also configured in `scripts/model-packs.config.mjs`:
 - source directory: `forrest-assets-tmp/KayKit_Forest_Nature_Pack_1.0_EXTRA/Assets/gltf/Color1`
 - target directory: `src/assets/models/kaykit`
 - imported files: the allowlisted terrain `.gltf` assets used by the stepped outdoor terrain runtime
-- derived assets: a generated `forest_grass_patch.png` cropped from the optimized `forest_texture.ktx2` atlas so `OutdoorGround` matches the terrain models at runtime
+- derived assets: a generated `forest_grass_patch.png` sampled from the same narrow atlas strip used by the KayKit hill-top center mesh so `OutdoorGround` matches the terrain models at runtime
 
 ### Import a new pack or directory
 

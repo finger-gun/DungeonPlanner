@@ -27,6 +27,10 @@ const OUTDOOR_GROUND_HALF_SIZE = OUTDOOR_GROUND_SIZE / 2
 const MASK_TEXTURE_SIZE = 768
 const TERRAIN_REPEAT = 36
 const TOP_SURFACE_ELEVATION = 0.01
+const TRANSITION_OVERLAY_ELEVATION = 0.005
+const TERRAIN_TRANSITION_OPACITY = 0.28
+const TERRAIN_EDGE_TRANSITION_DEPTH = GRID_SIZE * 0.55
+const TERRAIN_CORNER_TRANSITION_SIZE = GRID_SIZE * 0.75
 
 type OverlayTextureType = Exclude<OutdoorGroundTextureType, 'short-grass'>
 
@@ -172,6 +176,71 @@ function createCellMask(cells: GridCell[], value: 'filled' | 'holes') {
   return configureMaskTexture(new THREE.CanvasTexture(sourceCanvas))
 }
 
+function createEdgeTransitionTexture() {
+  const canvas = document.createElement('canvas')
+  canvas.width = 32
+  canvas.height = 128
+  const context = canvas.getContext('2d')
+  if (!context) {
+    return configureMaskTexture(new THREE.CanvasTexture(canvas))
+  }
+
+  const gradient = context.createLinearGradient(0, 0, 0, canvas.height)
+  gradient.addColorStop(0, 'rgba(255,255,255,0)')
+  gradient.addColorStop(0.5, 'rgba(255,255,255,1)')
+  gradient.addColorStop(1, 'rgba(255,255,255,0)')
+  context.fillStyle = gradient
+  context.fillRect(0, 0, canvas.width, canvas.height)
+
+  return configureMaskTexture(new THREE.CanvasTexture(canvas))
+}
+
+function createCornerTransitionTexture() {
+  const canvas = document.createElement('canvas')
+  canvas.width = 128
+  canvas.height = 128
+  const context = canvas.getContext('2d')
+  if (!context) {
+    return configureMaskTexture(new THREE.CanvasTexture(canvas))
+  }
+
+  const gradient = context.createRadialGradient(
+    canvas.width / 2,
+    canvas.height / 2,
+    8,
+    canvas.width / 2,
+    canvas.height / 2,
+    canvas.width / 2,
+  )
+  gradient.addColorStop(0, 'rgba(255,255,255,1)')
+  gradient.addColorStop(1, 'rgba(255,255,255,0)')
+  context.fillStyle = gradient
+  context.fillRect(0, 0, canvas.width, canvas.height)
+
+  return configureMaskTexture(new THREE.CanvasTexture(canvas))
+}
+
+export function getTerrainEdgeTransitionTransform(
+  cell: GridCell,
+  direction: TerrainDirection,
+) {
+  const [worldX, worldZ] = getCliffWorldPosition(cell, direction)
+
+  if (direction === 'north') {
+    return { position: [worldX, worldZ] as [number, number], rotationY: 0 }
+  }
+
+  if (direction === 'east') {
+    return { position: [worldX, worldZ] as [number, number], rotationY: Math.PI / 2 }
+  }
+
+  if (direction === 'south') {
+    return { position: [worldX, worldZ] as [number, number], rotationY: Math.PI }
+  }
+
+  return { position: [worldX, worldZ] as [number, number], rotationY: -Math.PI / 2 }
+}
+
 export function createTextureMask(
   cells: OutdoorGroundTextureCells,
   textureType: OutdoorGroundTextureType,
@@ -241,6 +310,16 @@ export function OutdoorGround({
     geometry.rotateX(-Math.PI / 2)
     return geometry
   }, [])
+  const edgeTransitionGeometry = useMemo(() => {
+    const geometry = new THREE.PlaneGeometry(GRID_SIZE, TERRAIN_EDGE_TRANSITION_DEPTH)
+    geometry.rotateX(-Math.PI / 2)
+    return geometry
+  }, [])
+  const cornerTransitionGeometry = useMemo(() => {
+    const geometry = new THREE.PlaneGeometry(TERRAIN_CORNER_TRANSITION_SIZE, TERRAIN_CORNER_TRANSITION_SIZE)
+    geometry.rotateX(-Math.PI / 2)
+    return geometry
+  }, [])
 
   const derivedTerrain = useMemo(
     () => buildSteppedOutdoorTerrain(outdoorTerrainHeights, groundTextureCells),
@@ -250,6 +329,18 @@ export function OutdoorGround({
   const holeMask = useMemo(
     () => createCellMask(derivedTerrain.holeCells, 'holes'),
     [derivedTerrain.holeCells],
+  )
+  const edgeTransitionMask = useMemo(
+    () => createEdgeTransitionTexture(),
+    [],
+  )
+  const cornerTransitionMask = useMemo(
+    () => createCornerTransitionTexture(),
+    [],
+  )
+  const transitionColor = useMemo(
+    () => defaultGrassColor.clone().lerp(new THREE.Color('#dceaa0'), 0.28),
+    [defaultGrassColor],
   )
 
   const baseMaterial = useMemo(
@@ -263,6 +354,30 @@ export function OutdoorGround({
       metalness: 0,
     }),
     [defaultGrassColor, grassPatchTexture, holeMask, opaqueGrassPatchTexture],
+  )
+  const edgeTransitionMaterial = useMemo(
+    () => createStandardCompatibleMaterial({
+      color: transitionColor,
+      alphaMap: edgeTransitionMask,
+      transparent: true,
+      opacity: TERRAIN_TRANSITION_OPACITY,
+      depthWrite: false,
+      roughness: 1,
+      metalness: 0,
+    }),
+    [edgeTransitionMask, transitionColor],
+  )
+  const cornerTransitionMaterial = useMemo(
+    () => createStandardCompatibleMaterial({
+      color: transitionColor,
+      alphaMap: cornerTransitionMask,
+      transparent: true,
+      opacity: TERRAIN_TRANSITION_OPACITY * 0.9,
+      depthWrite: false,
+      roughness: 1,
+      metalness: 0,
+    }),
+    [cornerTransitionMask, transitionColor],
   )
 
   const topMaterials = useMemo(() => ({
@@ -298,8 +413,14 @@ export function OutdoorGround({
   }, [grassPatchTexture, opaqueGrassPatchTexture])
   useEffect(() => () => topGeometry.dispose(), [topGeometry])
   useEffect(() => () => baseGeometry.dispose(), [baseGeometry])
+  useEffect(() => () => edgeTransitionGeometry.dispose(), [edgeTransitionGeometry])
+  useEffect(() => () => cornerTransitionGeometry.dispose(), [cornerTransitionGeometry])
   useEffect(() => () => holeMask.dispose(), [holeMask])
+  useEffect(() => () => edgeTransitionMask.dispose(), [edgeTransitionMask])
+  useEffect(() => () => cornerTransitionMask.dispose(), [cornerTransitionMask])
   useEffect(() => () => baseMaterial.dispose(), [baseMaterial])
+  useEffect(() => () => edgeTransitionMaterial.dispose(), [edgeTransitionMaterial])
+  useEffect(() => () => cornerTransitionMaterial.dispose(), [cornerTransitionMaterial])
   useEffect(() => () => opaqueGrassPatchTexture?.dispose(), [opaqueGrassPatchTexture])
   useEffect(() => () => {
     Object.values(topMaterials).forEach((material) => material.dispose())
@@ -310,6 +431,37 @@ export function OutdoorGround({
       <mesh geometry={baseGeometry} receiveShadow userData={{ outdoorTerrainSurface: true }}>
         <primitive object={baseMaterial} attach="material" />
       </mesh>
+
+      {derivedTerrain.topEdges.map((edge) => {
+        const transform = getTerrainEdgeTransitionTransform(edge.cell, edge.direction as TerrainDirection)
+
+        return (
+          <mesh
+            key={`edge-transition:${edge.cellKey}:${edge.direction}:${edge.worldY}`}
+            geometry={edgeTransitionGeometry}
+            position={[transform.position[0], TRANSITION_OVERLAY_ELEVATION, transform.position[1]]}
+            rotation={[0, transform.rotationY, 0]}
+            receiveShadow={false}
+          >
+            <primitive object={edgeTransitionMaterial} attach="material" />
+          </mesh>
+        )
+      })}
+
+      {derivedTerrain.topCorners.map((corner) => {
+        const [worldX, worldZ] = getCliffWorldPosition(corner.cell, corner.direction)
+
+        return (
+          <mesh
+            key={`corner-transition:${corner.cellKey}:${corner.direction}:${corner.worldY}`}
+            geometry={cornerTransitionGeometry}
+            position={[worldX, TRANSITION_OVERLAY_ELEVATION, worldZ]}
+            receiveShadow={false}
+          >
+            <primitive object={cornerTransitionMaterial} attach="material" />
+          </mesh>
+        )
+      })}
 
       {derivedTerrain.topSurfaces.map((surface) => {
         const [worldX, worldZ] = getCellWorldPosition(surface.cell)

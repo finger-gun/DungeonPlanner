@@ -1,6 +1,10 @@
 import * as THREE from 'three'
 import { describe, expect, it } from 'vitest'
-import { createTextureMask, makeTexturePixelsOpaque } from './OutdoorGround'
+import {
+  createTextureMask,
+  getTerrainEdgeTransitionTransform,
+  makeTexturePixelsOpaque,
+} from './OutdoorGround'
 import { sampleOutdoorTerrainHeight } from '../../store/outdoorTerrain'
 
 describe('createTextureMask', () => {
@@ -42,5 +46,17 @@ describe('createTextureMask', () => {
       90, 164, 60, 255,
       75, 154, 59, 255,
     ])
+  })
+
+  it('positions terrain edge transitions on the matching cliff boundary', () => {
+    expect(getTerrainEdgeTransitionTransform([2, 3], 'north')).toEqual({
+      position: [5, 6],
+      rotationY: 0,
+    })
+
+    expect(getTerrainEdgeTransitionTransform([2, 3], 'east')).toEqual({
+      position: [6, 7],
+      rotationY: Math.PI / 2,
+    })
   })
 })

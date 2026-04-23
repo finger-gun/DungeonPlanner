@@ -10,6 +10,12 @@ const kaykitGrassPatchUv = {
   maxV: 0.108,
 }
 
+const kaykitGrassStripUv = {
+  minU: 0.0354,
+  maxU: 0.0559,
+  v: 0.0894,
+}
+
 const kaykitTerrainAssetNames = [
   'Hill_2x2x2_Color1',
   'Hill_4x2x2_Color1',
@@ -96,6 +102,10 @@ export const modelPackConfigs = {
         cropUv: kaykitGrassPatchUv,
         phase: 'post-optimize',
         transcode: 'rgba8',
+        sampleMode: 'strip',
+        sampleStripUv: kaykitGrassStripUv,
+        sampleBandHeightPx: 4,
+        outputSize: 32,
       },
     ],
     clean: true,

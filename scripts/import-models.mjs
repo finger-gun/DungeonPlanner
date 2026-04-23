@@ -117,20 +117,170 @@ async function generateDerivedTextures(targetDir, packConfig, phase) {
       Math.ceil(sourceHeight * (derivedTexture.cropUv.maxV - derivedTexture.cropUv.minV)),
     )
 
-    await sharp(preparedSourcePath)
+    const extracted = await sharp(preparedSourcePath)
       .extract({
         left: Math.floor(sourceWidth * derivedTexture.cropUv.minU),
         top: Math.floor(sourceHeight * derivedTexture.cropUv.minV),
         width: extractWidth,
         height: extractHeight,
       })
-      .png()
-      .toFile(outputPath)
+      .raw()
+      .toBuffer({ resolveWithObject: true })
+
+    if (derivedTexture.sampleMode === 'strip' && derivedTexture.sampleStripUv) {
+      const stripTexture = await createStripTexture(preparedSourcePath, derivedTexture)
+      await sharp(Buffer.from(stripTexture.data), {
+        raw: stripTexture.info,
+      })
+        .png()
+        .toFile(outputPath)
+    } else {
+      const outputData = derivedTexture.makeTileable
+        ? makeTextureTileable(
+            extracted.data,
+            extracted.info.width,
+            extracted.info.height,
+            extracted.info.channels,
+            derivedTexture.edgeBlendPx,
+          )
+        : extracted.data
+
+      await sharp(Buffer.from(outputData), {
+        raw: {
+          width: extracted.info.width,
+          height: extracted.info.height,
+          channels: extracted.info.channels,
+        },
+      })
+        .png()
+        .toFile(outputPath)
+    }
 
     if (preparedSourcePath !== sourcePath) {
       await safeRm(preparedSourcePath)
     }
   }
+}
+
+export async function createStripTexture(sourcePath, derivedTexture) {
+  const metadata = await sharp(sourcePath).metadata()
+  const sourceWidth = metadata.width ?? 0
+  const sourceHeight = metadata.height ?? 0
+  if (!sourceWidth || !sourceHeight) {
+    throw new Error(`Could not read strip source dimensions for ${sourcePath}.`)
+  }
+
+  const stripUv = derivedTexture.sampleStripUv
+  if (!stripUv) {
+    throw new Error('sampleStripUv is required for strip-based derived textures.')
+  }
+
+  const left = Math.floor(sourceWidth * stripUv.minU)
+  const top = Math.max(0, Math.floor((sourceHeight * stripUv.v) - ((derivedTexture.sampleBandHeightPx ?? 1) / 2)))
+  const width = Math.max(1, Math.ceil(sourceWidth * (stripUv.maxU - stripUv.minU)))
+  const height = Math.max(1, Math.min(sourceHeight - top, derivedTexture.sampleBandHeightPx ?? 1))
+  const extracted = await sharp(sourcePath)
+    .extract({ left, top, width, height })
+    .raw()
+    .toBuffer({ resolveWithObject: true })
+
+  const outputSize = Math.max(8, derivedTexture.outputSize ?? extracted.info.width)
+  const outputData = createTiledStripTexture(
+    extracted.data,
+    extracted.info.width,
+    extracted.info.height,
+    extracted.info.channels,
+    outputSize,
+    outputSize,
+  )
+
+  return {
+    data: outputData,
+    info: {
+      width: outputSize,
+      height: outputSize,
+      channels: extracted.info.channels,
+    },
+  }
+}
+
+export function createTiledStripTexture(
+  data,
+  width,
+  height,
+  channels = 4,
+  outputWidth = width,
+  outputHeight = outputWidth,
+) {
+  const result = new Uint8ClampedArray(outputWidth * outputHeight * channels)
+  if (width < 1 || height < 1 || channels < 1) {
+    return result
+  }
+
+  for (let y = 0; y < outputHeight; y += 1) {
+    for (let x = 0; x < outputWidth; x += 1) {
+      const sourceX = Math.floor((x / outputWidth) * width) % width
+      let red = 0
+      let green = 0
+      let blue = 0
+      let alpha = 0
+
+      for (let sampleY = 0; sampleY < height; sampleY += 1) {
+        const sourceIndex = ((sampleY * width) + sourceX) * channels
+        red += data[sourceIndex] ?? 0
+        green += data[sourceIndex + 1] ?? 0
+        blue += data[sourceIndex + 2] ?? 0
+        alpha += data[sourceIndex + 3] ?? 255
+      }
+
+      const targetIndex = ((y * outputWidth) + x) * channels
+      result[targetIndex] = Math.round(red / height)
+      if (channels > 1) result[targetIndex + 1] = Math.round(green / height)
+      if (channels > 2) result[targetIndex + 2] = Math.round(blue / height)
+      if (channels > 3) result[targetIndex + 3] = Math.round(alpha / height)
+    }
+  }
+
+  return result
+}
+
+export function makeTextureTileable(data, width, height, channels = 4, edgeBlendPx = 8) {
+  if (width < 2 || height < 2 || channels < 3) {
+    return new Uint8ClampedArray(data)
+  }
+
+  const result = new Uint8ClampedArray(data)
+  const halfWidth = Math.floor(width / 2)
+  const halfHeight = Math.floor(height / 2)
+  const blendRadius = Math.max(1, Math.min(edgeBlendPx, Math.floor(Math.min(width, height) / 2)))
+
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 1) {
+      const distanceToEdge = Math.min(x, y, width - 1 - x, height - 1 - y)
+      const blend = smoothstep(0, 1, Math.min(1, distanceToEdge / blendRadius))
+      const sourceIndex = ((y * width) + x) * channels
+      const wrappedX = (x + halfWidth) % width
+      const wrappedY = (y + halfHeight) % height
+      const wrappedIndex = ((wrappedY * width) + wrappedX) * channels
+
+      for (let channel = 0; channel < channels; channel += 1) {
+        const originalValue = data[sourceIndex + channel] ?? 0
+        const wrappedValue = data[wrappedIndex + channel] ?? 0
+        result[sourceIndex + channel] = Math.round((originalValue * blend) + (wrappedValue * (1 - blend)))
+      }
+    }
+  }
+
+  return result
+}
+
+function smoothstep(min, max, value) {
+  if (min === max) {
+    return value < min ? 0 : 1
+  }
+
+  const normalized = Math.max(0, Math.min(1, (value - min) / (max - min)))
+  return normalized * normalized * (3 - (2 * normalized))
 }
 
 async function prepareDerivedTextureSource(sourcePath, derivedTexture) {

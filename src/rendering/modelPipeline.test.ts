@@ -7,6 +7,7 @@ import {
   resolvePackSourceDir,
   isThumbnailForModel,
 } from '../../scripts/model-pipeline.mjs'
+import { createTiledStripTexture, makeTextureTileable } from '../../scripts/import-models.mjs'
 
 describe('model pipeline utilities', () => {
   it('collects local gltf sidecar artifacts and ignores external URIs', () => {
@@ -77,7 +78,59 @@ describe('model pipeline utilities', () => {
         output: 'forest_grass_patch.png',
         phase: 'post-optimize',
         transcode: 'rgba8',
+        sampleMode: 'strip',
+        sampleBandHeightPx: 4,
+        outputSize: 32,
       }),
     ])
+  })
+
+  it('builds square grass textures from the sampled hill-top strip', () => {
+    const strip = new Uint8ClampedArray([
+      10, 20, 30, 255,
+      30, 40, 50, 255,
+      50, 60, 70, 255,
+
+      14, 24, 34, 255,
+      34, 44, 54, 255,
+      54, 64, 74, 255,
+    ])
+
+    const tiled = createTiledStripTexture(strip, 3, 2, 4, 6, 2)
+
+    expect([...tiled.slice(0, 4)]).toEqual([12, 22, 32, 255])
+    expect([...tiled.slice(4, 8)]).toEqual([12, 22, 32, 255])
+    expect([...tiled.slice(8, 12)]).toEqual([32, 42, 52, 255])
+    expect([...tiled.slice((6 * 4), (6 * 4) + 4)]).toEqual([12, 22, 32, 255])
+  })
+
+  it('feathers derived texture edges toward a wrapped copy for seamless tiling', () => {
+    const data = new Uint8ClampedArray([
+      0, 0, 0, 255,
+      10, 0, 0, 255,
+      20, 0, 0, 255,
+      30, 0, 0, 255,
+
+      40, 0, 0, 255,
+      50, 0, 0, 255,
+      60, 0, 0, 255,
+      70, 0, 0, 255,
+
+      80, 0, 0, 255,
+      90, 0, 0, 255,
+      100, 0, 0, 255,
+      110, 0, 0, 255,
+
+      120, 0, 0, 255,
+      130, 0, 0, 255,
+      140, 0, 0, 255,
+      150, 0, 0, 255,
+    ])
+
+    const tiled = makeTextureTileable(data, 4, 4, 4, 1)
+
+    expect([...tiled.slice(0, 4)]).toEqual([100, 0, 0, 255])
+    expect([...tiled.slice((3 * 4) * 4, ((3 * 4) * 4) + 4)]).toEqual([60, 0, 0, 255])
+    expect([...tiled.slice(((1 * 4) + 1) * 4, (((1 * 4) + 1) * 4) + 4)]).toEqual([50, 0, 0, 255])
   })
 })
