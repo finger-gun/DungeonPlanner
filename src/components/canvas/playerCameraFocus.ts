@@ -4,6 +4,13 @@ import { DEFAULT_GENERATED_CHARACTER_SIZE, type GeneratedCharacterRecord } from 
 
 const BASE_PLAYER_CAMERA_FOCUS_HEIGHT = 1.045
 
+export function shouldStartPlayerCameraFocus(
+  previousPlayerId: string | null,
+  nextPlayerId: string | null,
+) {
+  return Boolean(nextPlayerId) && previousPlayerId !== nextPlayerId
+}
+
 export function easePlayerCameraFocusProgress(progress: number) {
   if (progress <= 0) {
     return 0

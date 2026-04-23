@@ -139,4 +139,36 @@ describe('buildMergedTileGeometryMeshes', () => {
 
     merged[0]!.geometry.dispose()
   })
+
+  it('stamps per-placement fog cell coordinates into merged geometry attributes', () => {
+    const sourceGeometry = new THREE.PlaneGeometry(1, 1)
+    const sourceMaterial = new THREE.MeshStandardMaterial()
+    resources.push(sourceGeometry, sourceMaterial)
+
+    const scene = new THREE.Group()
+    scene.add(new THREE.Mesh(sourceGeometry, sourceMaterial))
+
+    const merged = buildMergedTileGeometryMeshes({
+      sourceScene: scene,
+      placements: [
+        { key: 'a', position: [0, 0, 0], rotation: [0, 0, 0], fogCell: [3, 4] },
+        { key: 'b', position: [2, 0, 0], rotation: [0, 0, 0], fogCell: [5, 6] },
+      ],
+    })
+
+    expect(merged).toHaveLength(1)
+
+    const fogCell = merged[0]!.geometry.getAttribute('fogCell')
+    expect(fogCell).toBeInstanceOf(THREE.BufferAttribute)
+    expect(fogCell.itemSize).toBe(2)
+
+    const stampedPairs = new Set<string>()
+    for (let index = 0; index < fogCell.count; index += 1) {
+      stampedPairs.add(`${fogCell.getX(index)}:${fogCell.getY(index)}`)
+    }
+
+    expect(stampedPairs).toEqual(new Set(['3:4', '5:6']))
+
+    merged[0]!.geometry.dispose()
+  })
 })

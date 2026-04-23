@@ -75,7 +75,7 @@ export function FireParticleSystem({
 }) {
   const { invalidate } = useThree()
   const particleEffectsEnabled = useDungeonStore((state) => state.particleEffectsEnabled)
-  const useLineOfSightPostMask = visibility.active && visibility.mask !== null
+  const useLineOfSightPostMask = visibility.active
 
   const activeEmitters = useMemo<ActiveFireEmitter[]>(() => {
     if (!particleEffectsEnabled) return []

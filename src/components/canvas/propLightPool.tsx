@@ -112,7 +112,7 @@ export function PropLightPool({
     () => collectVisiblePropLightAssignments({
       lightSources,
       visibility,
-      useLineOfSightPostMask: visibility.active && visibility.mask !== null,
+      useLineOfSightPostMask: visibility.active,
     }),
     [lightSources, visibility],
   )

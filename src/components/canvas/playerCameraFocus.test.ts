@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import { easePlayerCameraFocusProgress, getPlayerCameraFocusPoint } from './playerCameraFocus'
+import {
+  easePlayerCameraFocusProgress,
+  getPlayerCameraFocusPoint,
+  shouldStartPlayerCameraFocus,
+} from './playerCameraFocus'
 
 describe('getPlayerCameraFocusPoint', () => {
   it('aims at the center height of a default-size player standee', () => {
@@ -29,5 +33,19 @@ describe('easePlayerCameraFocusProgress', () => {
     expect(easePlayerCameraFocusProgress(0.25)).toBeCloseTo(0.103515625)
     expect(easePlayerCameraFocusProgress(0.5)).toBe(0.5)
     expect(easePlayerCameraFocusProgress(0.75)).toBeCloseTo(0.896484375)
+  })
+})
+
+describe('shouldStartPlayerCameraFocus', () => {
+  it('starts when selecting a player for the first time', () => {
+    expect(shouldStartPlayerCameraFocus(null, 'player-1')).toBe(true)
+  })
+
+  it('does not restart when the same selected player moves', () => {
+    expect(shouldStartPlayerCameraFocus('player-1', 'player-1')).toBe(false)
+  })
+
+  it('stops when no player is selected', () => {
+    expect(shouldStartPlayerCameraFocus('player-1', null)).toBe(false)
   })
 })

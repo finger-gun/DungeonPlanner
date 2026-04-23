@@ -221,7 +221,7 @@ export function DungeonRoom({
       ),
     [globalWallAssetId, innerWalls, rooms, suppressedWallKeys, visiblePaintedCells, wallSurfaceAssetIds],
   )
-  const useLineOfSightPostMask = visibility.active && visibility.mask !== null
+  const useLineOfSightPostMask = visibility.active
   const staticWallEntries = useMemo<StaticTileEntry[]>(
     () => walls.flatMap((wall) => {
       const floorKey = wall.segmentKeys[0]?.split(':').slice(0, 2).join(':') ?? wall.key
@@ -368,7 +368,7 @@ function CellGroupRenderer({
   visibility: PlayVisibility
   enableBuildAnimation: boolean
 }) {
-  const useLineOfSightPostMask = visibility.active && visibility.mask !== null
+  const useLineOfSightPostMask = visibility.active
   const staticEntries = useMemo<StaticTileEntry[]>(
     () => group.cells.flatMap((cell) => {
       const key = getCellKey(cell)
@@ -376,17 +376,18 @@ function CellGroupRenderer({
         return []
       }
 
-      return [{
-        key: `floor:${key}`,
-        assetId: group.floorAssetId,
-        position: cellToWorldPosition(cell),
-        rotation: ZERO_ROTATION,
-        variant: 'floor',
-        variantKey: key,
-        visibility: visibility.getCellVisibility(key),
-      }]
-    }),
-    [blockedFloorCellKeys, enableBuildAnimation, group.cells, group.floorAssetId, visibility],
+       return [{
+         key: `floor:${key}`,
+         assetId: group.floorAssetId,
+         position: cellToWorldPosition(cell),
+         rotation: ZERO_ROTATION,
+         variant: 'floor',
+         variantKey: key,
+         visibility: 'visible',
+         fogCell: cell,
+       }]
+     }),
+    [blockedFloorCellKeys, enableBuildAnimation, group.cells, group.floorAssetId],
   )
   const animatedCells = useMemo(
     () => group.cells.filter((cell) => {
@@ -411,7 +412,7 @@ function CellGroupRenderer({
               position={cellToWorldPosition(cell)}
               variant="floor"
               variantKey={key}
-              visibility={visibility.getCellVisibility(key)}
+              visibility="visible"
               useLineOfSightPostMask={useLineOfSightPostMask}
             />
           </AnimatedTileGroup>
@@ -808,7 +809,7 @@ function OpeningRenderer({
   const selectObject = useDungeonStore((state) => state.selectObject)
   const ppEnabled = useDungeonStore((state) => state.postProcessing.enabled)
   const selected = selection === opening.id
-  const useLineOfSightPostMask = visibility.active && visibility.mask !== null
+  const useLineOfSightPostMask = visibility.active
   const openingSegmentKeys = getOpeningSegments(opening.wallKey, opening.width)
   const wallVisibility = getWallSpanVisibilityState(visibility, openingSegmentKeys)
 
