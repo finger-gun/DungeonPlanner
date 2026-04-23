@@ -14,7 +14,6 @@ import { RoomToolPanel } from './components/editor/RoomToolPanel'
 import { PropToolPanel } from './components/editor/PropToolPanel'
 import { CharacterToolPanel } from './components/editor/CharacterToolPanel'
 import { SelectToolPanel } from './components/editor/SelectToolPanel'
-import { LayerPanel } from './components/editor/LayerPanel'
 import { ScenePanel } from './components/editor/ScenePanel'
 import { CharacterSheetOverlay } from './components/editor/CharacterSheetOverlay'
 import { getDebugCameraPose, projectDebugWorldPoint } from './components/canvas/debugCameraBridge'
@@ -106,12 +105,6 @@ function RightPanel({
         {!showSettings && tool === 'character' && <CharacterToolPanel />}
         {!showSettings && tool === 'prop' && <PropToolPanel />}
       </div>
-
-      {!showSettings && (
-        <div className="shrink-0 border-t border-stone-800/60 p-5 flex flex-col gap-6">
-          <LayerPanel />
-        </div>
-      )}
     </aside>
   )
 }

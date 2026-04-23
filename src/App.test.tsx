@@ -54,10 +54,6 @@ vi.mock('./components/editor/SelectToolPanel', () => ({
   SelectToolPanel: () => <div>Select Panel</div>,
 }))
 
-vi.mock('./components/editor/LayerPanel', () => ({
-  LayerPanel: () => <div>Layers</div>,
-}))
-
 vi.mock('./components/editor/ScenePanel', () => ({
   ScenePanel: () => <div>Scene Graph</div>,
 }))
