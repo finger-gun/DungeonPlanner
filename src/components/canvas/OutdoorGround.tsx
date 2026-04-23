@@ -32,13 +32,18 @@ const TRANSITION_OVERLAY_ELEVATION = 0.015
 const TERRAIN_TRANSITION_OPACITY = 0.42
 const TERRAIN_EDGE_TRANSITION_DEPTH = GRID_SIZE * 0.55
 const STEPPED_TERRAIN_ROUGHNESS = 0.6000000238418579
+const TERRAIN_ATLAS_STRIP_MIN_U = 0.03546178340911865
+const TERRAIN_ATLAS_STRIP_MAX_U = 0.055953145027160645
+const TERRAIN_ATLAS_STRIP_CENTER_V = 0.0894547700881958
+const TERRAIN_ATLAS_STRIP_SAMPLE_HEIGHT_PX = 4
+const TERRAIN_ATLAS_OUTPUT_SIZE = 32
 
 const STYLE_TEXTURE_URLS = Object.fromEntries(
-  Object.entries(import.meta.glob('../../assets/models/forrest/*/forest_grass_patch.png', {
+  Object.entries(import.meta.glob('../../assets/models/forrest/*/forest_texture.png', {
     eager: true,
     import: 'default',
   })).map(([key, url]) => {
-    const match = key.match(/forrest\/(Color\d+)\/forest_grass_patch\.png$/)
+    const match = key.match(/forrest\/(Color\d+)\/forest_texture\.png$/)
     return [match?.[1] ?? key, url as string]
   }),
 ) as Record<string, string>
@@ -127,6 +132,82 @@ function createOpaqueGroundTexture(texture: THREE.Texture) {
   context.putImageData(pixels, 0, 0)
 
   return new THREE.CanvasTexture(canvas)
+}
+
+export function getTerrainStyleAtlasStripUv(terrainStyle: OutdoorTerrainStyle) {
+  const styleIndex = OUTDOOR_TERRAIN_STYLES.indexOf(terrainStyle)
+  const styleOffset = Math.max(0, styleIndex) * 0.125
+  return {
+    minU: TERRAIN_ATLAS_STRIP_MIN_U + styleOffset,
+    maxU: TERRAIN_ATLAS_STRIP_MAX_U + styleOffset,
+    centerV: TERRAIN_ATLAS_STRIP_CENTER_V,
+  }
+}
+
+function createGroundTextureFromTerrainAtlas(texture: THREE.Texture, terrainStyle: OutdoorTerrainStyle) {
+  const image = texture.image as HTMLImageElement | HTMLCanvasElement | ImageBitmap | OffscreenCanvas | undefined
+  if (!image || typeof document === 'undefined') {
+    return null
+  }
+
+  const width = 'width' in image ? image.width : 0
+  const height = 'height' in image ? image.height : 0
+  if (!width || !height) {
+    return null
+  }
+
+  const sourceCanvas = document.createElement('canvas')
+  sourceCanvas.width = width
+  sourceCanvas.height = height
+  const sourceContext = sourceCanvas.getContext('2d', { willReadFrequently: true })
+  if (!sourceContext) {
+    return null
+  }
+
+  sourceContext.drawImage(image as CanvasImageSource, 0, 0, width, height)
+
+  const { minU, maxU, centerV } = getTerrainStyleAtlasStripUv(terrainStyle)
+  const left = Math.floor(width * minU)
+  const top = Math.max(0, Math.floor((height * centerV) - (TERRAIN_ATLAS_STRIP_SAMPLE_HEIGHT_PX / 2)))
+  const sampleWidth = Math.max(1, Math.ceil(width * (maxU - minU)))
+  const sampleHeight = Math.max(1, Math.min(height - top, TERRAIN_ATLAS_STRIP_SAMPLE_HEIGHT_PX))
+  const stripImage = sourceContext.getImageData(left, top, sampleWidth, sampleHeight)
+
+  const outputCanvas = document.createElement('canvas')
+  outputCanvas.width = TERRAIN_ATLAS_OUTPUT_SIZE
+  outputCanvas.height = TERRAIN_ATLAS_OUTPUT_SIZE
+  const outputContext = outputCanvas.getContext('2d')
+  if (!outputContext) {
+    return null
+  }
+
+  const outputImage = outputContext.createImageData(TERRAIN_ATLAS_OUTPUT_SIZE, TERRAIN_ATLAS_OUTPUT_SIZE)
+  for (let y = 0; y < TERRAIN_ATLAS_OUTPUT_SIZE; y += 1) {
+    for (let x = 0; x < TERRAIN_ATLAS_OUTPUT_SIZE; x += 1) {
+      const sourceX = Math.floor((x / TERRAIN_ATLAS_OUTPUT_SIZE) * sampleWidth) % sampleWidth
+      let red = 0
+      let green = 0
+      let blue = 0
+      let alpha = 0
+
+      for (let sampleY = 0; sampleY < sampleHeight; sampleY += 1) {
+        const sampleIndex = ((sampleY * sampleWidth) + sourceX) * 4
+        red += stripImage.data[sampleIndex] ?? 0
+        green += stripImage.data[sampleIndex + 1] ?? 0
+        blue += stripImage.data[sampleIndex + 2] ?? 0
+        alpha += stripImage.data[sampleIndex + 3] ?? 255
+      }
+
+      const targetIndex = ((y * TERRAIN_ATLAS_OUTPUT_SIZE) + x) * 4
+      outputImage.data[targetIndex] = Math.round(red / sampleHeight)
+      outputImage.data[targetIndex + 1] = Math.round(green / sampleHeight)
+      outputImage.data[targetIndex + 2] = Math.round(blue / sampleHeight)
+      outputImage.data[targetIndex + 3] = Math.round(alpha / sampleHeight)
+    }
+  }
+
+  outputContext.putImageData(outputImage, 0, 0)
+  return new THREE.CanvasTexture(outputCanvas)
 }
 
 function configureMaskTexture(texture: THREE.CanvasTexture) {
@@ -274,9 +355,14 @@ export function OutdoorGround({
     [],
   )
   const textures = useTexture(textureUrls) as Record<OutdoorTerrainStyle, THREE.Texture>
-  const opaqueTextures = useMemo(
+  const groundTextures = useMemo(
     () => Object.fromEntries(
-      OUTDOOR_TERRAIN_STYLES.map((style) => [style, createOpaqueGroundTexture(textures[style]) ?? textures[style]]),
+      OUTDOOR_TERRAIN_STYLES.map((style) => [
+        style,
+        createGroundTextureFromTerrainAtlas(textures[style], style)
+          ?? createOpaqueGroundTexture(textures[style])
+          ?? textures[style],
+      ]),
     ) as Record<OutdoorTerrainStyle, THREE.Texture>,
     [textures],
   )
@@ -311,14 +397,14 @@ export function OutdoorGround({
 
   const baseMaterial = useMemo(
     () => createStandardCompatibleMaterial({
-      map: opaqueTextures[defaultOutdoorTerrainStyle],
+      map: groundTextures[defaultOutdoorTerrainStyle],
       color: '#ffffff',
       alphaMap: holeMask,
       alphaTest: 0.5,
       roughness: STEPPED_TERRAIN_ROUGHNESS,
       metalness: 0,
     }),
-    [defaultOutdoorTerrainStyle, holeMask, opaqueTextures],
+    [defaultOutdoorTerrainStyle, groundTextures, holeMask],
   )
 
   const topMaterials = useMemo(
@@ -326,13 +412,13 @@ export function OutdoorGround({
       OUTDOOR_TERRAIN_STYLES.map((terrainStyle) => [
         terrainStyle,
         createStandardCompatibleMaterial({
-          map: opaqueTextures[terrainStyle],
+          map: groundTextures[terrainStyle],
           roughness: STEPPED_TERRAIN_ROUGHNESS,
           metalness: 0,
         }),
       ]),
     ) as Record<OutdoorTerrainStyle, THREE.Material>,
-    [opaqueTextures],
+    [groundTextures],
   )
 
   const transitionMaterials = useMemo(
@@ -340,7 +426,7 @@ export function OutdoorGround({
       OUTDOOR_TERRAIN_STYLES.map((terrainStyle) => [
         terrainStyle,
         createStandardCompatibleMaterial({
-          map: opaqueTextures[terrainStyle],
+          map: groundTextures[terrainStyle],
           alphaMap: edgeTransitionMask,
           transparent: true,
           opacity: TERRAIN_TRANSITION_OPACITY,
@@ -350,15 +436,15 @@ export function OutdoorGround({
         }),
       ]),
     ) as Record<OutdoorTerrainStyle, THREE.Material>,
-    [edgeTransitionMask, opaqueTextures],
+    [edgeTransitionMask, groundTextures],
   )
 
   useEffect(() => {
     Object.values(textures).forEach(configureGroundTexture)
   }, [textures])
   useEffect(() => {
-    Object.values(opaqueTextures).forEach(configureGroundTexture)
-  }, [opaqueTextures])
+    Object.values(groundTextures).forEach(configureGroundTexture)
+  }, [groundTextures])
   useEffect(() => () => topGeometry.dispose(), [topGeometry])
   useEffect(() => () => baseGeometry.dispose(), [baseGeometry])
   useEffect(() => () => edgeTransitionGeometry.dispose(), [edgeTransitionGeometry])
@@ -366,12 +452,12 @@ export function OutdoorGround({
   useEffect(() => () => edgeTransitionMask.dispose(), [edgeTransitionMask])
   useEffect(() => () => baseMaterial.dispose(), [baseMaterial])
   useEffect(() => () => {
-    Object.values(opaqueTextures).forEach((texture) => {
+    Object.values(groundTextures).forEach((texture) => {
       if (texture instanceof THREE.CanvasTexture) {
         texture.dispose()
       }
     })
-  }, [opaqueTextures])
+  }, [groundTextures])
   useEffect(() => () => {
     Object.values(topMaterials).forEach((material) => material.dispose())
     Object.values(transitionMaterials).forEach((material) => material.dispose())

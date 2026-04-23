@@ -3,11 +3,12 @@ import { describe, expect, it } from 'vitest'
 import {
   createTerrainStyleMask,
   getTerrainEdgeTransitionTransform,
+  getTerrainStyleAtlasStripUv,
   makeTexturePixelsOpaque,
 } from './OutdoorGround'
 import { sampleOutdoorTerrainHeight } from '../../store/outdoorTerrain'
 
-describe('createTerrainStyleMask', () => {
+describe('OutdoorGround helpers', () => {
   it('disables vertical texture flipping so painted ground aligns with cursor position', () => {
     const texture = createTerrainStyleMask({
       '2:1': {
@@ -57,6 +58,24 @@ describe('createTerrainStyleMask', () => {
     expect(getTerrainEdgeTransitionTransform([2, 3], 'east')).toEqual({
       position: [6, 7],
       rotationY: Math.PI / 2,
+    })
+  })
+
+  it('uses the authored top-center atlas strip for each terrain style', () => {
+    expect(getTerrainStyleAtlasStripUv('Color1')).toEqual({
+      minU: 0.03546178340911865,
+      maxU: 0.055953145027160645,
+      centerV: 0.0894547700881958,
+    })
+    expect(getTerrainStyleAtlasStripUv('Color5')).toEqual({
+      minU: 0.5354617834091187,
+      maxU: 0.5559531450271606,
+      centerV: 0.0894547700881958,
+    })
+    expect(getTerrainStyleAtlasStripUv('Color8')).toEqual({
+      minU: 0.9104617834091187,
+      maxU: 0.9309531450271606,
+      centerV: 0.0894547700881958,
     })
   })
 })
