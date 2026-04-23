@@ -398,7 +398,7 @@ export function OutdoorGround({
           <SteppedOutdoorTerrainAsset
             key={`top-edge:${edge.cellKey}:${edge.direction}:${edge.worldY}:${edge.terrainStyle}`}
             assetKey={TOP_EDGE_ASSET_KEYS[edge.direction as TerrainDirection]}
-            terrainStyle={defaultOutdoorTerrainStyle}
+            terrainStyle={edge.terrainStyle}
             position={[worldX, edge.worldY + TOP_SURFACE_ELEVATION, worldZ]}
             userData={{ outdoorTerrainSurface: true, outdoorTerrainCell: edge.cell }}
           />
@@ -411,7 +411,7 @@ export function OutdoorGround({
           <SteppedOutdoorTerrainAsset
             key={`top-corner:${corner.cellKey}:${corner.direction}:${corner.worldY}:${corner.terrainStyle}`}
             assetKey={TOP_CORNER_ASSET_KEYS[corner.direction as TerrainCorner]}
-            terrainStyle={defaultOutdoorTerrainStyle}
+            terrainStyle={corner.terrainStyle}
             position={[worldX, corner.worldY + TOP_SURFACE_ELEVATION, worldZ]}
             userData={{ outdoorTerrainSurface: true, outdoorTerrainCell: corner.cell }}
           />
