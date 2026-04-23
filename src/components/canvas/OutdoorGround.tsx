@@ -28,10 +28,10 @@ const OUTDOOR_GROUND_HALF_SIZE = OUTDOOR_GROUND_SIZE / 2
 const MASK_TEXTURE_SIZE = 768
 const TERRAIN_REPEAT = 36
 const TOP_SURFACE_ELEVATION = 0.01
-const TRANSITION_OVERLAY_ELEVATION = 0.015
-const TERRAIN_TRANSITION_OPACITY = 0.42
-const TERRAIN_EDGE_TRANSITION_DEPTH = GRID_SIZE * 0.55
+const STYLE_OVERLAY_ELEVATION = 0.18
 const STEPPED_TERRAIN_ROUGHNESS = 0.6000000238418579
+// CSS blur radius for style overlay masks (~1 cell gradient transition)
+const STYLE_OVERLAY_FEATHER_PX = 3
 
 const STYLE_TEXTURE_URLS = Object.fromEntries(
   Object.entries(import.meta.glob('../../assets/models/forrest/*/forest_grass_patch.png', {
@@ -137,7 +137,7 @@ function configureMaskTexture(texture: THREE.CanvasTexture) {
   return texture
 }
 
-function createCellMask(cells: GridCell[], inverted = false) {
+function createCellMask(cells: GridCell[], inverted = false, featherPx = 0) {
   const sourceCanvas = document.createElement('canvas')
   sourceCanvas.width = MASK_TEXTURE_SIZE
   sourceCanvas.height = MASK_TEXTURE_SIZE
@@ -169,26 +169,22 @@ function createCellMask(cells: GridCell[], inverted = false) {
     sourceContext.fillRect(x, y, width, height)
   })
 
-  return configureMaskTexture(new THREE.CanvasTexture(sourceCanvas))
-}
-
-function createEdgeTransitionTexture() {
-  const canvas = document.createElement('canvas')
-  canvas.width = 32
-  canvas.height = 128
-  const context = canvas.getContext('2d')
-  if (!context) {
-    return configureMaskTexture(new THREE.CanvasTexture(canvas))
+  if (featherPx <= 0) {
+    return configureMaskTexture(new THREE.CanvasTexture(sourceCanvas))
   }
 
-  const gradient = context.createLinearGradient(0, 0, canvas.width, 0)
-  gradient.addColorStop(0, 'rgba(255,255,255,0)')
-  gradient.addColorStop(0.75, 'rgba(255,255,255,0.7)')
-  gradient.addColorStop(1, 'rgba(255,255,255,1)')
-  context.fillStyle = gradient
-  context.fillRect(0, 0, canvas.width, canvas.height)
+  const blurredCanvas = document.createElement('canvas')
+  blurredCanvas.width = MASK_TEXTURE_SIZE
+  blurredCanvas.height = MASK_TEXTURE_SIZE
+  const blurredContext = blurredCanvas.getContext('2d')
+  if (!blurredContext) {
+    return configureMaskTexture(new THREE.CanvasTexture(sourceCanvas))
+  }
 
-  return configureMaskTexture(new THREE.CanvasTexture(canvas))
+  blurredContext.filter = `blur(${featherPx}px)`
+  blurredContext.drawImage(sourceCanvas, 0, 0)
+
+  return configureMaskTexture(new THREE.CanvasTexture(blurredCanvas))
 }
 
 export function getTerrainEdgeTransitionTransform(
@@ -285,16 +281,6 @@ export function OutdoorGround({
     geometry.rotateX(-Math.PI / 2)
     return geometry
   }, [])
-  const topGeometry = useMemo(() => {
-    const geometry = new THREE.PlaneGeometry(GRID_SIZE, GRID_SIZE)
-    geometry.rotateX(-Math.PI / 2)
-    return geometry
-  }, [])
-  const edgeTransitionGeometry = useMemo(() => {
-    const geometry = new THREE.PlaneGeometry(TERRAIN_EDGE_TRANSITION_DEPTH, GRID_SIZE)
-    geometry.rotateX(-Math.PI / 2)
-    return geometry
-  }, [])
 
   const derivedTerrain = useMemo(
     () => buildSteppedOutdoorTerrain(outdoorTerrainHeights, styleCells, defaultOutdoorTerrainStyle),
@@ -304,10 +290,37 @@ export function OutdoorGround({
     () => createCellMask(derivedTerrain.holeCells, true),
     [derivedTerrain.holeCells],
   )
-  const edgeTransitionMask = useMemo(
-    () => createEdgeTransitionTexture(),
-    [],
-  )
+
+  // Group cells by (terrainStyle, worldY) for full-map blurred overlays.
+  // On ground level, only explicit (non-default) styles need overlays since the
+  // base mesh provides the default color. On elevated terrain, ALL non-default
+  // cells need overlays because the 3D models are rendered in the default style.
+  const styleOverlays = useMemo(() => {
+    const groups = new Map<string, { terrainStyle: OutdoorTerrainStyle; worldY: number; cells: GridCell[] }>()
+    for (const surface of derivedTerrain.topSurfaces) {
+      const needsOverlay = surface.explicitStyle || (surface.usesSteppedAsset && surface.terrainStyle !== defaultOutdoorTerrainStyle)
+      if (!needsOverlay) continue
+      const key = `${surface.terrainStyle}:${surface.worldY}`
+      let group = groups.get(key)
+      if (!group) {
+        group = { terrainStyle: surface.terrainStyle, worldY: surface.worldY, cells: [] }
+        groups.set(key, group)
+      }
+      group.cells.push(surface.cell)
+    }
+    return [...groups.values()].map((group) => {
+      const mask = createCellMask(group.cells, false, STYLE_OVERLAY_FEATHER_PX)
+      const material = createStandardCompatibleMaterial({
+        map: opaqueTextures[group.terrainStyle],
+        alphaMap: mask,
+        transparent: true,
+        depthWrite: false,
+        roughness: STEPPED_TERRAIN_ROUGHNESS,
+        metalness: 0,
+      })
+      return { ...group, mask, material }
+    })
+  }, [derivedTerrain.topSurfaces, defaultOutdoorTerrainStyle, opaqueTextures])
 
   const baseMaterial = useMemo(
     () => createStandardCompatibleMaterial({
@@ -321,49 +334,14 @@ export function OutdoorGround({
     [defaultOutdoorTerrainStyle, holeMask, opaqueTextures],
   )
 
-  const topMaterials = useMemo(
-    () => Object.fromEntries(
-      OUTDOOR_TERRAIN_STYLES.map((terrainStyle) => [
-        terrainStyle,
-        createStandardCompatibleMaterial({
-          map: opaqueTextures[terrainStyle],
-          roughness: STEPPED_TERRAIN_ROUGHNESS,
-          metalness: 0,
-        }),
-      ]),
-    ) as Record<OutdoorTerrainStyle, THREE.Material>,
-    [opaqueTextures],
-  )
-
-  const transitionMaterials = useMemo(
-    () => Object.fromEntries(
-      OUTDOOR_TERRAIN_STYLES.map((terrainStyle) => [
-        terrainStyle,
-        createStandardCompatibleMaterial({
-          map: opaqueTextures[terrainStyle],
-          alphaMap: edgeTransitionMask,
-          transparent: true,
-          opacity: TERRAIN_TRANSITION_OPACITY,
-          depthWrite: false,
-          roughness: STEPPED_TERRAIN_ROUGHNESS,
-          metalness: 0,
-        }),
-      ]),
-    ) as Record<OutdoorTerrainStyle, THREE.Material>,
-    [edgeTransitionMask, opaqueTextures],
-  )
-
   useEffect(() => {
     Object.values(textures).forEach(configureGroundTexture)
   }, [textures])
   useEffect(() => {
     Object.values(opaqueTextures).forEach(configureGroundTexture)
   }, [opaqueTextures])
-  useEffect(() => () => topGeometry.dispose(), [topGeometry])
   useEffect(() => () => baseGeometry.dispose(), [baseGeometry])
-  useEffect(() => () => edgeTransitionGeometry.dispose(), [edgeTransitionGeometry])
   useEffect(() => () => holeMask.dispose(), [holeMask])
-  useEffect(() => () => edgeTransitionMask.dispose(), [edgeTransitionMask])
   useEffect(() => () => baseMaterial.dispose(), [baseMaterial])
   useEffect(() => () => {
     Object.values(opaqueTextures).forEach((texture) => {
@@ -373,9 +351,11 @@ export function OutdoorGround({
     })
   }, [opaqueTextures])
   useEffect(() => () => {
-    Object.values(topMaterials).forEach((material) => material.dispose())
-    Object.values(transitionMaterials).forEach((material) => material.dispose())
-  }, [topMaterials, transitionMaterials])
+    styleOverlays.forEach(({ mask, material }) => {
+      mask.dispose()
+      material.dispose()
+    })
+  }, [styleOverlays])
 
   return (
     <group>
@@ -383,46 +363,32 @@ export function OutdoorGround({
         <primitive object={baseMaterial} attach="material" />
       </mesh>
 
+      {styleOverlays.map((overlay) => (
+        <mesh
+          key={`style-overlay:${overlay.terrainStyle}:${overlay.worldY}`}
+          geometry={baseGeometry}
+          position={[0, overlay.worldY + STYLE_OVERLAY_ELEVATION, 0]}
+          receiveShadow={false}
+          userData={{ outdoorTerrainSurface: true }}
+        >
+          <primitive object={overlay.material} attach="material" />
+        </mesh>
+      ))}
+
       {derivedTerrain.topSurfaces.map((surface) => {
         const [worldX, worldZ] = getCellWorldPosition(surface.cell)
-        if (surface.usesSteppedAsset) {
-          return (
-            <SteppedOutdoorTerrainAsset
-              key={`top-center:${surface.cellKey}:${surface.terrainStyle}:${surface.worldY}`}
-              assetKey="top-center"
-              terrainStyle={surface.terrainStyle}
-              position={[worldX, surface.worldY - 0.02, worldZ]}
-              userData={{ outdoorTerrainSurface: true, outdoorTerrainCell: surface.cell }}
-            />
-          )
+        if (!surface.usesSteppedAsset) {
+          return null
         }
 
         return (
-          <mesh
-            key={`top-surface:${surface.cellKey}:${surface.terrainStyle}:${surface.worldY}`}
-            geometry={topGeometry}
-            position={[worldX, surface.worldY + TOP_SURFACE_ELEVATION, worldZ]}
-            receiveShadow
+          <SteppedOutdoorTerrainAsset
+            key={`top-center:${surface.cellKey}:${surface.terrainStyle}:${surface.worldY}`}
+            assetKey="top-center"
+            terrainStyle={defaultOutdoorTerrainStyle}
+            position={[worldX, surface.worldY - 0.02, worldZ]}
             userData={{ outdoorTerrainSurface: true, outdoorTerrainCell: surface.cell }}
-          >
-            <primitive object={topMaterials[surface.terrainStyle]} attach="material" />
-          </mesh>
-        )
-      })}
-
-      {derivedTerrain.styleTransitions.map((transition) => {
-        const transform = getTerrainEdgeTransitionTransform(transition.cell, transition.direction)
-        return (
-          <mesh
-            key={`style-transition:${transition.cellKey}:${transition.direction}:${transition.targetTerrainStyle}:${transition.worldY}`}
-            geometry={edgeTransitionGeometry}
-            position={[transform.position[0], transition.worldY + TRANSITION_OVERLAY_ELEVATION, transform.position[1]]}
-            rotation={[0, transform.rotationY, 0]}
-            receiveShadow={false}
-            userData={{ outdoorTerrainSurface: true, outdoorTerrainCell: transition.cell }}
-          >
-            <primitive object={transitionMaterials[transition.targetTerrainStyle]} attach="material" />
-          </mesh>
+          />
         )
       })}
 
@@ -432,7 +398,7 @@ export function OutdoorGround({
           <SteppedOutdoorTerrainAsset
             key={`top-edge:${edge.cellKey}:${edge.direction}:${edge.worldY}:${edge.terrainStyle}`}
             assetKey={TOP_EDGE_ASSET_KEYS[edge.direction as TerrainDirection]}
-            terrainStyle={edge.terrainStyle}
+            terrainStyle={defaultOutdoorTerrainStyle}
             position={[worldX, edge.worldY + TOP_SURFACE_ELEVATION, worldZ]}
             userData={{ outdoorTerrainSurface: true, outdoorTerrainCell: edge.cell }}
           />
@@ -445,7 +411,7 @@ export function OutdoorGround({
           <SteppedOutdoorTerrainAsset
             key={`top-corner:${corner.cellKey}:${corner.direction}:${corner.worldY}:${corner.terrainStyle}`}
             assetKey={TOP_CORNER_ASSET_KEYS[corner.direction as TerrainCorner]}
-            terrainStyle={corner.terrainStyle}
+            terrainStyle={defaultOutdoorTerrainStyle}
             position={[worldX, corner.worldY + TOP_SURFACE_ELEVATION, worldZ]}
             userData={{ outdoorTerrainSurface: true, outdoorTerrainCell: corner.cell }}
           />

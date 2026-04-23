@@ -21,6 +21,8 @@ export type OutdoorTerrainTopSurface = {
   terrainStyle: OutdoorTerrainStyle
   explicitStyle: boolean
   usesSteppedAsset: boolean
+  /** Bitmask: bit set = same-style same-level neighbor (north=1, east=2, south=4, west=8) */
+  neighborMask: number
 }
 
 export type OutdoorTerrainEdgeDecoration = {
@@ -56,6 +58,13 @@ const CARDINAL_DIRECTIONS: Array<{ direction: TerrainDirection; offset: GridCell
   { direction: 'south', offset: [0, 1] },
   { direction: 'west', offset: [-1, 0] },
 ]
+
+const DIRECTION_BITS: Record<TerrainDirection, number> = {
+  north: 1,
+  east: 2,
+  south: 4,
+  west: 8,
+}
 
 const CORNER_DEFINITIONS = [
   { key: 'north-west' as const, directions: ['north', 'west'] as const },
@@ -115,6 +124,7 @@ export function buildSteppedOutdoorTerrain(
     }
 
     const exposed = new Map<TerrainDirection, number>()
+    let styleNeighborMask = 0
 
     for (const { direction, offset } of CARDINAL_DIRECTIONS) {
       const neighbor: GridCell = [cell[0] + offset[0], cell[1] + offset[1]]
@@ -156,12 +166,16 @@ export function buildSteppedOutdoorTerrain(
           targetTerrainStyle: neighborTerrainStyle,
         })
       }
+
+      if (neighborLevel === level && neighborTerrainStyle === terrainStyle) {
+        styleNeighborMask |= DIRECTION_BITS[direction]
+      }
     }
 
     const usesSteppedAsset = level !== 0 || exposed.size > 0 || hasElevationBoundary
 
     if (usesSteppedAsset || explicitStyle) {
-      topSurfaces.push({ cell, cellKey, level, worldY, terrainStyle, explicitStyle, usesSteppedAsset })
+      topSurfaces.push({ cell, cellKey, level, worldY, terrainStyle, explicitStyle, usesSteppedAsset, neighborMask: styleNeighborMask })
     }
 
     for (const corner of CORNER_DEFINITIONS) {
