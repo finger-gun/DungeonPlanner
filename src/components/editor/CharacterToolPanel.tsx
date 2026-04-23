@@ -10,6 +10,7 @@ import {
 import type { ContentPackAsset } from '../../content-packs/types'
 import { useDungeonStore } from '../../store/useDungeonStore'
 import { AssetCatalog } from './AssetCatalog'
+import { CompactPillButton } from './CompactPillButton'
 
 const CREATE_CHARACTER_CARD_ID = 'generated.character.create-new'
 const EMPTY_COMPONENT = () => null
@@ -214,13 +215,14 @@ export function CharacterToolPanel() {
                 </p>
               </div>
               {selectedObject.assetId && generatedCharacters[selectedObject.assetId] && (
-                <button
+                <CompactPillButton
                   type="button"
                   onClick={() => openCharacterSheet(selectedObject.assetId!)}
-                  className="rounded-full border border-sky-300/30 bg-sky-400/10 px-3 py-1 text-xs text-sky-100 transition hover:border-sky-200/50 hover:bg-sky-400/15"
+                  tone="sky"
+                  size="sm"
                 >
                   Edit
-                </button>
+                </CompactPillButton>
               )}
             </div>
             <div className="grid gap-2 text-xs">

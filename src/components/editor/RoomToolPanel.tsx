@@ -9,6 +9,7 @@ import {
   type RoomEditMode,
 } from '../../store/useDungeonStore'
 import { AssetCatalog } from './AssetCatalog'
+import { CompactPillButton } from './CompactPillButton'
 import { RoomPanel } from './RoomPanel'
 
 const floorAssets = getContentPackAssetsByCategory('floor')
@@ -83,7 +84,7 @@ export function RoomToolPanel() {
         <p className="mb-3 text-xs font-semibold uppercase tracking-[0.3em] text-amber-200/70">
           {mapMode === 'outdoor' ? 'Terrain Mode' : 'Room Tools'}
         </p>
-        <div className={`grid gap-2 ${mapMode === 'outdoor' ? 'grid-cols-1' : 'grid-cols-2'}`}>
+        <div className="flex flex-wrap gap-1.5">
           {ROOM_EDIT_MODES.map((mode) => {
             if (mapMode === 'outdoor' && mode.id !== 'rooms') {
               return null
@@ -91,19 +92,17 @@ export function RoomToolPanel() {
 
             const active = roomEditMode === mode.id
             return (
-              <button
+              <CompactPillButton
                 key={mode.id}
                 type="button"
                 aria-pressed={active}
                 onClick={() => setRoomEditMode(mode.id)}
-                className={`rounded-2xl border px-3 py-2 text-xs font-medium uppercase tracking-[0.2em] transition ${
-                  active
-                    ? 'border-teal-300/35 bg-teal-400/10 text-teal-200'
-                    : 'border-stone-800 bg-stone-950/60 text-stone-400 hover:border-stone-700 hover:text-stone-200'
-                }`}
+                active={active}
+                tone="teal"
+                size="sm"
               >
                 {mode.label}
-              </button>
+              </CompactPillButton>
             )
           })}
         </div>
@@ -125,22 +124,20 @@ export function RoomToolPanel() {
             <div className="mt-4 space-y-3 text-xs">
               <div>
                 <p className="mb-1 uppercase tracking-[0.2em] text-stone-500">Brush Mode</p>
-                <div className="grid grid-cols-2 gap-2">
+                <div className="flex flex-wrap gap-1.5">
                   {OUTDOOR_BRUSH_MODES.map((mode) => {
                     const active = outdoorBrushMode === mode.id
                     return (
-                      <button
+                      <CompactPillButton
                         key={mode.id}
                         type="button"
                         onClick={() => setOutdoorBrushMode(mode.id)}
-                        className={`rounded-xl border px-2 py-1.5 transition ${
-                          active
-                            ? 'border-teal-300/35 bg-teal-400/10 text-teal-200'
-                            : 'border-stone-800 bg-stone-950/60 text-stone-400 hover:border-stone-700 hover:text-stone-200'
-                        }`}
+                        active={active}
+                        tone="teal"
+                        size="xs"
                       >
                         {mode.label}
-                      </button>
+                      </CompactPillButton>
                     )
                   })}
                 </div>
@@ -148,22 +145,20 @@ export function RoomToolPanel() {
               {outdoorBrushMode === 'ground-texture' ? (
                 <div>
                   <p className="mb-1 uppercase tracking-[0.2em] text-stone-500">Ground Texture</p>
-                  <div className="grid grid-cols-2 gap-2">
+                  <div className="flex flex-wrap gap-1.5">
                     {OUTDOOR_GROUND_TEXTURES.map((texture) => {
                       const active = outdoorGroundTextureBrush === texture.id
                       return (
-                        <button
+                        <CompactPillButton
                           key={texture.id}
                           type="button"
                           onClick={() => setOutdoorGroundTextureBrush(texture.id)}
-                          className={`rounded-xl border px-2 py-1.5 transition ${
-                            active
-                              ? 'border-teal-300/35 bg-teal-400/10 text-teal-200'
-                              : 'border-stone-800 bg-stone-950/60 text-stone-400 hover:border-stone-700 hover:text-stone-200'
-                          }`}
+                          active={active}
+                          tone="teal"
+                          size="xs"
                         >
                           {texture.label}
-                        </button>
+                        </CompactPillButton>
                       )
                     })}
                   </div>
@@ -171,22 +166,20 @@ export function RoomToolPanel() {
               ) : outdoorBrushMode === 'terrain-sculpt' ? (
                 <div>
                   <p className="mb-1 uppercase tracking-[0.2em] text-stone-500">Sculpt Direction</p>
-                  <div className="grid grid-cols-2 gap-2">
+                  <div className="flex flex-wrap gap-1.5">
                     {OUTDOOR_SCULPT_MODES.map((sculptMode) => {
                       const active = outdoorTerrainSculptMode === sculptMode.id
                       return (
-                        <button
+                        <CompactPillButton
                           key={sculptMode.id}
                           type="button"
                           onClick={() => setOutdoorTerrainSculptMode(sculptMode.id)}
-                          className={`rounded-xl border px-2 py-1.5 transition ${
-                            active
-                              ? 'border-teal-300/35 bg-teal-400/10 text-teal-200'
-                              : 'border-stone-800 bg-stone-950/60 text-stone-400 hover:border-stone-700 hover:text-stone-200'
-                          }`}
+                          active={active}
+                          tone="teal"
+                          size="xs"
                         >
                           {sculptMode.label}
-                        </button>
+                        </CompactPillButton>
                       )
                     })}
                   </div>
@@ -198,22 +191,20 @@ export function RoomToolPanel() {
                 <>
                   <div>
                     <p className="mb-1 uppercase tracking-[0.2em] text-stone-500">Terrain Type</p>
-                    <div className="grid grid-cols-1 gap-2">
-                      {TERRAIN_TYPES.map((terrainType) => {
+                      <div className="flex flex-wrap gap-1.5">
+                        {TERRAIN_TYPES.map((terrainType) => {
                         const active = outdoorTerrainType === terrainType.id
                         return (
-                          <button
+                          <CompactPillButton
                             key={terrainType.id}
                             type="button"
                             onClick={() => setOutdoorTerrainType(terrainType.id)}
-                            className={`rounded-xl border px-2 py-1.5 transition ${
-                              active
-                                ? 'border-teal-300/35 bg-teal-400/10 text-teal-200'
-                                : 'border-stone-800 bg-stone-950/60 text-stone-400 hover:border-stone-700 hover:text-stone-200'
-                            }`}
+                            active={active}
+                            tone="teal"
+                            size="xs"
                           >
                             {terrainType.label}
-                          </button>
+                          </CompactPillButton>
                         )
                       })}
                     </div>
@@ -223,22 +214,20 @@ export function RoomToolPanel() {
                       {TERRAIN_TYPES.find((type) => type.id === outdoorTerrainType)?.label} Settings
                     </p>
                     <p className="mb-2 text-stone-500">Density</p>
-                    <div className="grid grid-cols-3 gap-2">
+                    <div className="flex flex-wrap gap-1.5">
                       {TERRAIN_DENSITIES.map((density) => {
                         const active = outdoorTerrainDensity === density.id
                         return (
-                          <button
+                          <CompactPillButton
                             key={density.id}
                             type="button"
                             onClick={() => setOutdoorTerrainDensity(density.id)}
-                            className={`rounded-xl border px-2 py-1.5 transition ${
-                              active
-                                ? 'border-teal-300/35 bg-teal-400/10 text-teal-200'
-                                : 'border-stone-800 bg-stone-950/60 text-stone-400 hover:border-stone-700 hover:text-stone-200'
-                            }`}
+                            active={active}
+                            tone="teal"
+                            size="xs"
                           >
                             {density.label}
-                          </button>
+                          </CompactPillButton>
                         )
                       })}
                     </div>

@@ -3,6 +3,7 @@ import type { ContentPackAsset } from '../../content-packs/types'
 import { metadataSupportsConnectorType } from '../../content-packs/connectors'
 import { useDungeonStore } from '../../store/useDungeonStore'
 import { AssetCatalog } from './AssetCatalog'
+import { CompactPillButton } from './CompactPillButton'
 
 export function OpeningToolPanel() {
   const selectedAssetIds = useDungeonStore((state) => state.selectedAssetIds)
@@ -35,7 +36,7 @@ export function OpeningToolPanel() {
         <p className="mb-3 text-xs font-semibold uppercase tracking-[0.3em] text-amber-200/70">
           Connections
         </p>
-        <div className="grid grid-cols-3 gap-2">
+        <div className="flex flex-wrap gap-1.5">
           {([
             ['wall', 'Wall'],
             ['door', 'Door'],
@@ -43,18 +44,16 @@ export function OpeningToolPanel() {
           ] as const).map(([mode, label]) => {
             const active = wallConnectionMode === mode
             return (
-              <button
+              <CompactPillButton
                 key={mode}
                 type="button"
                 onClick={() => setWallConnectionMode(mode)}
-                className={`rounded-2xl border px-3 py-2 text-xs font-medium uppercase tracking-[0.2em] transition ${
-                  active
-                    ? 'border-teal-300/35 bg-teal-400/10 text-teal-200'
-                    : 'border-stone-800 bg-stone-950/60 text-stone-400 hover:border-stone-700 hover:text-stone-200'
-                }`}
+                active={active}
+                tone="teal"
+                size="sm"
               >
                 {label}
-              </button>
+              </CompactPillButton>
             )
           })}
         </div>
@@ -109,13 +108,14 @@ export function OpeningToolPanel() {
                   {selectedOpening.id.slice(0, 8)}
                 </p>
               </div>
-              <button
+              <CompactPillButton
                 type="button"
                 onClick={() => removeOpening(selectedOpening.id)}
-                className="rounded-full border border-rose-400/30 bg-rose-500/10 px-3 py-1 text-xs text-rose-200 transition hover:border-rose-300/60 hover:bg-rose-500/20"
+                tone="rose"
+                size="sm"
               >
                 Delete
-              </button>
+              </CompactPillButton>
             </div>
             <div className="grid gap-2 text-xs">
               <PropRow label="Wall" value={selectedOpening.wallKey} />

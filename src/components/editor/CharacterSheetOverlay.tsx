@@ -14,6 +14,7 @@ import {
   type GeneratedCharacterSize,
 } from '../../generated-characters/types'
 import { useDungeonStore } from '../../store/useDungeonStore'
+import { CompactPillButton } from './CompactPillButton'
 
 const CHARACTER_KINDS: GeneratedCharacterKind[] = ['player', 'npc']
 const CHARACTER_SIZES: GeneratedCharacterSize[] = ['S', 'M', 'XL', 'XXL']
@@ -152,13 +153,14 @@ export function CharacterSheetOverlay() {
                 {getGeneratedCharacterDisplayName(character)}
               </p>
             </div>
-            <button
+            <CompactPillButton
               type="button"
               onClick={closeCharacterSheet}
-              className="rounded-full border border-stone-700/70 bg-stone-900/90 px-3 py-1 text-xs uppercase tracking-[0.2em] text-stone-300 transition hover:border-stone-600 hover:text-stone-100"
+              tone="stone"
+              size="sm"
             >
               Close
-            </button>
+            </CompactPillButton>
           </div>
 
           <div className="mt-5 flex-1 rounded-2xl border border-stone-800/70 bg-stone-900/60 p-4">
@@ -176,29 +178,33 @@ export function CharacterSheetOverlay() {
           </div>
 
           <div className="mt-4 flex flex-wrap gap-2">
-            <button
+            <CompactPillButton
               type="button"
               onClick={() => void handleGenerateImage()}
               disabled={isGenerating || character.prompt.trim().length === 0}
-              className="rounded-full border border-sky-300/30 bg-sky-400/10 px-4 py-2 text-xs font-semibold uppercase tracking-[0.24em] text-sky-100 transition hover:border-sky-200/50 hover:bg-sky-400/15 disabled:cursor-not-allowed disabled:opacity-50"
+              tone="sky"
+              size="sm"
+              className="font-semibold"
             >
               {isGenerating
                 ? 'Generating...'
                 : isGeneratedCharacterReady(character)
                   ? 'Regenerate Image'
                   : 'Generate Image'}
-            </button>
+            </CompactPillButton>
             {isGeneratedCharacterReady(character) && (
-              <button
+              <CompactPillButton
                 type="button"
                 onClick={() => {
                   setSelectedAsset('player', character.assetId)
                   closeCharacterSheet()
                 }}
-                className="rounded-full border border-emerald-300/30 bg-emerald-400/10 px-4 py-2 text-xs font-semibold uppercase tracking-[0.24em] text-emerald-100 transition hover:border-emerald-200/50 hover:bg-emerald-400/15"
+                tone="emerald"
+                size="sm"
+                className="font-semibold"
               >
                 Arm for Placement
-              </button>
+              </CompactPillButton>
             )}
           </div>
 
@@ -238,18 +244,17 @@ export function CharacterSheetOverlay() {
                   {CHARACTER_KINDS.map((kind) => {
                     const active = character.kind === kind
                     return (
-                      <button
+                      <CompactPillButton
                         key={kind}
                         type="button"
                         onClick={() => updateGeneratedCharacter(character.assetId, { kind })}
-                        className={`rounded-full border px-4 py-2 text-xs font-semibold uppercase tracking-[0.22em] transition ${
-                          active
-                            ? 'border-sky-300/40 bg-sky-400/15 text-sky-100'
-                            : 'border-stone-800 bg-stone-900/80 text-stone-400 hover:border-stone-700 hover:text-stone-200'
-                        }`}
+                        active={active}
+                        tone="sky"
+                        size="sm"
+                        className="font-semibold"
                       >
                         {kind === 'player' ? 'Player' : 'NPC'}
-                      </button>
+                      </CompactPillButton>
                     )
                   })}
                 </div>
@@ -311,18 +316,17 @@ export function CharacterSheetOverlay() {
               {CHARACTER_SIZES.map((size) => {
                 const active = character.size === size
                 return (
-                  <button
+                  <CompactPillButton
                     key={size}
                     type="button"
-                    onClick={() => updateGeneratedCharacter(character.assetId, { size })}
-                    className={`rounded-full border px-4 py-2 text-xs font-semibold uppercase tracking-[0.22em] transition ${
-                      active
-                        ? 'border-amber-300/40 bg-amber-400/15 text-amber-100'
-                        : 'border-stone-800 bg-stone-900/80 text-stone-400 hover:border-stone-700 hover:text-stone-200'
-                    }`}
+                      onClick={() => updateGeneratedCharacter(character.assetId, { size })}
+                      active={active}
+                      tone="amber"
+                      size="sm"
+                      className="font-semibold"
                   >
                     {size}
-                  </button>
+                  </CompactPillButton>
                 )
               })}
             </div>
