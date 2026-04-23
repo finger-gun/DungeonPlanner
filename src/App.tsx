@@ -79,7 +79,7 @@ function RightPanel({
               : tool === 'select'
                 ? 'Select'
                 : tool === 'move'
-                  ? 'Settings'
+                  ? 'Move'
                   : tool === 'room'
                     ? mapMode === 'outdoor' ? 'Terrain' : 'Room'
                     : tool === 'character'
@@ -100,7 +100,6 @@ function RightPanel({
         {showSettings && <MoveToolPanel />}
         {!showSettings && tool === 'play' && null}
         {!showSettings && tool === 'select' && <SelectToolPanel />}
-        {!showSettings && tool === 'move' && <MoveToolPanel />}
         {!showSettings && tool === 'room' && <RoomToolPanel />}
         {!showSettings && tool === 'character' && <CharacterToolPanel />}
         {!showSettings && tool === 'prop' && <PropToolPanel />}
@@ -115,7 +114,7 @@ function App() {
   const roomEditMode = useDungeonStore((state) => state.roomEditMode)
   const outdoorBrushMode = useDungeonStore((state) => state.outdoorBrushMode)
   const isPlayMode = tool === 'play'
-  const [sidebarPanel, setSidebarPanel] = useState<'tool' | 'settings'>(() => (tool === 'move' ? 'settings' : 'tool'))
+  const [sidebarPanel, setSidebarPanel] = useState<'tool' | 'settings'>('tool')
   const [sidebarOpen, setSidebarOpen] = useState(true)
   const [debugPanelOpen, setDebugPanelOpen] = useState(false)
   const selectedAssetIds = useDungeonStore((state) => state.selectedAssetIds)
@@ -158,8 +157,9 @@ function App() {
   const debugAssetSourcePath = debugAssetId ? getContentPackAssetSourcePath(debugAssetId) : null
   const debugAssetSourceLink = debugAssetId ? getContentPackAssetSourceLink(debugAssetId) : null
   const webGpuSupported = isWebGpuSupported()
-  const showSettingsPanel = sidebarPanel === 'settings' || tool === 'move'
+  const showSettingsPanel = sidebarPanel === 'settings'
   const sidebarVisible = sidebarOpen && (!isPlayMode || showSettingsPanel)
+  const cameraRightOffset = sidebarVisible ? 400 : 16
 
   const onWindowKeyDown = useEffectEvent((event: KeyboardEvent) => {
     if (event.ctrlKey && event.shiftKey && event.key === 'F12') {
@@ -229,12 +229,6 @@ function App() {
       state.redo()
     }
   })
-
-  useEffect(() => {
-    if (tool === 'move') {
-      setSidebarPanel('settings')
-    }
-  }, [tool])
 
   useEffect(() => {
     window.addEventListener('keydown', onWindowKeyDown)
@@ -323,7 +317,7 @@ function App() {
     tool === 'play'
       ? 'Drag characters to move them'
       : tool === 'move'
-      ? 'Application settings and performance controls'
+      ? 'Navigate the scene and open settings when needed'
         : tool === 'room'
           ? roomEditMode === 'rooms'
             ? mapMode === 'outdoor'
@@ -384,7 +378,7 @@ function App() {
 
           {!isPlayMode && <CharacterSheetOverlay />}
 
-          <CameraDropdown />
+          <CameraDropdown rightOffset={cameraRightOffset} />
 
           {/* Floor-switch transition overlay — opacity driven imperatively by FloorTransitionController */}
           <div
@@ -401,7 +395,7 @@ function App() {
                 : tool === 'select'
                   ? 'Select'
                 : tool === 'move'
-                    ? 'Settings'
+                    ? 'Move'
                     : tool === 'character'
                       ? 'Characters'
                     : tool === 'room'

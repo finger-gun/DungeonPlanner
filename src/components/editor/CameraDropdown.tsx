@@ -15,7 +15,7 @@ const CAMERA_PRESETS: PresetEntry[] = [
   { id: 'top-down', label: 'Top Down', sub: 'Print / TTRPG', Icon: LayoutGrid },
 ]
 
-export function CameraDropdown() {
+export function CameraDropdown({ rightOffset = 16 }: { rightOffset?: number } = {}) {
   const [open, setOpen] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
   const activeCameraMode = useDungeonStore((state) => state.activeCameraMode)
@@ -41,7 +41,7 @@ export function CameraDropdown() {
   const activePreset = CAMERA_PRESETS.find((preset) => preset.id === activeCameraMode) ?? CAMERA_PRESETS[0]
 
   return (
-    <div ref={menuRef} className="absolute right-4 top-4 z-20">
+    <div ref={menuRef} className="absolute top-4 z-20 transition-[right] duration-200 ease-out" style={{ right: `${rightOffset}px` }}>
       <button
         type="button"
         title="Camera"

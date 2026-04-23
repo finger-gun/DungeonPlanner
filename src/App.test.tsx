@@ -31,7 +31,7 @@ vi.mock('./components/editor/EditorToolbar', () => ({
 }))
 
 vi.mock('./components/editor/CameraDropdown', () => ({
-  CameraDropdown: () => <div>Camera</div>,
+  CameraDropdown: ({ rightOffset }: { rightOffset?: number }) => <div data-testid="camera-offset">{rightOffset}</div>,
 }))
 
 vi.mock('./components/editor/MoveToolPanel', () => ({
@@ -93,15 +93,21 @@ describe('App sidebar drawer', () => {
     render(<App />)
 
     const shell = screen.getByTestId('editor-right-panel-shell')
+    expect(screen.getByTestId('toolbar-settings-state')).toHaveTextContent('closed')
     expect(shell).toHaveAttribute('data-sidebar-visible', 'true')
+    expect(shell).toHaveAttribute('data-sidebar-panel', 'tool')
+    expect(screen.getByTestId('camera-offset')).toHaveTextContent('400')
+    expect(screen.getByText('Select Panel')).toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: 'Hide sidebar' }))
 
     expect(shell).toHaveAttribute('data-sidebar-visible', 'false')
+    expect(screen.getByTestId('camera-offset')).toHaveTextContent('16')
 
     await user.click(screen.getByRole('button', { name: 'Show sidebar' }))
 
     expect(shell).toHaveAttribute('data-sidebar-visible', 'true')
+    expect(screen.getByTestId('camera-offset')).toHaveTextContent('400')
   })
 
   it('keeps the sidebar off-canvas in play mode without rendering the drawer tab', () => {
