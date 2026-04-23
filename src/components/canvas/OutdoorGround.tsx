@@ -310,12 +310,15 @@ export function OutdoorGround({
     }
     return [...groups.values()].map((group) => {
       const mask = createCellMask(group.cells, false, STYLE_OVERLAY_FEATHER_PX)
+      // Ground-level overlays use roughness 1 to match the matte base plane;
+      // elevated overlays use the stepped-terrain roughness to match 3D models.
+      const roughness = group.worldY > 0 ? STEPPED_TERRAIN_ROUGHNESS : 1
       const material = createStandardCompatibleMaterial({
         map: opaqueTextures[group.terrainStyle],
         alphaMap: mask,
         transparent: true,
         depthWrite: false,
-        roughness: STEPPED_TERRAIN_ROUGHNESS,
+        roughness,
         metalness: 0,
       })
       return { ...group, mask, material }
@@ -327,8 +330,9 @@ export function OutdoorGround({
       map: opaqueTextures[defaultOutdoorTerrainStyle],
       color: '#ffffff',
       alphaMap: holeMask,
+      transparent: true,
       alphaTest: 0.5,
-      roughness: STEPPED_TERRAIN_ROUGHNESS,
+      roughness: 1,
       metalness: 0,
     }),
     [defaultOutdoorTerrainStyle, holeMask, opaqueTextures],
