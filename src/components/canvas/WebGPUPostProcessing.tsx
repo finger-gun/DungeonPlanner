@@ -22,12 +22,6 @@ import { pixelate } from '../../postprocessing/pixelate'
 import { tiltShift } from '../../postprocessing/tiltShift'
 import { DEFAULT_AUTOFOCUS_SMOOTH_TIME } from '../../postprocessing/tiltShiftMath'
 import { selectionOutline, alphaOver, SELECTION_OUTLINE_LAYER } from '../../postprocessing/selectionOutline'
-import {
-  EXPLORED_MEMORY_MASK_LAYER,
-  applyLineOfSightMask,
-  geometryLayerMask,
-  LINE_OF_SIGHT_MASK_LAYER,
-} from '../../postprocessing/lineOfSightMask'
 import { useDungeonStore } from '../../store/useDungeonStore'
 import { getRegisteredObject } from './objectRegistry'
 import { resolveAutofocusTarget } from './autofocusTarget'
@@ -35,11 +29,7 @@ import { shouldApplyWebGpuLensBlur } from './webgpuPostProcessingMode'
 
 export { SELECTION_OUTLINE_LAYER }
 
-export function WebGPUPostProcessing({
-  lineOfSightActive = false,
-}: {
-  lineOfSightActive?: boolean
-}) {
+export function WebGPUPostProcessing() {
   const { gl: renderer, scene, camera, invalidate } = useThree()
   const postProcessingRef = useRef<THREE.PostProcessing | null>(null)
   // Gates rendering for one RAF tick after each pipeline rebuild so Three.js
@@ -123,26 +113,8 @@ export function WebGPUPostProcessing({
       outputNode = alphaOver(outputNode, selectionOutline(scene, outlineCamera))
     }
 
-    if (lineOfSightActive) {
-      const visibleLosCamera = (camera as any).clone() as THREE.Camera
-      ;(visibleLosCamera as any).layers.disableAll()
-      ;(visibleLosCamera as any).layers.enable(LINE_OF_SIGHT_MASK_LAYER)
-      visibleLosCameraRef.current = visibleLosCamera
-
-      const exploredLosCamera = (camera as any).clone() as THREE.Camera
-      ;(exploredLosCamera as any).layers.disableAll()
-      ;(exploredLosCamera as any).layers.enable(EXPLORED_MEMORY_MASK_LAYER)
-      exploredLosCameraRef.current = exploredLosCamera
-
-      outputNode = applyLineOfSightMask(
-        outputNode,
-        geometryLayerMask(scene, visibleLosCamera, baseSceneDepth),
-        geometryLayerMask(scene, exploredLosCamera, baseSceneDepth),
-      )
-    } else {
-      visibleLosCameraRef.current = null
-      exploredLosCameraRef.current = null
-    }
+    visibleLosCameraRef.current = null
+    exploredLosCameraRef.current = null
 
     const postProcessing = new THREE.PostProcessing(
       renderer as unknown as THREE.WebGPURenderer,
@@ -160,7 +132,7 @@ export function WebGPUPostProcessing({
       exploredLosCameraRef.current = null
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [camera, lineOfSightActive, renderer, scene, settings.enabled, settings.pixelateEnabled, activeCameraMode])
+  }, [camera, renderer, scene, settings.enabled, settings.pixelateEnabled, activeCameraMode])
 
   // Multi-frame delay after each pipeline rebuild — lets Three.js begin WebGPU
   // shader compilation (especially for complex scenes with many lights) before
@@ -185,7 +157,7 @@ export function WebGPUPostProcessing({
       pipelineReadyRef.current = false
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [camera, lineOfSightActive, renderer, scene, settings.enabled, settings.pixelateEnabled, activeCameraMode, invalidate])
+  }, [camera, renderer, scene, settings.enabled, settings.pixelateEnabled, activeCameraMode, invalidate])
 
   // Update shader uniforms only when settings actually change — not every frame.
   useEffect(() => {

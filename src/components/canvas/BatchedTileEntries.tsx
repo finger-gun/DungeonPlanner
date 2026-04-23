@@ -3,10 +3,10 @@ import * as THREE from 'three'
 import type { PlayVisibilityState } from './playVisibility'
 import { ContentPackInstance } from './ContentPackInstance'
 import { shouldRenderLineOfSightGeometry } from './losRendering'
-import { setLosLayers } from './losLayers'
 import { buildMergedTileGeometryMeshes, type BatchedTilePlacement } from './batchedTileGeometry'
 import { resolveBatchedTileAsset, type ResolvedBatchedTileAsset } from './tileAssetResolution'
 import { useGLTF } from '../../rendering/useGLTF'
+import { applyFogOfWarToMaterial, useFogOfWarRuntime } from './fogOfWar'
 
 export type StaticTileEntry = BatchedTilePlacement & {
   assetId: string | null
@@ -14,9 +14,17 @@ export type StaticTileEntry = BatchedTilePlacement & {
   variantKey?: string
   objectProps?: Record<string, unknown>
   visibility: PlayVisibilityState
+  fogCell?: readonly [number, number]
 }
 
 type ResolvedStaticTileEntry = StaticTileEntry & ResolvedBatchedTileAsset
+
+function shouldUseBatchedGpuFog(
+  variant: StaticTileEntry['variant'],
+  fogOfWar: ReturnType<typeof useFogOfWarRuntime>,
+) {
+  return fogOfWar !== null && variant === 'floor'
+}
 
 export function BatchedTileEntries({
   entries,
@@ -42,7 +50,7 @@ export function BatchedTileEntries({
       batchableEntries: batchable,
       fallbackEntries: fallback,
     }
-  }, [entries])
+  }, [entries, useLineOfSightPostMask])
 
   return (
     <>
@@ -78,6 +86,7 @@ function ResolvedBatchedTileEntries({
   entries: ResolvedStaticTileEntry[]
   useLineOfSightPostMask: boolean
 }) {
+  const fogOfWar = useFogOfWarRuntime()
   const assetUrls = useMemo(
     () => Array.from(new Set(entries.map((entry) => entry.assetUrl))),
     [entries],
@@ -93,10 +102,11 @@ function ResolvedBatchedTileEntries({
   const buckets = useMemo(() => {
     const grouped = new Map<string, ResolvedStaticTileEntry[]>()
     entries.forEach((entry) => {
+      const usesGpuFog = shouldUseBatchedGpuFog(entry.variant, fogOfWar)
       const bucketKey = [
         entry.assetUrl,
         entry.transformKey,
-        entry.visibility,
+        usesGpuFog ? `gpu-los:${entry.variant}` : entry.visibility,
         entry.receiveShadow ? 'shadow' : 'flat',
       ].join('|')
 
@@ -106,7 +116,7 @@ function ResolvedBatchedTileEntries({
       grouped.get(bucketKey)!.push(entry)
     })
     return Array.from(grouped.entries())
-  }, [entries])
+  }, [entries, fogOfWar])
 
   return (
     <>
@@ -150,6 +160,8 @@ function MergedTileBucket({
   entries: ResolvedStaticTileEntry[]
   useLineOfSightPostMask: boolean
 }) {
+  const fogOfWar = useFogOfWarRuntime()
+  const usesGpuFog = shouldUseBatchedGpuFog(entries[0]!.variant, fogOfWar)
   const visibility = entries[0]!.visibility
   const receiveShadow = entries[0]!.receiveShadow
   const meshes = useMemo(
@@ -171,8 +183,8 @@ function MergedTileBucket({
     [meshes],
   )
 
-  const shouldRenderBase = shouldRenderLineOfSightGeometry(visibility, useLineOfSightPostMask)
-  const overlayOpacity = visibility === 'hidden' ? 0.94 : visibility === 'explored' ? 0.6 : 0
+  const shouldRenderBase = usesGpuFog || shouldRenderLineOfSightGeometry(visibility, useLineOfSightPostMask)
+  const overlayOpacity = visibility === 'explored' ? 0.6 : 0
 
   return (
     <>
@@ -183,9 +195,11 @@ function MergedTileBucket({
           material={mesh.material}
           receiveShadow={receiveShadow}
           visibility={visibility}
+          variant={entries[0]!.variant}
+          useGpuFog={usesGpuFog}
         />
       ))}
-      {!useLineOfSightPostMask && visibility !== 'visible' && meshes.map((mesh) => (
+      {!usesGpuFog && visibility === 'explored' && meshes.map((mesh) => (
         <MergedTintMesh
           key={`overlay:${mesh.key}`}
           geometry={mesh.geometry}
@@ -201,13 +215,18 @@ function MergedTileMesh({
   material,
   receiveShadow,
   visibility,
+  variant,
+  useGpuFog,
 }: {
   geometry: THREE.BufferGeometry
   material: THREE.Material
   receiveShadow: boolean
   visibility: PlayVisibilityState
+  variant: 'floor' | 'wall'
+  useGpuFog: boolean
 }) {
   const ref = useRef<THREE.Mesh>(null)
+  const fogOfWar = useFogOfWarRuntime()
 
   // Create a shared depth material for shadows to avoid WebGPU pipeline issues
   const depthMaterial = useMemo(() => {
@@ -218,11 +237,21 @@ function MergedTileMesh({
 
   useLayoutEffect(() => {
     if (ref.current) {
-      setLosLayers(ref.current, visibility)
       // Set custom shadow materials to avoid WebGPU crashes with cloned materials
       ref.current.customDepthMaterial = depthMaterial
     }
   }, [visibility, depthMaterial])
+
+  useLayoutEffect(() => {
+    applyFogOfWarToMaterial(
+      material,
+      useGpuFog ? fogOfWar : null,
+      {
+        variant,
+        useCellAttribute: useGpuFog && variant === 'floor',
+      },
+    )
+  }, [fogOfWar, material, useGpuFog, variant])
 
   return (
     <mesh

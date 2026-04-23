@@ -2,14 +2,14 @@ import type { PlayVisibilityState } from './playVisibility'
 
 export function shouldRenderLineOfSightGeometry(
   visibilityState: PlayVisibilityState,
-  useLineOfSightPostMask: boolean,
+  _useLineOfSightPostMask: boolean,
 ): boolean {
-  return !useLineOfSightPostMask || visibilityState !== 'hidden'
+  return visibilityState !== 'hidden'
 }
 
 export function shouldRenderLineOfSightLight(
   visibilityState: PlayVisibilityState,
-  useLineOfSightPostMask: boolean,
+  _useLineOfSightPostMask: boolean,
 ) {
-  return useLineOfSightPostMask || visibilityState === 'visible'
+  return visibilityState === 'visible'
 }

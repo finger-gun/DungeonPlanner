@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import * as THREE from 'three'
 import { getContentPackAssetById } from '../../content-packs/registry'
 import { metadataSupportsConnectorType } from '../../content-packs/connectors'
@@ -9,7 +9,7 @@ import type { DungeonObjectRecord, Layer } from '../../store/useDungeonStore'
 import { getRegisteredObject, useObjectRegistryVersion } from './objectRegistry'
 import { isGeneratedCharacterAssetId } from '../../content-packs/runtimeRegistry'
 import type { GeneratedCharacterRecord } from '../../generated-characters/types'
-import { computePlayVisibilityData as computePlayVisibilityDataCore } from './playVisibilityCore'
+import type { PlayVisibilityWorkerInput as CorePlayVisibilityWorkerInput } from './playVisibilityCore'
 
 const PLAYER_VISION_RANGE = 8
 const MASK_BASE_SAMPLE_COUNT = 1024
@@ -17,8 +17,6 @@ const MASK_ANGLE_EPSILON = 0.0001
 const MASK_DISTANCE_EPSILON = 0.0005
 const MASK_OPENING_INSET = GRID_SIZE * 0.22
 const LOS_BLOCKER_RAYCAST_Y = 0.38
-const EMPTY_EXPLORED_CELLS: Record<string, true> = {}
-
 type BlockerBroadPhase = {
   minX: number
   maxX: number
@@ -40,20 +38,7 @@ type BlockerLookupValue = BlockerCellEntry | string[]
 type BlockerLookup = Map<string, BlockerLookupValue>
 const blockerBounds = new THREE.Box3()
 
-type PlayVisibilityWorkerInput = {
-  paintedCells: PaintedCells
-  wallOpenings: Record<string, OpeningRecord>
-  innerWalls: ReturnType<typeof useDungeonStore.getState>['innerWalls']
-  origins: GridCell[]
-  range: number
-  blockingCellKeys: string[]
-  blockerLookupEntries: Array<[string, BlockerCellEntry]>
-}
-
-type PlayVisibilityComputation = {
-  visibleCellKeys: string[]
-  mask: PlayVisibilityMask | null
-}
+type PlayVisibilityWorkerInput = CorePlayVisibilityWorkerInput
 
 export type PlayVisibilityState = 'visible' | 'explored' | 'hidden'
 
@@ -62,7 +47,8 @@ export type PlayVisibility = {
   getCellVisibility: (cellKey: string) => PlayVisibilityState
   getObjectVisibility: (object: DungeonObjectRecord) => PlayVisibilityState
   getWallVisibility: (wallKey: string) => PlayVisibilityState
-  mask: PlayVisibilityMask | null
+  visibleCellKeys: string[]
+  playerOrigins: ReadonlyArray<readonly [number, number]>
 }
 
 export type VisibilityPolygon = Array<readonly [x: number, z: number]>
@@ -151,30 +137,57 @@ export function usePlayVisibility(): PlayVisibility {
     tool,
     wallOpenings,
   ])
-  const [visibilityData, setVisibilityData] = useState<PlayVisibilityComputation>({
-    visibleCellKeys: [],
-    mask: null,
-  })
+  const playerOrigins = useMemo(
+    () => (tool !== 'play' || mapMode === 'outdoor'
+      ? []
+      : Object.values(placedObjects)
+          .filter((object) => isVisiblePlayerOrigin(object, paintedCells, layers, generatedCharacters))
+          .map((object) => [object.position[0], object.position[2]] as const)),
+    [generatedCharacters, layers, mapMode, paintedCells, placedObjects, tool],
+  )
+  const workerRef = useRef<Worker | null>(null)
+  const requestIdRef = useRef(0)
+  const [visibleCellKeys, setVisibleCellKeys] = useState<string[]>([])
+
+  useEffect(() => {
+    const worker = new Worker(new URL('./playVisibility.worker.ts', import.meta.url), { type: 'module' })
+    workerRef.current = worker
+
+    function handleMessage(event: MessageEvent<{ requestId: number, visibleCellKeys: string[] }>) {
+      if (event.data.requestId !== requestIdRef.current) {
+        return
+      }
+
+      setVisibleCellKeys(event.data.visibleCellKeys)
+    }
+
+    worker.addEventListener('message', handleMessage)
+
+    return () => {
+      worker.removeEventListener('message', handleMessage)
+      worker.terminate()
+      workerRef.current = null
+    }
+  }, [])
 
   useEffect(() => {
     if (tool !== 'play' || !workerInput) {
-      setVisibilityData({ visibleCellKeys: [], mask: null })
+      setVisibleCellKeys([])
       return
     }
 
-    setVisibilityData(computePlayVisibilityDataCore(workerInput))
+    requestIdRef.current += 1
+    workerRef.current?.postMessage({
+      requestId: requestIdRef.current,
+      input: workerInput,
+    })
   }, [tool, workerInput])
-
-  const mask = useMemo(
-    () => withExploredCellKeys(visibilityData.mask, exploredCells),
-    [exploredCells, visibilityData.mask],
-  )
 
   useEffect(() => {
     if (tool === 'play' && mapMode !== 'outdoor') {
-      mergeExploredCells(visibilityData.visibleCellKeys)
+      mergeExploredCells(visibleCellKeys)
     }
-  }, [mapMode, mergeExploredCells, tool, visibilityData.visibleCellKeys])
+  }, [mapMode, mergeExploredCells, tool, visibleCellKeys])
 
   return useMemo(() => {
     if (tool !== 'play' || mapMode === 'outdoor') {
@@ -183,11 +196,12 @@ export function usePlayVisibility(): PlayVisibility {
         getCellVisibility: () => 'visible' as const,
         getObjectVisibility: () => 'visible' as const,
         getWallVisibility: () => 'visible' as const,
-        mask: null,
+        visibleCellKeys: [],
+        playerOrigins: [],
       }
     }
 
-    const visibleSet = new Set(visibilityData.visibleCellKeys)
+    const visibleSet = new Set(visibleCellKeys)
 
     const getCellVisibility = (cellKey: string): PlayVisibilityState => {
       if (visibleSet.has(cellKey)) {
@@ -201,10 +215,10 @@ export function usePlayVisibility(): PlayVisibility {
 
     return {
       active: true,
+      visibleCellKeys,
       getCellVisibility,
       getObjectVisibility: (object) =>
         getObjectVisibilityState(object, getCellVisibility, generatedCharacters),
-      mask,
       getWallVisibility: (wallKey: string) => {
         const parsed = parseWallKey(wallKey)
         if (!parsed) {
@@ -216,46 +230,9 @@ export function usePlayVisibility(): PlayVisibility {
 
         return maxVisibility(cellVisibility, adjacentVisibility)
       },
+      playerOrigins,
     }
-  }, [exploredCells, generatedCharacters, mapMode, mask, tool, visibilityData.visibleCellKeys])
-}
-
-export function computePlayVisibilityData(input: PlayVisibilityWorkerInput): PlayVisibilityComputation {
-  const blockerLookup = new Map<string, BlockerLookupValue>(input.blockerLookupEntries)
-  const blockingCells = new Set(input.blockingCellKeys)
-  const visibleCellKeys = computeVisibleCellKeys(
-    input.paintedCells,
-    input.wallOpenings,
-    input.origins,
-    input.range,
-    blockingCells,
-    blockerLookup,
-  )
-  const mask = computeVisibilityMask(
-    input.paintedCells,
-    EMPTY_EXPLORED_CELLS,
-    input.wallOpenings,
-    input.origins,
-    input.range,
-    blockingCells,
-    blockerLookup,
-  )
-
-  return { visibleCellKeys, mask }
-}
-
-function withExploredCellKeys(
-  mask: PlayVisibilityMask | null,
-  exploredCells: Record<string, true>,
-): PlayVisibilityMask | null {
-  if (!mask) {
-    return null
-  }
-
-  return {
-    ...mask,
-    exploredCellKeys: Object.keys(exploredCells),
-  }
+  }, [exploredCells, generatedCharacters, mapMode, playerOrigins, tool, visibleCellKeys])
 }
 
 export function isVisiblePlayerOrigin(
