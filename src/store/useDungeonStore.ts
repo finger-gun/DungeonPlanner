@@ -203,11 +203,6 @@ export type SceneLighting = {
   intensity: number // multiplier applied to all scene lights, 0–2
 }
 
-export type LightBenchmarkSettings = {
-  enabled: boolean
-  count: 64 | 128 | 256
-}
-
 export type PostProcessingSettings = {
   enabled: boolean
   pixelateEnabled: boolean
@@ -243,7 +238,6 @@ type DungeonState = DungeonSnapshot & {
   selectedRoomId: string | null
   surfaceBrushAssetIds: SurfaceBrushAssetIds
   sceneLighting: SceneLighting
-  lightBenchmark: LightBenchmarkSettings
   postProcessing: PostProcessingSettings
   showGrid: boolean
   showLosDebugMask: boolean
@@ -298,8 +292,6 @@ type DungeonState = DungeonSnapshot & {
   setPaintingStrokeActive: (active: boolean) => void
   setObjectDragActive: (active: boolean) => void
   setSceneLightingIntensity: (intensity: number) => void
-  setLightBenchmarkEnabled: (enabled: boolean) => void
-  setLightBenchmarkCount: (count: 64 | 128 | 256) => void
   setPostProcessing: (settings: Partial<PostProcessingSettings>) => void
   setOutdoorTimeOfDay: (value: number) => void
   setOutdoorTerrainDensity: (value: OutdoorTerrainDensity) => void
@@ -1297,7 +1289,6 @@ export const useDungeonStore = create<DungeonState>()(
     wall: getDefaultAssetIdByCategory('wall'),
   },
   sceneLighting: { intensity: 1 },
-  lightBenchmark: { enabled: false, count: 128 },
   postProcessing: { ...DEFAULT_POST_PROCESSING_SETTINGS },
   showGrid: true,
   showLosDebugMask: false,
@@ -2367,18 +2358,6 @@ export const useDungeonStore = create<DungeonState>()(
   setSceneLightingIntensity: (intensity) => {
     set((state) => ({ ...state, sceneLighting: { ...state.sceneLighting, intensity } }))
   },
-  setLightBenchmarkEnabled: (enabled) => {
-    set((state) => ({
-      ...state,
-      lightBenchmark: { ...state.lightBenchmark, enabled },
-    }))
-  },
-  setLightBenchmarkCount: (count) => {
-    set((state) => ({
-      ...state,
-      lightBenchmark: { ...state.lightBenchmark, count },
-    }))
-  },
   setPostProcessing: (settings) => {
     set((state) => ({
       ...state,
@@ -2649,7 +2628,6 @@ export const useDungeonStore = create<DungeonState>()(
           floor: getDefaultAssetIdByCategory('floor'),
           wall: getDefaultAssetIdByCategory('wall'),
         },
-        lightBenchmark: { enabled: false, count: 128 },
         floorViewMode: 'active',
         tool: 'move',
         characterSheet: { open: false, assetId: null },
@@ -2684,14 +2662,13 @@ export const useDungeonStore = create<DungeonState>()(
          isObjectDragActive: false,
          selectedRoomId: null,
         roomEditMode: 'rooms',
-        surfaceBrushAssetIds: {
-          floor: getDefaultAssetIdByCategory('floor'),
-          wall: getDefaultAssetIdByCategory('wall'),
-        },
-        cameraMode: 'orbit',
-        tool: mode === 'outdoor' ? 'room' : fresh.tool,
-        lightBenchmark: { enabled: false, count: 128 },
-      floorViewMode: 'active',
+         surfaceBrushAssetIds: {
+           floor: getDefaultAssetIdByCategory('floor'),
+           wall: getDefaultAssetIdByCategory('wall'),
+         },
+         cameraMode: 'orbit',
+         tool: mode === 'outdoor' ? 'room' : fresh.tool,
+       floorViewMode: 'active',
       characterSheet: { open: false, assetId: null },
       assetBrowser: createDefaultAssetBrowserState(),
       activeCameraMode: 'perspective',

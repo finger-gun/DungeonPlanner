@@ -32,7 +32,6 @@ import { OutdoorGround } from './OutdoorGround'
 import { getEnvironmentLightingState } from './environmentLighting'
 import { createWebGpuRenderer } from '../../rendering/createWebGpuRenderer'
 import { MAX_FORWARD_PLUS_POINT_LIGHTS } from '../../rendering/forwardPlusConfig'
-import { createSyntheticLightBenchmarkObjects } from './lightBenchmark'
 
 const SCENE_OVERVIEW_FLOOR_HEIGHT_UNIT = 3
 const PLAYER_ANIMATION_MS = {
@@ -361,7 +360,6 @@ function FloorContent({ startY = 0 }: { startY?: number }) {
   const setObjectDragActive = useDungeonStore((state) => state.setObjectDragActive)
   const postProcessingEnabled = useDungeonStore((state) => state.postProcessing.enabled)
   const pixelateEnabled = useDungeonStore((state) => state.postProcessing.pixelateEnabled)
-  const lightBenchmark = useDungeonStore((state) => state.lightBenchmark)
   const visibility = usePlayVisibility()
   const [releaseAnimationIds, setReleaseAnimationIds] = useState<Record<string, true>>({})
 
@@ -372,19 +370,14 @@ function FloorContent({ startY = 0 }: { startY?: number }) {
   const objectLightCount = useMemo(() => precomputeLightSources(objects).length, [objects])
   const topLevelObjects = useMemo(() => getTopLevelObjects(objects), [objects])
   const childrenByParent = useMemo(() => buildObjectChildrenIndex(objects), [objects])
-  const syntheticBenchmarkObjects = useMemo(
-    () => lightBenchmark.enabled ? createSyntheticLightBenchmarkObjects(lightBenchmark.count) : [],
-    [lightBenchmark.count, lightBenchmark.enabled],
-  )
-  const [propLightBudget, syntheticLightBudget] = useMemo(
+  const [propLightBudget] = useMemo(
     () => distributeForwardPlusLightBudget(
       [
         getDesiredPropLightPoolSize(objectLightCount),
-        syntheticBenchmarkObjects.length,
       ],
       MAX_FORWARD_PLUS_POINT_LIGHTS,
     ),
-    [objectLightCount, syntheticBenchmarkObjects.length],
+    [objectLightCount],
   )
   const lineOfSightActive = visibility.active && visibility.mask !== null
   const showPostProcessing = postProcessingEnabled || pixelateEnabled || showLensFocusDebugPoint || lineOfSightActive
@@ -583,13 +576,6 @@ function FloorContent({ startY = 0 }: { startY?: number }) {
       <RoomResizeOverlay />
       {propLightBudget > 0 && (
         <PropLightPool objects={objects} visibility={visibility} maxLights={propLightBudget} />
-      )}
-      {syntheticLightBudget > 0 && (
-        <PropLightPool
-          objects={syntheticBenchmarkObjects}
-          visibility={ALWAYS_VISIBLE}
-          maxLights={syntheticLightBudget}
-        />
       )}
       {visibility.active && visibility.mask && (
         <>
