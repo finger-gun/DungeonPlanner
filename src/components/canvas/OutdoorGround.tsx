@@ -126,7 +126,9 @@ function createOpaqueGroundTexture(texture: THREE.Texture) {
   pixels.data.set(makeTexturePixelsOpaque(pixels.data))
   context.putImageData(pixels, 0, 0)
 
-  return new THREE.CanvasTexture(canvas)
+  const opaqueTexture = new THREE.CanvasTexture(canvas)
+  configureGroundTexture(opaqueTexture)
+  return opaqueTexture
 }
 
 function configureMaskTexture(texture: THREE.CanvasTexture) {
