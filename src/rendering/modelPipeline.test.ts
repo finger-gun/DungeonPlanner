@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest'
 import {
   collectLocalArtifactPathsFromGltf,
   formatBytes,
+  getPreservedArtifactPaths,
+  resolvePackSourceDir,
   isThumbnailForModel,
 } from '../../scripts/model-pipeline.mjs'
 
@@ -44,5 +46,26 @@ describe('model pipeline utilities', () => {
     expect(formatBytes(512)).toBe('512 B')
     expect(formatBytes(2048)).toBe('2.0 KB')
     expect(formatBytes(3 * 1024 ** 2)).toBe('3.00 MB')
+  })
+
+  it('resolves configured pack source directories from env or repo paths', () => {
+    expect(resolvePackSourceDir('kaykit')).toContain(
+      'forrest-assets-tmp/KayKit_Forest_Nature_Pack_1.0_EXTRA/Assets/gltf/Color1',
+    )
+
+    expect(
+      resolvePackSourceDir('core', null, {
+        DUNGEONPLANNER_CORE_SOURCE_DIR: '/tmp/core-models',
+      }),
+    ).toBe('/tmp/core-models')
+  })
+
+  it('preserves generated KayKit grass patch artifacts', () => {
+    expect([...getPreservedArtifactPaths('/packs/kaykit')]).toEqual([])
+    expect(
+      [...getPreservedArtifactPaths('src/assets/models/kaykit')].some((filePath) =>
+        filePath.endsWith('/src/assets/models/kaykit/forest_grass_patch.png'),
+      ),
+    ).toBe(true)
   })
 })

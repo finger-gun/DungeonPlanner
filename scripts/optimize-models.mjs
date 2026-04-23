@@ -9,6 +9,7 @@ import {
   findCommandPath,
   formatBytes,
   getDirectorySize,
+  getPreservedArtifactPaths,
   getRelativeModelPath,
   getTotalSize,
   isCleanupCandidate,
@@ -33,7 +34,12 @@ export async function runOptimizeModels({
       ? targets.map((target) => resolvePackDir(target))
       : listPackDirectories()
 
-  const resolvedKtxPath = findCommandPath('ktx', ktxDir ? [ktxDir] : [])
+  const fallbackKtxDirs = [
+    ktxDir,
+    process.env.DUNGEONPLANNER_KTX_DIR,
+    path.join(os.homedir(), '.local/bin'),
+  ].filter(Boolean)
+  const resolvedKtxPath = findCommandPath('ktx', fallbackKtxDirs)
   if (!resolvedKtxPath) {
     throw new Error(
       [
@@ -73,7 +79,7 @@ export async function runOptimizeModels({
           inputPath: modelPath,
           outputPath: tempOutputPath,
           textureSize,
-          ktxDir,
+          resolvedKtxDir: path.dirname(resolvedKtxPath),
         })
 
         const afterArtifacts = collectModelArtifactPaths(tempOutputPath)
@@ -106,7 +112,7 @@ export async function runOptimizeModels({
   )
 }
 
-async function runGltfTransformOptimize({ inputPath, outputPath, textureSize, ktxDir }) {
+async function runGltfTransformOptimize({ inputPath, outputPath, textureSize, resolvedKtxDir }) {
   await runCommand(
     process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm',
     [
@@ -124,7 +130,7 @@ async function runGltfTransformOptimize({ inputPath, outputPath, textureSize, kt
     ],
     {
       cwd: rootDir,
-      env: prependEnvPath(ktxDir ? [ktxDir] : []),
+      env: prependEnvPath(resolvedKtxDir ? [resolvedKtxDir] : []),
     },
   )
 }
@@ -132,6 +138,7 @@ async function runGltfTransformOptimize({ inputPath, outputPath, textureSize, kt
 function cleanupStaleArtifacts(targetDir) {
   const modelFiles = listModelFiles(targetDir)
   const referencedArtifacts = new Set(modelFiles.flatMap((modelPath) => collectModelArtifactPaths(modelPath)))
+  const preservedArtifacts = getPreservedArtifactPaths(targetDir)
   const modelBaseNames = new Set(
     modelFiles.map((modelPath) => modelPath.slice(0, -path.extname(modelPath).length)),
   )
@@ -141,7 +148,11 @@ function cleanupStaleArtifacts(targetDir) {
       continue
     }
 
-    if (referencedArtifacts.has(filePath) || isThumbnailForModel(filePath, modelBaseNames)) {
+    if (
+      referencedArtifacts.has(filePath) ||
+      preservedArtifacts.has(filePath) ||
+      isThumbnailForModel(filePath, modelBaseNames)
+    ) {
       continue
     }
 

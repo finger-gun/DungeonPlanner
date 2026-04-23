@@ -2,41 +2,15 @@ import { accessSync, copyFileSync, cpSync, existsSync, mkdirSync, readFileSync, 
 import path from 'node:path'
 import process from 'node:process'
 import { constants as fsConstants } from 'node:fs'
+import { modelPackConfigs } from './model-packs.config.mjs'
 
 export const rootDir = process.cwd()
 export const modelRootDir = path.join(rootDir, 'src/assets/models')
-export const defaultModelSourceDir = '/Users/roblibob/Projects/models'
 export const defaultKtxTranscoderSourceDir = path.join(
   rootDir,
   'node_modules/three/examples/jsm/libs/basis',
 )
 export const defaultKtxTranscoderTargetDir = path.join(rootDir, 'public/three/basis')
-
-export const corePackAssetNames = [
-  'floor',
-  'floor_001',
-  'floor_002',
-  'floor_003',
-  'floor_004',
-  'floor_005',
-  'floor_006',
-  'floor_007',
-  'props_wall_torch',
-  'wall',
-  'wall_001',
-  'wall_002',
-  'wall_003',
-  'wall_004',
-  'wall_005',
-]
-
-export const modelPackConfigs = {
-  core: {
-    sourceDir: defaultModelSourceDir,
-    targetDir: path.join(modelRootDir, 'core'),
-    include: corePackAssetNames.map((name) => `${name}.glb`),
-  },
-}
 
 const modelExtensions = new Set(['.glb', '.gltf'])
 const cleanupExtensions = new Set(['.bin', '.jpg', '.jpeg', '.ktx2', '.png', '.webp'])
@@ -69,6 +43,32 @@ export function getModelPackConfig(target) {
   return target ? modelPackConfigs[target] ?? null : null
 }
 
+export function resolvePipelinePath(inputPath) {
+  if (!inputPath) {
+    return null
+  }
+
+  return path.isAbsolute(inputPath) ? inputPath : path.resolve(rootDir, inputPath)
+}
+
+export function resolvePackSourceDir(target, source = null, env = process.env) {
+  if (source) {
+    return resolvePipelinePath(source)
+  }
+
+  const config = getModelPackConfig(target)
+  if (!config) {
+    return null
+  }
+
+  const configuredSource =
+    (config.sourceDirEnv ? env[config.sourceDirEnv] : null) ??
+    config.sourceDir ??
+    null
+
+  return resolvePipelinePath(configuredSource)
+}
+
 export function resolvePackDir(target) {
   if (!target) {
     return modelRootDir
@@ -86,11 +86,38 @@ export function resolvePackDir(target) {
   return path.join(modelRootDir, target)
 }
 
+export function shouldCleanPack(target) {
+  return getModelPackConfig(target)?.clean === true
+}
+
+export function getPackConfigByDir(targetDir) {
+  const normalizedTargetDir = path.resolve(targetDir)
+
+  return (
+    Object.values(modelPackConfigs).find((config) => resolvePackDirForConfig(config) === normalizedTargetDir) ?? null
+  )
+}
+
+export function getPreservedArtifactPaths(targetDir) {
+  const config = getPackConfigByDir(targetDir)
+  if (!config?.preserveArtifacts?.length) {
+    return new Set()
+  }
+
+  return new Set(
+    config.preserveArtifacts.map((relativePath) => path.join(path.resolve(targetDir), relativePath)),
+  )
+}
+
 export function listPackDirectories() {
   return readdirSync(modelRootDir, { withFileTypes: true })
     .filter((entry) => entry.isDirectory() && !entry.name.startsWith('.'))
     .map((entry) => path.join(modelRootDir, entry.name))
     .sort((left, right) => left.localeCompare(right))
+}
+
+function resolvePackDirForConfig(config) {
+  return path.resolve(rootDir, config.targetDir)
 }
 
 export function listFilesRecursive(dir) {

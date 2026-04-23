@@ -1,59 +1,62 @@
-const MODEL_URLS = import.meta.glob('../../../assets/models/kaykit/*.glb', {
+const MODEL_URLS = import.meta.glob('../../../assets/models/kaykit/**/*.glb', {
   eager: true,
   import: 'default',
   query: '?url',
 }) as Record<string, string>
 
-const GLTF_SOURCES = import.meta.glob('../../../assets/models/kaykit/*.gltf', {
+const GLTF_SOURCES = import.meta.glob('../../../assets/models/kaykit/**/*.gltf', {
   eager: true,
   import: 'default',
   query: '?raw',
 }) as Record<string, string>
 
-const BIN_URLS = import.meta.glob('../../../assets/models/kaykit/*.bin', {
-  eager: true,
-  import: 'default',
-  query: '?url',
-}) as Record<string, string>
-
-const IMAGE_URLS = import.meta.glob([
-  '../../../assets/models/kaykit/*.png',
-  '../../../assets/models/kaykit/*.jpg',
-  '../../../assets/models/kaykit/*.jpeg',
-  '../../../assets/models/kaykit/*.webp',
-], {
-  eager: true,
-  import: 'default',
-  query: '?url',
-}) as Record<string, string>
+const SIDECAR_URLS = import.meta.glob(
+  [
+    '../../../assets/models/kaykit/**/*.bin',
+    '../../../assets/models/kaykit/**/*.ktx2',
+    '../../../assets/models/kaykit/**/*.png',
+    '../../../assets/models/kaykit/**/*.jpg',
+    '../../../assets/models/kaykit/**/*.jpeg',
+    '../../../assets/models/kaykit/**/*.webp',
+  ],
+  {
+    eager: true,
+    import: 'default',
+    query: '?url',
+  },
+) as Record<string, string>
 
 type GltfDocument = {
   buffers?: Array<{ uri?: string }>
   images?: Array<{ uri?: string }>
 }
 
-const REWRITTEN_GLTF_URLS = Object.fromEntries(
-  Object.entries(GLTF_SOURCES).map(([key, source]) => [key, rewriteGltfAssetSource(source)]),
+const glbAssetUrls = indexAssetUrls(MODEL_URLS)
+const normalizedSidecarUrls = Object.fromEntries(
+  Object.entries(SIDECAR_URLS).map(([key, url]) => [normalizeAssetKey(key), url]),
+) as Record<string, string>
+const rewrittenGltfUrls = Object.fromEntries(
+  Object.entries(GLTF_SOURCES).map(([key, source]) => [getAssetName(key), rewriteGltfAssetSource(key, source)]),
 ) as Record<string, string>
 
 export function resolveKayKitAssetUrl(name: string, extension: 'glb' | 'gltf') {
-  const key = `../../../assets/models/kaykit/${name}.${extension}`
-  return extension === 'glb' ? MODEL_URLS[key] : REWRITTEN_GLTF_URLS[key]
+  return extension === 'glb' ? glbAssetUrls[name] : rewrittenGltfUrls[name]
 }
 
 export function resolveKayKitModelAssetUrl(name: string) {
   return resolveKayKitAssetUrl(name, 'glb') ?? resolveKayKitAssetUrl(name, 'gltf')
 }
 
-function rewriteGltfAssetSource(source: string) {
+function rewriteGltfAssetSource(key: string, source: string) {
   const document = JSON.parse(source) as GltfDocument
+  const assetDir = getAssetDir(key)
 
   document.buffers?.forEach((buffer) => {
     if (!buffer.uri || !isLocalUri(buffer.uri)) {
       return
     }
 
-    buffer.uri = resolveKayKitSidecarUrl(buffer.uri) ?? buffer.uri
+    buffer.uri = resolveKayKitSidecarUrl(assetDir, buffer.uri) ?? buffer.uri
   })
 
   document.images?.forEach((image) => {
@@ -61,24 +64,18 @@ function rewriteGltfAssetSource(source: string) {
       return
     }
 
-    image.uri = resolveKayKitSidecarUrl(image.uri) ?? image.uri
+    image.uri = resolveKayKitSidecarUrl(assetDir, image.uri) ?? image.uri
   })
 
   return `data:model/gltf+json;base64,${btoa(JSON.stringify(document))}`
 }
 
-function resolveKayKitSidecarUrl(uri: string) {
+function resolveKayKitSidecarUrl(assetDir: string, uri: string) {
   const normalizedPath = uri.split(/[?#]/, 1)[0]
-  const binKey = `../../../assets/models/kaykit/${normalizedPath}`
-  if (BIN_URLS[binKey]) {
-    return absolutizeRuntimeUrl(BIN_URLS[binKey])
-  }
+  const sidecarKey = normalizeAssetKey(`${assetDir}/${normalizedPath}`)
+  const sidecarUrl = normalizedSidecarUrls[sidecarKey]
 
-  if (IMAGE_URLS[binKey]) {
-    return absolutizeRuntimeUrl(IMAGE_URLS[binKey])
-  }
-
-  return undefined
+  return sidecarUrl ? absolutizeRuntimeUrl(sidecarUrl) : undefined
 }
 
 function isLocalUri(uri: string) {
@@ -99,4 +96,43 @@ function absolutizeRuntimeUrl(url: string) {
   }
 
   return url
+}
+
+function indexAssetUrls(assetUrls: Record<string, string>) {
+  return Object.fromEntries(
+    Object.entries(assetUrls).map(([key, url]) => [getAssetName(key), url]),
+  ) as Record<string, string>
+}
+
+function getAssetDir(key: string) {
+  const normalizedKey = normalizeAssetKey(key)
+  return normalizedKey.slice(0, normalizedKey.lastIndexOf('/'))
+}
+
+function getAssetName(key: string) {
+  return key
+    .split('/')
+    .pop()
+    ?.replace(/\.(glb|gltf)$/i, '') ?? key
+}
+
+function normalizeAssetKey(key: string) {
+  const normalized = key.replace(/\\/g, '/')
+  const segments = normalized.split('/')
+  const resolvedSegments: string[] = []
+
+  for (const segment of segments) {
+    if (!segment || segment === '.') {
+      continue
+    }
+
+    if (segment === '..') {
+      resolvedSegments.pop()
+      continue
+    }
+
+    resolvedSegments.push(segment)
+  }
+
+  return resolvedSegments.join('/')
 }

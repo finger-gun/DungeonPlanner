@@ -96,6 +96,9 @@ importers:
       jsdom:
         specifier: ^29.0.2
         version: 29.0.2
+      sharp:
+        specifier: ^0.34.5
+        version: 0.34.5
       turbo:
         specifier: ^2.6.0
         version: 2.9.6

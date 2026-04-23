@@ -2,6 +2,7 @@ import path from 'node:path'
 import process from 'node:process'
 import { spawn } from 'node:child_process'
 import { pathToFileURL } from 'node:url'
+import sharp from 'sharp'
 import {
   collectModelArtifactPaths,
   copyArtifactsIntoDir,
@@ -9,10 +10,13 @@ import {
   getDirectorySize,
   getModelPackConfig,
   mirrorDirectory,
+  resolvePackSourceDir,
   resolvePackDir,
   rootDir,
+  shouldCleanPack,
 } from './model-pipeline.mjs'
 import { runOptimizeModels } from './optimize-models.mjs'
+import { rmSync } from 'node:fs'
 
 export async function runImportModels({
   target,
@@ -22,20 +26,26 @@ export async function runImportModels({
   skipThumbnails = false,
   ktxDir = null,
   textureSize = 2048,
+  clean = null,
 } = {}) {
   if (!target) {
     throw new Error('A target pack or target directory is required.')
   }
 
   const packConfig = getModelPackConfig(target)
-  const sourceInput = source ?? packConfig?.sourceDir
-  if (!sourceInput) {
-    throw new Error('A source directory is required.')
+  const sourceDir = resolvePackSourceDir(target, source)
+  if (!sourceDir) {
+    const envHint = packConfig?.sourceDirEnv ? ` or set ${packConfig.sourceDirEnv}` : ''
+    throw new Error(`A source directory is required. Pass --source <dir>${envHint}.`)
   }
 
-  const sourceDir = path.resolve(rootDir, sourceInput)
   const targetDir = resolvePackDir(target)
   const beforeSize = getDirectorySize(targetDir)
+  const shouldResetTarget = clean ?? shouldCleanPack(target)
+
+  if (shouldResetTarget) {
+    rmSync(targetDir, { recursive: true, force: true })
+  }
 
   if (packConfig?.include?.length) {
     for (const relativeModelPath of packConfig.include) {
@@ -51,6 +61,8 @@ export async function runImportModels({
   console.log(
     `Imported assets into ${targetDir}: ${formatBytes(beforeSize)} -> ${formatBytes(afterCopySize)}`,
   )
+
+  await generateDerivedTextures(targetDir, packConfig)
 
   if (!skipOptimize) {
     await runOptimizeModels({
@@ -73,6 +85,38 @@ export async function runImportModels({
       ],
       { cwd: rootDir, env: process.env },
     )
+  }
+}
+
+async function generateDerivedTextures(targetDir, packConfig) {
+  const derivedTextures = packConfig?.derivedTextures ?? []
+
+  for (const derivedTexture of derivedTextures) {
+    const sourcePath = path.join(targetDir, derivedTexture.source)
+    const outputPath = path.join(targetDir, derivedTexture.output)
+    const metadata = await sharp(sourcePath).metadata()
+    const sourceWidth = metadata.width ?? 0
+    const sourceHeight = metadata.height ?? 0
+
+    if (!sourceWidth || !sourceHeight) {
+      throw new Error(`Could not read texture dimensions for ${sourcePath}.`)
+    }
+
+    const extractWidth = Math.max(8, Math.ceil(sourceWidth * (derivedTexture.cropUv.maxU - derivedTexture.cropUv.minU)))
+    const extractHeight = Math.max(
+      8,
+      Math.ceil(sourceHeight * (derivedTexture.cropUv.maxV - derivedTexture.cropUv.minV)),
+    )
+
+    await sharp(sourcePath)
+      .extract({
+        left: Math.floor(sourceWidth * derivedTexture.cropUv.minU),
+        top: Math.floor(sourceHeight * derivedTexture.cropUv.minV),
+        width: extractWidth,
+        height: extractHeight,
+      })
+      .png()
+      .toFile(outputPath)
   }
 }
 
@@ -103,6 +147,7 @@ function parseArgs(args) {
   let skipThumbnails = false
   let ktxDir = null
   let textureSize = 2048
+  let clean = null
 
   for (let index = 0; index < args.length; index += 1) {
     const value = args[index]
@@ -144,6 +189,16 @@ function parseArgs(args) {
       continue
     }
 
+    if (value === '--clean') {
+      clean = true
+      continue
+    }
+
+    if (value === '--no-clean') {
+      clean = false
+      continue
+    }
+
     target = value
   }
 
@@ -155,6 +210,7 @@ function parseArgs(args) {
     skipThumbnails,
     ktxDir,
     textureSize,
+    clean,
   }
 }
 
