@@ -2,57 +2,66 @@
 
 ## Purpose
 
-Define outdoor-only ground texture painting, blended terrain rendering, and persistence behavior for outdoor maps.
+Define outdoor-only terrain-style painting, feathered top-surface rendering, and persistence behavior for outdoor maps.
 ## Requirements
 ### Requirement: Outdoor mode SHALL support ground texture painting
-The system SHALL provide an outdoor-only ground surface paint capability that allows users to assign a terrain surface type to outdoor terrain cells using brush interactions. The selected surface type SHALL apply to the visible top surface of that cell at its current stepped terrain level.
+The system SHALL provide an outdoor-only terrain style paint capability that allows users to assign a supported authored terrain style to outdoor terrain cells using brush interactions.
 
 #### Scenario: Outdoor paint controls are available only in outdoor mode
 - **WHEN** the user is editing an outdoor map
-- **THEN** the UI shows outdoor surface-paint controls for selecting a terrain surface brush
+- **THEN** the UI shows terrain-style paint controls for selecting a supported terrain style brush
 - **AND** those controls are not shown in indoor mode
 
-#### Scenario: Brush painting assigns top-surface terrain types
-- **WHEN** the user performs a paint stroke with a selected terrain surface brush in outdoor mode
-- **THEN** each targeted outdoor cell stores the selected terrain surface assignment
-- **AND** the selected surface appears on the visible top of that cell at its current terrain level
+#### Scenario: Brush painting assigns terrain styles
+- **WHEN** the user performs a paint stroke with a selected terrain style brush in outdoor mode
+- **THEN** each targeted outdoor cell stores the selected terrain style override
+- **AND** the selected style is used for the visible terrain top and any stepped terrain geometry owned by that cell
 
-#### Scenario: Brush erase removes terrain surface assignments
+#### Scenario: Brush erase resets cells to the map default terrain style
 - **WHEN** the user performs an erase stroke in outdoor mode
-- **THEN** targeted cells remove their explicit terrain surface assignment
+- **THEN** targeted cells clear their explicit terrain style override
+- **AND** those cells render using the map's default outdoor terrain style
 
 ### Requirement: Outdoor texture paint SHALL persist across save and load
-The system SHALL include outdoor terrain surface paint state in dungeon serialization and restore it when loading a saved dungeon file.
+The system SHALL include outdoor terrain style paint state and the map-level default outdoor terrain style in dungeon serialization and restore them when loading a saved dungeon file.
 
-#### Scenario: Save and load round-trip preserves painted terrain surfaces
-- **WHEN** the user saves a dungeon with outdoor terrain surface-painted cells and then reloads it
-- **THEN** the same outdoor terrain surface assignments are restored
+#### Scenario: Save and load round-trip preserves terrain styles
+- **WHEN** the user saves a dungeon with outdoor terrain-style overrides and later reloads it
+- **THEN** the same map default terrain style and per-cell terrain-style overrides are restored
 
 #### Scenario: Older files load with migration-safe defaults
-- **WHEN** a dungeon file created before stepped outdoor terrain surface paint support is loaded
-- **THEN** the file loads successfully with migration-safe terrain surface defaults
+- **WHEN** a dungeon file created before outdoor terrain-style paint support is loaded
+- **THEN** the file loads successfully
+- **AND** any legacy outdoor material-paint overrides are cleared safely
+- **AND** outdoor terrain resolves to the map default terrain style unless repainted by the user
 
 ### Requirement: Outdoor texture paint SHALL remain aligned on sculpted terrain
-The system SHALL keep outdoor terrain surface paint mapped to the stepped outdoor terrain top so painted areas remain visually aligned after terrain elevation changes.
+The system SHALL keep outdoor terrain style assignments aligned to the stepped outdoor terrain top so painted areas remain visually coherent after terrain elevation changes.
 
-#### Scenario: Painted terrain surfaces remain attached to stepped terrain
-- **WHEN** an outdoor area has terrain surface assignments and that terrain is sculpted upward or downward
-- **THEN** the painted surface remains rendered on the corresponding stepped terrain top
-- **AND** the surface does not appear detached from the edited terrain cell
+#### Scenario: Painted terrain styles remain attached to stepped terrain
+- **WHEN** an outdoor area has terrain-style overrides and that terrain is sculpted upward or downward
+- **THEN** the same terrain style remains associated with the edited cells
+- **AND** newly visible top surfaces for those cells use the same terrain style
 
-#### Scenario: Terrain surface paint stays editable after sculpting
-- **WHEN** the user paints or erases outdoor terrain surface paint on already sculpted terrain
-- **THEN** the same surface-paint workflow remains available
-- **AND** the resulting painted area aligns with the stepped terrain top that was edited
+#### Scenario: Terrain style paint stays editable after sculpting
+- **WHEN** the user paints or erases terrain styles on already sculpted outdoor terrain
+- **THEN** the same terrain-style paint workflow remains available
+- **AND** resulting rendered tops and transitions align with the edited stepped terrain
 
-### Requirement: Unpainted stepped outdoor terrain SHALL use the default green grass top surface
-The system SHALL render unpainted stepped outdoor terrain tops with the default green grass terrain surface appearance.
+### Requirement: Outdoor maps SHALL define a default terrain style
+The system SHALL define a map-level default outdoor terrain style used for new outdoor maps and for cells without an explicit terrain-style override.
 
-#### Scenario: Unpainted flat terrain uses default grass top
-- **WHEN** an outdoor terrain cell has no explicit terrain surface assignment
-- **THEN** its visible top surface renders with the default green grass appearance
+#### Scenario: New outdoor maps start with the default terrain style
+- **WHEN** the user creates or loads an outdoor map with no explicit terrain-style overrides
+- **THEN** visible outdoor terrain uses the configured map default terrain style
 
-#### Scenario: Unpainted lowered terrain floor uses default grass top
-- **WHEN** a lowered outdoor terrain cell has no explicit terrain surface assignment
-- **THEN** the visible floor surface at the bottom of the pit or trench renders with the default green grass appearance
+### Requirement: Outdoor terrain style paint SHALL feather neighboring top-surface styles
+The system SHALL render soft top-surface transitions between neighboring outdoor cells that resolve to different terrain styles.
 
+#### Scenario: Flat neighboring styles transition softly
+- **WHEN** two neighboring flat outdoor cells resolve to different terrain styles
+- **THEN** the visible top-surface boundary between them appears feathered rather than as a hard-edged seam
+
+#### Scenario: Stepped neighboring styles transition softly across top surfaces
+- **WHEN** neighboring stepped outdoor cells resolve to different terrain styles
+- **THEN** the visible top surfaces and top caps render a soft transition where those styles meet

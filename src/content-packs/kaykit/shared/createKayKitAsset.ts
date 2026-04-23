@@ -47,6 +47,13 @@ export function resolveKayKitModelAssetUrl(name: string) {
   return resolveKayKitAssetUrl(name, 'glb') ?? resolveKayKitAssetUrl(name, 'gltf')
 }
 
+export function listAvailableKayKitModelNames() {
+  return [...new Set([
+    ...Object.keys(glbAssetUrls),
+    ...Object.keys(rewrittenGltfUrls),
+  ])].sort((left, right) => left.localeCompare(right))
+}
+
 function rewriteGltfAssetSource(key: string, source: string) {
   const document = JSON.parse(source) as GltfDocument
   const assetDir = getAssetDir(key)

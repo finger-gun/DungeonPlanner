@@ -39,6 +39,7 @@ import {
   normalizePostProcessingSettings,
 } from '../postprocessing/tiltShiftMath'
 import {
+  OUTDOOR_TERRAIN_STYLES,
   DEFAULT_OUTDOOR_TERRAIN_STYLE,
   type OutdoorTerrainStyle,
 } from './outdoorTerrainStyles'
@@ -407,45 +408,11 @@ const FOREST_BARE_TREE_ASSET_IDS = KAYKIT_FOREST_PROP_IDS.filter((id) =>
 const FOREST_BUSH_ASSET_IDS = KAYKIT_FOREST_PROP_IDS.filter((id) => id.startsWith('kaykit.forest_bush_'))
 const FOREST_ROCK_ASSET_IDS = KAYKIT_FOREST_PROP_IDS.filter((id) => id.startsWith('kaykit.forest_rock_'))
 const FOREST_GRASS_ASSET_IDS = KAYKIT_FOREST_PROP_IDS.filter((id) => id.startsWith('kaykit.forest_grass_'))
-const FLAT_SMALL_ROCK_ASSET_IDS = ensureAssetPool(
-  FOREST_ROCK_ASSET_IDS.filter((id) =>
-    [
-      'kaykit.forest_rock_2_a',
-      'kaykit.forest_rock_2_f',
-      'kaykit.forest_rock_3_j',
-      'kaykit.forest_rock_3_k',
-      'kaykit.forest_rock_3_l',
-      'kaykit.forest_rock_3_r',
-    ].includes(id),
-  ),
-  ['kaykit.forest_rock_2_a'],
-)
-
-const MIXED_PRIMARY_ASSETS = ensureAssetPool(
-  [...FOREST_TREE_ASSET_IDS, ...FOREST_BUSH_ASSET_IDS, ...FOREST_GRASS_ASSET_IDS],
-  ['kaykit.forest_tree_1_a', 'kaykit.forest_tree_2_a', 'kaykit.forest_bush_1_a', 'kaykit.forest_grass_1_a'],
-)
-const MIXED_SECONDARY_ASSETS = ensureAssetPool(
-  [...FOREST_GRASS_ASSET_IDS, ...FOREST_BUSH_ASSET_IDS, ...FLAT_SMALL_ROCK_ASSET_IDS],
-  ['kaykit.forest_bush_2_a', 'kaykit.forest_rock_2_a'],
-)
-const ROCK_PRIMARY_ASSETS = ensureAssetPool(FOREST_ROCK_ASSET_IDS, [
-  'kaykit.forest_rock_1_a',
-  'kaykit.forest_rock_2_a',
-  'kaykit.forest_rock_3_a',
-])
-const ROCK_SECONDARY_ASSETS = ensureAssetPool(FOREST_ROCK_ASSET_IDS, [
-  'kaykit.forest_rock_1_a',
-  'kaykit.forest_rock_2_a',
-])
-const DEAD_FOREST_PRIMARY_ASSETS = ensureAssetPool(
-  [...FOREST_BARE_TREE_ASSET_IDS, ...FOREST_GRASS_ASSET_IDS],
-  ['kaykit.forest_tree_bare_1_a', 'kaykit.forest_grass_1_a'],
-)
-const DEAD_FOREST_SECONDARY_ASSETS = ensureAssetPool(
-  [...FOREST_BARE_TREE_ASSET_IDS, ...FOREST_GRASS_ASSET_IDS, ...FLAT_SMALL_ROCK_ASSET_IDS],
-  ['kaykit.forest_tree_bare_1_a', 'kaykit.forest_rock_2_a'],
-)
+const FOREST_TREE_ASSET_IDS_BY_STYLE = buildOutdoorTerrainStyleAssetPools(FOREST_TREE_ASSET_IDS)
+const FOREST_BARE_TREE_ASSET_IDS_BY_STYLE = buildOutdoorTerrainStyleAssetPools(FOREST_BARE_TREE_ASSET_IDS)
+const FOREST_BUSH_ASSET_IDS_BY_STYLE = buildOutdoorTerrainStyleAssetPools(FOREST_BUSH_ASSET_IDS)
+const FOREST_ROCK_ASSET_IDS_BY_STYLE = buildOutdoorTerrainStyleAssetPools(FOREST_ROCK_ASSET_IDS)
+const FOREST_GRASS_ASSET_IDS_BY_STYLE = buildOutdoorTerrainStyleAssetPools(FOREST_GRASS_ASSET_IDS)
 const DENSITY_SECONDARY_CHANCE: Record<OutdoorTerrainDensity, number> = {
   sparse: 15,
   medium: 35,
@@ -662,21 +629,103 @@ function getDeterministicRotation(cellKey: string, slot: number) {
   return bucket * (Math.PI / 2)
 }
 
-function getOutdoorPrimaryAssetId(cellKey: string, terrainType: OutdoorTerrainType) {
+function getOutdoorTerrainStyleAssetSuffix(terrainStyle: OutdoorTerrainStyle) {
+  return `_${terrainStyle.toLowerCase()}`
+}
+
+function buildOutdoorTerrainStyleAssetPools(assetIds: string[]) {
+  return Object.fromEntries(
+    OUTDOOR_TERRAIN_STYLES.map((terrainStyle) => [
+      terrainStyle,
+      assetIds.filter((id) => id.endsWith(getOutdoorTerrainStyleAssetSuffix(terrainStyle))),
+    ]),
+  ) as Record<OutdoorTerrainStyle, string[]>
+}
+
+function getOutdoorStyleAssetPool(
+  assetPools: Record<OutdoorTerrainStyle, string[]>,
+  terrainStyle: OutdoorTerrainStyle,
+  fallback: string[],
+) {
+  return ensureAssetPool(assetPools[terrainStyle] ?? [], fallback)
+}
+
+function getOutdoorTerrainAssetPools(terrainStyle: OutdoorTerrainStyle) {
+  const color1Trees = FOREST_TREE_ASSET_IDS_BY_STYLE[DEFAULT_OUTDOOR_TERRAIN_STYLE] ?? []
+  const color1BareTrees = FOREST_BARE_TREE_ASSET_IDS_BY_STYLE[DEFAULT_OUTDOOR_TERRAIN_STYLE] ?? []
+  const color1Bushes = FOREST_BUSH_ASSET_IDS_BY_STYLE[DEFAULT_OUTDOOR_TERRAIN_STYLE] ?? []
+  const color1Rocks = FOREST_ROCK_ASSET_IDS_BY_STYLE[DEFAULT_OUTDOOR_TERRAIN_STYLE] ?? []
+  const color1Grass = FOREST_GRASS_ASSET_IDS_BY_STYLE[DEFAULT_OUTDOOR_TERRAIN_STYLE] ?? []
+
+  const trees = getOutdoorStyleAssetPool(FOREST_TREE_ASSET_IDS_BY_STYLE, terrainStyle, color1Trees)
+  const bareTrees = getOutdoorStyleAssetPool(FOREST_BARE_TREE_ASSET_IDS_BY_STYLE, terrainStyle, color1BareTrees)
+  const bushes = getOutdoorStyleAssetPool(FOREST_BUSH_ASSET_IDS_BY_STYLE, terrainStyle, color1Bushes)
+  const rocks = getOutdoorStyleAssetPool(FOREST_ROCK_ASSET_IDS_BY_STYLE, terrainStyle, color1Rocks)
+  const grass = getOutdoorStyleAssetPool(FOREST_GRASS_ASSET_IDS_BY_STYLE, terrainStyle, color1Grass)
+  const flatSmallRocks = ensureAssetPool(
+    rocks.filter((id) => /(rock_2_[af]|rock_3_[jklr])_color[1-8]$/.test(id)),
+    color1Rocks.filter((id) => /(rock_2_[af]|rock_3_[jklr])_color1$/.test(id)),
+  )
+
+  return {
+    mixedPrimary: ensureAssetPool(
+      [...trees, ...bushes, ...grass],
+      [
+        'kaykit.forest_tree_1_a_color1',
+        'kaykit.forest_tree_2_a_color1',
+        'kaykit.forest_bush_1_a_color1',
+        'kaykit.forest_grass_1_a_color1',
+      ],
+    ),
+    mixedSecondary: ensureAssetPool(
+      [...grass, ...bushes, ...flatSmallRocks],
+      ['kaykit.forest_bush_2_a_color1', 'kaykit.forest_rock_2_a_color1'],
+    ),
+    rockPrimary: ensureAssetPool(rocks, [
+      'kaykit.forest_rock_1_a_color1',
+      'kaykit.forest_rock_2_a_color1',
+      'kaykit.forest_rock_3_a_color1',
+    ]),
+    rockSecondary: ensureAssetPool(rocks, [
+      'kaykit.forest_rock_1_a_color1',
+      'kaykit.forest_rock_2_a_color1',
+    ]),
+    deadForestPrimary: ensureAssetPool(
+      [...bareTrees, ...grass],
+      ['kaykit.forest_tree_bare_1_a_color1', 'kaykit.forest_grass_1_a_color1'],
+    ),
+    deadForestSecondary: ensureAssetPool(
+      [...bareTrees, ...grass, ...flatSmallRocks],
+      ['kaykit.forest_tree_bare_1_a_color1', 'kaykit.forest_rock_2_a_color1'],
+    ),
+  }
+}
+
+function getOutdoorPrimaryAssetId(
+  cellKey: string,
+  terrainType: OutdoorTerrainType,
+  terrainStyle: OutdoorTerrainStyle,
+) {
+  const assetPools = getOutdoorTerrainAssetPools(terrainStyle)
   const assets = terrainType === 'rocks'
-    ? ROCK_PRIMARY_ASSETS
+    ? assetPools.rockPrimary
     : terrainType === 'dead-forest'
-      ? DEAD_FOREST_PRIMARY_ASSETS
-      : MIXED_PRIMARY_ASSETS
+      ? assetPools.deadForestPrimary
+      : assetPools.mixedPrimary
   return assets[hashString(`${cellKey}:primary`) % assets.length]
 }
 
-function getOutdoorSecondaryAssetId(cellKey: string, terrainType: OutdoorTerrainType) {
+function getOutdoorSecondaryAssetId(
+  cellKey: string,
+  terrainType: OutdoorTerrainType,
+  terrainStyle: OutdoorTerrainStyle,
+) {
+  const assetPools = getOutdoorTerrainAssetPools(terrainStyle)
   const assets = terrainType === 'rocks'
-    ? ROCK_SECONDARY_ASSETS
+    ? assetPools.rockSecondary
     : terrainType === 'dead-forest'
-      ? DEAD_FOREST_SECONDARY_ASSETS
-      : MIXED_SECONDARY_ASSETS
+      ? assetPools.deadForestSecondary
+      : assetPools.mixedSecondary
   return assets[hashString(`${cellKey}:secondary`) % assets.length]
 }
 
@@ -725,19 +774,21 @@ function createForestPrimaryObject({
   cellKey,
   layerId,
   terrainType,
+  terrainStyle,
   outdoorTerrainHeights,
 }: {
   cell: GridCell
   cellKey: string
   layerId: string
   terrainType: OutdoorTerrainType
+  terrainStyle: OutdoorTerrainStyle
   outdoorTerrainHeights: OutdoorTerrainHeightfield
 }): DungeonObjectRecord {
   const worldPosition = getOutdoorTerrainWorldPosition(cell, outdoorTerrainHeights)
   return {
     id: `surrounding:${SURROUNDING_FOREST_TAG}:${cellKey}:primary`,
     type: 'prop',
-    assetId: getOutdoorPrimaryAssetId(cellKey, terrainType),
+    assetId: getOutdoorPrimaryAssetId(cellKey, terrainType, terrainStyle),
     position: [worldPosition[0], worldPosition[1], worldPosition[2]],
     rotation: [0, getDeterministicRotation(cellKey, 0), 0],
     cell: [...cell] as GridCell,
@@ -748,6 +799,7 @@ function createForestPrimaryObject({
       direction: null,
       generatedBy: SURROUNDING_FOREST_TAG,
       surroundingType: terrainType,
+      terrainStyle,
     },
     layerId,
   }
@@ -758,12 +810,14 @@ function createForestSecondaryObject({
   cellKey,
   layerId,
   terrainType,
+  terrainStyle,
   outdoorTerrainHeights,
 }: {
   cell: GridCell
   cellKey: string
   layerId: string
   terrainType: OutdoorTerrainType
+  terrainStyle: OutdoorTerrainStyle
   outdoorTerrainHeights: OutdoorTerrainHeightfield
 }): DungeonObjectRecord {
   const worldPosition = getOutdoorTerrainWorldPosition(cell, outdoorTerrainHeights)
@@ -772,7 +826,7 @@ function createForestSecondaryObject({
   return {
     id: `surrounding:${SURROUNDING_FOREST_TAG}:${cellKey}:secondary`,
     type: 'prop',
-    assetId: getOutdoorSecondaryAssetId(cellKey, terrainType),
+    assetId: getOutdoorSecondaryAssetId(cellKey, terrainType, terrainStyle),
     position: [worldPosition[0] + offsetX, worldPosition[1], worldPosition[2] + offsetZ],
     rotation: [0, getDeterministicRotation(cellKey, 1), 0],
     cell: [...cell] as GridCell,
@@ -783,6 +837,7 @@ function createForestSecondaryObject({
       direction: null,
       generatedBy: SURROUNDING_FOREST_TAG,
       surroundingType: terrainType,
+      terrainStyle,
     },
     layerId,
   }
@@ -862,6 +917,7 @@ function placeSurroundingForestForCell({
   cell,
   layerId,
   terrainType,
+  terrainStyle,
   density,
   regenerate,
   outdoorTerrainHeights,
@@ -870,6 +926,7 @@ function placeSurroundingForestForCell({
   cell: GridCell
   layerId: string
   terrainType: OutdoorTerrainType
+  terrainStyle: OutdoorTerrainStyle
   density: OutdoorTerrainDensity
   regenerate: boolean
   outdoorTerrainHeights: OutdoorTerrainHeightfield
@@ -889,14 +946,28 @@ function placeSurroundingForestForCell({
   }
 
   if (!current.occupancy[floorAnchorKey]) {
-    const primary = createForestPrimaryObject({ cell, cellKey, layerId, terrainType, outdoorTerrainHeights })
+    const primary = createForestPrimaryObject({
+      cell,
+      cellKey,
+      layerId,
+      terrainType,
+      terrainStyle,
+      outdoorTerrainHeights,
+    })
     current.placedObjects[primary.id] = primary
     current.occupancy[floorAnchorKey] = primary.id
   }
 
   const secondaryId = `surrounding:${SURROUNDING_FOREST_TAG}:${cellKey}:secondary`
   if (shouldPlaceOutdoorSecondary(cellKey, density)) {
-    const secondary = createForestSecondaryObject({ cell, cellKey, layerId, terrainType, outdoorTerrainHeights })
+    const secondary = createForestSecondaryObject({
+      cell,
+      cellKey,
+      layerId,
+      terrainType,
+      terrainStyle,
+      outdoorTerrainHeights,
+    })
     current.placedObjects[secondary.id] = secondary
   } else if (current.placedObjects[secondaryId]) {
     removeObjectHierarchy(current, secondaryId)
@@ -1435,6 +1506,7 @@ export const useDungeonStore = create<DungeonState>()(
           cell,
           layerId: current.activeLayerId,
           terrainType: current.outdoorTerrainType,
+          terrainStyle: current.outdoorTerrainStyleBrush,
           density: getOutdoorTerrainProfile(current.outdoorTerrainType, current.outdoorTerrainProfiles).density,
           regenerate: getOutdoorTerrainProfile(
             current.outdoorTerrainType,

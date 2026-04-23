@@ -1,3 +1,4 @@
+import { existsSync, readdirSync } from 'node:fs'
 import path from 'node:path'
 
 const kaykitForestSourceDir =
@@ -102,6 +103,46 @@ const kaykitTerrainAssetNames = kaykitTerrainStyles.flatMap((style) => (
   kaykitTerrainAssetBaseNames.map((name) => `${style}/${name}_${style}.gltf`)
 ))
 
+function listKaykitForestAssetNames(sourceDir) {
+  const absoluteSourceDir = path.resolve(sourceDir)
+  if (!existsSync(absoluteSourceDir)) {
+    return kaykitTerrainAssetNames
+  }
+
+  const assetNames = []
+  const pendingDirs = ['']
+  while (pendingDirs.length > 0) {
+    const relativeDir = pendingDirs.pop()
+    const absoluteDir = path.join(absoluteSourceDir, relativeDir)
+    for (const entry of readdirSync(absoluteDir, { withFileTypes: true })) {
+      if (entry.name.startsWith('.')) {
+        continue
+      }
+
+      const relativePath = path.join(relativeDir, entry.name)
+      if (entry.isDirectory()) {
+        pendingDirs.push(relativePath)
+        continue
+      }
+
+      if (!entry.name.endsWith('.gltf')) {
+        continue
+      }
+
+      const normalizedPath = relativePath.replace(/\\/g, '/')
+      if (!normalizedPath.startsWith('Color')) {
+        continue
+      }
+
+      assetNames.push(normalizedPath)
+    }
+  }
+
+  return assetNames.sort((left, right) => left.localeCompare(right))
+}
+
+const kaykitForestAssetNames = listKaykitForestAssetNames(kaykitForestSourceDir)
+
 const kaykitPreservedArtifacts = kaykitTerrainStyles.flatMap((style) => [
   `${style}/forest_grass_patch.png`,
   `${style}/forest_texture.png`,
@@ -146,7 +187,7 @@ export const modelPackConfigs = {
   kaykit: {
     sourceDir: kaykitForestSourceDir,
     targetDir: path.join('src', 'assets', 'models', 'forrest'),
-    include: kaykitTerrainAssetNames,
+    include: kaykitForestAssetNames,
     preserveArtifacts: kaykitPreservedArtifacts,
     derivedTextures: kaykitDerivedTextures,
     clean: true,

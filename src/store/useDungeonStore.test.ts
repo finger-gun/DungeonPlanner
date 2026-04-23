@@ -167,7 +167,7 @@ describe('useDungeonStore history', () => {
 
     expect(generated.length).toBeGreaterThan(0)
     generated.forEach((object) => {
-      expect(object.assetId).toMatch(/^kaykit\.forest_rock_/)
+      expect(object.assetId).toMatch(/^kaykit\.forest_rock_.*_color1$/)
     })
   })
 
@@ -184,7 +184,25 @@ describe('useDungeonStore history', () => {
 
     expect(generated.length).toBeGreaterThan(0)
     generated.forEach((object) => {
-      expect(object.assetId).toMatch(/^kaykit\.forest_(tree_bare_|rock_|grass_)/)
+      expect(object.assetId).toMatch(/^kaykit\.forest_(tree_bare_|rock_|grass_).+_color1$/)
+    })
+  })
+
+  it('uses the selected outdoor terrain style brush for surroundings color variants', () => {
+    useDungeonStore.getState().newDungeon('outdoor')
+    useDungeonStore.getState().setOutdoorTerrainStyleBrush('Color6')
+    useDungeonStore.getState().paintBlockedCells([[6, 6]])
+
+    const generated = Object.values(useDungeonStore.getState().placedObjects).filter(
+      (object) =>
+        object.supportCellKey === '6:6' &&
+        object.props.generatedBy === 'surrounding-forest',
+    )
+
+    expect(generated.length).toBeGreaterThan(0)
+    generated.forEach((object) => {
+      expect(object.assetId).toMatch(/_color6$/)
+      expect(object.props.terrainStyle).toBe('Color6')
     })
   })
 
@@ -240,7 +258,7 @@ describe('useDungeonStore history', () => {
 
     const manualId = useDungeonStore.getState().placeObject({
       type: 'prop',
-      assetId: 'kaykit.forest_tree_1_a',
+      assetId: 'kaykit.forest_tree_1_a_color1',
       position: [1, 0, 1],
       rotation: [0, 0, 0],
       props: { connector: 'FREE', direction: null },

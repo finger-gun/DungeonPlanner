@@ -220,6 +220,28 @@ export function RoomToolPanel() {
               ) : (
                 <>
                   <div>
+                    <p className="mb-1 uppercase tracking-[0.2em] text-stone-500">Color Variant</p>
+                    <div className="grid grid-cols-2 gap-2">
+                      {OUTDOOR_TERRAIN_STYLE_OPTIONS.map((terrainStyle) => {
+                        const active = outdoorTerrainStyleBrush === terrainStyle.id
+                        return (
+                          <button
+                            key={`surroundings-${terrainStyle.id}`}
+                            type="button"
+                            onClick={() => setOutdoorTerrainStyleBrush(terrainStyle.id)}
+                            className={`rounded-xl border px-2 py-1.5 transition ${
+                              active
+                                ? 'border-teal-300/35 bg-teal-400/10 text-teal-200'
+                                : 'border-stone-800 bg-stone-950/60 text-stone-400 hover:border-stone-700 hover:text-stone-200'
+                            }`}
+                          >
+                            {terrainStyle.label}
+                          </button>
+                        )
+                      })}
+                    </div>
+                  </div>
+                  <div>
                     <p className="mb-1 uppercase tracking-[0.2em] text-stone-500">Terrain Type</p>
                     <div className="grid grid-cols-1 gap-2">
                       {TERRAIN_TYPES.map((terrainType) => {
