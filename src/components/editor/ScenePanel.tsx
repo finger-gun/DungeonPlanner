@@ -171,7 +171,7 @@ function FloorNode({
   onActivate, onRename, onDelete,
   onSelectProp, onSelectOpening, onRenameRoom, onDeleteRoom,
 }: FloorNodeProps) {
-  const [expanded, setExpanded] = useState(true)
+  const [expanded, setExpanded] = useState(false)
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState(floor.name)
   const inputRef = useRef<HTMLInputElement>(null)
@@ -202,6 +202,7 @@ function FloorNode({
         <button
           type="button"
           onClick={() => setExpanded((v) => !v)}
+          aria-label={`Toggle ${floor.name}`}
           className="flex h-4 w-4 shrink-0 items-center justify-center text-stone-500"
         >
           <ChevronRight size={11} strokeWidth={2} className={`transition-transform ${expanded ? 'rotate-90' : ''}`} />
