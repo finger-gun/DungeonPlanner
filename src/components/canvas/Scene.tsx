@@ -47,6 +47,7 @@ const PLAYER_ANIMATION_MS = {
   pickup: 520,
   release: 520,
 } as const
+const DRAG_GROUND_PLANE = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0)
 
 const ALWAYS_VISIBLE: ReturnType<typeof usePlayVisibility> = {
   active: false,
@@ -361,7 +362,6 @@ function SceneOverviewContent() {
 function FloorContent({ startY = 0 }: { startY?: number }) {
   const placedObjects = useDungeonStore((state) => state.placedObjects)
   const paintedCells = useDungeonStore((state) => state.paintedCells)
-  const blockedCells = useDungeonStore((state) => state.blockedCells)
   const outdoorTerrainHeights = useDungeonStore((state) => state.outdoorTerrainHeights)
   const mapMode = useDungeonStore((state) => state.mapMode)
   const occupancy = useDungeonStore((state) => state.occupancy)
@@ -398,7 +398,8 @@ function FloorContent({ startY = 0 }: { startY?: number }) {
   const groupRef = useRef<THREE.Group>(null)
   const animYRef = useRef(startY)
   const dragStateRef = useRef<PlayDragState | null>(null)
-  const { camera, gl, invalidate, scene } = useThree()
+  const dragCleanupRef = useRef<(() => void) | null>(null)
+  const { camera, gl, invalidate, controls } = useThree()
   const [dragState, setDragState] = useState<PlayDragState | null>(null)
 
   useFrame((_, delta) => {
@@ -432,41 +433,110 @@ function FloorContent({ startY = 0 }: { startY?: number }) {
     return () => window.clearTimeout(timeoutId)
   }, [dragState?.animationState, dragState?.objectId, invalidate])
 
+  const clearDragListeners = useCallback(() => {
+    dragCleanupRef.current?.()
+    dragCleanupRef.current = null
+  }, [])
+
   const stopDrag = useCallback(() => {
+    clearDragListeners()
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const orbitControls = controls as any
+    if (orbitControls && 'enabled' in orbitControls) {
+      orbitControls.enabled = true
+    }
     setDragState(null)
     dragStateRef.current = null
     setObjectDragActive(false)
     invalidate()
-  }, [invalidate, setObjectDragActive])
+  }, [clearDragListeners, controls, invalidate, setObjectDragActive])
 
-  const getOutdoorTerrainDragPoint = useCallback((ray: THREE.Ray) => {
-    const raycaster = new THREE.Raycaster(ray.origin, ray.direction.clone().normalize())
-    const intersections = raycaster.intersectObjects(scene.children, true)
+  const getDragPointerPoint = useCallback((ray: THREE.Ray) => (
+    ray.intersectPlane(DRAG_GROUND_PLANE, new THREE.Vector3())
+  ), [])
 
-    for (const intersection of intersections) {
-      let current: THREE.Object3D | null = intersection.object
-      while (current) {
-        if (current.userData.outdoorTerrainSurface === true) {
-          return intersection.point.clone()
-        }
-        current = current.parent
-      }
+  const updateDragFromClientPosition = useCallback((clientX: number, clientY: number) => {
+    const rect = gl.domElement.getBoundingClientRect()
+    if (rect.width === 0 || rect.height === 0) {
+      return
     }
 
-    return null
-  }, [scene.children])
+    const raycaster = new THREE.Raycaster()
+    const ndc = new THREE.Vector2(
+      ((clientX - rect.left) / rect.width) * 2 - 1,
+      -((clientY - rect.top) / rect.height) * 2 + 1,
+    )
+    raycaster.setFromCamera(ndc, camera)
+    const nextPoint = getDragPointerPoint(raycaster.ray)
+    if (!nextPoint) {
+      return
+    }
+
+    const current = dragStateRef.current
+    if (!current) {
+      return
+    }
+
+    const nextDisplayX = nextPoint.x + current.grabOffset[0]
+    const nextDisplayZ = nextPoint.z + current.grabOffset[1]
+    const snapped = snapWorldPointToGrid({ x: nextDisplayX, y: nextPoint.y, z: nextDisplayZ })
+    const targetKey = getCellKey(snapped.cell)
+    const anchorKey = `${targetKey}:floor`
+    const occupantId = occupancy[anchorKey]
+    const occupant =
+      occupantId && mapMode === 'outdoor'
+        ? placedObjects[occupantId]
+        : null
+    const blockingOccupantId =
+      occupant && occupant.props.generatedBy === 'surrounding-forest'
+        ? undefined
+        : occupantId
+
+    setDragState((dragging) => dragging
+      ? updatePlayDragState(
+          dragging,
+          nextPoint,
+          mapMode === 'outdoor'
+            ? true
+            : Boolean(paintedCells[targetKey]),
+          blockingOccupantId,
+          mapMode === 'outdoor' ? outdoorTerrainHeights : undefined,
+        )
+      : dragging)
+    invalidate()
+  }, [camera, getDragPointerPoint, gl, invalidate, mapMode, occupancy, outdoorTerrainHeights, paintedCells, placedObjects])
+
+  const commitDrag = useCallback(() => {
+    const current = dragStateRef.current
+    if (current?.valid) {
+      moveObject(current.objectId, {
+        position: current.position,
+        cell: current.cell,
+        cellKey: `${getCellKey(current.cell)}:floor`,
+      })
+      setReleaseAnimationIds((existing) => ({ ...existing, [current.objectId]: true }))
+      window.setTimeout(() => {
+        setReleaseAnimationIds((existing) => {
+          if (!existing[current.objectId]) {
+            return existing
+          }
+
+          const next = { ...existing }
+          delete next[current.objectId]
+          return next
+        })
+        invalidate()
+      }, PLAYER_ANIMATION_MS.release)
+    }
+    stopDrag()
+  }, [invalidate, moveObject, stopDrag])
 
   const startDrag = useCallback((object: DungeonObjectRecord, event: ThreeEvent<PointerEvent>) => {
     if (tool !== 'play' || object.type !== 'player') {
       return
     }
 
-    const pointerPoint = mapMode === 'outdoor'
-      ? getOutdoorTerrainDragPoint(event.ray)
-      : event.ray.intersectPlane(
-          new THREE.Plane(new THREE.Vector3(0, 1, 0), 0),
-          new THREE.Vector3(),
-        )
+    const pointerPoint = getDragPointerPoint(event.ray)
     const nextState = createPlayDragState(
       object,
       pointerPoint,
@@ -477,122 +547,29 @@ function FloorContent({ startY = 0 }: { startY?: number }) {
     setDragState(nextState)
     dragStateRef.current = nextState
     setObjectDragActive(true)
-    invalidate()
-  }, [getOutdoorTerrainDragPoint, invalidate, mapMode, outdoorTerrainHeights, selectObject, setObjectDragActive, tool])
-
-  useEffect(() => {
-    if (!dragState) {
-      return
+    clearDragListeners()
+    const handlePointerMove = (pointerEvent: PointerEvent) => {
+      updateDragFromClientPosition(pointerEvent.clientX, pointerEvent.clientY)
     }
-
-    const raycaster = new THREE.Raycaster()
-    const ndc = new THREE.Vector2()
-    const point = new THREE.Vector3()
-
-    function updateDrag(clientX: number, clientY: number) {
-      const rect = gl.domElement.getBoundingClientRect()
-      if (rect.width === 0 || rect.height === 0) {
-        return
-      }
-
-      ndc.set(
-        ((clientX - rect.left) / rect.width) * 2 - 1,
-        -((clientY - rect.top) / rect.height) * 2 + 1,
-      )
-
-      raycaster.setFromCamera(ndc, camera)
-      const nextPoint = mapMode === 'outdoor'
-        ? getOutdoorTerrainDragPoint(raycaster.ray)
-        : raycaster.ray.intersectPlane(new THREE.Plane(new THREE.Vector3(0, 1, 0), 0), point)
-      if (!nextPoint) {
-        return
-      }
-
-      const current = dragStateRef.current
-      if (!current) {
-        return
-      }
-
-      const nextDisplayX = nextPoint.x + current.grabOffset[0]
-      const nextDisplayZ = nextPoint.z + current.grabOffset[1]
-      const snapped = snapWorldPointToGrid({ x: nextDisplayX, y: nextPoint.y, z: nextDisplayZ })
-      const targetKey = getCellKey(snapped.cell)
-      const anchorKey = `${targetKey}:floor`
-      const occupantId = occupancy[anchorKey]
-      const occupant =
-        occupantId && mapMode === 'outdoor'
-          ? placedObjects[occupantId]
-          : null
-      const blockingOccupantId =
-        occupant && occupant.props.generatedBy === 'surrounding-forest'
-          ? undefined
-          : occupantId
-
-      setDragState((current) => current
-        ? updatePlayDragState(
-            current,
-            nextPoint,
-            mapMode === 'outdoor'
-              ? true
-              : Boolean(paintedCells[targetKey]),
-            blockingOccupantId,
-            mapMode === 'outdoor' ? outdoorTerrainHeights : undefined,
-          )
-        : current)
-      invalidate()
+    const handlePointerUp = () => {
+      commitDrag()
     }
-
-    function handlePointerMove(event: PointerEvent) {
-      updateDrag(event.clientX, event.clientY)
-    }
-
-    function handlePointerUp() {
-      const current = dragStateRef.current
-      if (current?.valid) {
-        moveObject(current.objectId, {
-          position: current.position,
-          cell: current.cell,
-          cellKey: `${getCellKey(current.cell)}:floor`,
-        })
-        setReleaseAnimationIds((existing) => ({ ...existing, [current.objectId]: true }))
-        window.setTimeout(() => {
-          setReleaseAnimationIds((existing) => {
-            if (!existing[current.objectId]) {
-              return existing
-            }
-
-            const next = { ...existing }
-            delete next[current.objectId]
-            return next
-          })
-          invalidate()
-        }, PLAYER_ANIMATION_MS.release)
-      }
-      stopDrag()
-    }
-
     window.addEventListener('pointermove', handlePointerMove)
     window.addEventListener('pointerup', handlePointerUp, { once: true })
-
-    return () => {
+    window.addEventListener('pointercancel', handlePointerUp, { once: true })
+    dragCleanupRef.current = () => {
       window.removeEventListener('pointermove', handlePointerMove)
       window.removeEventListener('pointerup', handlePointerUp)
+      window.removeEventListener('pointercancel', handlePointerUp)
     }
-  }, [
-    blockedCells,
-    camera,
-    dragState,
-    getOutdoorTerrainDragPoint,
-    gl,
-    invalidate,
-    mapMode,
-    moveObject,
-    occupancy,
-    placedObjects,
-    outdoorTerrainHeights,
-    paintedCells,
-    stopDrag,
-  ])
+    // Disable orbit controls only after drag listeners are armed so quick taps cannot leave the scene locked.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const orbitControls = controls as any
+    if (orbitControls && 'enabled' in orbitControls) {
+      orbitControls.enabled = false
+    }
+    invalidate()
+  }, [clearDragListeners, commitDrag, controls, getDragPointerPoint, invalidate, outdoorTerrainHeights, selectObject, setObjectDragActive, tool, updateDragFromClientPosition])
 
   useEffect(() => {
     if (tool === 'play') {

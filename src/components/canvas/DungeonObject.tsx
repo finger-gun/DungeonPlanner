@@ -9,7 +9,10 @@ import { shouldAllowObjectContextDelete } from './openPassageInteraction'
 import type { PlayVisibility } from './playVisibility'
 import { ProjectedGroundDecal } from './ProjectedGroundDecal'
 import { DEFAULT_GENERATED_CHARACTER_SIZE } from '../../generated-characters/types'
-import { getGeneratedCharacterIndicatorSize } from '../../generated-characters/rendering'
+import {
+  getGeneratedCharacterIndicatorSize,
+  getGeneratedCharacterScale,
+} from '../../generated-characters/rendering'
 
 type DungeonObjectProps = {
   object: DungeonObjectRecord
@@ -33,6 +36,11 @@ export const DungeonObject = memo(function DungeonObject({
   const ppEnabled = useDungeonStore((state) => state.postProcessing.enabled)
   const tool = useDungeonStore((state) => state.tool)
   const assetBrowserCategory = useDungeonStore((state) => state.assetBrowser.category)
+  const characterSize = useDungeonStore(
+    (state) => object.assetId
+      ? (state.generatedCharacters[object.assetId]?.size ?? DEFAULT_GENERATED_CHARACTER_SIZE)
+      : DEFAULT_GENERATED_CHARACTER_SIZE,
+  )
   const selected = selection === object.id
   const visibilityState = visibility.getObjectVisibility(object)
   const useLineOfSightPostMask = visibility.active
@@ -71,6 +79,8 @@ export const DungeonObject = memo(function DungeonObject({
     }
 
     event.stopPropagation()
+    event.nativeEvent.preventDefault()
+    event.nativeEvent.stopImmediatePropagation()
     selectObject(object.id)
     onPlayDragStart?.(object, event)
   }
@@ -92,9 +102,22 @@ export const DungeonObject = memo(function DungeonObject({
   const childObjects = childrenByParent?.[object.id] ?? []
   const position = object.parentObjectId ? (object.localPosition ?? object.position) : object.position
   const rotation = object.parentObjectId ? (object.localRotation ?? object.rotation) : object.rotation
+  const showPlayDragHitArea = tool === 'play' && object.type === 'player'
+  const playerHitRadius = getGeneratedCharacterIndicatorSize(characterSize) * 0.42
+  const playerHitHeight = 2.4 * getGeneratedCharacterScale(characterSize)
 
   return (
     <group ref={groupRef} position={position} rotation={rotation}>
+      {showPlayDragHitArea && (
+        <mesh
+          position={[0, playerHitHeight * 0.5, 0]}
+          onPointerDown={handlePointerDown}
+          onClick={handleClick}
+        >
+          <cylinderGeometry args={[playerHitRadius, playerHitRadius, playerHitHeight, 24]} />
+          <meshBasicMaterial transparent opacity={0} depthWrite={false} />
+        </mesh>
+      )}
       <ContentPackInstance
         assetId={object.assetId}
         selected={showHullOutline}
