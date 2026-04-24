@@ -5,7 +5,7 @@ import {
   type EditorLaunchSession,
   type SavedDungeonRecord,
   type SavedDungeonSummary,
-} from '../../shared/editorAccess'
+} from '@dungeonplanner/shared/editorAccess'
 
 export type EditorDungeonHandoff = EditorLaunchSession
 export type ConsumedEditorDungeon = SavedDungeonRecord
@@ -53,7 +53,7 @@ export async function consumeEditorDungeonHandoff(
 
   return postEditorApi<ConsumedEditorDungeon>(
     handoff,
-    '/editor-dungeons/open',
+    '/api/editor/dungeons/open',
     { dungeonId: handoff.dungeonId },
     fetchImpl,
   )
@@ -63,7 +63,7 @@ export async function listEditorDungeons(
   access: EditorDungeonAccess,
   fetchImpl: typeof fetch = fetch,
 ) {
-  return postEditorApi<SavedDungeonSummary[]>(access, '/editor-dungeons/list', {}, fetchImpl)
+  return postEditorApi<SavedDungeonSummary[]>(access, '/api/editor/dungeons/list', {}, fetchImpl)
 }
 
 export async function openEditorDungeon(
@@ -73,7 +73,7 @@ export async function openEditorDungeon(
 ) {
   return postEditorApi<ConsumedEditorDungeon>(
     access,
-    '/editor-dungeons/open',
+    '/api/editor/dungeons/open',
     { dungeonId },
     fetchImpl,
   )
@@ -91,7 +91,7 @@ export async function saveEditorDungeon(
 ) {
   return postEditorApi<SavedDungeonSummary>(
     access,
-    '/editor-dungeons/save',
+    '/api/editor/dungeons/save',
     input,
     fetchImpl,
   )
@@ -104,7 +104,7 @@ export async function copyEditorDungeon(
 ) {
   return postEditorApi<SavedDungeonSummary>(
     access,
-    '/editor-dungeons/copy',
+    '/api/editor/dungeons/copy',
     { dungeonId },
     fetchImpl,
   )
@@ -117,7 +117,7 @@ export async function deleteEditorDungeon(
 ) {
   return postEditorApi<{ dungeonId: string }>(
     access,
-    '/editor-dungeons/delete',
+    '/api/editor/dungeons/delete',
     { dungeonId },
     fetchImpl,
   )

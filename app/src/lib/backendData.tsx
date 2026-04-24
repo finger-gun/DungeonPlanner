@@ -1,3 +1,4 @@
+/* eslint-disable react-refresh/only-export-components */
 import {
   createContext,
   useCallback,
@@ -9,6 +10,7 @@ import {
 } from 'react'
 import { getFunctionName, type FunctionReference, type FunctionReturnType } from 'convex/server'
 import { resolveBackendApiBaseUrl } from './backendAuthApi'
+import { useBackendAuthState } from './backendAuth'
 
 type BackendDataContextValue = {
   version: number
@@ -16,6 +18,39 @@ type BackendDataContextValue = {
 }
 
 type QueryArgs = Record<string, unknown> | 'skip'
+type BackendDataRoute = {
+  path: string
+  method: 'GET' | 'POST'
+}
+
+const QUERY_ROUTES: Record<string, BackendDataRoute> = {
+  'users:viewerContext': { path: '/api/app/viewer-context', method: 'GET' },
+  'roles:listActiveWorkspaceUsers': { path: '/api/app/workspace/users', method: 'GET' },
+  'dungeons:listViewerDungeons': { path: '/api/app/dungeons', method: 'GET' },
+  'sessions:listViewerSessions': { path: '/api/app/sessions', method: 'GET' },
+  'actors:listViewerActorPacks': { path: '/api/app/actor-packs', method: 'GET' },
+  'actors:listViewerActors': { path: '/api/app/actors', method: 'GET' },
+  'packs:listWorkspacePacks': { path: '/api/app/packs', method: 'GET' },
+  'packs:listSessionPacks': { path: '/api/app/session-packs', method: 'POST' },
+}
+
+const MUTATION_ROUTES: Record<string, BackendDataRoute> = {
+  'users:initializeViewer': { path: '/api/app/initialize-viewer', method: 'POST' },
+  'roles:grantRoleByEmail': { path: '/api/app/roles/grant', method: 'POST' },
+  'roles:revokeRoleByEmail': { path: '/api/app/roles/revoke', method: 'POST' },
+  'dungeons:issueEditorAccessToken': { path: '/api/app/editor-access-token', method: 'POST' },
+  'dungeons:copyViewerDungeon': { path: '/api/app/dungeons/copy', method: 'POST' },
+  'dungeons:deleteViewerDungeon': { path: '/api/app/dungeons/delete', method: 'POST' },
+  'sessions:createSession': { path: '/api/app/sessions/create', method: 'POST' },
+  'sessions:joinSessionByCode': { path: '/api/app/sessions/join', method: 'POST' },
+  'sessions:issueServerAccessTicket': { path: '/api/app/sessions/access-ticket', method: 'POST' },
+  'packs:savePackRecord': { path: '/api/app/packs/save', method: 'POST' },
+  'packs:setPackActive': { path: '/api/app/packs/set-active', method: 'POST' },
+  'actors:saveActorPack': { path: '/api/app/actor-packs/save', method: 'POST' },
+  'actors:setActorPackActive': { path: '/api/app/actor-packs/set-active', method: 'POST' },
+  'actors:saveActor': { path: '/api/app/actors/save', method: 'POST' },
+  'actors:deleteActor': { path: '/api/app/actors/delete', method: 'POST' },
+}
 
 const BackendDataContext = createContext<BackendDataContextValue | null>(null)
 
@@ -28,21 +63,23 @@ function getBackendBaseUrl() {
 }
 
 async function requestBackendValue<TResponse>(
-  path: string,
-  body: Record<string, unknown>,
-  init: RequestInit = {},
+  route: BackendDataRoute,
+  body: Record<string, unknown> = {},
   fetchImpl: typeof fetch = fetch,
 ) {
-  const response = await fetchImpl(new URL(path, `${getBackendBaseUrl()}/`).toString(), {
+  const init: RequestInit = {
     credentials: 'include',
-    ...init,
-    method: init.method ?? 'POST',
+    method: route.method,
     headers: {
       'Content-Type': 'application/json',
-      ...(init.headers ?? {}),
     },
-    body: JSON.stringify(body),
-  })
+  }
+
+  if (route.method !== 'GET') {
+    init.body = JSON.stringify(body)
+  }
+
+  const response = await fetchImpl(new URL(route.path, `${getBackendBaseUrl()}/`).toString(), init)
 
   if (!response.ok) {
     let message = 'Backend data request failed.'
@@ -61,6 +98,26 @@ async function requestBackendValue<TResponse>(
 
   const payload = (await response.json()) as { value: TResponse }
   return payload.value
+}
+
+function normalizeFunctionName(functionName: string) {
+  return functionName.replace(/\./g, ':')
+}
+
+function getBackendRoute(
+  kind: 'query' | 'mutation',
+  functionName: string,
+) {
+  const normalizedName = normalizeFunctionName(functionName)
+  const route = kind === 'query'
+    ? QUERY_ROUTES[normalizedName]
+    : MUTATION_ROUTES[normalizedName]
+
+  if (!route) {
+    throw new Error(`Unsupported backend ${kind}: ${functionName}. Add an explicit backend API route before using it.`)
+  }
+
+  return route
 }
 
 export async function uploadFileThroughBackend(
@@ -124,8 +181,12 @@ export function useQuery<Query extends FunctionReference<'query'>>(
   query: Query,
   args: QueryArgs = {},
 ): FunctionReturnType<Query> | undefined {
+  const { isAuthenticated, isLoading } = useBackendAuthState()
   const { version } = useBackendDataContext()
-  const [value, setValue] = useState<FunctionReturnType<Query> | undefined>(undefined)
+  const [result, setResult] = useState<{
+    requestKey: string
+    value: FunctionReturnType<Query>
+  } | null>(null)
   const queryName = getFunctionName(query)
   const serializedArgs = args === 'skip' ? 'skip' : JSON.stringify(args)
   const requestArgs = useMemo(
@@ -136,50 +197,52 @@ export function useQuery<Query extends FunctionReference<'query'>>(
     ),
     [serializedArgs],
   )
+  const shouldFetch = requestArgs !== null && !isLoading && isAuthenticated
+  const requestKey = `${queryName}:${serializedArgs}:${version}`
+  const queryRoute = getBackendRoute('query', queryName)
 
   useEffect(() => {
-    if (requestArgs === null) {
-      setValue(undefined)
+    if (!shouldFetch || requestArgs === null) {
       return
     }
 
     let cancelled = false
-    setValue(undefined)
 
-    void requestBackendValue<FunctionReturnType<Query>>('/api/app/query', {
-      name: queryName,
-      args: requestArgs,
-    }).then((result) => {
+    void requestBackendValue<FunctionReturnType<Query>>(queryRoute, requestArgs).then((result) => {
       if (!cancelled) {
-        setValue(result)
+        setResult({
+          requestKey,
+          value: result,
+        })
       }
     }).catch(() => {
       if (!cancelled) {
-        setValue(undefined)
+        setResult(null)
       }
     })
 
     return () => {
       cancelled = true
     }
-  }, [queryName, requestArgs, version])
+  }, [queryRoute, requestArgs, requestKey, shouldFetch])
 
-  return value
+  return shouldFetch && result?.requestKey === requestKey ? result.value : undefined
 }
 
 export function useMutation<Mutation extends FunctionReference<'mutation'>>(mutation: Mutation) {
   const { invalidate } = useBackendDataContext()
   const mutationName = getFunctionName(mutation)
+  const mutationRoute = getBackendRoute('mutation', mutationName)
 
   return useCallback(
     async (args?: Mutation['_args']) => {
-      const value = await requestBackendValue<FunctionReturnType<Mutation>>('/api/app/mutation', {
-        name: mutationName,
-        args: (args ?? {}) as Record<string, unknown>,
-      })
+      const value = await requestBackendValue<FunctionReturnType<Mutation>>(
+        mutationRoute,
+        (args ?? {}) as Record<string, unknown>,
+      )
       invalidate()
       return value
     },
-    [invalidate, mutationName],
+    [invalidate, mutationRoute],
   )
 }

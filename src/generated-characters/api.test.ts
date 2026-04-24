@@ -75,6 +75,30 @@ describe('requestGeneratedCharacterImage', () => {
     }))
   })
 
+  it('supports an explicit backend base URL for app usage', async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({
+        imageDataUrl: 'data:image/png;base64,abc',
+        model: 'x/z-image-turbo',
+      }), {
+        status: 200,
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      }),
+    )
+
+    await requestGeneratedCharacterImage('wizard', {
+      fetchImpl,
+      baseUrl: 'http://localhost:2567',
+    })
+
+    expect(fetchImpl).toHaveBeenCalledWith(
+      'http://localhost:2567/api/generated-characters/image',
+      expect.objectContaining({ method: 'POST' }),
+    )
+  })
+
   it('saves generated assets to disk through the backend', async () => {
     const fetchImpl = vi.fn().mockResolvedValue(
       new Response(JSON.stringify({
@@ -122,6 +146,45 @@ describe('requestGeneratedCharacterImage', () => {
     )
 
     await expect(deleteGeneratedCharacterAssets('storage-test', fetchImpl)).resolves.toBeUndefined()
+  })
+
+  it('supports explicit backend URLs for generated asset storage', async () => {
+    const fetchImpl = vi.fn()
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({
+          storageId: 'storage-test',
+          originalImageUrl: '/generated-character-assets/storage-test/original.png',
+          processedImageUrl: '/generated-character-assets/storage-test/processed.png',
+          alphaMaskUrl: '/generated-character-assets/storage-test/alpha-mask.png',
+          thumbnailUrl: '/generated-character-assets/storage-test/thumbnail.png',
+        }), {
+          status: 200,
+          headers: {
+            'Content-Type': 'application/json',
+          },
+        }),
+      )
+      .mockResolvedValueOnce(new Response(null, { status: 204 }))
+
+    await saveGeneratedCharacterAssets({
+      originalImageDataUrl: 'data:image/png;base64,abc',
+      processedImageDataUrl: 'data:image/png;base64,def',
+      alphaMaskDataUrl: 'data:image/png;base64,jkl',
+      thumbnailDataUrl: 'data:image/png;base64,ghi',
+    }, fetchImpl, 'http://localhost:2567')
+
+    await deleteGeneratedCharacterAssets('storage-test', fetchImpl, 'http://localhost:2567')
+
+    expect(fetchImpl).toHaveBeenNthCalledWith(
+      1,
+      'http://localhost:2567/api/generated-characters/assets',
+      expect.objectContaining({ method: 'POST' }),
+    )
+    expect(fetchImpl).toHaveBeenNthCalledWith(
+      2,
+      'http://localhost:2567/api/generated-characters/assets/storage-test',
+      expect.objectContaining({ method: 'DELETE' }),
+    )
   })
 })
 

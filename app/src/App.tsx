@@ -8,33 +8,8 @@ import { resolveBackendApiBaseUrl } from './lib/backendAuthApi'
 import { useViewerIdentity } from './lib/auth'
 import { type PlatformRole } from './lib/roles'
 import { buildEditorLaunchUrl, resolveEditorBaseUrl } from './lib/editorLaunch'
-
-const DEFAULT_PACK_ENTRIES_JSON = `[
-  {
-    "localId": "wall_window_open",
-    "name": "Window Opening",
-    "entryKind": "scene-asset",
-    "category": "opening",
-    "assetFileRef": "assets/models/dungeon/wall_window_open.glb",
-    "thumbnailFileRef": "assets/models/dungeon/wall_window_open.png",
-    "placement": {
-      "category": "opening",
-      "snapsTo": "GRID",
-      "connectors": [{ "point": [0, 0, 0], "type": "WALL" }],
-      "openingWidth": 1
-    },
-    "browser": {
-      "category": "openings",
-      "subcategory": "doors",
-      "tags": ["wall-mounted"]
-    }
-  }
-]`
-
-const DEFAULT_PACK_DEFAULT_REFS_JSON = `{
-  "floor": "dungeon:floor_flagstone",
-  "wall": "dungeon:wall_plain"
-}`
+import { useAuthenticatedAppState } from './store/useAppStore'
+import { ActorLibraryPanel } from './components/ActorLibraryPanel'
 
 type WorkspacePage = 'overview' | 'library' | 'dev' | 'sessions' | 'characters' | 'admin-users' | 'admin-packs'
 type DevWorkspacePage = 'sessions' | 'characters' | 'admin-users' | 'admin-packs'
@@ -299,16 +274,23 @@ function PasswordAuthCard() {
   )
 }
 
-function SignedInOverview({
-  currentPath,
-  identity,
-  isDevMenuVisible,
-}: {
-  currentPath: string
-  identity: ReturnType<typeof useViewerIdentity>
-  isDevMenuVisible: boolean
-}) {
+function SignedInOverview({ identity }: { identity: ReturnType<typeof useViewerIdentity> }) {
   const { signOut } = useAuthActions()
+  const {
+    shell,
+    roleManager,
+    dungeonLibrary,
+    sessionTools,
+    packTools,
+    setRoleManager,
+    setDungeonLibrary,
+    setSessionTools,
+    setPackTools,
+    startNewPackDraft,
+    hydratePackDraft,
+  } = useAuthenticatedAppState()
+  const currentPath = shell.currentPath
+  const isDevMenuVisible = shell.isDevMenuVisible
   const canAccessDungeonLibrary = identity.access.canManageDungeons
   const workspaceMembers = useQuery(
     api.roles.listActiveWorkspaceUsers,
@@ -320,7 +302,7 @@ function SignedInOverview({
   )
   const sessionRecords = useQuery(api.sessions.listViewerSessions, {})
   const characterRecords = useQuery(
-    api.characters.listViewerCharacters,
+    api.actors.listViewerActors,
     identity.access.canUseCharacterLibrary ? {} : 'skip',
   )
   const packRecords = useQuery(
@@ -335,69 +317,69 @@ function SignedInOverview({
   const createSession = useMutation(api.sessions.createSession)
   const joinSessionByCode = useMutation(api.sessions.joinSessionByCode)
   const issueServerAccessTicket = useMutation(api.sessions.issueServerAccessTicket)
-  const saveCharacter = useMutation(api.characters.saveCharacter)
-  const deleteCharacter = useMutation(api.characters.deleteCharacter)
-  const attachCharacterToSession = useMutation(api.sessions.attachCharacterToSession)
   const savePackRecord = useMutation(api.packs.savePackRecord)
   const setPackActive = useMutation(api.packs.setPackActive)
-
-  const [roleEmail, setRoleEmail] = useState('')
-  const [roleToManage, setRoleToManage] = useState<PlatformRole>('player')
-  const [roleScope, setRoleScope] = useState<'workspace' | 'global'>('workspace')
-  const [roleError, setRoleError] = useState<string | null>(null)
-  const [isManagingRoles, setIsManagingRoles] = useState(false)
-
-  const [dungeonNotice, setDungeonNotice] = useState<string | null>(null)
-  const [dungeonError, setDungeonError] = useState<string | null>(null)
-  const [activeDungeonAction, setActiveDungeonAction] = useState<string | null>(null)
-  const [sessionTitle, setSessionTitle] = useState('')
-  const [sessionJoinCode, setSessionJoinCode] = useState('')
-  const [sessionNotice, setSessionNotice] = useState<string | null>(null)
-  const [sessionError, setSessionError] = useState<string | null>(null)
-  const [isWorkingSession, setIsWorkingSession] = useState(false)
-  const [selectedSessionId, setSelectedSessionId] = useState<Id<'sessions'> | null>(null)
-  const [sessionAccessPayload, setSessionAccessPayload] = useState<{
-    roomName: string
-    sessionId: string
-    accessToken: string
-    role: string
-    expiresAt: number
-  } | null>(null)
   const sessionPackRecords = useQuery(
     api.packs.listSessionPacks,
-    selectedSessionId ? { sessionId: selectedSessionId } : 'skip',
+    sessionTools.selectedSessionId ? { sessionId: sessionTools.selectedSessionId } : 'skip',
   )
-  const [selectedCharacterId, setSelectedCharacterId] = useState<Id<'characters'> | null>(null)
-  const selectedCharacter = useQuery(
-    api.characters.getViewerCharacter,
-    selectedCharacterId ? { characterId: selectedCharacterId } : 'skip',
-  )
-  const [characterName, setCharacterName] = useState('')
-  const [characterContentRef, setCharacterContentRef] = useState('')
-  const [characterSheet, setCharacterSheet] = useState('{\n  "notes": ""\n}')
-  const [characterNotice, setCharacterNotice] = useState<string | null>(null)
-  const [characterError, setCharacterError] = useState<string | null>(null)
-  const [isWorkingCharacter, setIsWorkingCharacter] = useState(false)
-  const [selectedPackRecordId, setSelectedPackRecordId] = useState<Id<'packs'> | null>(null)
-  const [packIdDraft, setPackIdDraft] = useState('')
-  const [packNameDraft, setPackNameDraft] = useState('')
-  const [packKindDraft, setPackKindDraft] = useState<'asset' | 'rules'>('asset')
-  const [packVersionDraft, setPackVersionDraft] = useState('0.1.0')
-  const [packVisibilityDraft, setPackVisibilityDraft] = useState<'global' | 'public' | 'private'>('public')
-  const [packIsActiveDraft, setPackIsActiveDraft] = useState(true)
-  const [packDescriptionDraft, setPackDescriptionDraft] = useState('')
-  const [packEntriesJson, setPackEntriesJson] = useState(DEFAULT_PACK_ENTRIES_JSON)
-  const [packDefaultRefsJson, setPackDefaultRefsJson] = useState(DEFAULT_PACK_DEFAULT_REFS_JSON)
-  const [manifestFile, setManifestFile] = useState<File | null>(null)
-  const [thumbnailFile, setThumbnailFile] = useState<File | null>(null)
-  const [manifestStorageId, setManifestStorageId] = useState<Id<'_storage'> | null>(null)
-  const [thumbnailStorageId, setThumbnailStorageId] = useState<Id<'_storage'> | null>(null)
-  const [packNotice, setPackNotice] = useState<string | null>(null)
-  const [packError, setPackError] = useState<string | null>(null)
-  const [isWorkingPacks, setIsWorkingPacks] = useState(false)
-
-  const selectedSession = sessionRecords?.find((session) => session._id === selectedSessionId) ?? null
-  const selectedPackRecord = packRecords?.find((pack) => pack._id === selectedPackRecordId) ?? null
+  const selectedSession = sessionRecords?.find((session) => session._id === sessionTools.selectedSessionId) ?? null
+  const selectedPackRecord = packRecords?.find((pack) => pack._id === packTools.selectedPackRecordId) ?? null
+  const dungeonError = dungeonLibrary.error
+  const dungeonNotice = dungeonLibrary.notice
+  const roleEmail = roleManager.email
+  const roleToManage = roleManager.role
+  const roleScope = roleManager.scope
+  const roleError = roleManager.error
+  const isManagingRoles = roleManager.isWorking
+  const setRoleEmail = (email: string) => setRoleManager({ email })
+  const setRoleToManage = (role: PlatformRole) =>
+    setRoleManager({
+      role,
+      scope: role === 'admin' ? 'global' : roleManager.scope,
+    })
+  const setRoleScope = (scope: 'workspace' | 'global') => setRoleManager({ scope })
+  const sessionTitle = sessionTools.titleDraft
+  const sessionJoinCode = sessionTools.joinCodeDraft
+  const sessionError = sessionTools.error
+  const sessionNotice = sessionTools.notice
+  const isWorkingSession = sessionTools.isWorking
+  const selectedSessionId = sessionTools.selectedSessionId
+  const sessionAccessPayload = sessionTools.accessPayload
+  const setSessionTitle = (titleDraft: string) => setSessionTools({ titleDraft })
+  const setSessionJoinCode = (joinCodeDraft: string) => setSessionTools({ joinCodeDraft })
+  const setSelectedSessionId = (selectedSessionId: Id<'sessions'> | null) => setSessionTools({ selectedSessionId })
+  const setSessionAccessPayload = (accessPayload: typeof sessionTools.accessPayload) => setSessionTools({ accessPayload })
+  const setSessionNotice = (notice: string | null) => setSessionTools({ notice })
+  const setSessionError = (error: string | null) => setSessionTools({ error })
+  const selectedPackRecordId = packTools.selectedPackRecordId
+  const packIdDraft = packTools.packIdDraft
+  const packNameDraft = packTools.nameDraft
+  const packKindDraft = packTools.kindDraft
+  const packVersionDraft = packTools.versionDraft
+  const packVisibilityDraft = packTools.visibilityDraft
+  const packIsActiveDraft = packTools.isActiveDraft
+  const packDescriptionDraft = packTools.descriptionDraft
+  const packEntriesJson = packTools.entriesJsonDraft
+  const packDefaultRefsJson = packTools.defaultRefsJsonDraft
+  const manifestFile = packTools.manifestFile
+  const thumbnailFile = packTools.thumbnailFile
+  const manifestStorageId = packTools.manifestStorageId
+  const thumbnailStorageId = packTools.thumbnailStorageId
+  const packError = packTools.error
+  const packNotice = packTools.notice
+  const isWorkingPacks = packTools.isWorking
+  const setPackIdDraft = (nextPackIdDraft: string) => setPackTools({ packIdDraft: nextPackIdDraft })
+  const setPackNameDraft = (nameDraft: string) => setPackTools({ nameDraft })
+  const setPackKindDraft = (kindDraft: typeof packTools.kindDraft) => setPackTools({ kindDraft })
+  const setPackVersionDraft = (versionDraft: string) => setPackTools({ versionDraft })
+  const setPackVisibilityDraft = (visibilityDraft: typeof packTools.visibilityDraft) => setPackTools({ visibilityDraft })
+  const setPackIsActiveDraft = (isActiveDraft: boolean) => setPackTools({ isActiveDraft })
+  const setPackDescriptionDraft = (descriptionDraft: string) => setPackTools({ descriptionDraft })
+  const setManifestFile = (nextManifestFile: File | null) => setPackTools({ manifestFile: nextManifestFile })
+  const setThumbnailFile = (nextThumbnailFile: File | null) => setPackTools({ thumbnailFile: nextThumbnailFile })
+  const setPackDefaultRefsJson = (defaultRefsJsonDraft: string) => setPackTools({ defaultRefsJsonDraft })
+  const setPackEntriesJson = (entriesJsonDraft: string) => setPackTools({ entriesJsonDraft })
   const canAccessDevMenu = identity.access.isAdmin && isDevMenuVisible
   const editorBaseUrl = resolveEditorBaseUrl(window.location, import.meta.env.VITE_EDITOR_URL)
   const backendUrl = resolveBackendApiBaseUrl(window.location, import.meta.env.VITE_BACKEND_URL)
@@ -465,21 +447,20 @@ function SignedInOverview({
   } satisfies Record<WorkspacePage, { eyebrow: string; title: string; copy: string }>
 
   async function handleRoleMutation(mode: 'grant' | 'revoke') {
-    const normalizedEmail = roleEmail.trim().toLowerCase()
+    const normalizedEmail = roleManager.email.trim().toLowerCase()
 
     if (!normalizedEmail) {
-      setRoleError('Enter a user email before changing roles.')
+      setRoleManager({ error: 'Enter a user email before changing roles.' })
       return
     }
 
-    setRoleError(null)
-    setIsManagingRoles(true)
+    setRoleManager({ error: null, isWorking: true })
 
     try {
       const payload = {
         email: normalizedEmail,
-        role: roleToManage,
-        scope: roleScope,
+        role: roleManager.role,
+        scope: roleManager.scope,
       }
 
       if (mode === 'grant') {
@@ -489,26 +470,30 @@ function SignedInOverview({
       }
     } catch (mutationError) {
       console.error(mutationError)
-      setRoleError(
-        mode === 'grant'
+      setRoleManager({
+        error: mode === 'grant'
           ? 'Role update failed. The target user may not exist yet.'
           : 'Role removal failed. The last global admin cannot remove their own admin access.',
-      )
+      })
     }
 
-    setIsManagingRoles(false)
+    setRoleManager({ isWorking: false })
   }
 
   async function handleLaunchEditor(dungeonId?: Id<'dungeons'>) {
     if (dungeonId && !backendUrl) {
-      setDungeonError('Opening saved dungeons requires a backend connection.')
-      setDungeonNotice(null)
+      setDungeonLibrary({
+        error: 'Opening saved dungeons requires a backend connection.',
+        notice: null,
+      })
       return
     }
 
-    setDungeonError(null)
-    setDungeonNotice(null)
-    setActiveDungeonAction(dungeonId ? `open:${dungeonId}` : 'new')
+    setDungeonLibrary({
+      error: null,
+      notice: null,
+      activeAction: dungeonId ? `open:${dungeonId}` : 'new',
+    })
 
     try {
       if (backendUrl) {
@@ -528,33 +513,37 @@ function SignedInOverview({
         window.open(buildEditorLaunchUrl({ editorBaseUrl }), '_blank', 'noopener,noreferrer')
       }
 
-      setDungeonNotice(dungeonId ? 'Opened the saved dungeon in the editor.' : 'Opened a fresh editor session.')
+      setDungeonLibrary({
+        notice: dungeonId ? 'Opened the saved dungeon in the editor.' : 'Opened a fresh editor session.',
+      })
     } catch (mutationError) {
       console.error(mutationError)
-      setDungeonError(
-        dungeonId
+      setDungeonLibrary({
+        error: dungeonId
           ? 'Opening the dungeon in the editor failed.'
           : 'Opening a fresh editor session failed.',
-      )
+      })
     }
 
-    setActiveDungeonAction(null)
+    setDungeonLibrary({ activeAction: null })
   }
 
   async function handleCopyDungeon(dungeonId: Id<'dungeons'>) {
-    setDungeonError(null)
-    setDungeonNotice(null)
-    setActiveDungeonAction(`copy:${dungeonId}`)
+    setDungeonLibrary({
+      error: null,
+      notice: null,
+      activeAction: `copy:${dungeonId}`,
+    })
 
     try {
       const copiedDungeon = await copyViewerDungeon({ dungeonId })
-      setDungeonNotice(`Created "${copiedDungeon.title}" in your library.`)
+      setDungeonLibrary({ notice: `Created "${copiedDungeon.title}" in your library.` })
     } catch (mutationError) {
       console.error(mutationError)
-      setDungeonError('Copying the dungeon failed.')
+      setDungeonLibrary({ error: 'Copying the dungeon failed.' })
     }
 
-    setActiveDungeonAction(null)
+    setDungeonLibrary({ activeAction: null })
   }
 
   async function handleDeleteDungeon(dungeonId: Id<'dungeons'>, title: string) {
@@ -562,251 +551,124 @@ function SignedInOverview({
       return
     }
 
-    setDungeonError(null)
-    setDungeonNotice(null)
-    setActiveDungeonAction(`delete:${dungeonId}`)
+    setDungeonLibrary({
+      error: null,
+      notice: null,
+      activeAction: `delete:${dungeonId}`,
+    })
 
     try {
       await deleteViewerDungeon({ dungeonId })
-      setDungeonNotice(`Deleted "${title}" from your library.`)
+      setDungeonLibrary({ notice: `Deleted "${title}" from your library.` })
     } catch (mutationError) {
       console.error(mutationError)
-      setDungeonError('Deleting the dungeon failed.')
+      setDungeonLibrary({ error: 'Deleting the dungeon failed.' })
     }
 
-    setActiveDungeonAction(null)
-  }
-
-  function handleNewCharacterDraft() {
-    setSelectedCharacterId(null)
-    setCharacterName('')
-    setCharacterContentRef('')
-    setCharacterSheet('{\n  "notes": ""\n}')
-    setCharacterError(null)
-    setCharacterNotice('Started a fresh character draft.')
+    setDungeonLibrary({ activeAction: null })
   }
 
   async function handleCreateSession() {
-    const normalizedTitle = sessionTitle.trim()
+    const normalizedTitle = sessionTools.titleDraft.trim()
 
     if (!normalizedTitle) {
-      setSessionError('Give the session a title before creating it.')
-      setSessionNotice(null)
+      setSessionTools({
+        error: 'Give the session a title before creating it.',
+        notice: null,
+      })
       return
     }
 
-    setIsWorkingSession(true)
-    setSessionError(null)
-    setSessionNotice(null)
+    setSessionTools({
+      isWorking: true,
+      error: null,
+      notice: null,
+    })
 
     try {
       const createdSession = await createSession({
         title: normalizedTitle,
       })
 
-      setSelectedSessionId(createdSession.sessionId)
-      setSessionTitle('')
-      setSessionJoinCode(createdSession.joinCode)
-      setSessionNotice(`Created "${normalizedTitle}" with join code ${createdSession.joinCode}.`)
+      setSessionTools({
+        selectedSessionId: createdSession.sessionId,
+        titleDraft: '',
+        joinCodeDraft: createdSession.joinCode,
+        notice: `Created "${normalizedTitle}" with join code ${createdSession.joinCode}.`,
+      })
     } catch (mutationError) {
       console.error(mutationError)
-      setSessionError('Session creation failed. Only DMs can create sessions.')
+      setSessionTools({ error: 'Session creation failed. Only DMs can create sessions.' })
     }
 
-    setIsWorkingSession(false)
+    setSessionTools({ isWorking: false })
   }
 
   async function handleJoinSession() {
-    const normalizedJoinCode = sessionJoinCode.trim().toUpperCase()
+    const normalizedJoinCode = sessionTools.joinCodeDraft.trim().toUpperCase()
 
     if (!normalizedJoinCode) {
-      setSessionError('Enter a join code first.')
-      setSessionNotice(null)
+      setSessionTools({
+        error: 'Enter a join code first.',
+        notice: null,
+      })
       return
     }
 
-    setIsWorkingSession(true)
-    setSessionError(null)
-    setSessionNotice(null)
+    setSessionTools({
+      isWorking: true,
+      error: null,
+      notice: null,
+    })
 
     try {
       const joinedSession = await joinSessionByCode({
         joinCode: normalizedJoinCode,
       })
 
-      setSelectedSessionId(joinedSession.sessionId)
-      setSessionJoinCode(joinedSession.joinCode)
-      setSessionNotice(`Joined "${joinedSession.title}".`)
+      setSessionTools({
+        selectedSessionId: joinedSession.sessionId,
+        joinCodeDraft: joinedSession.joinCode,
+        notice: `Joined "${joinedSession.title}".`,
+      })
     } catch (mutationError) {
       console.error(mutationError)
-      setSessionError('That join code is invalid or no longer active.')
+      setSessionTools({ error: 'That join code is invalid or no longer active.' })
     }
 
-    setIsWorkingSession(false)
+    setSessionTools({ isWorking: false })
   }
 
   async function handleIssueSessionAccessTicket() {
-    if (!selectedSessionId) {
+    if (!sessionTools.selectedSessionId) {
       return
     }
 
-    setIsWorkingSession(true)
-    setSessionError(null)
-    setSessionNotice(null)
+    setSessionTools({
+      isWorking: true,
+      error: null,
+      notice: null,
+    })
 
     try {
       const payload = await issueServerAccessTicket({
-        sessionId: selectedSessionId,
+        sessionId: sessionTools.selectedSessionId,
       })
 
-      setSessionAccessPayload(payload)
-      setSessionNotice('Created a short-lived session access token.')
-    } catch (mutationError) {
-      console.error(mutationError)
-      setSessionError('Could not create an access token for this session.')
-    }
-
-    setIsWorkingSession(false)
-  }
-
-  function handleLoadCharacter() {
-    if (!selectedCharacter) {
-      return
-    }
-
-    setCharacterName(selectedCharacter.name)
-    setCharacterContentRef(selectedCharacter.contentRef ?? '')
-    setCharacterSheet(JSON.stringify(selectedCharacter.sheet, null, 2))
-    setCharacterError(null)
-    setCharacterNotice(`Loaded "${selectedCharacter.name}" into the local character draft.`)
-  }
-
-  async function handleSaveCharacter() {
-    const normalizedName = characterName.trim()
-
-    if (!normalizedName) {
-      setCharacterError('Give the character a name before saving.')
-      setCharacterNotice(null)
-      return
-    }
-
-    let parsedSheet: unknown
-
-    try {
-      parsedSheet = JSON.parse(characterSheet)
-    } catch {
-      setCharacterError('Character sheet JSON must be valid before saving.')
-      setCharacterNotice(null)
-      return
-    }
-
-    setIsWorkingCharacter(true)
-    setCharacterError(null)
-    setCharacterNotice(null)
-
-    try {
-      const savedCharacterId = await saveCharacter({
-        characterId: selectedCharacterId ?? undefined,
-        name: normalizedName,
-        contentRef: characterContentRef.trim() || undefined,
-        sheet: parsedSheet,
+      setSessionTools({
+        accessPayload: payload,
+        notice: 'Created a short-lived session access token.',
       })
-
-      setSelectedCharacterId(savedCharacterId)
-      setCharacterName(normalizedName)
-      setCharacterNotice(selectedCharacterId ? 'Updated the character record.' : 'Saved a new character record.')
     } catch (mutationError) {
       console.error(mutationError)
-      setCharacterError('Saving the character failed.')
+      setSessionTools({ error: 'Could not create an access token for this session.' })
     }
 
-    setIsWorkingCharacter(false)
-  }
-
-  async function handleDeleteCharacter() {
-    if (!selectedCharacterId) {
-      return
-    }
-
-    setIsWorkingCharacter(true)
-    setCharacterError(null)
-    setCharacterNotice(null)
-
-    try {
-      await deleteCharacter({
-        characterId: selectedCharacterId,
-      })
-
-      handleNewCharacterDraft()
-      setCharacterNotice('Deleted the selected character record.')
-    } catch (mutationError) {
-      console.error(mutationError)
-      setCharacterError('Deleting the character failed.')
-    }
-
-    setIsWorkingCharacter(false)
-  }
-
-  async function handleAttachCharacterToSession() {
-    if (!selectedCharacterId || !selectedSessionId) {
-      return
-    }
-
-    setIsWorkingCharacter(true)
-    setCharacterError(null)
-    setCharacterNotice(null)
-
-    try {
-      await attachCharacterToSession({
-        sessionId: selectedSessionId,
-        characterId: selectedCharacterId,
-      })
-
-      setCharacterNotice('Attached the selected character to the selected session record.')
-    } catch (mutationError) {
-      console.error(mutationError)
-      setCharacterError('Attaching the character to the selected session failed.')
-    }
-
-    setIsWorkingCharacter(false)
+    setSessionTools({ isWorking: false })
   }
 
   function handleNewPackDraft() {
-    setSelectedPackRecordId(null)
-    setPackIdDraft('')
-    setPackNameDraft('')
-    setPackKindDraft('asset')
-    setPackVersionDraft('0.1.0')
-    setPackVisibilityDraft('public')
-    setPackIsActiveDraft(true)
-    setPackDescriptionDraft('')
-    setPackEntriesJson(DEFAULT_PACK_ENTRIES_JSON)
-    setPackDefaultRefsJson(DEFAULT_PACK_DEFAULT_REFS_JSON)
-    setManifestFile(null)
-    setThumbnailFile(null)
-    setManifestStorageId(null)
-    setThumbnailStorageId(null)
-    setPackError(null)
-    setPackNotice('Started a fresh pack draft.')
-  }
-
-  function hydratePackDraft(record: NonNullable<typeof packRecords>[number]) {
-    setSelectedPackRecordId(record._id)
-    setPackIdDraft(record.packId)
-    setPackNameDraft(record.name)
-    setPackKindDraft(record.kind)
-    setPackVersionDraft(record.version)
-    setPackVisibilityDraft(record.visibility)
-    setPackIsActiveDraft(record.isActive)
-    setPackDescriptionDraft(record.description ?? '')
-    setPackEntriesJson(JSON.stringify(record.entries, null, 2))
-    setPackDefaultRefsJson(JSON.stringify(record.defaultAssetRefs ?? {}, null, 2))
-    setManifestFile(null)
-    setThumbnailFile(null)
-    setManifestStorageId(record.manifestStorageId)
-    setThumbnailStorageId(record.thumbnailStorageId)
-    setPackError(null)
-    setPackNotice(`Loaded "${record.name}" into the pack draft.`)
+    startNewPackDraft()
   }
 
   async function uploadPackFile(file: File) {
@@ -815,13 +677,15 @@ function SignedInOverview({
   }
 
   async function handleSavePack() {
-    const normalizedPackId = packIdDraft.trim()
-    const normalizedName = packNameDraft.trim()
-    const normalizedVersion = packVersionDraft.trim()
+    const normalizedPackId = packTools.packIdDraft.trim()
+    const normalizedName = packTools.nameDraft.trim()
+    const normalizedVersion = packTools.versionDraft.trim()
 
     if (!normalizedPackId || !normalizedName || !normalizedVersion) {
-      setPackError('Pack ID, name, and version are required before saving.')
-      setPackNotice(null)
+      setPackTools({
+        error: 'Pack ID, name, and version are required before saving.',
+        notice: null,
+      })
       return
     }
 
@@ -829,17 +693,21 @@ function SignedInOverview({
     let parsedDefaultRefs: unknown
 
     try {
-      parsedEntries = JSON.parse(packEntriesJson)
-      parsedDefaultRefs = JSON.parse(packDefaultRefsJson)
+      parsedEntries = JSON.parse(packTools.entriesJsonDraft)
+      parsedDefaultRefs = JSON.parse(packTools.defaultRefsJsonDraft)
     } catch {
-      setPackError('Pack entries JSON and default refs JSON must both be valid JSON.')
-      setPackNotice(null)
+      setPackTools({
+        error: 'Pack entries JSON and default refs JSON must both be valid JSON.',
+        notice: null,
+      })
       return
     }
 
-    setIsWorkingPacks(true)
-    setPackError(null)
-    setPackNotice(null)
+    setPackTools({
+      isWorking: true,
+      error: null,
+      notice: null,
+    })
 
     try {
       const entriesForMutation = Array.isArray(parsedEntries)
@@ -852,23 +720,23 @@ function SignedInOverview({
             assetFileRef: typeof entry?.assetFileRef === 'string' ? entry.assetFileRef : undefined,
             thumbnailFileRef: typeof entry?.thumbnailFileRef === 'string' ? entry.thumbnailFileRef : undefined,
             placement: typeof entry?.placement === 'object' && entry.placement !== null ? entry.placement : undefined,
-            browser: typeof entry?.browser === 'object' && entry.browser !== null ? entry.browser : undefined,
-            light: typeof entry?.light === 'object' && entry.light !== null ? entry.light : undefined,
-            effects: Array.isArray(entry?.effects) ? entry.effects : undefined,
-          }))
+             browser: typeof entry?.browser === 'object' && entry.browser !== null ? entry.browser : undefined,
+             light: typeof entry?.light === 'object' && entry.light !== null ? entry.light : undefined,
+             effects: Array.isArray(entry?.effects) ? entry.effects : undefined,
+           }))
         : []
-      const nextManifestStorageId = manifestFile ? await uploadPackFile(manifestFile) : manifestStorageId ?? undefined
-      const nextThumbnailStorageId = thumbnailFile ? await uploadPackFile(thumbnailFile) : thumbnailStorageId ?? undefined
+      const nextManifestStorageId = packTools.manifestFile ? await uploadPackFile(packTools.manifestFile) : packTools.manifestStorageId ?? undefined
+      const nextThumbnailStorageId = packTools.thumbnailFile ? await uploadPackFile(packTools.thumbnailFile) : packTools.thumbnailStorageId ?? undefined
 
       const savedPackRecordId = await savePackRecord({
-        packRecordId: selectedPackRecordId ?? undefined,
+        packRecordId: packTools.selectedPackRecordId ?? undefined,
         packId: normalizedPackId,
         name: normalizedName,
-        kind: packKindDraft,
+        kind: packTools.kindDraft,
         version: normalizedVersion,
-        visibility: packVisibilityDraft,
-        description: packDescriptionDraft.trim() || undefined,
-        isActive: packVisibilityDraft === 'global' ? true : packIsActiveDraft,
+        visibility: packTools.visibilityDraft,
+        description: packTools.descriptionDraft.trim() || undefined,
+        isActive: packTools.visibilityDraft === 'global' ? true : packTools.isActiveDraft,
         manifestStorageId: nextManifestStorageId,
         thumbnailStorageId: nextThumbnailStorageId,
         defaultAssetRefs: parsedDefaultRefs as {
@@ -881,43 +749,51 @@ function SignedInOverview({
         entries: entriesForMutation,
       })
 
-      setSelectedPackRecordId(savedPackRecordId)
-      setManifestStorageId(nextManifestStorageId ?? null)
-      setThumbnailStorageId(nextThumbnailStorageId ?? null)
-      setManifestFile(null)
-      setThumbnailFile(null)
-      setPackNotice(selectedPackRecordId ? 'Updated the pack registry record.' : 'Saved a new pack registry record.')
+      setPackTools({
+        selectedPackRecordId: savedPackRecordId,
+        manifestStorageId: nextManifestStorageId ?? null,
+        thumbnailStorageId: nextThumbnailStorageId ?? null,
+        manifestFile: null,
+        thumbnailFile: null,
+        notice: packTools.selectedPackRecordId ? 'Updated the pack registry record.' : 'Saved a new pack registry record.',
+      })
     } catch (mutationError) {
       console.error(mutationError)
-      setPackError('Saving the pack failed. Check the canonical metadata JSON and admin permissions.')
+      setPackTools({
+        error: 'Saving the pack failed. Check the canonical metadata JSON and admin permissions.',
+      })
     }
 
-    setIsWorkingPacks(false)
+    setPackTools({ isWorking: false })
   }
 
   async function handleTogglePackActive() {
-    if (!selectedPackRecordId || !selectedPackRecord) {
+    if (!packTools.selectedPackRecordId || !selectedPackRecord) {
       return
     }
 
-    setIsWorkingPacks(true)
-    setPackError(null)
-    setPackNotice(null)
+    setPackTools({
+      isWorking: true,
+      error: null,
+      notice: null,
+    })
 
     try {
       await setPackActive({
-        packRecordId: selectedPackRecordId,
+        packRecordId: packTools.selectedPackRecordId,
         isActive: !selectedPackRecord.isActive,
       })
 
-      setPackIsActiveDraft(!selectedPackRecord.isActive)
-      setPackNotice(`${selectedPackRecord.isActive ? 'Deactivated' : 'Activated'} "${selectedPackRecord.name}".`)
+      setPackTools({
+        isActiveDraft: !selectedPackRecord.isActive,
+        notice: `${selectedPackRecord.isActive ? 'Deactivated' : 'Activated'} "${selectedPackRecord.name}".`,
+      })
     } catch (mutationError) {
       console.error(mutationError)
-      setPackError('Updating the pack activation state failed.')
+      setPackTools({ error: 'Updating the pack activation state failed.' })
     }
 
-    setIsWorkingPacks(false)
+    setPackTools({ isWorking: false })
   }
 
   return (
@@ -1095,11 +971,11 @@ function SignedInOverview({
                   </div>
                   <button
                     className="hero-panel__button hero-panel__button--secondary"
-                    disabled={activeDungeonAction === 'new'}
+                    disabled={dungeonLibrary.activeAction === 'new'}
                     onClick={() => void handleLaunchEditor()}
                     type="button"
                   >
-                    {activeDungeonAction === 'new' ? 'Opening...' : 'New in editor'}
+                    {dungeonLibrary.activeAction === 'new' ? 'Opening...' : 'New in editor'}
                   </button>
                 </div>
 
@@ -1115,27 +991,27 @@ function SignedInOverview({
                         <div className="library-record__actions">
                           <button
                             className="hero-panel__button hero-panel__button--secondary"
-                            disabled={!backendUrl || activeDungeonAction === `open:${record._id}`}
+                            disabled={!backendUrl || dungeonLibrary.activeAction === `open:${record._id}`}
                             onClick={() => void handleLaunchEditor(record._id)}
                             type="button"
                           >
-                            {activeDungeonAction === `open:${record._id}` ? 'Opening...' : 'Open'}
+                            {dungeonLibrary.activeAction === `open:${record._id}` ? 'Opening...' : 'Open'}
                           </button>
                           <button
                             className="hero-panel__button hero-panel__button--secondary"
-                            disabled={activeDungeonAction === `copy:${record._id}`}
+                            disabled={dungeonLibrary.activeAction === `copy:${record._id}`}
                             onClick={() => void handleCopyDungeon(record._id)}
                             type="button"
                           >
-                            {activeDungeonAction === `copy:${record._id}` ? 'Copying...' : 'Copy'}
+                            {dungeonLibrary.activeAction === `copy:${record._id}` ? 'Copying...' : 'Copy'}
                           </button>
                           <button
                             className="hero-panel__button hero-panel__button--secondary library-record__button--danger"
-                            disabled={activeDungeonAction === `delete:${record._id}`}
+                            disabled={dungeonLibrary.activeAction === `delete:${record._id}`}
                             onClick={() => void handleDeleteDungeon(record._id, record.title)}
                             type="button"
                           >
-                            {activeDungeonAction === `delete:${record._id}` ? 'Deleting...' : 'Delete'}
+                            {dungeonLibrary.activeAction === `delete:${record._id}` ? 'Deleting...' : 'Delete'}
                           </button>
                         </div>
                       </article>
@@ -1303,135 +1179,7 @@ function SignedInOverview({
         ) : null}
 
         {activePage === 'characters' && identity.access.canUseCharacterLibrary ? (
-          <article className="panel panel--characters">
-            <p className="panel__eyebrow">Characters</p>
-            <h2 className="panel__title">Character library</h2>
-            <p className="panel__copy">
-              Keep reusable character sheets ready for every session and connect them when it is time to play.
-            </p>
-
-            <div className="library-grid">
-              <section className="library-card">
-                <div className="library-card__header">
-                  <div>
-                    <p className="status-card__label">Owned characters</p>
-                    <h3 className="library-card__title">Library records</h3>
-                  </div>
-                  <button className="hero-panel__button hero-panel__button--secondary" onClick={handleNewCharacterDraft} type="button">
-                    New character
-                  </button>
-                </div>
-
-                {characterRecords && characterRecords.length > 0 ? (
-                  <div className="library-records">
-                    {characterRecords.map((character) => (
-                      <button
-                        className={`library-record ${selectedCharacterId === character._id ? 'library-record--selected' : ''}`}
-                        key={character._id}
-                        onClick={() => {
-                          setSelectedCharacterId(character._id)
-                          setCharacterNotice(`Selected "${character.name}".`)
-                          setCharacterError(null)
-                        }}
-                        type="button"
-                      >
-                        <div>
-                          <p className="library-record__title">{character.name}</p>
-                          <p className="panel__copy">{character.contentRef ?? 'No content reference yet.'}</p>
-                        </div>
-                        <p className="library-record__meta">Updated {new Date(character.updatedAt).toLocaleString()}</p>
-                      </button>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="panel__copy">No character records have been saved for this user yet.</p>
-                )}
-
-                <div className="library-card__actions">
-                  <button
-                    className="hero-panel__button hero-panel__button--secondary"
-                    disabled={!selectedCharacter}
-                    onClick={handleLoadCharacter}
-                    type="button"
-                  >
-                    Load selected into draft
-                  </button>
-                </div>
-              </section>
-
-              <section className="library-card">
-                <div className="library-card__header">
-                  <div>
-                    <p className="status-card__label">Local draft</p>
-                    <h3 className="library-card__title">Character editor</h3>
-                  </div>
-                </div>
-
-                <label className="auth-card__field">
-                  <span>Name</span>
-                  <input
-                    onChange={(event) => setCharacterName(event.target.value)}
-                    placeholder="Lysander"
-                    type="text"
-                    value={characterName}
-                  />
-                </label>
-
-                <label className="auth-card__field">
-                  <span>Content reference</span>
-                  <input
-                    onChange={(event) => setCharacterContentRef(event.target.value)}
-                    placeholder="dragonbane-core:hero"
-                    type="text"
-                    value={characterContentRef}
-                  />
-                </label>
-
-                <label className="auth-card__field">
-                  <span>Character sheet JSON</span>
-                  <textarea
-                    className="library-editor"
-                    onChange={(event) => setCharacterSheet(event.target.value)}
-                    rows={12}
-                    value={characterSheet}
-                  />
-                </label>
-
-                {characterError ? <p className="auth-card__error">{characterError}</p> : null}
-                {characterNotice ? <p className="library-notice">{characterNotice}</p> : null}
-
-                <div className="library-card__actions">
-                  <button
-                    className="hero-panel__button hero-panel__button--primary"
-                    disabled={isWorkingCharacter}
-                    onClick={() => void handleSaveCharacter()}
-                    type="button"
-                  >
-                    {selectedCharacterId ? 'Update character' : 'Save character'}
-                  </button>
-                  <button
-                    className="hero-panel__button hero-panel__button--secondary"
-                    disabled={!selectedCharacterId || isWorkingCharacter}
-                    onClick={() => void handleDeleteCharacter()}
-                    type="button"
-                  >
-                    Delete character
-                  </button>
-                </div>
-
-                <div className="library-card__actions">
-                  <button
-                    className="hero-panel__button hero-panel__button--secondary"
-                    disabled={!selectedCharacterId || !selectedSessionId || isWorkingCharacter}
-                    onClick={() => void handleAttachCharacterToSession()}
-                    type="button"
-                  >
-                    Attach to selected session
-                  </button>
-                </div>
-              </section>
-            </div>
-          </article>
+          <ActorLibraryPanel />
         ) : null}
 
         {activePage === 'admin-packs' && identity.access.canManagePacks ? (
@@ -1728,8 +1476,9 @@ function SignedInOverview({
 function App() {
   const { isAuthenticated, isLoading } = useBackendAuthState()
   const identity = useViewerIdentity()
-  const [currentPath, setCurrentPath] = useState(() => readHashPath())
-  const [isDevMenuVisible, setIsDevMenuVisible] = useState(false)
+  const { shell, setCurrentPath, toggleDevMenuVisible, setDevMenuVisible, resetWorkspaceState } = useAuthenticatedAppState()
+  const currentPath = shell.currentPath
+  const isDevMenuVisible = shell.isDevMenuVisible
   const publicPath = currentPath === '/login' ? '/login' : '/'
 
   useEffect(() => {
@@ -1751,7 +1500,7 @@ function App() {
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.ctrlKey && event.shiftKey && event.key === 'F12') {
         event.preventDefault()
-        setIsDevMenuVisible((current) => !current)
+        toggleDevMenuVisible()
       }
     }
 
@@ -1760,7 +1509,19 @@ function App() {
     return () => {
       window.removeEventListener('keydown', handleKeyDown)
     }
-  }, [identity.access.isAdmin, isAuthenticated])
+  }, [identity.access.isAdmin, isAuthenticated, toggleDevMenuVisible])
+
+  useEffect(() => {
+    if (!isAuthenticated) {
+      resetWorkspaceState()
+    }
+  }, [isAuthenticated, resetWorkspaceState])
+
+  useEffect(() => {
+    if (!identity.access.isAdmin && isDevMenuVisible) {
+      setDevMenuVisible(false)
+    }
+  }, [identity.access.isAdmin, isDevMenuVisible, setDevMenuVisible])
 
   const showDevHeaderLink = isAuthenticated && identity.access.isAdmin && isDevMenuVisible
 
@@ -1842,7 +1603,7 @@ function App() {
             </div>
           </section>
         ) : (
-          <SignedInOverview currentPath={currentPath} identity={identity} isDevMenuVisible={isDevMenuVisible} />
+          <SignedInOverview identity={identity} />
         )}
 
         <footer className="app-shell__footer"></footer>

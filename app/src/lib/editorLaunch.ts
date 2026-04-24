@@ -1,4 +1,4 @@
 export {
   buildEditorLaunchUrl,
   resolveEditorBaseUrl,
-} from '../../../shared/editorAccess'
+} from '@dungeonplanner/shared/editorAccess'

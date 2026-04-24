@@ -8,6 +8,9 @@ importers:
 
   .:
     dependencies:
+      '@dungeonplanner/shared':
+        specifier: workspace:*
+        version: link:shared
       '@react-three/drei':
         specifier: ^10.7.7
         version: 10.7.7(@react-three/fiber@9.6.0(@types/react@19.2.14)(react-dom@19.2.5(react@19.2.5))(react@19.2.5)(three@0.184.0))(@types/react@19.2.14)(@types/three@0.184.0)(react-dom@19.2.5(react@19.2.5))(react@19.2.5)(three@0.184.0)
@@ -123,6 +126,9 @@ importers:
       '@convex-dev/auth':
         specifier: ^0.0.91
         version: 0.0.91(@auth/core@0.37.0)(convex@1.36.1(react@19.2.5))(react@19.2.5)
+      '@dungeonplanner/shared':
+        specifier: workspace:*
+        version: link:../shared
       convex:
         specifier: ^1.36.1
         version: 1.36.1(react@19.2.5)
@@ -212,6 +218,8 @@ importers:
       typescript:
         specifier: ~5.9.3
         version: 5.9.3
+
+  shared: {}
 
 packages:
 

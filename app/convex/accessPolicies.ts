@@ -8,6 +8,10 @@ export type CharacterLike = {
   ownerUserId: string
 }
 
+export type ActorPackLike = {
+  ownerUserId: string
+}
+
 export type DungeonLike = {
   ownerUserId: string
 }
@@ -27,6 +31,10 @@ export function viewerCanManageSession(session: SessionLike, userId: string) {
 
 export function viewerOwnsCharacter(character: CharacterLike, userId: string) {
   return character.ownerUserId === userId
+}
+
+export function viewerOwnsActorPack(actorPack: ActorPackLike, userId: string) {
+  return actorPack.ownerUserId === userId
 }
 
 export function viewerOwnsDungeon(dungeon: DungeonLike, userId: string) {

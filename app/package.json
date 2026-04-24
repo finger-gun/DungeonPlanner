@@ -19,6 +19,7 @@
     "seed:dev": "convex run seed:seedDevAccounts"
   },
   "dependencies": {
+    "@dungeonplanner/shared": "workspace:*",
     "@auth/core": "0.37.0",
     "@convex-dev/auth": "^0.0.91",
     "convex": "^1.36.1",

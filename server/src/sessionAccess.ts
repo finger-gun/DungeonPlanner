@@ -5,9 +5,14 @@ type SessionAccessResponse = {
 }
 
 const DEFAULT_CONVEX_SITE_URL = 'http://127.0.0.1:3211'
+const SESSION_ACCESS_CONSUME_PATH = '/api/session-access/consume'
+
+function buildConvexSiteUrl(path: string) {
+  return new URL(path, `${process.env.CONVEX_SITE_URL ?? DEFAULT_CONVEX_SITE_URL}/`).toString()
+}
 
 export async function consumeSessionAccessTicket(sessionId: string, accessToken: string) {
-  const response = await fetch(`${process.env.CONVEX_SITE_URL ?? DEFAULT_CONVEX_SITE_URL}/session-access/consume`, {
+  const response = await fetch(buildConvexSiteUrl(SESSION_ACCESS_CONSUME_PATH), {
     method: 'POST',
     headers: {
       'content-type': 'application/json',

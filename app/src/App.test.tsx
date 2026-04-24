@@ -34,8 +34,10 @@ const mock = vi.hoisted(() => ({
     'sessions.createSession': vi.fn(),
     'sessions.joinSessionByCode': vi.fn(),
     'sessions.issueServerAccessTicket': vi.fn(),
-    'characters.saveCharacter': vi.fn(),
-    'characters.deleteCharacter': vi.fn(),
+    'actors.saveActorPack': vi.fn(),
+    'actors.setActorPackActive': vi.fn(),
+    'actors.saveActor': vi.fn(),
+    'actors.deleteActor': vi.fn(),
     'sessions.attachCharacterToSession': vi.fn(),
     'packs.generatePackUploadUrl': vi.fn(),
     'packs.savePackRecord': vi.fn(),
@@ -73,11 +75,13 @@ vi.mock('../convex/_generated/api', () => ({
       issueServerAccessTicket: 'sessions.issueServerAccessTicket',
       attachCharacterToSession: 'sessions.attachCharacterToSession',
     },
-    characters: {
-      listViewerCharacters: 'characters.listViewerCharacters',
-      getViewerCharacter: 'characters.getViewerCharacter',
-      saveCharacter: 'characters.saveCharacter',
-      deleteCharacter: 'characters.deleteCharacter',
+    actors: {
+      listViewerActorPacks: 'actors.listViewerActorPacks',
+      listViewerActors: 'actors.listViewerActors',
+      saveActorPack: 'actors.saveActorPack',
+      setActorPackActive: 'actors.setActorPackActive',
+      saveActor: 'actors.saveActor',
+      deleteActor: 'actors.deleteActor',
     },
     packs: {
       listWorkspacePacks: 'packs.listWorkspacePacks',
@@ -192,6 +196,44 @@ describe('authenticated app shell', () => {
     expect(screen.queryByText('Import dungeon file')).toBeNull()
     expect(screen.queryByLabelText('Portable dungeon JSON')).toBeNull()
     expect(screen.queryByRole('button', { name: 'Save as new record' })).toBeNull()
+  })
+
+  it('opens a fresh editor session from the dungeon library route', async () => {
+    const user = userEvent.setup()
+    window.location.hash = '#/app/library'
+    mock.authState.isAuthenticated = true
+    mock.viewerIdentity = {
+      viewer: { name: 'Player Builder', email: 'player@example.com' },
+      workspace: { name: 'Player Workspace' },
+      roles: ['player'],
+      access: {
+        isAdmin: false,
+        canManageUsers: false,
+        canManagePacks: false,
+        canManageDungeons: true,
+        canManageSessions: false,
+        canUseCharacterLibrary: true,
+      },
+    }
+    mock.queries = {
+      'dungeons.listViewerDungeons': [],
+      'sessions.listViewerSessions': [],
+      'characters.listViewerCharacters': [],
+    }
+    mock.mutations['dungeons.issueEditorAccessToken'].mockResolvedValue({
+      accessToken: 'token-123',
+      expiresAt: 123,
+    })
+
+    render(<App />)
+
+    await user.click(screen.getByRole('button', { name: 'New in editor' }))
+
+    await waitFor(() =>
+      expect(mock.mutations['dungeons.issueEditorAccessToken']).toHaveBeenCalledWith({}),
+    )
+    expect(openSpy).toHaveBeenCalledTimes(1)
+    expect(openSpy.mock.calls[0]?.[0]).toContain('appEditorToken=token-123')
   })
 
   it('reveals admin debug views only after the hidden shortcut', async () => {

@@ -1,6 +1,7 @@
 import { ConvexError, v } from 'convex/values'
 import type { Doc } from './_generated/dataModel'
 import { mutation, query } from './_generated/server'
+import { ensureSavedCharacterActorPack } from './actorPackMigration'
 import { viewerOwnsCharacter } from './accessPolicies'
 import { INVALID_REQUEST } from './errors'
 import { requireCurrentUser, requireRole } from './helpers'
@@ -82,7 +83,16 @@ export const saveCharacter = mutation({
         throw new Error('Character not found.')
       }
 
+      const targetWorkspaceId = existingCharacter.workspaceId ?? workspaceId
+      const actorPackId =
+        existingCharacter.actorPackId
+        ?? (targetWorkspaceId
+          ? await ensureSavedCharacterActorPack(ctx, viewer._id, targetWorkspaceId)
+          : undefined)
+
       await ctx.db.patch(args.characterId, {
+        workspaceId: existingCharacter.workspaceId ?? targetWorkspaceId,
+        actorPackId,
         name,
         contentRef,
         sheet: args.sheet,
@@ -92,9 +102,14 @@ export const saveCharacter = mutation({
       return args.characterId
     }
 
+    const actorPackId = workspaceId
+      ? await ensureSavedCharacterActorPack(ctx, viewer._id, workspaceId)
+      : undefined
+
     return ctx.db.insert('characters', {
       ownerUserId: viewer._id,
       workspaceId,
+      actorPackId,
       name,
       contentRef,
       sheet: args.sheet,

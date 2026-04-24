@@ -2,6 +2,8 @@ import { authTables } from '@convex-dev/auth/server'
 import { defineSchema, defineTable } from 'convex/server'
 import { v } from 'convex/values'
 import {
+  actorKindValidator,
+  actorSizeValidator,
   canonicalPackEntryValidator,
   packDefaultAssetRefsValidator,
   packKindValidator,
@@ -86,9 +88,33 @@ export default defineSchema({
   characters: defineTable({
     ownerUserId: v.id('users'),
     workspaceId: v.optional(v.id('workspaces')),
+    actorPackId: v.optional(v.id('actorPacks')),
     name: v.string(),
+    kind: v.optional(actorKindValidator),
+    prompt: v.optional(v.string()),
+    model: v.optional(v.string()),
+    size: v.optional(actorSizeValidator),
+    storageId: v.optional(v.string()),
+    originalImageUrl: v.optional(v.string()),
+    processedImageUrl: v.optional(v.string()),
+    alphaMaskUrl: v.optional(v.string()),
+    thumbnailUrl: v.optional(v.string()),
+    width: v.optional(v.number()),
+    height: v.optional(v.number()),
     contentRef: v.optional(v.string()),
     sheet: v.any(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index('by_ownerUserId', ['ownerUserId'])
+    .index('by_actorPackId', ['actorPackId'])
+    .index('by_workspaceId', ['workspaceId']),
+  actorPacks: defineTable({
+    workspaceId: v.id('workspaces'),
+    ownerUserId: v.id('users'),
+    name: v.string(),
+    description: v.optional(v.string()),
+    isActive: v.boolean(),
     createdAt: v.number(),
     updatedAt: v.number(),
   })

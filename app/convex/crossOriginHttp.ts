@@ -1,10 +1,11 @@
 export const CROSS_ORIGIN_POST_PATHS = [
-  '/session-access/consume',
-  '/editor-dungeons/list',
-  '/editor-dungeons/open',
-  '/editor-dungeons/save',
-  '/editor-dungeons/copy',
-  '/editor-dungeons/delete',
+  '/api/session-access/consume',
+  '/api/editor/dungeons/list',
+  '/api/editor/dungeons/open',
+  '/api/editor/dungeons/save',
+  '/api/editor/dungeons/copy',
+  '/api/editor/dungeons/delete',
+  '/api/editor/actors/list',
 ] as const
 
 const CORS_ALLOWED_HEADERS = 'Content-Type'

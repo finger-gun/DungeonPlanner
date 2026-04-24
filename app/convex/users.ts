@@ -1,4 +1,5 @@
 import { mutation, query } from './_generated/server'
+import { migrateSavedCharactersIntoActorPacks } from './actorPackMigration'
 import { getRoleAssignmentsForUser, getViewerRoleContext, requireCurrentUser } from './helpers'
 import { getRoleCapabilities } from './roleAccess'
 import { ensureRoleAssignments, ensureWorkspaceForUser } from './workspaceProvisioning'
@@ -53,6 +54,8 @@ export const initializeViewer = mutation({
     if (globalAdmin === null && !alreadyAdmin) {
       await ensureRoleAssignments(ctx, viewer._id, ['admin'])
     }
+
+    await migrateSavedCharactersIntoActorPacks(ctx, viewer._id, workspaceId)
 
     return {
       workspaceId,

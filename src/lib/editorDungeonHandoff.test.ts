@@ -40,7 +40,7 @@ describe('editor dungeon handoff helpers', () => {
       fetchMock as unknown as typeof fetch,
     )
 
-    expect(fetchMock).toHaveBeenCalledWith('http://127.0.0.1:3210/editor-dungeons/open', expect.objectContaining({
+    expect(fetchMock).toHaveBeenCalledWith('http://127.0.0.1:3210/api/editor/dungeons/open', expect.objectContaining({
       method: 'POST',
     }))
   })
@@ -67,8 +67,8 @@ describe('editor dungeon handoff helpers', () => {
       fetchMock as unknown as typeof fetch,
     )
 
-    expect(fetchMock.mock.calls[0]?.[0]).toBe('http://127.0.0.1:3210/editor-dungeons/list')
-    expect(fetchMock.mock.calls[1]?.[0]).toBe('http://127.0.0.1:3210/editor-dungeons/save')
+    expect(fetchMock.mock.calls[0]?.[0]).toBe('http://127.0.0.1:3210/api/editor/dungeons/list')
+    expect(fetchMock.mock.calls[1]?.[0]).toBe('http://127.0.0.1:3210/api/editor/dungeons/save')
   })
 
   it('copies dungeons through the editor library endpoint', async () => {
@@ -83,7 +83,7 @@ describe('editor dungeon handoff helpers', () => {
       fetchMock as unknown as typeof fetch,
     )
 
-    expect(fetchMock).toHaveBeenCalledWith('http://127.0.0.1:3210/editor-dungeons/copy', expect.objectContaining({
+    expect(fetchMock).toHaveBeenCalledWith('http://127.0.0.1:3210/api/editor/dungeons/copy', expect.objectContaining({
       method: 'POST',
     }))
   })

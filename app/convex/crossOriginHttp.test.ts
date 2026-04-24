@@ -32,12 +32,13 @@ describe('cross-origin HTTP helpers', () => {
     expect(response.status).toBe(204)
     expect(response.headers.get('access-control-allow-origin')).toBe('*')
     expect(CROSS_ORIGIN_POST_PATHS).toEqual(expect.arrayContaining([
-      '/session-access/consume',
-      '/editor-dungeons/list',
-      '/editor-dungeons/open',
-      '/editor-dungeons/save',
-      '/editor-dungeons/copy',
-      '/editor-dungeons/delete',
+      '/api/session-access/consume',
+      '/api/editor/dungeons/list',
+      '/api/editor/dungeons/open',
+      '/api/editor/dungeons/save',
+      '/api/editor/dungeons/copy',
+      '/api/editor/dungeons/delete',
+      '/api/editor/actors/list',
     ]))
   })
 

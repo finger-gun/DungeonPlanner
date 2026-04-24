@@ -15,9 +15,9 @@ import { PropToolPanel } from './components/editor/PropToolPanel'
 import { CharacterToolPanel } from './components/editor/CharacterToolPanel'
 import { SelectToolPanel } from './components/editor/SelectToolPanel'
 import { ScenePanel } from './components/editor/ScenePanel'
-import { CharacterSheetOverlay } from './components/editor/CharacterSheetOverlay'
 import { getDebugCameraPose, projectDebugWorldPoint } from './components/canvas/debugCameraBridge'
 import { migrateLegacyGeneratedCharacters } from './generated-characters/migration'
+import type { GeneratedCharacterRecord } from './generated-characters/types'
 import { useDungeonStore } from './store/useDungeonStore'
 import { shouldRotateSelectionFromShortcut } from './rotationShortcuts'
 import {
@@ -43,7 +43,9 @@ import {
   saveEditorDungeon,
   stripEditorDungeonHandoff,
 } from './lib/editorDungeonHandoff'
-import type { SavedDungeonSummary } from '../shared/editorAccess'
+import { listEditorActors } from './lib/editorActors'
+import type { SavedDungeonSummary } from '@dungeonplanner/shared/editorAccess'
+import type { EditorActorRecord } from '@dungeonplanner/shared/actors'
 
 const Scene = lazy(() =>
   import('./components/canvas/Scene').then((module) => ({
@@ -255,6 +257,7 @@ function App() {
   const [isEditorLibraryLoading, setIsEditorLibraryLoading] = useState(false)
   const [isSavingRemoteDungeon, setIsSavingRemoteDungeon] = useState(false)
   const [currentRemoteDungeonId, setCurrentRemoteDungeonId] = useState<string | null>(null)
+  const ingestGeneratedCharacters = useDungeonStore((state) => state.ingestGeneratedCharacters)
   const selectedAssetIds = useDungeonStore((state) => state.selectedAssetIds)
   const surfaceBrushAssetIds = useDungeonStore((state) => state.surfaceBrushAssetIds)
   const assetBrowser = useDungeonStore((state) => state.assetBrowser)
@@ -403,6 +406,19 @@ function App() {
 
     setEditorLibraryAccess(access)
     window.sessionStorage.setItem(EDITOR_LIBRARY_SESSION_STORAGE_KEY, JSON.stringify(access))
+    let cancelled = false
+
+    void listEditorActors(access)
+      .then((actors) => {
+        if (cancelled) {
+          return
+        }
+
+        ingestGeneratedCharacters(actors.map(mapEditorActorToGeneratedCharacter))
+      })
+      .catch((error) => {
+        console.error(error)
+      })
 
     if (!handoff?.dungeonId) {
       if (handoff) {
@@ -410,10 +426,10 @@ function App() {
         window.history.replaceState({}, '', `${window.location.pathname}${nextSearch}${window.location.hash}`)
       }
 
-      return
+      return () => {
+        cancelled = true
+      }
     }
-
-    let cancelled = false
 
     void (async () => {
       try {
@@ -445,7 +461,7 @@ function App() {
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [ingestGeneratedCharacters])
 
   async function refreshEditorLibrary(access = editorLibraryAccess) {
     if (!access) {
@@ -737,8 +753,6 @@ function App() {
             )}
           </Suspense>
 
-          {!isPlayMode && <CharacterSheetOverlay />}
-
           <CameraDropdown rightOffset={cameraRightOffset} />
 
           {/* Floor-switch transition overlay — opacity driven imperatively by FloorTransitionController */}
@@ -893,6 +907,26 @@ function App() {
 }
 
 export default App
+
+function mapEditorActorToGeneratedCharacter(actor: EditorActorRecord): GeneratedCharacterRecord {
+  return {
+    assetId: actor.assetId,
+    storageId: actor.storageId,
+    name: actor.name,
+    kind: actor.kind === 'npc' ? 'npc' : 'player',
+    prompt: actor.prompt,
+    model: actor.model,
+    size: actor.size,
+    originalImageUrl: actor.originalImageUrl,
+    processedImageUrl: actor.processedImageUrl,
+    alphaMaskUrl: actor.alphaMaskUrl,
+    thumbnailUrl: actor.thumbnailUrl,
+    width: actor.width,
+    height: actor.height,
+    createdAt: actor.createdAt,
+    updatedAt: actor.updatedAt,
+  }
+}
 
 function GeneratedCharacterMigrationBootstrap() {
   const generatedCharacters = useDungeonStore((state) => state.generatedCharacters)

@@ -9,6 +9,8 @@
  */
 
 import type * as accessPolicies from "../accessPolicies.js";
+import type * as actorPackMigration from "../actorPackMigration.js";
+import type * as actors from "../actors.js";
 import type * as auth from "../auth.js";
 import type * as characters from "../characters.js";
 import type * as crossOriginHttp from "../crossOriginHttp.js";
@@ -35,6 +37,8 @@ import type {
 
 declare const fullApi: ApiFromModules<{
   accessPolicies: typeof accessPolicies;
+  actorPackMigration: typeof actorPackMigration;
+  actors: typeof actors;
   auth: typeof auth;
   characters: typeof characters;
   crossOriginHttp: typeof crossOriginHttp;

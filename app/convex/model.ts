@@ -5,6 +5,15 @@ export const roleValidator = v.union(...platformRoles.map((role) => v.literal(ro
 
 export const packKindValidator = v.union(v.literal('asset'), v.literal('rules'))
 
+export const actorKindValidator = v.union(v.literal('character'), v.literal('npc'))
+
+export const actorSizeValidator = v.union(
+  v.literal('S'),
+  v.literal('M'),
+  v.literal('XL'),
+  v.literal('XXL'),
+)
+
 export const packVisibilityValidator = v.union(
   v.literal('global'),
   v.literal('public'),

@@ -317,6 +317,9 @@ type DungeonState = DungeonSnapshot & {
   setFloorViewMode: (mode: FloorViewMode) => void
   createGeneratedCharacter: (input: CreateGeneratedCharacterInput) => string
   createGeneratedCharacterDraft: () => string
+  ingestGeneratedCharacters: (
+    records: ReadonlyArray<Partial<GeneratedCharacterRecord> & Pick<GeneratedCharacterRecord, 'assetId'>>,
+  ) => void
   updateGeneratedCharacter: (assetId: string, input: UpdateGeneratedCharacterInput) => boolean
   removeGeneratedCharacter: (assetId: string) => boolean
   openCharacterSheet: (assetId: string) => void
@@ -2619,6 +2622,28 @@ export const useDungeonStore = create<DungeonState>()(
   },
   createGeneratedCharacterDraft: () => {
     return get().createGeneratedCharacter(createDefaultGeneratedCharacterInput())
+  },
+  ingestGeneratedCharacters: (records) => {
+    if (records.length === 0) {
+      return
+    }
+
+    set((current) => ({
+      ...current,
+      generatedCharacters: {
+        ...current.generatedCharacters,
+        ...Object.fromEntries(
+          records.map((record) => [
+            record.assetId,
+            normalizeGeneratedCharacterRecord(record.assetId, {
+              ...current.generatedCharacters[record.assetId],
+              ...record,
+            }),
+          ]),
+        ),
+      },
+    }))
+    syncGeneratedCharacterAssets(get().generatedCharacters)
   },
   updateGeneratedCharacter: (assetId, input) => {
     const state = get()

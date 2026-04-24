@@ -21,7 +21,7 @@ for (const path of CROSS_ORIGIN_POST_PATHS) {
 }
 
 http.route({
-  path: '/session-access/consume',
+  path: '/api/session-access/consume',
   method: 'POST',
   handler: httpAction(async (ctx, request) => {
     const body = (await request.json()) as {
@@ -50,7 +50,34 @@ http.route({
 })
 
 http.route({
-  path: '/editor-dungeons/list',
+  path: '/api/editor/actors/list',
+  method: 'POST',
+  handler: httpAction(async (ctx, request) => {
+    const body = (await request.json()) as {
+      accessToken?: string
+    }
+
+    if (!body.accessToken) {
+      return crossOriginJson({ error: 'accessToken is required.' }, { status: 400 })
+    }
+
+    try {
+      const actors = await ctx.runQuery(internal.actors.listEditorActors, {
+        accessToken: body.accessToken,
+      })
+
+      return crossOriginJson(actors)
+    } catch (error) {
+      return crossOriginJson(
+        { error: error instanceof Error ? error.message : 'Actor access denied.' },
+        { status: 403 },
+      )
+    }
+  }),
+})
+
+http.route({
+  path: '/api/editor/dungeons/list',
   method: 'POST',
   handler: httpAction(async (ctx, request) => {
     const body = (await request.json()) as {
@@ -77,7 +104,7 @@ http.route({
 })
 
 http.route({
-  path: '/editor-dungeons/open',
+  path: '/api/editor/dungeons/open',
   method: 'POST',
   handler: httpAction(async (ctx, request) => {
     const body = (await request.json()) as {
@@ -106,7 +133,7 @@ http.route({
 })
 
 http.route({
-  path: '/editor-dungeons/save',
+  path: '/api/editor/dungeons/save',
   method: 'POST',
   handler: httpAction(async (ctx, request) => {
     const body = (await request.json()) as {
@@ -144,7 +171,7 @@ http.route({
 })
 
 http.route({
-  path: '/editor-dungeons/copy',
+  path: '/api/editor/dungeons/copy',
   method: 'POST',
   handler: httpAction(async (ctx, request) => {
     const body = (await request.json()) as {
@@ -173,7 +200,7 @@ http.route({
 })
 
 http.route({
-  path: '/editor-dungeons/delete',
+  path: '/api/editor/dungeons/delete',
   method: 'POST',
   handler: httpAction(async (ctx, request) => {
     const body = (await request.json()) as {

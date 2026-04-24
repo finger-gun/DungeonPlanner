@@ -8,9 +8,9 @@ This page explains how DungeonPlanner is structured today, with the current back
 
 DungeonPlanner is a monorepo with three main runtime surfaces:
 
-- `app/` — the authenticated workspace app. Users manage dungeons, sessions, characters, roles, and packs here.
+- `app/` — the authenticated workspace app. Users manage dungeons, sessions, actor packs, actors, roles, and other library/admin data here.
 - `src/` — the main dungeon editor and player view. This is the 3D R3F/WebGPU experience.
-- `server/` — the browser-facing backend facade. It owns auth cookies, browser API endpoints, editor/library proxies, generated-character endpoints, and the Colyseus multiplayer server.
+- `server/` — the browser-facing backend facade. It owns auth cookies, browser API endpoints, editor/library proxies, actor library proxies, generated-character endpoints, and the Colyseus multiplayer server.
 
 Convex still exists, but it is now an **internal backend dependency**, not something the browser talks to directly.
 
@@ -20,18 +20,19 @@ Convex still exists, but it is now an **internal backend dependency**, not somet
 │ React workspace UI                                                │
 │ - login                                                           │
 │ - dungeon library                                                 │
-│ - sessions / characters / packs / roles                           │
+│ - sessions / actor packs / actors / roles                         │
 └───────────────────────────────┬────────────────────────────────────┘
                                 │ fetch + cookies
 ┌───────────────────────────────▼────────────────────────────────────┐
 │ server/                                                           │
 │ Express facade + Colyseus                                         │
 │ - /api/auth/*                                                     │
-│ - /api/app/query + /api/app/mutation                              │
+│ - /api/app/* typed data routes                                    │
 │ - /api/app/storage/upload                                         │
-│ - /editor-dungeons/*                                              │
-│ - /session-access/consume                                         │
+│ - /api/editor/dungeons/*                                          │
+│ - /api/session-access/consume                                     │
 │ - /api/generated-characters/*                                     │
+│ - /api/editor/actors/list                                         │
 │ - Colyseus room: "dungeon"                                        │
 └──────────────────────┬───────────────────────────────┬─────────────┘
                        │                               │
@@ -41,7 +42,7 @@ Convex still exists, but it is now an **internal backend dependency**, not somet
 │ Convex                                   │   │ Browser: src/          │
 │ app domain data + auth state             │   │ React editor / player  │
 │ - users, roles, dungeons                 │   │ Zustand + R3F/WebGPU   │
-│ - sessions, characters, packs            │   │ editor library handoff │
+│ - sessions, actorPacks, characters       │   │ editor + actor handoff │
 └──────────────────────────────────────────┘   └────────────────────────┘
 ```
 
@@ -61,7 +62,7 @@ The architectural rule is now:
 - workspace overview
 - private dungeon library
 - session creation and join flows
-- character library
+- actor pack and actor library
 - role management
 - content pack management
 
@@ -70,10 +71,18 @@ It no longer uses `ConvexReactClient`, `ConvexProviderWithAuth`, or `@convex-dev
 Instead:
 
 - `app/src/lib/backendAuth.tsx` manages auth state through backend cookies
-- `app/src/lib/backendData.tsx` provides `useQuery` / `useMutation` hooks that call:
-  - `POST /api/app/query`
-  - `POST /api/app/mutation`
+- `app/src/lib/backendData.tsx` provides `useQuery` / `useMutation` hooks that map known app operations to explicit backend routes, such as:
+  - `GET /api/app/viewer-context`
+  - `GET /api/app/dungeons`
+  - `POST /api/app/sessions/create`
+  - `POST /api/app/roles/grant`
   - `POST /api/app/storage/upload`
+
+The actor pipeline now lives here too:
+
+- `app/src/components/ActorLibraryPanel.tsx` is the browser UI for actor pack management and actor creation/editing
+- `app/convex/actors.ts` owns the actor domain in Convex: user-owned `actorPacks`, actor records in `characters`, active/inactive toggles, and the editor-facing actor export
+- standee generation/storage still uses the shared `src/generated-characters/*` helpers, but the browser reaches them through `server/`'s `/api/generated-characters/*` facade routes
 
 So `app/` still *looks* like it is calling Convex functions from React, but that is now just a naming and contract convenience. The browser is really talking to `server/`.
 
@@ -88,13 +97,17 @@ So `app/` still *looks* like it is calling Convex functions from React, but that
 - local persistence
 - dungeon file import/export
 - remote dungeon library handoff
+- actor selection from active actor packs
 - multiplayer play mode
 
 This app is also static. It talks to:
 
-- `server/` HTTP endpoints for editor-library handoff (`/editor-dungeons/*`)
+- `server/` HTTP endpoints for editor-library handoff (`/api/editor/dungeons/*`)
+- `server/` actor handoff endpoint (`/api/editor/actors/list`)
 - `server/` generated-character APIs (`/api/generated-characters/*`)
 - Colyseus on `server/` for live play sessions
+
+`src/` no longer owns actor authoring. It only imports active actors from `app/`, converts them into runtime/generated-character records, and exposes them as selectable placement assets in the editor UI.
 
 ## `server/` — backend facade
 
@@ -103,18 +116,19 @@ This app is also static. It talks to:
 It is responsible for:
 
 1. browser auth/session cookies
-2. app-facing query and mutation facade routes
+2. app-facing typed data routes
 3. editor dungeon library proxies
-4. session-access token consumption
-5. generated-character APIs and asset storage
-6. Colyseus multiplayer hosting
-7. serving the built frontend bundle in deployment
+4. editor actor proxy routes
+5. session-access token consumption
+6. generated-character APIs and asset storage
+7. Colyseus multiplayer hosting
+8. serving the built frontend bundle in deployment
 
 Key files:
 
 - `server/src/index.ts` — Express + Colyseus bootstrap
 - `server/src/authFacade.ts` — auth cookie handling and access-token resolution
-- `server/src/appFacade.ts` — app data facade and editor/session proxy routes
+- `server/src/appFacade.ts` — app data facade and editor/actor/session proxy routes
 - `server/src/sessionAccess.ts` — server-side session token consumption helper
 - `server/src/rooms/DungeonRoom.ts` — multiplayer room logic
 
@@ -138,8 +152,8 @@ At runtime:
 1. `BackendAuthProvider` calls `GET /api/auth/session`
 2. `server/` checks or refreshes the Convex-backed auth cookies
 3. `AppBackendProvider` exposes a simple invalidation counter
-4. `app/src/lib/backendData.tsx` sends query/mutation calls to `server/`
-5. `server/` resolves the current user token, calls Convex server-side, and returns JSON
+4. `app/src/lib/backendData.tsx` maps each supported app operation to an explicit `/api/app/...` route
+5. `server/` resolves the current user token, calls the allowlisted Convex function server-side, and returns JSON
 
 This gives `app/` a static deployment model with a server-owned API facade.
 
@@ -148,7 +162,7 @@ This gives `app/` a static deployment model with a server-owned API facade.
 This is the main cross-app handoff:
 
 1. User clicks **Open** in `app/`'s dungeon library
-2. `app/` calls backend mutation facade for `dungeons.issueEditorAccessToken`
+2. `app/` calls `POST /api/app/editor-access-token`
 3. `app/` builds an editor launch URL with:
    - editor base URL
    - backend URL
@@ -156,13 +170,53 @@ This is the main cross-app handoff:
    - optional dungeon id
 4. The browser opens `src/`
 5. `src/lib/editorDungeonHandoff.ts` reads those params
-6. `src/` calls `POST /editor-dungeons/open` on `server/`
+6. `src/` calls `POST /api/editor/dungeons/open` on `server/`
 7. `server/` proxies that request to Convex HTTP actions
 8. `src/` receives serialized dungeon JSON and loads it into the Zustand store
 
 The important bit is that the editor now receives the **backend facade URL**, not a raw Convex browser endpoint.
 
-## 3. Editor library operations
+## 3. Actor pipeline
+
+Actors now cross all three runtimes, but each runtime has a narrower responsibility:
+
+### In `app/`
+
+1. `ActorLibraryPanel` is where users create/edit characters and NPCs
+2. actor packs are owned by the current user inside the active workspace
+3. each pack can be toggled `isActive`, which is the switch that controls whether the editor should see that pack
+4. actor standee images are generated/processed/saved through the shared generated-character helpers and `server/`'s `/api/generated-characters/*` routes
+
+### In Convex (internal only)
+
+`app/convex/actors.ts` is the authoritative actor domain layer:
+
+- viewer-scoped queries/mutations manage packs and actors for the workspace app
+- `internal.actors.listEditorActors` accepts the short-lived editor access token
+- it filters to the token's workspace, keeps only active packs, and only returns actors with ready processed assets (`processedImageUrl`, `thumbnailUrl`, `width`, `height`)
+- it emits `EditorActorRecord` payloads from `shared/actors.ts`, including a stable editor/runtime asset id shaped like `generated.player.<actorId>`
+
+### Through `server/`
+
+When the editor starts with backend handoff access:
+
+1. `src/App.tsx` calls `src/lib/editorActors.ts`
+2. that posts to `POST /api/editor/actors/list` on `server/`
+3. `server/src/appFacade.ts` proxies the request to the Convex site HTTP endpoint
+4. `app/convex/http.ts` forwards the request to `internal.actors.listEditorActors`
+
+### In `src/`
+
+The editor is selection-only for actors:
+
+1. `src/App.tsx` maps each `EditorActorRecord` into the existing `GeneratedCharacterRecord` shape
+2. `useDungeonStore.ingestGeneratedCharacters()` merges those records into `generatedCharacters`
+3. `syncGeneratedCharacterAssets()` rebuilds the runtime asset registry so those actors behave like generated player assets
+4. `CharacterToolPanel` renders them under **Active Actor Packs** and only lets users select/place ready actors
+
+So the editor reuses the generated-character/runtime asset path, but the source of truth for actor authoring now lives in `app/`.
+
+## 4. Editor library operations
 
 Inside the editor, remote library actions such as:
 
@@ -174,22 +228,24 @@ Inside the editor, remote library actions such as:
 
 all go through `src/lib/editorDungeonHandoff.ts`, which posts to:
 
-- `/editor-dungeons/list`
-- `/editor-dungeons/open`
-- `/editor-dungeons/save`
-- `/editor-dungeons/copy`
-- `/editor-dungeons/delete`
+- `/api/editor/dungeons/list`
+- `/api/editor/dungeons/open`
+- `/api/editor/dungeons/save`
+- `/api/editor/dungeons/copy`
+- `/api/editor/dungeons/delete`
 
 Those routes are implemented in `server/src/appFacade.ts`, which currently proxies to Convex site HTTP endpoints.
 
-## 4. Multiplayer session access
+The same short-lived editor access handoff used for dungeon library operations is also what authorizes `/api/editor/actors/list`.
+
+## 5. Multiplayer session access
 
 For live sessions:
 
 1. `app/` creates or joins sessions through the app facade
 2. `app/` requests a short-lived session access ticket
-3. a client later sends that ticket to `POST /session-access/consume`
-4. `server/` resolves the session membership through Convex
+3. a live connection presents that ticket to `server/`
+4. `server/` resolves the session membership through Convex using `/api/session-access/consume`
 5. Colyseus uses the resolved role/session info for room auth
 
 This keeps live room auth server-owned instead of relying on direct browser access to Convex state.
@@ -264,7 +320,7 @@ It owns:
 - tool/selection UI state
 - camera preset state
 - lighting/post-processing settings
-- generated character metadata
+- generated character metadata, including imported active actors
 - undo/redo snapshots
 
 There is no separate view model layer between the UI and the scene. React UI panels and canvas components subscribe directly to the store using selectors.
@@ -471,6 +527,7 @@ That means:
 - the store records asset ids
 - canvas components ask the content registry for the runtime component/config
 - pack metadata controls category, snapping, browser grouping, defaults, and related behavior
+- runtime-generated player assets are rebuilt from `generatedCharacters`, which now includes active actors imported from `app/`
 
 This keeps the editor data-driven and allows:
 
@@ -503,13 +560,13 @@ The browser never needs to hold the raw refresh-token flow itself.
 
 `server/src/appFacade.ts` owns:
 
-- app query facade: `POST /api/app/query`
-- app mutation facade: `POST /api/app/mutation`
+- app data routes for explicit operations, such as `GET /api/app/viewer-context`, `GET /api/app/dungeons`, and `POST /api/app/sessions/create`
 - storage upload proxy: `POST /api/app/storage/upload`
-- editor dungeon proxies
-- session access consumption proxy
+- editor dungeon proxies: `POST /api/editor/dungeons/*`
+- editor actor proxy: `POST /api/editor/actors/list`
+- session access consumption proxy: `POST /api/session-access/consume`
 
-So the browser API surface is stable even if the backend implementation changes later.
+The browser never sends arbitrary Convex function names to this facade. Each browser-facing operation has a named route, and the server decides which Convex function, if any, handles that route.
 
 ---
 

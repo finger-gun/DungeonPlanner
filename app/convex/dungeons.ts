@@ -8,6 +8,7 @@ import {
   type MutationCtx,
   type QueryCtx,
 } from './_generated/server'
+import { migrateSavedCharactersIntoActorPacks } from './actorPackMigration'
 import { viewerOwnsDungeon } from './accessPolicies'
 import { requireRoleInActiveWorkspace } from './helpers'
 
@@ -72,7 +73,7 @@ async function getViewerOwnedDungeon(
   return dungeon
 }
 
-async function getEditorAccessTokenRecord(
+export async function getEditorAccessTokenRecord(
   ctx: Pick<QueryCtx, 'db'> | Pick<MutationCtx, 'db'>,
   accessToken: string,
 ) {
@@ -194,6 +195,7 @@ export const issueEditorAccessToken = mutation({
   args: {},
   handler: async (ctx) => {
     const { viewer, workspaceId } = await requireRoleInActiveWorkspace(ctx, 'player')
+    await migrateSavedCharactersIntoActorPacks(ctx, viewer._id, workspaceId)
     const issuedAt = Date.now()
     const expiresAt = issuedAt + 60 * 60 * 1000
     const accessToken = generateToken()

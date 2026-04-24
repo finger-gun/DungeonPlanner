@@ -18,7 +18,7 @@ describe('CharacterToolPanel', () => {
     cleanup()
   })
 
-  it('renders created characters and a create-new card', () => {
+  it('renders active actor pack characters', () => {
     useDungeonStore.getState().createGeneratedCharacter({
       storageId: 'storage-paladin',
       name: 'Generated Paladin',
@@ -36,9 +36,9 @@ describe('CharacterToolPanel', () => {
     render(<CharacterToolPanel />)
 
     expect(screen.getByText('Character Library')).toBeInTheDocument()
-    expect(screen.getByText('Created Characters')).toBeInTheDocument()
+    expect(screen.getByText('Active Actor Packs')).toBeInTheDocument()
     expect(screen.getByAltText('Generated Paladin thumbnail')).toBeInTheDocument()
-    expect(screen.getByText('Create New Character')).toBeInTheDocument()
+    expect(screen.getByText(/Creation and editing now happen in the app/i)).toBeInTheDocument()
   })
 
   it('selects a ready generated character for placement', () => {
@@ -63,14 +63,21 @@ describe('CharacterToolPanel', () => {
     expect(useDungeonStore.getState().selectedAssetIds.player).toBe(assetId)
   })
 
-  it('creates a draft character and opens the sheet', () => {
+  it('does not select characters that are still processing', () => {
+    const assetId = useDungeonStore.getState().createGeneratedCharacter({
+      storageId: 'storage-wizard',
+      name: 'Generated Wizard',
+      kind: 'player',
+      size: 'M',
+      prompt: 'A wizard on a white background',
+      model: 'x/z-image-turbo',
+      originalImageUrl: TEST_IMAGE_DATA_URL,
+    })
+
     render(<CharacterToolPanel />)
 
-    fireEvent.click(screen.getByRole('button', { name: /create new character/i }))
+    fireEvent.click(screen.getByText('Generated Wizard').closest('button')!)
 
-    const state = useDungeonStore.getState()
-    expect(state.characterSheet.open).toBe(true)
-    expect(state.characterSheet.assetId).toBeTruthy()
-    expect(state.generatedCharacters[state.characterSheet.assetId!]?.size).toBe('M')
+    expect(useDungeonStore.getState().selectedAssetIds.player).not.toBe(assetId)
   })
 })
