@@ -4,7 +4,7 @@ import { createPlayDragState, updatePlayDragState } from './playDrag'
 describe('playDrag terrain support', () => {
   it('anchors drag state to sculpted outdoor terrain heights', () => {
     const outdoorTerrainHeights = {
-      '0:0': { cell: [0, 0] as [number, number], height: 1.5 },
+      '0:0': { cell: [0, 0] as [number, number], level: 1 },
     }
 
     const dragState = createPlayDragState({
@@ -15,13 +15,13 @@ describe('playDrag terrain support', () => {
       cell: [0, 0],
     }, undefined, outdoorTerrainHeights)
 
-    expect(dragState.positionY).toBe(1.5)
-    expect(dragState.position).toEqual([1, 1.5, 1])
+    expect(dragState.positionY).toBe(2)
+    expect(dragState.position).toEqual([1, 2, 1])
   })
 
   it('updates dragged positions to the target sculpted cell height', () => {
     const outdoorTerrainHeights = {
-      '1:0': { cell: [1, 0] as [number, number], height: 0.75 },
+      '1:0': { cell: [1, 0] as [number, number], level: 1 },
     }
 
     const dragState = updatePlayDragState({
@@ -42,7 +42,7 @@ describe('playDrag terrain support', () => {
     }, true, undefined, outdoorTerrainHeights)
 
     expect(dragState.cell).toEqual([1, 0])
-    expect(dragState.positionY).toBe(0.75)
-    expect(dragState.position).toEqual([3, 0.75, 1])
+    expect(dragState.positionY).toBe(2)
+    expect(dragState.position).toEqual([3, 2, 1])
   })
 })

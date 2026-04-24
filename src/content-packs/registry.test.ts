@@ -189,6 +189,23 @@ describe('content pack registry', () => {
     expect(getContentPackAssetById('kaykit.opening_stairs_long_modular_right_up')).toBeNull()
   })
 
+  it('registers KayKit forest props for all outdoor color variants', () => {
+    expect(getContentPackAssetById('kaykit.forest_tree_1_a_color1')).toMatchObject({
+      category: 'prop',
+      name: 'Forest Tree 1 A (Color 1)',
+    })
+    expect(getContentPackAssetById('kaykit.forest_tree_1_a_color8')).toMatchObject({
+      category: 'prop',
+      name: 'Forest Tree 1 A (Color 8)',
+    })
+    expect(getContentPackAssetById('kaykit.forest_rock_2_a_color4')).toMatchObject({
+      category: 'prop',
+      metadata: {
+        browserTags: expect.arrayContaining(['forest', 'rock', 'color4']),
+      },
+    })
+  })
+
   it('resolves dungeon defaults from actual imported assets', () => {
     expect(getDefaultAssetIdByCategory('floor')).toBe('dungeon.floor_floor_tile_small')
     expect(getDefaultAssetIdByCategory('wall')).toBe('dungeon.wall_wall')

@@ -13,7 +13,7 @@ The pipeline now does four things as a single workflow:
 
 - `src/assets/models/core/` - core pack runtime assets.
 - `src/assets/models/dungeon/` - dungeon pack runtime assets.
-- `src/assets/models/kaykit/` - KayKit runtime assets, including `.gltf` sidecars and external texture/buffer files.
+- `src/assets/models/forrest/` - forest runtime assets from the KayKit creator pack, including `.gltf` sidecars and external texture/buffer files.
 
 Pack folders are treated as generated runtime content, not raw source-asset staging areas.
 
@@ -56,11 +56,18 @@ That sync runs automatically before:
 pnpm run generate:content-pack:core
 ```
 
-The core pack is special-cased in `scripts/model-pipeline.mjs`:
+The core pack is configured in `scripts/model-packs.config.mjs`:
 
-- source directory: `/Users/roblibob/Projects/models`
+- source directory: `DUNGEONPLANNER_CORE_SOURCE_DIR`
 - target directory: `src/assets/models/core`
 - imported files: only the curated allowlisted core `.glb` assets
+
+The KayKit terrain pack is also configured in `scripts/model-packs.config.mjs`:
+
+- source directory: `forrest-assets-tmp/KayKit_Forest_Nature_Pack_1.0_EXTRA/Assets/gltf`
+- target directory: `src/assets/models/forrest`
+- imported files: the allowlisted terrain `.gltf` assets for the curated `Color1`..`Color8` stepped terrain styles
+- derived assets: a generated `forest_grass_patch.png` per `ColorN/` folder sampled from the matching style atlas so `OutdoorGround` matches the terrain models at runtime
 
 ### Import a new pack or directory
 
@@ -84,6 +91,8 @@ Optional flags:
 
 - `--skip-optimize`
 - `--skip-thumbnails`
+- `--clean`
+- `--no-clean`
 - `--filter <substring>`
 - `--texture-size <max-size>`
 - `--ktx-dir <directory-containing-ktx>`
@@ -111,6 +120,11 @@ Texture compression requires the **KTX-Software** CLI and specifically the `ktx`
 
 If `ktx` is already on your `PATH`, the scripts will use it automatically.
 
+The optimizer also checks:
+
+- `DUNGEONPLANNER_KTX_DIR`
+- `~/.local/bin`
+
 If not, point the scripts at a local install:
 
 ```bash
@@ -137,7 +151,7 @@ Thumbnails are written next to their model file as `.png`.
 
 KayKit assets may use `.gltf` files with sidecar `.bin` and texture files instead of self-contained `.glb`.
 
-The pipeline preserves those sidecars and the runtime asset resolver rewrites local references so they continue to load correctly after import and optimization, including `.ktx2` textures.
+The pipeline preserves those sidecars so the runtime can load the emitted `.gltf` directly and let relative sidecar references resolve naturally, including `.ktx2` textures after optimization.
 
 ## Notes on output size
 

@@ -1,14 +1,42 @@
 import * as THREE from 'three'
-import { MeshStandardNodeMaterial, WebGPURenderer } from 'three/webgpu'
-import { TiledLighting } from './TiledLighting'
-import { registerMeshStandardNodeMaterial } from './nodeMaterialUtils'
 import { FORWARD_PLUS_TILE_SIZE, MAX_FORWARD_PLUS_POINT_LIGHTS } from './forwardPlusConfig'
 import { requireWebGpu } from './webgpuSupport'
-import { registerGLTFRenderer } from './useGLTF'
+import type { TiledLighting as TiledLightingType } from './TiledLighting'
 
-registerMeshStandardNodeMaterial(MeshStandardNodeMaterial)
+type WebGpuRuntime = {
+  MeshStandardNodeMaterial: (typeof import('three/webgpu'))['MeshStandardNodeMaterial']
+  WebGPURenderer: (typeof import('three/webgpu'))['WebGPURenderer']
+  TiledLighting: typeof TiledLightingType
+  registerMeshStandardNodeMaterial: typeof import('./nodeMaterialUtils')['registerMeshStandardNodeMaterial']
+  registerGLTFRenderer: typeof import('./useGLTF')['registerGLTFRenderer']
+}
+
+let webGpuRuntimePromise: Promise<WebGpuRuntime> | null = null
+
+function loadWebGpuRuntime() {
+  if (!webGpuRuntimePromise) {
+    webGpuRuntimePromise = Promise.all([
+      import('three/webgpu'),
+      import('./TiledLighting'),
+      import('./nodeMaterialUtils'),
+      import('./useGLTF'),
+    ]).then(([threeWebGpu, tiledLightingModule, nodeMaterialUtilsModule, gltfModule]) => {
+      nodeMaterialUtilsModule.registerMeshStandardNodeMaterial(threeWebGpu.MeshStandardNodeMaterial)
+      return {
+        MeshStandardNodeMaterial: threeWebGpu.MeshStandardNodeMaterial,
+        WebGPURenderer: threeWebGpu.WebGPURenderer,
+        TiledLighting: tiledLightingModule.TiledLighting,
+        registerMeshStandardNodeMaterial: nodeMaterialUtilsModule.registerMeshStandardNodeMaterial,
+        registerGLTFRenderer: gltfModule.registerGLTFRenderer,
+      }
+    })
+  }
+
+  return webGpuRuntimePromise
+}
 
 export async function createWebGpuRenderer(props: THREE.WebGLRendererParameters) {
+  const { WebGPURenderer, TiledLighting, registerGLTFRenderer } = await loadWebGpuRuntime()
   const powerPreference =
     props.powerPreference === 'high-performance' ? 'high-performance' : 'low-power'
 

@@ -2,12 +2,15 @@ import { getContentPackAssetById, getContentPackAssetsByCategory } from '../../c
 import {
   useDungeonStore,
   type OutdoorBrushMode,
-  type OutdoorGroundTextureType,
   type OutdoorTerrainDensity,
   type OutdoorTerrainSculptMode,
   type OutdoorTerrainType,
   type RoomEditMode,
 } from '../../store/useDungeonStore'
+import {
+  OUTDOOR_TERRAIN_STYLES,
+  type OutdoorTerrainStyle as TerrainStyleId,
+} from '../../store/outdoorTerrainStyles'
 import { AssetCatalog } from './AssetCatalog'
 import { RoomPanel } from './RoomPanel'
 
@@ -36,7 +39,7 @@ const TERRAIN_DENSITIES: Array<{ id: OutdoorTerrainDensity; label: string }> = [
 const OUTDOOR_BRUSH_MODES: Array<{ id: OutdoorBrushMode; label: string }> = [
   { id: 'surroundings', label: 'Surroundings' },
   { id: 'terrain-sculpt', label: 'Terrain Sculpt' },
-  { id: 'ground-texture', label: 'Ground Texture' },
+  { id: 'terrain-style', label: 'Terrain Style Paint' },
 ]
 
 const OUTDOOR_SCULPT_MODES: Array<{ id: OutdoorTerrainSculptMode; label: string }> = [
@@ -44,12 +47,10 @@ const OUTDOOR_SCULPT_MODES: Array<{ id: OutdoorTerrainSculptMode; label: string 
   { id: 'lower', label: 'Lower' },
 ]
 
-const OUTDOOR_GROUND_TEXTURES: Array<{ id: OutdoorGroundTextureType; label: string }> = [
-  { id: 'short-grass', label: 'Short Grass' },
-  { id: 'dry-dirt', label: 'Dry Dirt' },
-  { id: 'rough-stone', label: 'Rough Stone' },
-  { id: 'wet-dirt', label: 'Wet Dirt' },
-]
+const OUTDOOR_TERRAIN_STYLE_OPTIONS: Array<{ id: TerrainStyleId; label: string }> = OUTDOOR_TERRAIN_STYLES.map((style) => ({
+  id: style,
+  label: style.replace('Color', 'Color '),
+}))
 
 export function RoomToolPanel() {
   const mapMode = useDungeonStore((state) => state.mapMode)
@@ -60,7 +61,8 @@ export function RoomToolPanel() {
   const outdoorOverpaintRegenerate = useDungeonStore((state) => state.outdoorOverpaintRegenerate)
   const outdoorBrushMode = useDungeonStore((state) => state.outdoorBrushMode)
   const outdoorTerrainSculptMode = useDungeonStore((state) => state.outdoorTerrainSculptMode)
-  const outdoorGroundTextureBrush = useDungeonStore((state) => state.outdoorGroundTextureBrush)
+  const defaultOutdoorTerrainStyle = useDungeonStore((state) => state.defaultOutdoorTerrainStyle)
+  const outdoorTerrainStyleBrush = useDungeonStore((state) => state.outdoorTerrainStyleBrush)
   const setRoomEditMode = useDungeonStore((state) => state.setRoomEditMode)
   const setSurfaceBrushAsset = useDungeonStore((state) => state.setSurfaceBrushAsset)
   const setOutdoorTerrainDensity = useDungeonStore((state) => state.setOutdoorTerrainDensity)
@@ -68,7 +70,8 @@ export function RoomToolPanel() {
   const setOutdoorOverpaintRegenerate = useDungeonStore((state) => state.setOutdoorOverpaintRegenerate)
   const setOutdoorBrushMode = useDungeonStore((state) => state.setOutdoorBrushMode)
   const setOutdoorTerrainSculptMode = useDungeonStore((state) => state.setOutdoorTerrainSculptMode)
-  const setOutdoorGroundTextureBrush = useDungeonStore((state) => state.setOutdoorGroundTextureBrush)
+  const setDefaultOutdoorTerrainStyle = useDungeonStore((state) => state.setDefaultOutdoorTerrainStyle)
+  const setOutdoorTerrainStyleBrush = useDungeonStore((state) => state.setOutdoorTerrainStyleBrush)
 
   const selectedFloorAsset = surfaceBrushAssetIds.floor
     ? getContentPackAssetById(surfaceBrushAssetIds.floor)
@@ -114,10 +117,10 @@ export function RoomToolPanel() {
           <p className="font-medium text-stone-300">{mapMode === 'outdoor' ? 'Surrounding Paint Brush' : 'Room Tool'}</p>
           <p className="mt-1 text-xs">
             {mapMode === 'outdoor'
-              ? outdoorBrushMode === 'ground-texture'
-                ? 'Left-drag to paint ground textures. Right-drag to erase texture paint.'
+              ? outdoorBrushMode === 'terrain-style'
+                ? 'Left-drag to paint terrain styles. Right-drag to reset painted cells back to the map default style.'
                 : outdoorBrushMode === 'terrain-sculpt'
-                  ? 'Left-drag to sculpt with the selected terrain mode. Right-drag uses the opposite mode for quick raise/lower edits.'
+                  ? 'Left-drag raises stepped terrain. Right-drag lowers stepped terrain into pits and trenches.'
                   : 'Left-drag to paint terrain surroundings. Right-drag to erase. Painted areas auto-place terrain props and remain inaccessible.'
               : 'Left-drag to paint rooms. Right-drag to erase.'}
           </p>
@@ -145,17 +148,17 @@ export function RoomToolPanel() {
                   })}
                 </div>
               </div>
-              {outdoorBrushMode === 'ground-texture' ? (
+              {outdoorBrushMode === 'terrain-style' ? (
                 <div>
-                  <p className="mb-1 uppercase tracking-[0.2em] text-stone-500">Ground Texture</p>
+                  <p className="mb-1 uppercase tracking-[0.2em] text-stone-500">Terrain Style</p>
                   <div className="grid grid-cols-2 gap-2">
-                    {OUTDOOR_GROUND_TEXTURES.map((texture) => {
-                      const active = outdoorGroundTextureBrush === texture.id
+                    {OUTDOOR_TERRAIN_STYLE_OPTIONS.map((texture) => {
+                      const active = outdoorTerrainStyleBrush === texture.id
                       return (
                         <button
                           key={texture.id}
                           type="button"
-                          onClick={() => setOutdoorGroundTextureBrush(texture.id)}
+                          onClick={() => setOutdoorTerrainStyleBrush(texture.id)}
                           className={`rounded-xl border px-2 py-1.5 transition ${
                             active
                               ? 'border-teal-300/35 bg-teal-400/10 text-teal-200'
@@ -163,6 +166,26 @@ export function RoomToolPanel() {
                           }`}
                         >
                           {texture.label}
+                        </button>
+                      )
+                    })}
+                  </div>
+                  <p className="mb-1 mt-3 uppercase tracking-[0.2em] text-stone-500">Map Default</p>
+                  <div className="grid grid-cols-2 gap-2">
+                    {OUTDOOR_TERRAIN_STYLE_OPTIONS.map((terrainStyle) => {
+                      const active = defaultOutdoorTerrainStyle === terrainStyle.id
+                      return (
+                        <button
+                          key={`default-${terrainStyle.id}`}
+                          type="button"
+                          onClick={() => setDefaultOutdoorTerrainStyle(terrainStyle.id)}
+                          className={`rounded-xl border px-2 py-1.5 transition ${
+                            active
+                              ? 'border-teal-300/35 bg-teal-400/10 text-teal-200'
+                              : 'border-stone-800 bg-stone-950/60 text-stone-400 hover:border-stone-700 hover:text-stone-200'
+                          }`}
+                        >
+                          {terrainStyle.label}
                         </button>
                       )
                     })}
@@ -191,11 +214,33 @@ export function RoomToolPanel() {
                     })}
                   </div>
                   <p className="mt-2 text-stone-500">
-                    Sculpt strokes use a soft 3x3 brush and keep older outdoor maps flat until you edit them.
+                    Each sculpt stroke changes the selected cells by one stepped terrain level and builds cliffs around raised plateaus and lowered pits.
                   </p>
                 </div>
               ) : (
                 <>
+                  <div>
+                    <p className="mb-1 uppercase tracking-[0.2em] text-stone-500">Color Variant</p>
+                    <div className="grid grid-cols-2 gap-2">
+                      {OUTDOOR_TERRAIN_STYLE_OPTIONS.map((terrainStyle) => {
+                        const active = outdoorTerrainStyleBrush === terrainStyle.id
+                        return (
+                          <button
+                            key={`surroundings-${terrainStyle.id}`}
+                            type="button"
+                            onClick={() => setOutdoorTerrainStyleBrush(terrainStyle.id)}
+                            className={`rounded-xl border px-2 py-1.5 transition ${
+                              active
+                                ? 'border-teal-300/35 bg-teal-400/10 text-teal-200'
+                                : 'border-stone-800 bg-stone-950/60 text-stone-400 hover:border-stone-700 hover:text-stone-200'
+                            }`}
+                          >
+                            {terrainStyle.label}
+                          </button>
+                        )
+                      })}
+                    </div>
+                  </div>
                   <div>
                     <p className="mb-1 uppercase tracking-[0.2em] text-stone-500">Terrain Type</p>
                     <div className="grid grid-cols-1 gap-2">

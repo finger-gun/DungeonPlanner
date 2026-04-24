@@ -162,6 +162,12 @@ export default defineConfig({
     rollupOptions: {
       output: {
         manualChunks(id) {
+          if (
+            id.includes('node_modules/three/build/three.webgpu') ||
+            id.includes('node_modules/three/build/three.tsl')
+          ) {
+            return 'three-webgpu'
+          }
           if (id.includes('node_modules/react') || id.includes('node_modules/react-dom') || id.includes('node_modules/scheduler')) {
             return 'react'
           }

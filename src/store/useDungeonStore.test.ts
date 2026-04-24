@@ -84,8 +84,8 @@ describe('useDungeonStore history', () => {
     expect(useDungeonStore.getState().sculptOutdoorTerrain([[2, 2]], 'raise')).toBe(1)
 
     const state = useDungeonStore.getState()
-    expect(state.outdoorTerrainHeights['2:2']?.height).toBeGreaterThan(0)
-    expect(state.outdoorTerrainHeights['1:2']?.height).toBeGreaterThan(0)
+    expect(state.outdoorTerrainHeights['2:2']?.level).toBe(1)
+    expect(state.outdoorTerrainHeights['1:2']).toBeUndefined()
   })
 
   it('reanchors outdoor placed objects after terrain sculpting', () => {
@@ -106,7 +106,7 @@ describe('useDungeonStore history', () => {
 
     useDungeonStore.getState().sculptOutdoorTerrain([[0, 0]], 'raise')
 
-    expect(useDungeonStore.getState().placedObjects[placedId!]?.position[1]).toBeGreaterThan(0)
+    expect(useDungeonStore.getState().placedObjects[placedId!]?.position[1]).toBe(2)
   })
 
   it('paints and erases outdoor surrounding cells with generated forest props', () => {
@@ -130,28 +130,28 @@ describe('useDungeonStore history', () => {
 
   it('paints and erases outdoor ground texture cells', () => {
     useDungeonStore.getState().newDungeon('outdoor')
-    useDungeonStore.getState().setOutdoorGroundTextureBrush('rough-stone')
+    useDungeonStore.getState().setOutdoorTerrainStyleBrush('Color3')
 
-    expect(useDungeonStore.getState().paintOutdoorGroundTextureCells([[2, 1], [3, 1]])).toBe(2)
+    expect(useDungeonStore.getState().paintOutdoorTerrainStyleCells([[2, 1], [3, 1]])).toBe(2)
     let state = useDungeonStore.getState()
-    expect(state.outdoorGroundTextureCells['2:1']).toMatchObject({
+    expect(state.outdoorTerrainStyleCells['2:1']).toMatchObject({
       cell: [2, 1],
-      textureType: 'rough-stone',
+      terrainStyle: 'Color3',
     })
 
-    useDungeonStore.getState().setOutdoorGroundTextureBrush('wet-dirt')
-    expect(useDungeonStore.getState().paintOutdoorGroundTextureCells([[2, 1]])).toBe(1)
+    useDungeonStore.getState().setOutdoorTerrainStyleBrush('Color5')
+    expect(useDungeonStore.getState().paintOutdoorTerrainStyleCells([[2, 1]])).toBe(1)
     state = useDungeonStore.getState()
-    expect(state.outdoorGroundTextureCells['2:1']?.textureType).toBe('wet-dirt')
+    expect(state.outdoorTerrainStyleCells['2:1']?.terrainStyle).toBe('Color5')
 
-    expect(useDungeonStore.getState().eraseOutdoorGroundTextureCells([[2, 1]])).toBe(1)
+    expect(useDungeonStore.getState().eraseOutdoorTerrainStyleCells([[2, 1]])).toBe(1)
     state = useDungeonStore.getState()
-    expect(state.outdoorGroundTextureCells['2:1']).toBeUndefined()
+    expect(state.outdoorTerrainStyleCells['2:1']).toBeUndefined()
   })
 
   it('does not paint outdoor ground textures while indoor mode is active', () => {
-    expect(useDungeonStore.getState().paintOutdoorGroundTextureCells([[0, 0]])).toBe(0)
-    expect(Object.keys(useDungeonStore.getState().outdoorGroundTextureCells)).toHaveLength(0)
+    expect(useDungeonStore.getState().paintOutdoorTerrainStyleCells([[0, 0]])).toBe(0)
+    expect(Object.keys(useDungeonStore.getState().outdoorTerrainStyleCells)).toHaveLength(0)
   })
 
   it('supports rock-only terrain preset for surrounding paint', () => {
@@ -167,7 +167,7 @@ describe('useDungeonStore history', () => {
 
     expect(generated.length).toBeGreaterThan(0)
     generated.forEach((object) => {
-      expect(object.assetId).toMatch(/^kaykit\.forest_rock_/)
+      expect(object.assetId).toMatch(/^kaykit\.forest_rock_.*_color1$/)
     })
   })
 
@@ -184,7 +184,25 @@ describe('useDungeonStore history', () => {
 
     expect(generated.length).toBeGreaterThan(0)
     generated.forEach((object) => {
-      expect(object.assetId).toMatch(/^kaykit\.forest_(tree_bare_|rock_|grass_)/)
+      expect(object.assetId).toMatch(/^kaykit\.forest_(tree_bare_|rock_|grass_).+_color1$/)
+    })
+  })
+
+  it('uses the selected outdoor terrain style brush for surroundings color variants', () => {
+    useDungeonStore.getState().newDungeon('outdoor')
+    useDungeonStore.getState().setOutdoorTerrainStyleBrush('Color6')
+    useDungeonStore.getState().paintBlockedCells([[6, 6]])
+
+    const generated = Object.values(useDungeonStore.getState().placedObjects).filter(
+      (object) =>
+        object.supportCellKey === '6:6' &&
+        object.props.generatedBy === 'surrounding-forest',
+    )
+
+    expect(generated.length).toBeGreaterThan(0)
+    generated.forEach((object) => {
+      expect(object.assetId).toMatch(/_color6$/)
+      expect(object.props.terrainStyle).toBe('Color6')
     })
   })
 
@@ -240,7 +258,7 @@ describe('useDungeonStore history', () => {
 
     const manualId = useDungeonStore.getState().placeObject({
       type: 'prop',
-      assetId: 'kaykit.forest_tree_1_a',
+      assetId: 'kaykit.forest_tree_1_a_color1',
       position: [1, 0, 1],
       rotation: [0, 0, 0],
       props: { connector: 'FREE', direction: null },

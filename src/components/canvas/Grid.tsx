@@ -64,7 +64,7 @@ export function Grid({ size = 120, playMode = false }: GridProps) {
   const surfacePointerRef = useRef(new THREE.Vector2())
   const paintedCells = useDungeonStore((state) => state.paintedCells)
   const blockedCells = useDungeonStore((state) => state.blockedCells)
-  const outdoorGroundTextureCells = useDungeonStore((state) => state.outdoorGroundTextureCells)
+  const outdoorTerrainStyleCells = useDungeonStore((state) => state.outdoorTerrainStyleCells)
   const outdoorTerrainHeights = useDungeonStore((state) => state.outdoorTerrainHeights)
   const outdoorBrushMode = useDungeonStore((state) => state.outdoorBrushMode)
   const outdoorTerrainSculptMode = useDungeonStore((state) => state.outdoorTerrainSculptMode)
@@ -75,8 +75,8 @@ export function Grid({ size = 120, playMode = false }: GridProps) {
   const paintBlockedCells = useDungeonStore((state) => state.paintBlockedCells)
   const eraseBlockedCells = useDungeonStore((state) => state.eraseBlockedCells)
   const sculptOutdoorTerrain = useDungeonStore((state) => state.sculptOutdoorTerrain)
-  const paintOutdoorGroundTextureCells = useDungeonStore((state) => state.paintOutdoorGroundTextureCells)
-  const eraseOutdoorGroundTextureCells = useDungeonStore((state) => state.eraseOutdoorGroundTextureCells)
+  const paintOutdoorTerrainStyleCells = useDungeonStore((state) => state.paintOutdoorTerrainStyleCells)
+  const eraseOutdoorTerrainStyleCells = useDungeonStore((state) => state.eraseOutdoorTerrainStyleCells)
   const setFloorTileAsset = useDungeonStore((state) => state.setFloorTileAsset)
   const setWallSurfaceAsset = useDungeonStore((state) => state.setWallSurfaceAsset)
   const placeObject = useDungeonStore((state) => state.placeObject)
@@ -142,6 +142,7 @@ export function Grid({ size = 120, playMode = false }: GridProps) {
     origin: [number, number, number]
     direction: [number, number, number]
   } | null>(null)
+  const [hoveredTerrainCell, setHoveredTerrainCell] = useState<GridCell | null>(null)
   const [hoveredSurfaceHit, setHoveredSurfaceHit] = useState<PlacementSurfaceHit | null>(null)
   const [strokeMode, setStrokeMode] = useState<'paint' | 'erase' | null>(null)
   const [strokeStartCell, setStrokeStartCell] = useState<GridCell | null>(null)
@@ -199,9 +200,9 @@ export function Grid({ size = 120, playMode = false }: GridProps) {
     if (mapMode !== 'outdoor') {
       return paintedCells
     }
-    if (outdoorBrushMode === 'ground-texture') {
+    if (outdoorBrushMode === 'terrain-style') {
       return Object.fromEntries(
-        Object.entries(outdoorGroundTextureCells).map(([cellKey, record]) => [
+        Object.entries(outdoorTerrainStyleCells).map(([cellKey, record]) => [
           cellKey,
           {
             cell: record.cell,
@@ -212,7 +213,7 @@ export function Grid({ size = 120, playMode = false }: GridProps) {
       )
     }
     return blockedCells
-  }, [blockedCells, mapMode, outdoorBrushMode, outdoorGroundTextureCells, paintedCells])
+  }, [blockedCells, mapMode, outdoorBrushMode, outdoorTerrainStyleCells, paintedCells])
 
   // R key: rotates floor-connected assets; flips wall-connected openings 180°
   useEffect(() => {
@@ -359,14 +360,14 @@ export function Grid({ size = 120, playMode = false }: GridProps) {
             mode,
             mapMode === 'outdoor' &&
               mode === 'paint' &&
-              (outdoorBrushMode === 'ground-texture' || outdoorOverpaintRegenerate),
+              (outdoorBrushMode === 'terrain-style' || outdoorOverpaintRegenerate),
           )
 
     if (cells.length > 0) {
       if (mode === 'paint') {
         if (mapMode === 'outdoor') {
-          if (outdoorBrushMode === 'ground-texture') {
-            paintOutdoorGroundTextureCells(cells)
+          if (outdoorBrushMode === 'terrain-style') {
+            paintOutdoorTerrainStyleCells(cells)
           } else if (outdoorBrushMode === 'terrain-sculpt') {
             sculptOutdoorTerrain(cells, outdoorTerrainSculptMode)
           } else {
@@ -380,8 +381,8 @@ export function Grid({ size = 120, playMode = false }: GridProps) {
         triggerBuild(cells, startCell)
       } else {
         if (mapMode === 'outdoor') {
-          if (outdoorBrushMode === 'ground-texture') {
-            eraseOutdoorGroundTextureCells(cells)
+          if (outdoorBrushMode === 'terrain-style') {
+            eraseOutdoorTerrainStyleCells(cells)
           } else if (outdoorBrushMode === 'terrain-sculpt') {
             sculptOutdoorTerrain(
               cells,
@@ -479,9 +480,54 @@ export function Grid({ size = 120, playMode = false }: GridProps) {
     }
   }, [setPaintingStrokeActive])
 
+  function getOutdoorTerrainHit(event: ThreeEvent<PointerEvent>) {
+    if (mapMode !== 'outdoor') {
+      return null
+    }
+
+    for (const intersection of event.intersections) {
+      let current: THREE.Object3D | null = intersection.object
+      while (current) {
+        if (current.userData.outdoorTerrainSurface === true) {
+          const terrainCell = current.userData.outdoorTerrainCell
+          const cell =
+            Array.isArray(terrainCell) &&
+            terrainCell.length === 2 &&
+            typeof terrainCell[0] === 'number' &&
+            typeof terrainCell[1] === 'number'
+              ? [terrainCell[0], terrainCell[1]] as GridCell
+              : null
+          return {
+            point: intersection.point.clone(),
+            cell,
+          }
+        }
+        current = current.parent
+      }
+    }
+
+    return null
+  }
+
+  function getSnappedHoverCell(
+    point: { x: number; y: number; z: number },
+    terrainCell: GridCell | null,
+  ): SnappedGridPosition {
+    if (!terrainCell) {
+      return snap(point)
+    }
+
+    return {
+      cell: terrainCell,
+      key: getCellKey(terrainCell),
+      position: cellToWorldPosition(terrainCell),
+    }
+  }
+
   function updateHoveredCell(event: ThreeEvent<PointerEvent>) {
-    const point = raycaster.pointOnPlane(event)
-    const snapped = snap(point)
+    const terrainHit = getOutdoorTerrainHit(event)
+    const point = terrainHit?.point ?? raycaster.pointOnPlane(event)
+    const snapped = getSnappedHoverCell(point, terrainHit?.cell ?? null)
     const hoveredOpenWallKey = isOpenWallBrushMode
       ? getEligibleOpenPassageWallKey(point, paintedCells, eligibleOpenPassageWallKeys)
       : null
@@ -500,6 +546,7 @@ export function Grid({ size = 120, playMode = false }: GridProps) {
       origin: [event.ray.origin.x, event.ray.origin.y, event.ray.origin.z],
       direction: [event.ray.direction.x, event.ray.direction.y, event.ray.direction.z],
     })
+    setHoveredTerrainCell(terrainHit?.cell ?? null)
     setHoveredSurfaceHit(resolvePlacementSurfaceHit(event.nativeEvent))
     setHoveredOpenWallKey(hoveredOpenWallKey)
     setHoveredRoomWallEditTarget(hoveredRoomWallEditTarget)
@@ -570,8 +617,9 @@ export function Grid({ size = 120, playMode = false }: GridProps) {
   }
 
   function handlePointerDown(event: ThreeEvent<PointerEvent>) {
-    const point = raycaster.pointOnPlane(event)
-    const snapped = snap(point)
+    const terrainHit = getOutdoorTerrainHit(event)
+    const point = terrainHit?.point ?? raycaster.pointOnPlane(event)
+    const snapped = getSnappedHoverCell(point, terrainHit?.cell ?? null)
     const surfaceHit = resolvePlacementSurfaceHit(event.nativeEvent)
     const hoveredOpenWallKey = isOpenWallBrushMode
       ? getEligibleOpenPassageWallKey(point, paintedCells, eligibleOpenPassageWallKeys)
@@ -591,6 +639,7 @@ export function Grid({ size = 120, playMode = false }: GridProps) {
       origin: [event.ray.origin.x, event.ray.origin.y, event.ray.origin.z],
       direction: [event.ray.direction.x, event.ray.direction.y, event.ray.direction.z],
     })
+    setHoveredTerrainCell(terrainHit?.cell ?? null)
     setHoveredSurfaceHit(surfaceHit)
     setHoveredOpenWallKey(hoveredOpenWallKey)
     setHoveredRoomWallEditTarget(hoveredRoomWallEditTarget)
@@ -614,6 +663,7 @@ export function Grid({ size = 120, playMode = false }: GridProps) {
                   origin: [event.ray.origin.x, event.ray.origin.y, event.ray.origin.z],
                   direction: [event.ray.direction.x, event.ray.direction.y, event.ray.direction.z],
                 },
+                terrainHit?.cell ?? null,
               )
             : null
           const propPlacement = applyFloorRotation(rawPlacement, floorRotationIndex * (Math.PI / 2))
@@ -706,6 +756,7 @@ export function Grid({ size = 120, playMode = false }: GridProps) {
               origin: [event.ray.origin.x, event.ray.origin.y, event.ray.origin.z],
               direction: [event.ray.direction.x, event.ray.direction.y, event.ray.direction.z],
             },
+            terrainHit?.cell ?? null,
           )
         : null
       const propPlacement = applyFloorRotation(rawPlacement, floorRotationIndex * (Math.PI / 2))
@@ -909,6 +960,7 @@ export function Grid({ size = 120, playMode = false }: GridProps) {
             setHoveredCell(null)
             setHoveredPoint(null)
             setHoveredRay(null)
+            setHoveredTerrainCell(null)
             setHoveredSurfaceHit(null)
             invalidate()
           }
@@ -963,6 +1015,7 @@ export function Grid({ size = 120, playMode = false }: GridProps) {
                   mapMode,
                   outdoorTerrainHeights,
                   hoveredRay,
+                  hoveredTerrainCell,
                 ),
                 floorRotationIndex * (Math.PI / 2),
               )
@@ -976,6 +1029,7 @@ export function Grid({ size = 120, playMode = false }: GridProps) {
                   mapMode,
                   outdoorTerrainHeights,
                   hoveredRay,
+                  hoveredTerrainCell,
                 ),
                 floorRotationIndex * (Math.PI / 2),
               )
@@ -994,6 +1048,7 @@ export function Grid({ size = 120, playMode = false }: GridProps) {
                   mapMode,
                   outdoorTerrainHeights,
                   hoveredRay,
+                  hoveredTerrainCell,
                 ),
                 floorRotationIndex * (Math.PI / 2),
               )
@@ -1483,6 +1538,7 @@ export function getPropPlacement(
     origin: [number, number, number]
     direction: [number, number, number]
   } | null,
+  terrainCellOverride?: GridCell | null,
 ): PropPlacement | null {
   // Use new placement system if asset has new metadata features
   // OR if it uses new ConnectsTo values (WALL, SURFACE, or arrays)
@@ -1506,6 +1562,9 @@ export function getPropPlacement(
         cell: surfaceHit.cell,
       } : null,
       cursorRay,
+      mapMode === 'outdoor',
+      mapMode === 'outdoor' ? outdoorTerrainHeights : undefined,
+      terrainCellOverride ?? undefined,
     )
     
     if (!snapResult) {
@@ -1533,7 +1592,13 @@ export function getPropPlacement(
   }
   
   // Legacy placement logic for backward compatibility
-  const snapped = snapWorldPointToGrid(point)
+  const snapped = terrainCellOverride
+    ? {
+        cell: terrainCellOverride,
+        key: getCellKey(terrainCellOverride),
+        position: cellToWorldPosition(terrainCellOverride),
+      }
+    : snapWorldPointToGrid(point)
   const connectsTo = asset.metadata?.connectsTo ?? 'FLOOR'
   
   // For legacy logic, we only handle single PropConnector values
@@ -1571,7 +1636,11 @@ export function getPropPlacement(
       position: [
         point.x,
         mapMode === 'outdoor'
-          ? sampleOutdoorTerrainHeight(outdoorTerrainHeights, point.x, point.z)
+          ? sampleOutdoorTerrainHeight(
+              outdoorTerrainHeights,
+              terrainCellOverride ? snapped.position[0] : point.x,
+              terrainCellOverride ? snapped.position[2] : point.z,
+            )
           : 0,
         point.z,
       ],
