@@ -12,6 +12,7 @@ export type PlayDragState = {
   objectId: string
   assetId: string | null
   rotation: [number, number, number]
+  originCell: GridCell
   positionY: number
   cell: GridCell
   position: [number, number, number]
@@ -46,6 +47,7 @@ export function createPlayDragState(
     objectId: object.id,
     assetId: object.assetId,
     rotation: object.rotation,
+    originCell: object.cell,
     positionY,
     cell: object.cell,
     position: [snappedPosition[0], positionY, snappedPosition[2]],
