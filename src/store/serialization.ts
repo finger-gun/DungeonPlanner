@@ -711,7 +711,7 @@ function parseFile(raw: Record<string, unknown>): SerializableState | null {
         id, name, level,
         snapshot: {
           ...data,
-          tool: 'move' as const,
+          tool: 'select' as const,
           selectedAssetIds: {
             floor: getDefaultAssetIdByCategory('floor'),
             wall: getDefaultAssetIdByCategory('wall'),
@@ -739,7 +739,7 @@ function parseFile(raw: Record<string, unknown>): SerializableState | null {
       const fallbackId = 'floor-1'
       floors[fallbackId] = {
         id: fallbackId, name: 'Ground Floor', level: 0,
-        snapshot: { ...activeFloorData, tool: 'move', selectedAssetIds: {
+        snapshot: { ...activeFloorData, tool: 'select', selectedAssetIds: {
           floor: getDefaultAssetIdByCategory('floor'),
           wall: getDefaultAssetIdByCategory('wall'),
           prop: getDefaultAssetIdByCategory('prop'),

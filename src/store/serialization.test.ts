@@ -9,7 +9,7 @@ import { DEFAULT_OUTDOOR_TERRAIN_STYLE } from './outdoorTerrainStyles'
 
 function emptyFloorSnapshot() {
   return {
-    tool: 'move' as const,
+    tool: 'select' as const,
     selectedAssetIds: { floor: null, wall: null, prop: null, opening: null, player: null },
     selection: null,
     layers: { default: { id: 'default', name: 'Default', visible: true, locked: false } },
@@ -74,6 +74,7 @@ describe('serializeDungeon / deserializeDungeon roundtrip', () => {
     const result = deserializeDungeon(serializeDungeon(state))
     expect(result).not.toBeNull()
     expect(result!.name).toBe('Test Dungeon')
+    expect(result!.floors?.['floor-1']?.snapshot.tool).toBe('select')
     expect(result!.sceneLighting.intensity).toBe(1.5)
     expect(result!.postProcessing.enabled).toBe(true)
     expect(result!.postProcessing.pixelateEnabled).toBe(false)

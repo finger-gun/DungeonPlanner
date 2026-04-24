@@ -8,7 +8,7 @@ import {
 
 function createSnapshot() {
   return {
-    tool: 'move' as const,
+    tool: 'select' as const,
     selectedAssetIds: {
       floor: 'missing.floor',
       wall: 'missing.wall',

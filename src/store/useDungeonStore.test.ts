@@ -710,7 +710,7 @@ describe('useDungeonStore history', () => {
     expect(useDungeonStore.getState().tool).toBe('prop')
 
     useDungeonStore.getState().undo()
-    expect(useDungeonStore.getState().tool).toBe('move')
+    expect(useDungeonStore.getState().tool).toBe('select')
 
     useDungeonStore.getState().redo()
     expect(useDungeonStore.getState().tool).toBe('prop')
