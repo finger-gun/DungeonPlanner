@@ -150,7 +150,15 @@
         consentBanner.hidden = true;
       };
 
-      if (!localStorage.getItem("dp_cookie_consent")) {
+      const isAutomatedBrowser =
+        navigator.webdriver ||
+        window.location.search.includes("e2e=1") ||
+        localStorage.getItem("dp_cookie_consent_test") === "skip";
+
+      if (isAutomatedBrowser) {
+        localStorage.setItem("dp_cookie_consent", "denied");
+        consentBanner.hidden = true;
+      } else if (!localStorage.getItem("dp_cookie_consent")) {
         consentBanner.hidden = false;
       }
 

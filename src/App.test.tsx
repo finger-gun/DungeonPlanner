@@ -115,7 +115,7 @@ describe('App sidebar drawer', () => {
     render(<App />)
 
     expect(screen.queryByRole('button', { name: /sidebar/i })).not.toBeInTheDocument()
-    expect(screen.getByTestId('editor-right-panel-shell')).toHaveAttribute('data-sidebar-visible', 'false')
+    expect(screen.queryByTestId('editor-right-panel-shell')).not.toBeInTheDocument()
   })
 
   it('opens settings in play mode without changing the active tool', async () => {
@@ -142,7 +142,7 @@ describe('App sidebar drawer', () => {
 
     expect(useDungeonStore.getState().tool).toBe('play')
     expect(screen.getByTestId('toolbar-settings-state')).toHaveTextContent('closed')
-    expect(screen.getByTestId('editor-right-panel-shell')).toHaveAttribute('data-sidebar-visible', 'false')
+    expect(screen.queryByTestId('editor-right-panel-shell')).not.toBeInTheDocument()
   })
 
   it('returns to the normal side panel outside play mode with the back button', async () => {

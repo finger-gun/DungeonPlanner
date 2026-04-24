@@ -4,7 +4,6 @@ import { useEffect, useRef } from 'react'
 import * as THREE from 'three'
 import type { OrbitControls as OrbitControlsImpl } from 'three-stdlib'
 import { useDungeonStore } from '../../store/useDungeonStore'
-import { registerDebugCameraPoseReader, registerDebugWorldProjector } from './debugCameraBridge'
 
 const PAN_SPEED = 0.006
 const ROTATE_SPEED = 0.025
@@ -138,8 +137,6 @@ function KeyboardCameraControls() {
 
 export function Controls() {
   const controlsRef = useRef<OrbitControlsImpl | null>(null)
-  const camera = useThree((state) => state.camera)
-  const gl = useThree((state) => state.gl)
   const cameraMode = useDungeonStore((state) => state.cameraMode)
   const isPaintingStrokeActive = useDungeonStore(
     (state) => state.isPaintingStrokeActive,
@@ -151,34 +148,6 @@ export function Controls() {
     activeCameraMode === 'isometric'
     || activeCameraMode === 'top-down'
     || activeCameraMode === 'classic'
-
-  useEffect(() => {
-    if (!import.meta.env.DEV) {
-      return
-    }
-
-    registerDebugCameraPoseReader(() => {
-      const target = controlsRef.current?.target ?? new THREE.Vector3()
-
-      return {
-        position: [camera.position.x, camera.position.y, camera.position.z] as const,
-        target: [target.x, target.y, target.z] as const,
-      }
-    })
-    registerDebugWorldProjector((point) => {
-      const vector = new THREE.Vector3(point[0], point[1], point[2]).project(camera)
-      const rect = gl.domElement.getBoundingClientRect()
-      return {
-        x: rect.left + ((vector.x + 1) * 0.5 * rect.width),
-        y: rect.top + ((1 - vector.y) * 0.5 * rect.height),
-      }
-    })
-
-    return () => {
-      registerDebugCameraPoseReader(null)
-      registerDebugWorldProjector(null)
-    }
-  }, [camera, gl])
 
   return (
     <>

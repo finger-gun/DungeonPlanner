@@ -409,6 +409,7 @@ function App() {
 
           {debugPanelOpen && (
             <DebugVisibilityPanel
+              rightOffsetClass={!isPlayMode && sidebarVisible ? 'right-[23rem]' : 'right-4'}
               exploredCellCount={exploredCellCount}
               clearExploredCells={clearExploredCells}
               showLosDebugMask={showLosDebugMask}
@@ -477,7 +478,7 @@ function App() {
             </Suspense>
           )}
 
-          {isPlayMode && (
+          {isPlayMode && showSettingsPanel && (
             <div
               data-testid="editor-right-panel-shell"
               data-sidebar-visible={sidebarVisible}
@@ -531,6 +532,7 @@ function formatCount(count: number, singular: string) {
 }
 
 function DebugVisibilityPanel({
+  rightOffsetClass,
   exploredCellCount,
   clearExploredCells,
   showLosDebugMask,
@@ -545,6 +547,7 @@ function DebugVisibilityPanel({
   debugAssetSourcePath,
   debugAssetSourceLink,
 }: {
+  rightOffsetClass: string
   exploredCellCount: number
   clearExploredCells: () => void
   showLosDebugMask: boolean
@@ -562,7 +565,7 @@ function DebugVisibilityPanel({
   return (
     <aside
       data-testid="debug-visibility-panel"
-      className="absolute right-4 top-20 z-20 flex w-72 flex-col gap-4 rounded-2xl border border-emerald-400/25 bg-stone-950/92 p-4 shadow-2xl backdrop-blur"
+      className={`absolute top-20 z-40 flex w-72 flex-col gap-4 rounded-2xl border border-emerald-400/25 bg-stone-950/92 p-4 shadow-2xl backdrop-blur ${rightOffsetClass}`}
     >
       <div>
         <p className="text-xs font-semibold uppercase tracking-[0.3em] text-emerald-300/85">

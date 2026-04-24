@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/ban-ts-comment */
 // @ts-nocheck
 import { Lighting } from 'three/webgpu'
 import DungeonPlannerTiledLightsNode from './TiledLightsNode'

@@ -29,6 +29,7 @@ import { getEnvironmentLightingState } from './environmentLighting'
 import { createWebGpuRenderer } from '../../rendering/createWebGpuRenderer'
 import { MAX_FORWARD_PLUS_POINT_LIGHTS } from '../../rendering/forwardPlusConfig'
 import { FogOfWarProvider } from './fogOfWar'
+import { registerDebugCameraPoseReader, registerDebugWorldProjector } from './debugCameraBridge'
 
 const WebGPUPostProcessing = lazy(() =>
   import('./WebGPUPostProcessing').then((module) => ({
@@ -173,6 +174,7 @@ function GlobalContent() {
         position={[-8, 7, -4]}
       />
 
+      <DebugCameraBridgeBinder />
       {effectiveFloorViewMode === 'active' && <Grid playMode={tool === 'play'} />}
       <pointLight
         position={[0, -1000, 0]}
@@ -188,6 +190,46 @@ function GlobalContent() {
       <FrameDriver />
     </>
   )
+}
+
+function DebugCameraBridgeBinder() {
+  const camera = useThree((state) => state.camera)
+  const gl = useThree((state) => state.gl)
+
+  useEffect(() => {
+    if (!import.meta.env.DEV) {
+      return
+    }
+
+    registerDebugCameraPoseReader(() => {
+      const direction = new THREE.Vector3()
+      camera.getWorldDirection(direction)
+
+      return {
+        position: [camera.position.x, camera.position.y, camera.position.z] as const,
+        target: [
+          camera.position.x + direction.x * 10,
+          camera.position.y + direction.y * 10,
+          camera.position.z + direction.z * 10,
+        ] as const,
+      }
+    })
+    registerDebugWorldProjector((point) => {
+      const vector = new THREE.Vector3(point[0], point[1], point[2]).project(camera)
+      const rect = gl.domElement.getBoundingClientRect()
+      return {
+        x: rect.left + ((vector.x + 1) * 0.5 * rect.width),
+        y: rect.top + ((1 - vector.y) * 0.5 * rect.height),
+      }
+    })
+
+    return () => {
+      registerDebugCameraPoseReader(null)
+      registerDebugWorldProjector(null)
+    }
+  }, [camera, gl])
+
+  return null
 }
 
 type FloorRenderEntry = {
