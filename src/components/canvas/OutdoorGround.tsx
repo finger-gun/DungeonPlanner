@@ -28,7 +28,7 @@ const OUTDOOR_GROUND_HALF_SIZE = OUTDOOR_GROUND_SIZE / 2
 const MASK_TEXTURE_SIZE = 768
 const TERRAIN_REPEAT = 36
 const TOP_SURFACE_ELEVATION = 0.01
-const STYLE_OVERLAY_ELEVATION = 0.18
+const STYLE_OVERLAY_ELEVATION = 0.001
 const STEPPED_TERRAIN_ROUGHNESS = 0.6000000238418579
 // CSS blur radius for style overlay masks (~1 cell gradient transition)
 const STYLE_OVERLAY_FEATHER_PX = 3
@@ -218,6 +218,24 @@ export function createTerrainStyleMask(cells: OutdoorTerrainStyleCells, terrainS
   )
 }
 
+export function createTerrainStyleOverlayMaterial(
+  texture: THREE.Texture,
+  mask: THREE.Texture,
+  roughness: number,
+) {
+  return createStandardCompatibleMaterial({
+    map: texture,
+    alphaMap: mask,
+    transparent: true,
+    depthWrite: false,
+    polygonOffset: true,
+    polygonOffsetFactor: -1,
+    polygonOffsetUnits: -1,
+    roughness,
+    metalness: 0,
+  })
+}
+
 function getCellWorldPosition(cell: GridCell): [number, number] {
   return [
     (cell[0] + 0.5) * GRID_SIZE,
@@ -315,14 +333,11 @@ export function OutdoorGround({
       // Ground-level overlays use roughness 1 to match the matte base plane;
       // elevated overlays use the stepped-terrain roughness to match 3D models.
       const roughness = group.worldY > 0 ? STEPPED_TERRAIN_ROUGHNESS : 1
-      const material = createStandardCompatibleMaterial({
-        map: opaqueTextures[group.terrainStyle],
-        alphaMap: mask,
-        transparent: true,
-        depthWrite: false,
+      const material = createTerrainStyleOverlayMaterial(
+        opaqueTextures[group.terrainStyle],
+        mask,
         roughness,
-        metalness: 0,
-      })
+      )
       return { ...group, mask, material }
     })
   }, [derivedTerrain.topSurfaces, defaultOutdoorTerrainStyle, opaqueTextures])
