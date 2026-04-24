@@ -193,10 +193,12 @@ describe('content pack registry', () => {
     expect(getContentPackAssetById('kaykit.forest_tree_1_a_color1')).toMatchObject({
       category: 'prop',
       name: 'Forest Tree 1 A (Lush)',
+      thumbnailUrl: expect.any(String),
     })
     expect(getContentPackAssetById('kaykit.forest_tree_1_a_color8')).toMatchObject({
       category: 'prop',
       name: 'Forest Tree 1 A (Ash)',
+      thumbnailUrl: expect.any(String),
     })
     expect(getContentPackAssetById('kaykit.forest_rock_2_a_color4')).toMatchObject({
       category: 'prop',
