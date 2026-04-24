@@ -1,5 +1,5 @@
 import { Suspense, useEffect, useMemo, useRef, useState } from 'react'
-import { Canvas, useThree } from '@react-three/fiber'
+import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import { OrthographicCamera } from '@react-three/drei'
 import * as THREE from 'three'
 import { SkeletonUtils } from 'three-stdlib'
@@ -67,6 +67,7 @@ function ThumbnailModel({
     [gltf.scene, useNodeMaterials],
   )
   const groupRef = useRef<THREE.Group>(null)
+  const renderedFramesRef = useRef(-1)
   const { camera, invalidate, size } = useThree()
 
   useEffect(() => {
@@ -91,21 +92,23 @@ function ThumbnailModel({
     camera.zoom = layout.zoom
     camera.updateProjectionMatrix()
     camera.updateMatrixWorld()
+    renderedFramesRef.current = 0
     invalidate()
-
-    let settleFrame = 0
-    const frame = window.requestAnimationFrame(() => {
-      invalidate()
-      settleFrame = window.requestAnimationFrame(() => {
-        window.__THUMBNAIL_READY__ = true
-      })
-    })
-
-    return () => {
-      window.cancelAnimationFrame(frame)
-      window.cancelAnimationFrame(settleFrame)
-    }
   }, [camera, invalidate, scene, size.height, size.width])
+
+  useFrame(() => {
+    if (renderedFramesRef.current < 0 || window.__THUMBNAIL_READY__) {
+      return
+    }
+
+    renderedFramesRef.current += 1
+    if (renderedFramesRef.current < 3) {
+      invalidate()
+      return
+    }
+
+    window.__THUMBNAIL_READY__ = true
+  })
 
   return (
     <group ref={groupRef}>
@@ -119,6 +122,7 @@ function createThumbnailWebGlRenderer(props: THREE.WebGLRendererParameters) {
     canvas: props.canvas as HTMLCanvasElement | undefined,
     antialias: props.antialias ?? true,
     alpha: props.alpha ?? true,
+    preserveDrawingBuffer: true,
     powerPreference: props.powerPreference,
   })
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
