@@ -18,6 +18,18 @@ describe('browserMetadata', () => {
     expect(getAssetBrowserSubcategory(banner!)).toBe('banners')
   })
 
+  it('categorizes forest props as nature assets', () => {
+    const tree = getContentPackAssetsByCategory('prop').find((asset) => asset.id.includes('kaykit.forest_tree_1_a_color1'))
+    const rock = getContentPackAssetsByCategory('prop').find((asset) => asset.id.includes('kaykit.forest_rock_2_a_color4'))
+
+    expect(tree).toBeDefined()
+    expect(rock).toBeDefined()
+    expect(getAssetBrowserCategory(tree!)).toBe('nature')
+    expect(getAssetBrowserSubcategory(tree!)).toBe('trees')
+    expect(getAssetBrowserCategory(rock!)).toBe('nature')
+    expect(getAssetBrowserSubcategory(rock!)).toBe('rocks')
+  })
+
   it('categorizes floor and wall assets as surfaces', () => {
     const floor = getContentPackAssetsByCategory('floor')[0]
     const wall = getContentPackAssetsByCategory('wall')[0]

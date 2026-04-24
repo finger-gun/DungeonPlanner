@@ -11,6 +11,7 @@ const ASSET_BROWSER_CATEGORIES: Array<{ id: AssetBrowserCategory; label: string 
   { id: 'furniture', label: 'Furniture' },
   { id: 'storage', label: 'Storage' },
   { id: 'decor', label: 'Decor' },
+  { id: 'nature', label: 'Nature' },
   { id: 'treasure', label: 'Treasure' },
   { id: 'structure', label: 'Structure' },
   { id: 'openings', label: 'Openings' },
@@ -28,6 +29,11 @@ const SUBCATEGORY_LABELS: Record<AssetBrowserSubcategory, string> = {
   banners: 'Banners',
   tabletop: 'Tabletop',
   books: 'Books',
+  trees: 'Trees',
+  'bare-trees': 'Bare Trees',
+  bushes: 'Bushes',
+  grass: 'Grass',
+  rocks: 'Rocks',
   loot: 'Loot',
   tools: 'Tools',
   rubble: 'Rubble',
@@ -59,6 +65,9 @@ export function PropToolPanel() {
   const setAssetBrowserSubcategory = useDungeonStore((state) => state.setAssetBrowserSubcategory)
   const removeSelectedObject = useDungeonStore((state) => state.removeSelectedObject)
   const removeOpening = useDungeonStore((state) => state.removeOpening)
+  const visibleCategories = mapMode === 'outdoor'
+    ? ASSET_BROWSER_CATEGORIES
+    : ASSET_BROWSER_CATEGORIES.filter(({ id }) => id !== 'nature')
 
   const allAssets = [
     ...getContentPackAssetsByCategory('prop'),
@@ -103,7 +112,7 @@ export function PropToolPanel() {
           Asset Categories
         </p>
         <div className="flex flex-wrap gap-1.5">
-          {ASSET_BROWSER_CATEGORIES.map(({ id, label }) => {
+          {visibleCategories.map(({ id, label }) => {
             const active = assetBrowser.category === id
             return (
               <CompactPillButton
@@ -203,6 +212,8 @@ export function PropToolPanel() {
         <p className="mt-1">
           {assetBrowser.category === 'openings'
             ? 'Browse doors and stairs here. Shared-wall editing now lives under Room -> Walls.'
+            : assetBrowser.category === 'nature'
+              ? 'Browse outdoor nature props by family. Only full placeable assets appear here; terrain cliff and top pieces stay out of the prop browser.'
             : assetBrowser.category === 'surfaces'
               ? 'Browse floor and wall variants here. Selecting a surface asset keeps the faster brush workflow on the canvas.'
               : 'Browse props by category and subcategory. Wall, floor, and surface-aware placement still comes from asset metadata.'}
@@ -295,7 +306,7 @@ function getAssetBadgeLabel(asset: ContentPackAsset, active: boolean) {
   if (asset.category === 'floor' || asset.category === 'wall') return asset.category
   if (tags.includes('light')) return 'light'
 
-  return getAssetBrowserSubcategory(asset)
+  return SUBCATEGORY_LABELS[getAssetBrowserSubcategory(asset)].toLowerCase()
 }
 
 function getAssetBadgeClassName(asset: ContentPackAsset, active: boolean) {

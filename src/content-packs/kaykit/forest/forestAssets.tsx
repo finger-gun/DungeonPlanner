@@ -1,6 +1,7 @@
 import type { ContentPackAsset, ContentPackAssetMetadata } from '../../types'
 import { listAvailableKayKitModelNames } from '../shared/createKayKitAsset'
 import { createKayKitContentPackAsset } from '../shared/createKayKitContentPackAsset'
+import { getOutdoorTerrainStyleLabel, type OutdoorTerrainStyle } from '../../../store/outdoorTerrainStyles'
 
 type ForestAssetFamily = 'tree' | 'tree-bare' | 'bush' | 'grass' | 'rock'
 
@@ -24,7 +25,7 @@ export const kaykitForestPropAssets: ContentPackAsset[] = FOREST_MODEL_DEFINITIO
   createKayKitContentPackAsset({
     id: `kaykit.forest_${definition.baseName.toLowerCase()}_${definition.style.toLowerCase()}`,
     slug: `kaykit-forest-${definition.baseName.toLowerCase().replace(/_/g, '-')}-${definition.style.toLowerCase()}`,
-    name: `Forest ${humanizeForestBaseName(definition.baseName)} (${definition.style.replace('Color', 'Color ')})`,
+    name: `Forest ${humanizeForestBaseName(definition.baseName)} (${getOutdoorTerrainStyleLabel(definition.style as OutdoorTerrainStyle)})`,
     category: 'prop',
     modelName: definition.modelName,
     metadata: createForestAssetMetadata(definition),
@@ -70,7 +71,16 @@ function parseForestModelName(modelName: string): ForestModelDefinition | null {
 }
 
 function createForestAssetMetadata(definition: ForestModelDefinition): ContentPackAssetMetadata {
-  const browserSubcategory = definition.family === 'rock' ? 'rubble' : 'misc'
+  const browserSubcategory =
+    definition.family === 'rock'
+      ? 'rocks'
+      : definition.family === 'grass'
+        ? 'grass'
+        : definition.family === 'bush'
+          ? 'bushes'
+          : definition.family === 'tree-bare'
+            ? 'bare-trees'
+            : 'trees'
   const blocksLineOfSight = definition.family === 'tree' || definition.family === 'tree-bare'
   const castShadow = definition.family !== 'grass'
 
@@ -79,7 +89,7 @@ function createForestAssetMetadata(definition: ForestModelDefinition): ContentPa
     connectors: FLOOR_CONNECTORS,
     blocksLineOfSight,
     castShadow,
-    browserCategory: 'decor',
+    browserCategory: 'nature',
     browserSubcategory,
     browserTags: [
       'outdoor',

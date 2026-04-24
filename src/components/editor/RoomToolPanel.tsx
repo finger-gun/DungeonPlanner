@@ -9,6 +9,7 @@ import {
 } from '../../store/useDungeonStore'
 import {
   OUTDOOR_TERRAIN_STYLES,
+  getOutdoorTerrainStyleLabel,
   type OutdoorTerrainStyle as TerrainStyleId,
 } from '../../store/outdoorTerrainStyles'
 import { AssetCatalog } from './AssetCatalog'
@@ -38,9 +39,9 @@ const TERRAIN_DENSITIES: Array<{ id: OutdoorTerrainDensity; label: string }> = [
 ]
 
 const OUTDOOR_BRUSH_MODES: Array<{ id: OutdoorBrushMode; label: string }> = [
-  { id: 'surroundings', label: 'Surroundings' },
-  { id: 'terrain-sculpt', label: 'Terrain Sculpt' },
-  { id: 'terrain-style', label: 'Terrain Style Paint' },
+  { id: 'surroundings', label: 'Nature' },
+  { id: 'terrain-sculpt', label: 'Sculpt' },
+  { id: 'terrain-style', label: 'Style' },
 ]
 
 const OUTDOOR_SCULPT_MODES: Array<{ id: OutdoorTerrainSculptMode; label: string }> = [
@@ -50,7 +51,7 @@ const OUTDOOR_SCULPT_MODES: Array<{ id: OutdoorTerrainSculptMode; label: string 
 
 const OUTDOOR_TERRAIN_STYLE_OPTIONS: Array<{ id: TerrainStyleId; label: string }> = OUTDOOR_TERRAIN_STYLES.map((style) => ({
   id: style,
-  label: style.replace('Color', 'Color '),
+  label: getOutdoorTerrainStyleLabel(style),
 }))
 
 export function RoomToolPanel() {
@@ -85,7 +86,7 @@ export function RoomToolPanel() {
     <div className="space-y-5">
       <section>
         <p className="mb-3 text-xs font-semibold uppercase tracking-[0.3em] text-amber-200/70">
-          {mapMode === 'outdoor' ? 'Terrain Mode' : 'Room Tools'}
+          {mapMode === 'outdoor' ? 'Terrain Tools' : 'Room Tools'}
         </p>
         <div className="flex flex-wrap gap-1.5">
           {ROOM_EDIT_MODES.map((mode) => {
@@ -94,6 +95,7 @@ export function RoomToolPanel() {
             }
 
             const active = roomEditMode === mode.id
+            const label = mapMode === 'outdoor' && mode.id === 'rooms' ? 'Nature' : mode.label
             return (
               <CompactPillButton
                 key={mode.id}
@@ -104,7 +106,7 @@ export function RoomToolPanel() {
                 tone="teal"
                 size="sm"
               >
-                {mode.label}
+                {label}
               </CompactPillButton>
             )
           })}
@@ -113,20 +115,28 @@ export function RoomToolPanel() {
 
       {roomEditMode === 'rooms' ? (
         <section className="rounded-2xl border border-stone-800 bg-stone-950/50 p-4 text-sm leading-6 text-stone-400">
-          <p className="font-medium text-stone-300">{mapMode === 'outdoor' ? 'Surrounding Paint Brush' : 'Room Tool'}</p>
+          <p className="font-medium text-stone-300">
+            {mapMode === 'outdoor'
+              ? outdoorBrushMode === 'terrain-style'
+                ? 'Style Brush'
+                : outdoorBrushMode === 'terrain-sculpt'
+                  ? 'Sculpt Tool'
+                  : 'Nature Brush'
+              : 'Room Tool'}
+          </p>
           <p className="mt-1 text-xs">
             {mapMode === 'outdoor'
               ? outdoorBrushMode === 'terrain-style'
-                ? 'Left-drag to paint terrain styles. Right-drag to reset painted cells back to the map default style.'
+                ? 'Left-drag to paint terrain styles. Right-drag resets painted cells back to the map default.'
                 : outdoorBrushMode === 'terrain-sculpt'
                   ? 'Left-drag raises stepped terrain. Right-drag lowers stepped terrain into pits and trenches.'
-                  : 'Left-drag to paint terrain surroundings. Right-drag to erase. Painted areas auto-place terrain props and remain inaccessible.'
+                  : 'Left-drag to paint nature. Right-drag to erase. Painted areas auto-place nature props and remain inaccessible.'
               : 'Left-drag to paint rooms. Right-drag to erase.'}
           </p>
           {mapMode === 'outdoor' ? (
             <div className="mt-4 space-y-3 text-xs">
               <div>
-                <p className="mb-1 uppercase tracking-[0.2em] text-stone-500">Brush Mode</p>
+                <p className="mb-1 uppercase tracking-[0.2em] text-stone-500">Tool</p>
                 <div className="flex flex-wrap gap-1.5">
                   {OUTDOOR_BRUSH_MODES.map((mode) => {
                     const active = outdoorBrushMode === mode.id
@@ -147,7 +157,7 @@ export function RoomToolPanel() {
               </div>
               {outdoorBrushMode === 'terrain-style' ? (
                 <div>
-                  <p className="mb-1 uppercase tracking-[0.2em] text-stone-500">Terrain Style</p>
+                  <p className="mb-1 uppercase tracking-[0.2em] text-stone-500">Style</p>
                   <div className="grid grid-cols-2 gap-2">
                     {OUTDOOR_TERRAIN_STYLE_OPTIONS.map((texture) => {
                       const active = outdoorTerrainStyleBrush === texture.id
@@ -215,7 +225,7 @@ export function RoomToolPanel() {
               ) : (
                 <>
                   <div>
-                    <p className="mb-1 uppercase tracking-[0.2em] text-stone-500">Color Variant</p>
+                    <p className="mb-1 uppercase tracking-[0.2em] text-stone-500">Nature Style</p>
                     <div className="grid grid-cols-2 gap-2">
                       {OUTDOOR_TERRAIN_STYLE_OPTIONS.map((terrainStyle) => {
                         const active = outdoorTerrainStyleBrush === terrainStyle.id

@@ -36,6 +36,19 @@ describe('EditorToolbar', () => {
     expect(state.tool).toBe('room')
   })
 
+  it('shows neutral styling for indoor and outdoor map choices', () => {
+    render(<EditorToolbar />)
+
+    fireEvent.click(screen.getByTitle('File'))
+    fireEvent.click(screen.getByRole('button', { name: /new dungeon/i }))
+
+    const indoorButton = screen.getByRole('button', { name: /new indoor dungeon/i })
+    const outdoorButton = screen.getByRole('button', { name: /new outdoor map/i })
+
+    expect(indoorButton.className).not.toMatch(/red|emerald/)
+    expect(outdoorButton.className).not.toMatch(/red|emerald/)
+  })
+
   it('hides the opening tool shortcut in outdoor mode', () => {
     useDungeonStore.getState().newDungeon('outdoor')
     render(<EditorToolbar />)

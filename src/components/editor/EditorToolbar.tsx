@@ -134,6 +134,7 @@ function FileMenuButton() {
   const [confirmNew, setConfirmNew] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const menuItemClass = 'flex w-full items-center gap-3 px-3 py-2 text-left text-sm transition'
 
   const downloadDungeon = useDungeonStore((s) => s.downloadDungeon)
   const loadDungeon = useDungeonStore((s) => s.loadDungeon)
@@ -185,7 +186,7 @@ function FileMenuButton() {
       </button>
 
       {open && (
-        <div className="absolute bottom-0 left-14 z-50 w-44 rounded-2xl border border-stone-700/60 bg-stone-900 py-1.5 shadow-xl">
+        <div className="absolute bottom-0 left-14 z-50 w-56 rounded-2xl border border-stone-700/60 bg-stone-900 py-1.5 shadow-xl">
           {/* New */}
           <button
             type="button"
@@ -196,9 +197,9 @@ function FileMenuButton() {
               }
               handleNew('indoor')
             }}
-            className={`flex w-full items-center gap-3 px-3 py-2 text-left text-sm transition ${
+            className={`${menuItemClass} ${
               confirmNew
-                ? 'bg-red-900/40 text-red-300 hover:bg-red-900/60'
+                ? 'bg-stone-800 text-stone-100 hover:bg-stone-700'
                 : 'text-stone-300 hover:bg-stone-800'
             }`}
           >
@@ -210,7 +211,7 @@ function FileMenuButton() {
             <button
               type="button"
               onClick={() => handleNew('outdoor')}
-              className="flex w-full items-center gap-3 px-3 py-2 text-left text-sm text-emerald-200 transition hover:bg-emerald-900/40"
+              className={`${menuItemClass} text-stone-300 hover:bg-stone-800 hover:text-stone-100`}
             >
               <FilePlus2 size={14} strokeWidth={1.5} className="shrink-0" />
               New Outdoor Map
@@ -223,7 +224,7 @@ function FileMenuButton() {
           <button
             type="button"
             onClick={() => { downloadDungeon(); setOpen(false) }}
-            className="flex w-full items-center gap-3 px-3 py-2 text-left text-sm text-stone-300 transition hover:bg-stone-800"
+            className={`${menuItemClass} text-stone-300 hover:bg-stone-800`}
           >
             <Download size={14} strokeWidth={1.5} className="shrink-0" />
             Save Dungeon
@@ -233,7 +234,7 @@ function FileMenuButton() {
           <button
             type="button"
             onClick={() => fileInputRef.current?.click()}
-            className="flex w-full items-center gap-3 px-3 py-2 text-left text-sm text-stone-300 transition hover:bg-stone-800"
+            className={`${menuItemClass} text-stone-300 hover:bg-stone-800`}
           >
             <Upload size={14} strokeWidth={1.5} className="shrink-0" />
             Load Dungeon
