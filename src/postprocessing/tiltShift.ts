@@ -1,5 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import {
+  convertToTexture,
   mix,
   screenUV,
   step,
@@ -31,9 +32,10 @@ export function tiltShift(
   sceneViewZ: any,
   opts: TiltShiftOptions,
 ): any {
+  const colorTexture = convertToTexture(sceneColor)
   const currentDistance = sceneViewZ.negate()
   const signedDistanceFromFocus = currentDistance.sub(opts.focusDistance as any)
-  const sharp = sceneColor.sample(screenUV as any)
+  const sharp = colorTexture.sample(screenUV as any)
   const nearMask = step(
     signedDistanceFromFocus,
     0,

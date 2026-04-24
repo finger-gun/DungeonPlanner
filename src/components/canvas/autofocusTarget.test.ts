@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { resolveAutofocusTarget } from './autofocusTarget'
+import * as THREE from 'three'
+import { getAutofocusDistance, resolveAutofocusTarget } from './autofocusTarget'
 
 describe('resolveAutofocusTarget', () => {
   it('prefers the orbit target over a raycast hit', () => {
@@ -30,5 +31,16 @@ describe('resolveAutofocusTarget', () => {
         { x: 4, y: 5, z: 6 },
       ),
     ).toEqual({ x: 4, y: 5, z: 6 })
+  })
+
+  it('uses camera-space depth instead of world-space straight-line distance', () => {
+    const camera = new THREE.PerspectiveCamera(42, 1, 0.1, 100)
+    camera.position.set(0, 0, 0)
+    camera.lookAt(0, 0, -1)
+    camera.updateMatrixWorld()
+    camera.updateProjectionMatrix()
+
+    expect(getAutofocusDistance(camera, { x: 0, y: 0, z: -10 })).toBeCloseTo(10)
+    expect(getAutofocusDistance(camera, { x: 3, y: 0, z: -10 })).toBeCloseTo(10)
   })
 })
