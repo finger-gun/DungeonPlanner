@@ -1,15 +1,11 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import type { ActorKind, ActorSize } from '@dungeonplanner/shared/actors'
-import {
-  deleteGeneratedCharacterAssets,
-  requestGeneratedCharacterImage,
-  saveGeneratedCharacterAssets,
-} from '@dungeonplanner/shared/generated-characters/api'
+import { requestGeneratedCharacterImage } from '@dungeonplanner/shared/generated-characters/api'
 import { composeGeneratedCharacterPrompt } from '@dungeonplanner/shared/generated-characters/prompt'
 import { processGeneratedCharacterImage } from '@dungeonplanner/shared/generated-characters/processing'
 import type { Id } from '../../convex/_generated/dataModel'
 import { api } from '../../convex/_generated/api'
-import { useMutation, useQuery } from '../lib/backendData'
+import { uploadFileThroughBackend, useMutation, useQuery } from '../lib/backendData'
 import { resolveBackendApiBaseUrl } from '../lib/backendAuthApi'
 
 const DEFAULT_ACTOR_KIND: ActorKind = 'character'
@@ -35,6 +31,10 @@ type ActorSummary = {
   model: string | null
   size: ActorSize
   storageId: string | null
+  originalImageStorageId: Id<'_storage'> | null
+  processedImageStorageId: Id<'_storage'> | null
+  alphaMaskStorageId: Id<'_storage'> | null
+  thumbnailStorageId: Id<'_storage'> | null
   originalImageUrl: string | null
   processedImageUrl: string | null
   alphaMaskUrl: string | null
@@ -54,6 +54,10 @@ type ActorDraft = {
   model: string | null
   size: ActorSize
   storageId: string | null
+  originalImageStorageId: Id<'_storage'> | null
+  processedImageStorageId: Id<'_storage'> | null
+  alphaMaskStorageId: Id<'_storage'> | null
+  thumbnailStorageId: Id<'_storage'> | null
   originalImageUrl: string | null
   processedImageUrl: string | null
   alphaMaskUrl: string | null
@@ -72,6 +76,10 @@ function createEmptyActorDraft(actorPackId: Id<'actorPacks'> | null): ActorDraft
     model: null,
     size: DEFAULT_ACTOR_SIZE,
     storageId: null,
+    originalImageStorageId: null,
+    processedImageStorageId: null,
+    alphaMaskStorageId: null,
+    thumbnailStorageId: null,
     originalImageUrl: null,
     processedImageUrl: null,
     alphaMaskUrl: null,
@@ -102,6 +110,24 @@ function resolveActorAssetUrl(path: string | null, backendBaseUrl: string) {
   }
 }
 
+function collectDraftStorageIds(draft: Pick<
+  ActorDraft,
+  'originalImageStorageId' | 'processedImageStorageId' | 'alphaMaskStorageId' | 'thumbnailStorageId'
+>) {
+  return [
+    draft.originalImageStorageId,
+    draft.processedImageStorageId,
+    draft.alphaMaskStorageId,
+    draft.thumbnailStorageId,
+  ].filter((storageId): storageId is Id<'_storage'> => Boolean(storageId))
+}
+
+async function dataUrlToFile(dataUrl: string, fileName: string) {
+  const response = await fetch(dataUrl)
+  const blob = await response.blob()
+  return new File([blob], fileName, { type: blob.type || 'image/png' })
+}
+
 export function ActorLibraryPanel() {
   const backendBaseUrl = useMemo(
     () => resolveBackendApiBaseUrl(window.location, import.meta.env.VITE_BACKEND_URL),
@@ -115,8 +141,9 @@ export function ActorLibraryPanel() {
   const setActorPackActive = useMutation(api.actors.setActorPackActive)
   const saveActor = useMutation(api.actors.saveActor)
   const deleteActor = useMutation(api.actors.deleteActor)
+  const deleteUploadedActorImages = useMutation(api.actors.deleteUploadedActorImages)
 
-  const [selectedActorPackId, setSelectedActorPackId] = useState<Id<'actorPacks'> | null>(null)
+  const [selectedActorPackIdState, setSelectedActorPackIdState] = useState<Id<'actorPacks'> | null>(null)
   const [packFormId, setPackFormId] = useState<Id<'actorPacks'> | null>(null)
   const [packName, setPackName] = useState('')
   const [packDescription, setPackDescription] = useState('')
@@ -131,35 +158,25 @@ export function ActorLibraryPanel() {
   const [isSavingActor, setIsSavingActor] = useState(false)
   const [isGeneratingImage, setIsGeneratingImage] = useState(false)
 
-  useEffect(() => {
-    if (selectedActorPackId && actorPacks.some((actorPack) => actorPack._id === selectedActorPackId)) {
-      return
-    }
-
-    const firstActorPack = actorPacks[0] ?? null
-    setSelectedActorPackId(firstActorPack?._id ?? null)
-  }, [actorPacks, selectedActorPackId])
-
-  useEffect(() => {
-    if (!selectedActorPackId) {
-      setActorDraft((current) => (
-        current.actorId ? current : createEmptyActorDraft(null)
-      ))
-      return
-    }
-
-    setActorDraft((current) => (
-      current.actorId || current.actorPackId === selectedActorPackId
-        ? current
-        : createEmptyActorDraft(selectedActorPackId)
-    ))
-  }, [selectedActorPackId])
-
+  const selectedActorPackId = useMemo(() => (
+    selectedActorPackIdState && actorPacks.some((actorPack) => actorPack._id === selectedActorPackIdState)
+      ? selectedActorPackIdState
+      : (actorPacks[0]?._id ?? null)
+  ), [actorPacks, selectedActorPackIdState])
   const selectedActorPack = actorPacks.find((actorPack) => actorPack._id === selectedActorPackId) ?? null
   const actorsInSelectedPack = useMemo(
     () => actors.filter((actor) => actor.actorPackId === selectedActorPackId),
     [actors, selectedActorPackId],
   )
+
+  function selectActorPack(actorPackId: Id<'actorPacks'> | null) {
+    setSelectedActorPackIdState(actorPackId)
+    setActorDraft((current) => (
+      current.actorId || current.actorPackId === actorPackId
+        ? current
+        : createEmptyActorDraft(actorPackId)
+    ))
+  }
 
   function hydratePackForm(actorPack: ActorPackSummary | null) {
     setPackFormId(actorPack?._id ?? null)
@@ -187,6 +204,10 @@ export function ActorLibraryPanel() {
       model: actor.model,
       size: actor.size,
       storageId: actor.storageId,
+      originalImageStorageId: actor.originalImageStorageId,
+      processedImageStorageId: actor.processedImageStorageId,
+      alphaMaskStorageId: actor.alphaMaskStorageId,
+      thumbnailStorageId: actor.thumbnailStorageId,
       originalImageUrl: actor.originalImageUrl,
       processedImageUrl: actor.processedImageUrl,
       alphaMaskUrl: actor.alphaMaskUrl,
@@ -218,7 +239,7 @@ export function ActorLibraryPanel() {
         isActive: packIsActive,
       })
 
-      setSelectedActorPackId(actorPackId)
+      selectActorPack(actorPackId)
       setPackFormId(actorPackId)
       setPackNotice(packFormId ? 'Updated the actor pack.' : 'Created a new actor pack.')
     } catch (error) {
@@ -259,33 +280,34 @@ export function ActorLibraryPanel() {
         baseUrl: backendBaseUrl,
       })
       const processed = await processGeneratedCharacterImage(generated.imageDataUrl)
-      const saved = await saveGeneratedCharacterAssets({
-        originalImageDataUrl: generated.imageDataUrl,
-        processedImageDataUrl: processed.processedImageDataUrl,
-        alphaMaskDataUrl: processed.alphaMaskDataUrl,
-        thumbnailDataUrl: processed.thumbnailDataUrl,
-      }, fetch, backendBaseUrl)
+      const previousDraftStorageIds = actorDraft.actorId ? [] : collectDraftStorageIds(actorDraft)
+      const [originalImageStorageId, processedImageStorageId, alphaMaskStorageId, thumbnailStorageId] = await Promise.all([
+        uploadFileThroughBackend(await dataUrlToFile(generated.imageDataUrl, 'original.png')),
+        uploadFileThroughBackend(await dataUrlToFile(processed.processedImageDataUrl, 'processed.png')),
+        uploadFileThroughBackend(await dataUrlToFile(processed.alphaMaskDataUrl, 'alpha-mask.png')),
+        uploadFileThroughBackend(await dataUrlToFile(processed.thumbnailDataUrl, 'thumbnail.png')),
+      ])
 
-      if (actorDraft.storageId && actorDraft.storageId !== saved.storageId) {
-        try {
-          await deleteGeneratedCharacterAssets(actorDraft.storageId, fetch, backendBaseUrl)
-        } catch (cleanupError) {
-          console.error(cleanupError)
-        }
+      if (previousDraftStorageIds.length > 0) {
+        await deleteUploadedActorImages({ storageIds: previousDraftStorageIds })
       }
 
       setActorDraft((current) => ({
         ...current,
         model: generated.model,
-        storageId: saved.storageId,
-        originalImageUrl: saved.originalImageUrl,
-        processedImageUrl: saved.processedImageUrl,
-        alphaMaskUrl: saved.alphaMaskUrl,
-        thumbnailUrl: saved.thumbnailUrl,
+        storageId: thumbnailStorageId.storageId,
+        originalImageStorageId: originalImageStorageId.storageId as Id<'_storage'>,
+        processedImageStorageId: processedImageStorageId.storageId as Id<'_storage'>,
+        alphaMaskStorageId: alphaMaskStorageId.storageId as Id<'_storage'>,
+        thumbnailStorageId: thumbnailStorageId.storageId as Id<'_storage'>,
+        originalImageUrl: generated.imageDataUrl,
+        processedImageUrl: processed.processedImageDataUrl,
+        alphaMaskUrl: processed.alphaMaskDataUrl,
+        thumbnailUrl: processed.thumbnailDataUrl,
         width: processed.width,
         height: processed.height,
       }))
-      setActorNotice('Generated and stored a new standee image for this actor.')
+      setActorNotice('Generated and uploaded a new standee image for this actor.')
     } catch (error) {
       console.error(error)
       setActorError(error instanceof Error ? error.message : 'Actor image generation failed.')
@@ -322,10 +344,14 @@ export function ActorLibraryPanel() {
         model: actorDraft.model ?? undefined,
         size: actorDraft.size,
         storageId: actorDraft.storageId ?? undefined,
-        originalImageUrl: actorDraft.originalImageUrl ?? undefined,
-        processedImageUrl: actorDraft.processedImageUrl ?? undefined,
-        alphaMaskUrl: actorDraft.alphaMaskUrl ?? undefined,
-        thumbnailUrl: actorDraft.thumbnailUrl ?? undefined,
+        originalImageStorageId: actorDraft.originalImageStorageId ?? undefined,
+        processedImageStorageId: actorDraft.processedImageStorageId ?? undefined,
+        alphaMaskStorageId: actorDraft.alphaMaskStorageId ?? undefined,
+        thumbnailStorageId: actorDraft.thumbnailStorageId ?? undefined,
+        originalImageUrl: actorDraft.originalImageStorageId ? undefined : (actorDraft.originalImageUrl ?? undefined),
+        processedImageUrl: actorDraft.processedImageStorageId ? undefined : (actorDraft.processedImageUrl ?? undefined),
+        alphaMaskUrl: actorDraft.alphaMaskStorageId ? undefined : (actorDraft.alphaMaskUrl ?? undefined),
+        thumbnailUrl: actorDraft.thumbnailStorageId ? undefined : (actorDraft.thumbnailUrl ?? undefined),
         width: actorDraft.width ?? undefined,
         height: actorDraft.height ?? undefined,
       })
@@ -358,17 +384,9 @@ export function ActorLibraryPanel() {
     setActorNotice(null)
 
     try {
-      const result = await deleteActor({
+      await deleteActor({
         actorId: actorDraft.actorId,
       })
-
-      if (result.storageId) {
-        try {
-          await deleteGeneratedCharacterAssets(result.storageId, fetch, backendBaseUrl)
-        } catch (cleanupError) {
-          console.error(cleanupError)
-        }
-      }
 
       setActorDraft(createEmptyActorDraft(selectedActorPackId))
       setActorNotice('Deleted the actor record.')
@@ -434,8 +452,8 @@ export function ActorLibraryPanel() {
                   type="button"
                   className="w-full text-left"
                   onClick={() => {
-                    setSelectedActorPackId(actorPack._id)
-                    hydratePackForm(actorPack)
+                     selectActorPack(actorPack._id)
+                     hydratePackForm(actorPack)
                   }}
                 >
                   <p className="library-record__title">{actorPack.name}</p>
@@ -504,11 +522,11 @@ export function ActorLibraryPanel() {
             <select
               className="auth-card__select"
               onChange={(event) => {
-                const nextActorPackId = event.target.value ? event.target.value as Id<'actorPacks'> : null
-                setSelectedActorPackId(nextActorPackId)
-                setActorDraft((current) => ({
-                  ...current,
-                  actorPackId: nextActorPackId,
+                 const nextActorPackId = event.target.value ? event.target.value as Id<'actorPacks'> : null
+                 setSelectedActorPackIdState(nextActorPackId)
+                 setActorDraft((current) => ({
+                   ...current,
+                   actorPackId: nextActorPackId,
                 }))
               }}
               value={actorDraft.actorPackId ?? ''}

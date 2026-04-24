@@ -50,6 +50,7 @@ const MUTATION_ROUTES: Record<string, BackendDataRoute> = {
   'actors:setActorPackActive': { path: '/api/app/actor-packs/set-active', method: 'POST' },
   'actors:saveActor': { path: '/api/app/actors/save', method: 'POST' },
   'actors:deleteActor': { path: '/api/app/actors/delete', method: 'POST' },
+  'actors:deleteUploadedActorImages': { path: '/api/app/actors/delete-uploaded-images', method: 'POST' },
 }
 
 const BackendDataContext = createContext<BackendDataContextValue | null>(null)

@@ -35,6 +35,21 @@ function MutationProbe() {
   )
 }
 
+function DeleteUploadedActorImagesProbe() {
+  const deleteUploadedActorImages = useMutation('actors.deleteUploadedActorImages' as never)
+
+  return (
+    <button
+      type="button"
+      onClick={() => {
+        void deleteUploadedActorImages({ storageIds: ['storage-1', 'storage-2'] } as never)
+      }}
+    >
+      Delete uploaded images
+    </button>
+  )
+}
+
 describe('useQuery', () => {
   const fetchMock = vi.fn<typeof fetch>()
 
@@ -129,6 +144,30 @@ describe('useQuery', () => {
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1))
     expect(fetchMock).toHaveBeenCalledWith('http://localhost:2567/api/app/initialize-viewer', expect.objectContaining({
       body: '{}',
+      credentials: 'include',
+      method: 'POST',
+    }))
+  })
+
+  it('routes actor image cleanup through the backend facade', async () => {
+    authState.isLoading = false
+    authState.isAuthenticated = true
+    fetchMock.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ value: { deletedCount: 2 } }),
+    } as Response)
+
+    render(
+      <AppBackendProvider>
+        <DeleteUploadedActorImagesProbe />
+      </AppBackendProvider>,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'Delete uploaded images' }))
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1))
+    expect(fetchMock).toHaveBeenCalledWith('http://localhost:2567/api/app/actors/delete-uploaded-images', expect.objectContaining({
+      body: JSON.stringify({ storageIds: ['storage-1', 'storage-2'] }),
       credentials: 'include',
       method: 'POST',
     }))

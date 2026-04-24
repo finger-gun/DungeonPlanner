@@ -26,7 +26,37 @@ function normalizeActorModel(model?: string) {
   return model?.trim() || undefined
 }
 
-function buildActorSummary(actor: ActorRecord, actorPackName: string | null) {
+async function getActorImageUrls(
+  ctx: Pick<QueryCtx, 'storage'> | Pick<MutationCtx, 'storage'>,
+  actor: ActorRecord,
+) {
+  const [
+    originalImageUrl,
+    processedImageUrl,
+    alphaMaskUrl,
+    thumbnailUrl,
+  ] = await Promise.all([
+    actor.originalImageStorageId ? ctx.storage.getUrl(actor.originalImageStorageId) : actor.originalImageUrl ?? null,
+    actor.processedImageStorageId ? ctx.storage.getUrl(actor.processedImageStorageId) : actor.processedImageUrl ?? null,
+    actor.alphaMaskStorageId ? ctx.storage.getUrl(actor.alphaMaskStorageId) : actor.alphaMaskUrl ?? null,
+    actor.thumbnailStorageId ? ctx.storage.getUrl(actor.thumbnailStorageId) : actor.thumbnailUrl ?? null,
+  ])
+
+  return {
+    originalImageUrl,
+    processedImageUrl,
+    alphaMaskUrl,
+    thumbnailUrl,
+  }
+}
+
+async function buildActorSummary(
+  ctx: Pick<QueryCtx, 'storage'> | Pick<MutationCtx, 'storage'>,
+  actor: ActorRecord,
+  actorPackName: string | null,
+) {
+  const imageUrls = await getActorImageUrls(ctx, actor)
+
   return {
     _id: actor._id,
     actorPackId: actor.actorPackId ?? null,
@@ -36,11 +66,15 @@ function buildActorSummary(actor: ActorRecord, actorPackName: string | null) {
     prompt: actor.prompt ?? '',
     model: actor.model ?? null,
     size: actor.size ?? 'M',
-    storageId: actor.storageId ?? null,
-    originalImageUrl: actor.originalImageUrl ?? null,
-    processedImageUrl: actor.processedImageUrl ?? null,
-    alphaMaskUrl: actor.alphaMaskUrl ?? null,
-    thumbnailUrl: actor.thumbnailUrl ?? null,
+    storageId: actor.storageId ?? actor.thumbnailStorageId ?? null,
+    originalImageStorageId: actor.originalImageStorageId ?? null,
+    processedImageStorageId: actor.processedImageStorageId ?? null,
+    alphaMaskStorageId: actor.alphaMaskStorageId ?? null,
+    thumbnailStorageId: actor.thumbnailStorageId ?? null,
+    originalImageUrl: imageUrls.originalImageUrl,
+    processedImageUrl: imageUrls.processedImageUrl,
+    alphaMaskUrl: imageUrls.alphaMaskUrl,
+    thumbnailUrl: imageUrls.thumbnailUrl,
     width: actor.width ?? null,
     height: actor.height ?? null,
     createdAt: actor.createdAt,
@@ -100,6 +134,30 @@ async function loadActorPackMap(
     .collect()
 
   return new Map(actorPacks.map((actorPack) => [actorPack._id, actorPack]))
+}
+
+function collectActorStorageIds(actor: Pick<
+  ActorRecord,
+  | 'originalImageStorageId'
+  | 'processedImageStorageId'
+  | 'alphaMaskStorageId'
+  | 'thumbnailStorageId'
+>) {
+  return [
+    actor.originalImageStorageId,
+    actor.processedImageStorageId,
+    actor.alphaMaskStorageId,
+    actor.thumbnailStorageId,
+  ].filter((storageId): storageId is Id<'_storage'> => Boolean(storageId))
+}
+
+async function deleteStorageIds(
+  ctx: Pick<MutationCtx, 'storage'>,
+  storageIds: Iterable<Id<'_storage'>>,
+) {
+  await Promise.all(
+    [...new Set(storageIds)].map((storageId) => ctx.storage.delete(storageId)),
+  )
 }
 
 export const listViewerActorPacks = query({
@@ -198,10 +256,14 @@ export const listViewerActors = query({
       .collect()
     const actorPackMap = await loadActorPackMap(ctx, workspaceId)
 
-    return actors
+    const sortedActors = actors
       .filter((actor) => actor.workspaceId === workspaceId)
       .sort((left, right) => right.updatedAt - left.updatedAt)
-      .map((actor) => buildActorSummary(actor, actor.actorPackId ? actorPackMap.get(actor.actorPackId)?.name ?? null : null))
+
+    return Promise.all(
+      sortedActors.map((actor) =>
+        buildActorSummary(ctx, actor, actor.actorPackId ? actorPackMap.get(actor.actorPackId)?.name ?? null : null)),
+    )
   },
 })
 
@@ -213,7 +275,7 @@ export const getViewerActor = query({
     const { viewer, workspaceId } = await requireRoleInActiveWorkspace(ctx, 'player')
     const actor = await getViewerOwnedActor(ctx, args.actorId, viewer._id, workspaceId)
     const actorPack = actor.actorPackId ? await ctx.db.get(actor.actorPackId) : null
-    return buildActorSummary(actor, actorPack?.name ?? null)
+    return buildActorSummary(ctx, actor, actorPack?.name ?? null)
   },
 })
 
@@ -227,6 +289,10 @@ export const saveActor = mutation({
     model: v.optional(v.string()),
     size: actorSizeValidator,
     storageId: v.optional(v.string()),
+    originalImageStorageId: v.optional(v.id('_storage')),
+    processedImageStorageId: v.optional(v.id('_storage')),
+    alphaMaskStorageId: v.optional(v.id('_storage')),
+    thumbnailStorageId: v.optional(v.id('_storage')),
     originalImageUrl: v.optional(v.string()),
     processedImageUrl: v.optional(v.string()),
     alphaMaskUrl: v.optional(v.string()),
@@ -249,6 +315,18 @@ export const saveActor = mutation({
 
     if (args.actorId) {
       const actor = await getViewerOwnedActor(ctx, args.actorId, viewer._id, workspaceId)
+      const nextOriginalImageStorageId = args.originalImageStorageId ?? actor.originalImageStorageId
+      const nextProcessedImageStorageId = args.processedImageStorageId ?? actor.processedImageStorageId
+      const nextAlphaMaskStorageId = args.alphaMaskStorageId ?? actor.alphaMaskStorageId
+      const nextThumbnailStorageId = args.thumbnailStorageId ?? actor.thumbnailStorageId
+      const nextStorageIds = new Set<Id<'_storage'>>(
+        [
+          nextOriginalImageStorageId,
+          nextProcessedImageStorageId,
+          nextAlphaMaskStorageId,
+          nextThumbnailStorageId,
+        ].filter((storageId): storageId is Id<'_storage'> => Boolean(storageId)),
+      )
       await ctx.db.patch(args.actorId, {
         actorPackId: args.actorPackId,
         name,
@@ -256,15 +334,23 @@ export const saveActor = mutation({
         prompt,
         model,
         size: args.size,
-        storageId: args.storageId || undefined,
-        originalImageUrl: args.originalImageUrl || undefined,
-        processedImageUrl: args.processedImageUrl || undefined,
-        alphaMaskUrl: args.alphaMaskUrl || undefined,
-        thumbnailUrl: args.thumbnailUrl || undefined,
+        storageId: args.storageId || actor.storageId || undefined,
+        originalImageStorageId: nextOriginalImageStorageId,
+        processedImageStorageId: nextProcessedImageStorageId,
+        alphaMaskStorageId: nextAlphaMaskStorageId,
+        thumbnailStorageId: nextThumbnailStorageId,
+        originalImageUrl: nextOriginalImageStorageId ? undefined : (args.originalImageUrl || actor.originalImageUrl || undefined),
+        processedImageUrl: nextProcessedImageStorageId ? undefined : (args.processedImageUrl || actor.processedImageUrl || undefined),
+        alphaMaskUrl: nextAlphaMaskStorageId ? undefined : (args.alphaMaskUrl || actor.alphaMaskUrl || undefined),
+        thumbnailUrl: nextThumbnailStorageId ? undefined : (args.thumbnailUrl || actor.thumbnailUrl || undefined),
         width: args.width,
         height: args.height,
         updatedAt: now,
       })
+      await deleteStorageIds(
+        ctx,
+        collectActorStorageIds(actor).filter((storageId) => !nextStorageIds.has(storageId)),
+      )
       return actor._id
     }
 
@@ -278,10 +364,14 @@ export const saveActor = mutation({
       model,
       size: args.size,
       storageId: args.storageId || undefined,
-      originalImageUrl: args.originalImageUrl || undefined,
-      processedImageUrl: args.processedImageUrl || undefined,
-      alphaMaskUrl: args.alphaMaskUrl || undefined,
-      thumbnailUrl: args.thumbnailUrl || undefined,
+      originalImageStorageId: args.originalImageStorageId,
+      processedImageStorageId: args.processedImageStorageId,
+      alphaMaskStorageId: args.alphaMaskStorageId,
+      thumbnailStorageId: args.thumbnailStorageId,
+      originalImageUrl: args.originalImageStorageId ? undefined : (args.originalImageUrl || undefined),
+      processedImageUrl: args.processedImageStorageId ? undefined : (args.processedImageUrl || undefined),
+      alphaMaskUrl: args.alphaMaskStorageId ? undefined : (args.alphaMaskUrl || undefined),
+      thumbnailUrl: args.thumbnailStorageId ? undefined : (args.thumbnailUrl || undefined),
       width: args.width,
       height: args.height,
       contentRef: undefined,
@@ -300,10 +390,19 @@ export const deleteActor = mutation({
     const { viewer, workspaceId } = await requireRoleInActiveWorkspace(ctx, 'player')
     const actor = await getViewerOwnedActor(ctx, args.actorId, viewer._id, workspaceId)
     await ctx.db.delete(args.actorId)
-    return {
-      actorId: args.actorId,
-      storageId: actor.storageId ?? null,
-    }
+    await deleteStorageIds(ctx, collectActorStorageIds(actor))
+    return { actorId: args.actorId }
+  },
+})
+
+export const deleteUploadedActorImages = mutation({
+  args: {
+    storageIds: v.array(v.id('_storage')),
+  },
+  handler: async (ctx, args) => {
+    await requireRoleInActiveWorkspace(ctx, 'player')
+    await deleteStorageIds(ctx, args.storageIds)
+    return { deletedCount: args.storageIds.length }
   },
 })
 
@@ -325,36 +424,41 @@ export const listEditorActors = internalQuery({
       .withIndex('by_workspaceId', (q) => q.eq('workspaceId', tokenRecord.workspaceId))
       .collect()
 
-    return actors
-      .filter((actor) =>
-        Boolean(
-          actor.actorPackId &&
-          activeActorPackIds.has(actor.actorPackId) &&
-          actor.processedImageUrl &&
-          actor.thumbnailUrl &&
-          actor.width &&
-          actor.height,
-        ))
-      .sort((left, right) => left.name.localeCompare(right.name))
-      .map((actor) => ({
-        actorId: actor._id,
-        actorPackId: actor.actorPackId!,
-        actorPackName: actorPackNameById.get(actor.actorPackId!) ?? 'Actor Pack',
-        assetId: buildEditorActorAssetId(actor._id),
-        name: actor.name,
-        kind: actor.kind ?? 'character',
-        prompt: actor.prompt ?? '',
-        model: actor.model ?? null,
-        size: actor.size ?? 'M',
-        storageId: actor.storageId ?? null,
-        originalImageUrl: actor.originalImageUrl ?? null,
-        processedImageUrl: actor.processedImageUrl ?? null,
-        alphaMaskUrl: actor.alphaMaskUrl ?? null,
-        thumbnailUrl: actor.thumbnailUrl ?? null,
-        width: actor.width ?? null,
-        height: actor.height ?? null,
-        createdAt: new Date(actor.createdAt).toISOString(),
-        updatedAt: new Date(actor.updatedAt).toISOString(),
-      }))
+    return Promise.all(
+      actors
+        .filter((actor) =>
+          Boolean(
+            actor.actorPackId &&
+            activeActorPackIds.has(actor.actorPackId) &&
+            (actor.processedImageStorageId || actor.processedImageUrl) &&
+            (actor.thumbnailStorageId || actor.thumbnailUrl) &&
+            actor.width &&
+            actor.height,
+          ))
+        .sort((left, right) => left.name.localeCompare(right.name))
+        .map(async (actor) => {
+          const imageUrls = await getActorImageUrls(ctx, actor)
+          return {
+            actorId: actor._id,
+            actorPackId: actor.actorPackId!,
+            actorPackName: actorPackNameById.get(actor.actorPackId!) ?? 'Actor Pack',
+            assetId: buildEditorActorAssetId(actor._id),
+            name: actor.name,
+            kind: actor.kind ?? 'character',
+            prompt: actor.prompt ?? '',
+            model: actor.model ?? null,
+            size: actor.size ?? 'M',
+            storageId: actor.storageId ?? actor.thumbnailStorageId ?? null,
+            originalImageUrl: imageUrls.originalImageUrl,
+            processedImageUrl: imageUrls.processedImageUrl,
+            alphaMaskUrl: imageUrls.alphaMaskUrl,
+            thumbnailUrl: imageUrls.thumbnailUrl,
+            width: actor.width ?? null,
+            height: actor.height ?? null,
+            createdAt: new Date(actor.createdAt).toISOString(),
+            updatedAt: new Date(actor.updatedAt).toISOString(),
+          }
+        }),
+    )
   },
 })

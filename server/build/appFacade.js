@@ -95,6 +95,7 @@ const APP_MUTATION_ROUTES = [
     { method: 'post', path: '/api/app/actor-packs/set-active', convexFunction: 'actors:setActorPackActive' },
     { method: 'post', path: '/api/app/actors/save', convexFunction: 'actors:saveActor' },
     { method: 'post', path: '/api/app/actors/delete', convexFunction: 'actors:deleteActor' },
+    { method: 'post', path: '/api/app/actors/delete-uploaded-images', convexFunction: 'actors:deleteUploadedActorImages' },
 ];
 const EDITOR_PROXY_ROUTES = [
     { path: '/api/editor/dungeons/list', convexPath: '/api/editor/dungeons/list' },
