@@ -78,7 +78,7 @@ describe('dungeonContentPack', () => {
     })
     expect(candle?.getEffect?.({})).toMatchObject({
       preset: 'fire',
-      emitters: [{ offset: [0, 0.56, 0] }],
+      emitters: [{ offset: [0, 0.4, 0] }],
     })
     expect(candle?.getEffect?.({ lit: false })).toBeNull()
     expect(candle?.getEffect?.({ lit: true })).toMatchObject({ preset: 'fire' })
