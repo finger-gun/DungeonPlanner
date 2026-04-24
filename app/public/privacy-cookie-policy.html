@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="icon" type="image/png" href="./icon.png" />
+    <title>DungeonPlanner Privacy &amp; Cookie Policy</title>
+    <meta
+      name="description"
+      content="Privacy and cookie policy for the DungeonPlanner website, demo, and docs."
+    />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700;900&family=Inter:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="./styles.css" />
+    <!-- Google tag (gtag.js) -->
+    <script async src="https://www.googletagmanager.com/gtag/js?id=G-4TZCSBF6LN"></script>
+    <script>
+      window.dataLayer = window.dataLayer || [];
+      function gtag() { dataLayer.push(arguments); }
+      gtag('js', new Date());
+
+      gtag('consent', 'default', {
+        ad_storage: 'denied',
+        ad_user_data: 'denied',
+        ad_personalization: 'denied',
+        analytics_storage: 'denied',
+        wait_for_update: 500,
+      });
+
+      const consentChoice = localStorage.getItem('dp_cookie_consent');
+      if (consentChoice === 'granted') {
+        gtag('consent', 'update', {
+          ad_storage: 'granted',
+          ad_user_data: 'granted',
+          ad_personalization: 'granted',
+          analytics_storage: 'granted',
+        });
+      }
+
+      gtag('config', 'G-4TZCSBF6LN');
+    </script>
+  </head>
+  <body>
+    <header class="site-header">
+      <div class="header-inner">
+        <a class="brand" href="./index.html">
+          <img class="brand-icon" src="./logo.png" alt="DungeonPlanner" />
+        </a>
+      </div>
+    </header>
+
+    <main class="features">
+      <h1 class="section-title">Privacy &amp; Cookie Policy</h1>
+      <article class="feat-card">
+        <h3>Who we are</h3>
+        <p>
+          DungeonPlanner is a source-available project maintained by Finger Gun,
+          free for noncommercial use under PolyForm Noncommercial 1.0.0. This
+          page explains how we use analytics on the public website, demo, and
+          docs pages.
+        </p>
+
+        <h3 class="policy-section-title">What we collect</h3>
+        <p>
+          If you accept analytics cookies, we use Google Analytics to collect
+          basic usage data such as page views, approximate location (country or
+          region), browser/device information, and referral source.
+        </p>
+
+        <h3 class="policy-section-title">How we use cookies</h3>
+        <p>
+          We only use analytics cookies to understand traffic and improve the
+          site. Analytics is disabled by default and only enabled after you
+          consent in the cookie banner.
+        </p>
+
+        <h3 class="policy-section-title">Cookie choices</h3>
+        <p>
+          You can accept or reject analytics cookies in the banner. Your choice
+          is stored in your browser.
+        </p>
+
+        <h3 class="policy-section-title">Third-party processing</h3>
+        <p>
+          Google Analytics is provided by Google. Data processing is subject to
+          Google’s terms and privacy policies.
+        </p>
+
+        <h3 class="policy-section-title">Contact</h3>
+        <p>
+          Questions about this policy can be directed through the project
+          repository:
+          <a href="https://github.com/finger-gun/DungeonPlanner" target="_blank" rel="noreferrer">
+            github.com/finger-gun/DungeonPlanner
+          </a>
+        </p>
+      </article>
+    </main>
+
+    <footer class="site-footer">
+      <div class="footer-inner">
+        <p class="footer-credit">
+          <a href="./index.html">Back to main page</a>
+        </p>
+      </div>
+    </footer>
+    <div id="cookie-consent-banner" class="cookie-consent-banner" hidden>
+      <div class="cookie-consent-content">
+        <p class="cookie-consent-text">
+          We use cookies for traffic analytics. Read our
+          <a href="./privacy-cookie-policy.html">Privacy &amp; Cookie Policy</a>.
+        </p>
+        <div class="cookie-consent-actions">
+          <button id="cookie-consent-reject" class="cookie-consent-btn cookie-consent-btn-reject" type="button">Reject</button>
+          <button id="cookie-consent-accept" class="cookie-consent-btn cookie-consent-btn-accept" type="button">Accept</button>
+        </div>
+      </div>
+    </div>
+    <script>
+      const consentBanner = document.getElementById('cookie-consent-banner');
+      const acceptCookies = document.getElementById('cookie-consent-accept');
+      const rejectCookies = document.getElementById('cookie-consent-reject');
+
+      const applyConsent = (granted) => {
+        localStorage.setItem('dp_cookie_consent', granted ? 'granted' : 'denied');
+        gtag('consent', 'update', {
+          ad_storage: granted ? 'granted' : 'denied',
+          ad_user_data: granted ? 'granted' : 'denied',
+          ad_personalization: granted ? 'granted' : 'denied',
+          analytics_storage: granted ? 'granted' : 'denied',
+        });
+        consentBanner.hidden = true;
+      };
+
+      if (!localStorage.getItem('dp_cookie_consent')) {
+        consentBanner.hidden = false;
+      }
+
+      acceptCookies.addEventListener('click', () => applyConsent(true));
+      rejectCookies.addEventListener('click', () => applyConsent(false));
+    </script>
+  </body>
+</html>

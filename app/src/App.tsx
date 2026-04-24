@@ -1,7 +1,7 @@
 import './App.css'
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useAuthActions } from '@convex-dev/auth/react'
-import { Authenticated, Unauthenticated, useConvexAuth, useMutation, useQuery } from 'convex/react'
+import { useConvexAuth, useMutation, useQuery } from 'convex/react'
 import { api } from '../convex/_generated/api'
 import type { Id } from '../convex/_generated/dataModel'
 import { useViewerIdentity } from './lib/auth'
@@ -40,6 +40,167 @@ const DEFAULT_PACK_DEFAULT_REFS_JSON = `{
   "wall": "dungeon:wall_plain"
 }`
 
+type WorkspacePage = 'overview' | 'library' | 'sessions' | 'characters' | 'admin-users' | 'admin-packs'
+
+const GITHUB_ICON_PATH =
+  'M12 2C6.48 2 2 6.59 2 12.25c0 4.53 2.87 8.37 6.84 9.72.5.1.68-.22.68-.49 0-.24-.01-1.04-.01-1.89-2.78.62-3.37-1.22-3.37-1.22-.46-1.2-1.12-1.52-1.12-1.52-.92-.64.07-.63.07-.63 1.01.08 1.55 1.08 1.55 1.08.91 1.6 2.38 1.14 2.96.87.09-.68.36-1.14.65-1.4-2.22-.26-4.56-1.14-4.56-5.09 0-1.12.39-2.03 1.03-2.74-.1-.26-.45-1.31.1-2.73 0 0 .85-.28 2.78 1.05a9.33 9.33 0 0 1 5.06 0c1.93-1.33 2.78-1.05 2.78-1.05.55 1.42.2 2.47.1 2.73.64.71 1.03 1.62 1.03 2.74 0 3.96-2.34 4.83-4.57 5.08.37.33.7.97.7 1.96 0 1.42-.01 2.57-.01 2.92 0 .27.18.59.69.49A10.25 10.25 0 0 0 22 12.25C22 6.59 17.52 2 12 2Z'
+
+const LANDING_FEATURES = [
+  {
+    title: 'Tile-Based Building',
+    copy: 'Snap rooms together on a grid. Walls, doors, stairs - everything clicks into place. Build a full dungeon in minutes.',
+    imageSrc: '/animated-room.gif',
+    imageAlt: 'Animated tile-based room building',
+  },
+  {
+    title: 'Real-Time 3D',
+    copy: 'See your dungeon come alive in full 3D with dynamic lighting, atmospheric fog, and smooth camera controls.',
+    imageSrc: '/real-time.png',
+    imageAlt: 'Real-time 3D dungeon rendering',
+  },
+  {
+    title: 'Multi-Floor Dungeons',
+    copy: 'Stack floors above and below. Cellars, towers, catacombs - your vertical designs stay connected and navigable.',
+    imageSrc: '/animated-floors.gif',
+    imageAlt: 'Animated multi-floor dungeon building',
+  },
+  {
+    title: 'Props & Furnishing',
+    copy: 'Place torches, chests, barrels, altars and more. Each asset snaps to walls or floors exactly where it belongs.',
+    imageSrc: '/animated-barrel.gif',
+    imageAlt: 'Animated props and furnishing placement',
+  },
+  {
+    title: 'Save & Share',
+    copy: 'Export your dungeon as a portable JSON file. Load it back anytime, share with your party, or build a library of maps.',
+    imageSrc: '/save-n-load.png',
+    imageAlt: 'Save and share dungeon maps',
+  },
+  {
+    title: 'Source Available',
+    copy: 'Source available and free for noncommercial use under PolyForm Noncommercial 1.0.0. Modify it, extend it, and contribute back.',
+    imageSrc: '/open-source.png',
+    imageAlt: 'Source available project',
+  },
+] as const
+
+function readHashPath() {
+  if (typeof window === 'undefined') {
+    return '/'
+  }
+
+  const hash = window.location.hash.replace(/^#/, '').trim()
+  return hash || '/'
+}
+
+function getWorkspacePageFromPath(path: string): WorkspacePage | null {
+  switch (path) {
+    case '/app':
+      return 'overview'
+    case '/app/library':
+      return 'library'
+    case '/app/sessions':
+      return 'sessions'
+    case '/app/characters':
+      return 'characters'
+    case '/app/admin/users':
+      return 'admin-users'
+    case '/app/admin/packs':
+      return 'admin-packs'
+    default:
+      return null
+  }
+}
+
+function GitHubMark() {
+  return (
+    <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24">
+      <path d={GITHUB_ICON_PATH} fill="currentColor" />
+    </svg>
+  )
+}
+
+function PublicLandingScreen() {
+  return (
+    <>
+      <section className="hero">
+        <div aria-hidden="true" className="hero-glow"></div>
+        <div className="hero-content">
+          <img alt="DungeonPlanner logo" className="hero-logo" src="/logo.png" />
+          <h1>
+            Build Dungeons.
+            <br />
+            Run <em>Epic</em> Sessions.
+          </h1>
+          <p className="hero-sub">
+            A modern 3D dungeon editor made for game masters who want their maps to look as good as they play.
+          </p>
+          <div className="hero-actions">
+            <a className="btn btn-primary" href="#/login">
+              Login
+            </a>
+            <a className="btn btn-secondary" href="https://docs.dungeonplanner.com/" rel="noreferrer" target="_blank">
+              Read the Docs
+            </a>
+          </div>
+          <p className="hero-note">Source available · Free for noncommercial use</p>
+        </div>
+
+        <svg aria-hidden="true" className="deco deco-d20" viewBox="0 0 100 100">
+          <polygon fill="none" points="50,5 95,35 80,90 20,90 5,35" stroke="currentColor" strokeWidth="1.5"></polygon>
+          <line stroke="currentColor" strokeWidth="1" x1="50" x2="20" y1="5" y2="90"></line>
+          <line stroke="currentColor" strokeWidth="1" x1="50" x2="80" y1="5" y2="90"></line>
+          <line stroke="currentColor" strokeWidth="1" x1="5" x2="80" y1="35" y2="90"></line>
+          <line stroke="currentColor" strokeWidth="1" x1="95" x2="20" y1="35" y2="90"></line>
+          <line stroke="currentColor" strokeWidth="1" x1="5" x2="95" y1="35" y2="35"></line>
+        </svg>
+        <svg aria-hidden="true" className="deco deco-d20-sm" viewBox="0 0 100 100">
+          <polygon fill="none" points="50,5 95,35 80,90 20,90 5,35" stroke="currentColor" strokeWidth="2"></polygon>
+        </svg>
+      </section>
+
+      <section className="features">
+        <h2 className="section-title">Why DungeonPlanner?</h2>
+        <div className="features-grid">
+          {LANDING_FEATURES.map((feature) => (
+            <article className="feat-card feat-card--has-gif" key={feature.title}>
+              <img alt={feature.imageAlt} className="feat-gif" src={feature.imageSrc} />
+              <h3>{feature.title}</h3>
+              <p>{feature.copy}</p>
+            </article>
+          ))}
+        </div>
+      </section>
+
+      <section className="cta">
+        <div className="cta-inner">
+          <h2>Ready to Return?</h2>
+          <p>Log in to open your saved dungeons, active sessions, characters, and packs.</p>
+          <a className="btn btn-primary btn-lg" href="#/login">
+            Login
+          </a>
+        </div>
+      </section>
+
+      <footer className="site-footer">
+        <div className="footer-inner">
+          <p className="footer-tagline">Made for TTRPG players who want their dungeon to look as good as it plays.</p>
+          <p className="footer-credit">
+            Made with ❤️ in Skane. A{' '}
+            <a href="https://fingergun.dev/" rel="noreferrer" target="_blank">
+              Finger Gun
+            </a>{' '}
+            project, making nothing into something.
+          </p>
+          <p className="footer-links">
+            <a href="/privacy-cookie-policy.html">Privacy &amp; Cookie Policy</a>
+          </p>
+        </div>
+      </footer>
+    </>
+  )
+}
+
 function PasswordAuthCard() {
   const { signIn } = useAuthActions()
   const [flow, setFlow] = useState<'signIn' | 'signUp'>('signIn')
@@ -72,12 +233,12 @@ function PasswordAuthCard() {
   return (
     <section className="auth-card" aria-labelledby="auth-card-title">
       <div className="auth-card__header">
-        <p className="app-shell__eyebrow">Convex Auth</p>
+        <p className="app-shell__eyebrow">Login</p>
         <h2 className="panel__title" id="auth-card-title">
-          Email and password
+          Sign in to DungeonPlanner
         </h2>
         <p className="panel__copy">
-          Local self-hosted authentication is the first gateway into the signed-in product.
+          Open your dungeons, sessions, characters, and packs with your email and password.
         </p>
       </div>
 
@@ -129,7 +290,7 @@ function PasswordAuthCard() {
   )
 }
 
-function SignedInOverview() {
+function SignedInOverview({ currentPath }: { currentPath: string }) {
   const { signOut } = useAuthActions()
   const identity = useViewerIdentity()
   const workspaceMembers = useQuery(
@@ -248,14 +409,68 @@ function SignedInOverview() {
   )
 
   const navItems = [
-    identity.access.canManageDungeons && { id: 'library', label: 'Dungeon Library' },
-    { id: 'sessions', label: 'Sessions' },
-    identity.access.canUseCharacterLibrary && { id: 'characters', label: 'Characters' },
-    identity.access.canManagePacks && { id: 'admin', label: 'Admin' },
-  ].filter((item): item is { id: string; label: string } => Boolean(item))
+    { id: 'overview', label: 'Overview', href: '#/app' },
+    identity.access.canManageDungeons && { id: 'library', label: 'Dungeons', href: '#/app/library' },
+    { id: 'sessions', label: 'Sessions', href: '#/app/sessions' },
+    identity.access.canUseCharacterLibrary && { id: 'characters', label: 'Characters', href: '#/app/characters' },
+    identity.access.canManageUsers && { id: 'admin-users', label: 'Users', href: '#/app/admin/users' },
+    identity.access.canManagePacks && { id: 'admin-packs', label: 'Packs', href: '#/app/admin/packs' },
+  ].filter((item): item is { id: WorkspacePage; label: string; href: string } => Boolean(item))
 
   const selectedSession = sessionRecords?.find((session) => session._id === selectedSessionId) ?? null
   const selectedPackRecord = packRecords?.find((pack) => pack._id === selectedPackRecordId) ?? null
+  const defaultPage: WorkspacePage = identity.access.canManageDungeons ? 'library' : 'sessions'
+  const requestedPage = getWorkspacePageFromPath(currentPath)
+  const activePage = navItems.some((item) => item.id === requestedPage)
+    ? (requestedPage as WorkspacePage)
+    : currentPath === '/app'
+      ? 'overview'
+      : defaultPage
+  const adminEntryHref = identity.access.canManageUsers ? '#/app/admin/users' : '#/app/admin/packs'
+  const workspaceNavItems = [
+    { id: 'overview', label: 'Overview', href: '#/app' },
+    identity.access.canManageDungeons && { id: 'library', label: 'Dungeons', href: '#/app/library' },
+    { id: 'sessions', label: 'Sessions', href: '#/app/sessions' },
+    identity.access.canUseCharacterLibrary && { id: 'characters', label: 'Characters', href: '#/app/characters' },
+    (identity.access.canManageUsers || identity.access.canManagePacks) && {
+      id: 'admin',
+      label: 'Admin',
+      href: adminEntryHref,
+    },
+  ].filter((item): item is { id: string; label: string; href: string } => Boolean(item))
+
+  const pageIntro = {
+    overview: {
+      eyebrow: 'Overview',
+      title: 'Everything for tonight’s game',
+      copy: 'Jump straight into your dungeons, sessions, characters, and admin tools.',
+    },
+    library: {
+      eyebrow: 'Dungeons',
+      title: 'Dungeon library',
+      copy: 'Save portable dungeon files, review past maps, and load any draft back into play.',
+    },
+    sessions: {
+      eyebrow: 'Sessions',
+      title: 'Run live tables',
+      copy: 'Create sessions, share join codes, and keep the table moving from one screen.',
+    },
+    characters: {
+      eyebrow: 'Characters',
+      title: 'Keep characters ready',
+      copy: 'Store reusable character sheets and connect them to the sessions you are playing.',
+    },
+    'admin-users': {
+      eyebrow: 'Admin',
+      title: 'Manage user access',
+      copy: 'Grant or remove roles by email so everyone sees the tools they need.',
+    },
+    'admin-packs': {
+      eyebrow: 'Admin',
+      title: 'Manage content packs',
+      copy: 'Curate the packs available to your group and keep their defaults in one place.',
+    },
+  } satisfies Record<WorkspacePage, { eyebrow: string; title: string; copy: string }>
 
   async function handleRoleMutation(mode: 'grant' | 'revoke') {
     const normalizedEmail = roleEmail.trim().toLowerCase()
@@ -325,7 +540,7 @@ function SignedInOverview() {
     setDraftDescription(selectedDungeon.description ?? '')
     setDraftSerializedDungeon(selectedDungeon.serializedDungeon)
     setDungeonError(null)
-    setDungeonNotice(`Loaded "${selectedDungeon.title}" from Convex into the local draft.`)
+    setDungeonNotice(`Loaded "${selectedDungeon.title}" into your draft.`)
   }
 
   async function handleSaveDungeon() {
@@ -359,12 +574,10 @@ function SignedInOverview() {
       setSelectedDungeonId(savedId)
       setDraftTitle(normalizedTitle)
       setDraftSerializedDungeon(normalizedPayload)
-      setDungeonNotice(
-        selectedDungeonId ? 'Updated the durable dungeon record in Convex.' : 'Saved a new durable dungeon record in Convex.',
-      )
+      setDungeonNotice(selectedDungeonId ? 'Updated the saved dungeon.' : 'Saved a new dungeon.')
     } catch (mutationError) {
       console.error(mutationError)
-      setDungeonError('Saving the dungeon failed. Make sure this account still has DM access in the active workspace.')
+      setDungeonError('Saving the dungeon failed. Make sure this account can still manage dungeons.')
     }
 
     setIsSavingDungeon(false)
@@ -449,7 +662,7 @@ function SignedInOverview() {
 
       setSelectedSessionId(joinedSession.sessionId)
       setSessionJoinCode(joinedSession.joinCode)
-      setSessionNotice(`Joined "${joinedSession.title}". Convex now tracks this membership.`)
+      setSessionNotice(`Joined "${joinedSession.title}".`)
     } catch (mutationError) {
       console.error(mutationError)
       setSessionError('That join code is invalid or no longer active.')
@@ -473,10 +686,10 @@ function SignedInOverview() {
       })
 
       setSessionAccessPayload(payload)
-      setSessionNotice('Issued a short-lived Colyseus access ticket for the selected session.')
+      setSessionNotice('Created a short-lived session access token.')
     } catch (mutationError) {
       console.error(mutationError)
-      setSessionError('Could not issue a Colyseus access ticket for this session.')
+      setSessionError('Could not create an access token for this session.')
     }
 
     setIsWorkingSession(false)
@@ -748,22 +961,19 @@ function SignedInOverview() {
 
   return (
     <>
-      <section className="signed-in-card" aria-labelledby="signed-in-title">
+      <section className="signed-in-card signed-in-card--overview" aria-labelledby="signed-in-title">
         <div>
-          <p className="app-shell__eyebrow">Authenticated workspace</p>
+          <p className="app-shell__eyebrow">Your table</p>
           <h2 className="panel__title" id="signed-in-title">
             {identity.viewer?.name ?? identity.viewer?.email ?? 'DungeonPlanner user'}
           </h2>
-          <p className="panel__copy">
-            Signed into the local Convex-backed shell. Workspace, role, and library records are now
-            resolving through Convex instead of the anonymous demo surface.
-          </p>
+          <p className="panel__copy">Pick up your dungeons, sessions, characters, and packs from one place.</p>
         </div>
 
         <div className="signed-in-card__meta">
           <div>
             <p className="status-card__label">Workspace</p>
-            <p className="status-card__value">{identity.workspace?.name ?? 'Provisioning workspace...'}</p>
+            <p className="status-card__value">{identity.workspace?.name ?? 'Loading your table...'}</p>
           </div>
           <div>
             <p className="status-card__label">Roles</p>
@@ -785,36 +995,116 @@ function SignedInOverview() {
         </div>
       </section>
 
-      <nav className="app-shell__subnav" aria-label="Signed-in modules">
-        {navItems.map((item) => (
-          <a className="app-shell__nav-link" href={`#${item.id}`} key={item.id}>
+      <nav className="workspace-nav" aria-label="Workspace pages">
+        {workspaceNavItems.map((item) => (
+          <a
+            className={`workspace-nav__link ${
+              item.id === 'admin'
+                ? activePage === 'admin-users' || activePage === 'admin-packs'
+                  ? 'workspace-nav__link--active'
+                  : ''
+                : activePage === item.id
+                  ? 'workspace-nav__link--active'
+                  : ''
+            }`}
+            href={item.href}
+            key={item.id}
+          >
             {item.label}
           </a>
         ))}
       </nav>
 
+      {(activePage === 'admin-users' || activePage === 'admin-packs') &&
+      (identity.access.canManageUsers || identity.access.canManagePacks) ? (
+        <nav className="workspace-nav workspace-nav--nested" aria-label="Admin pages">
+          {identity.access.canManageUsers ? (
+            <a
+              className={`workspace-nav__link ${activePage === 'admin-users' ? 'workspace-nav__link--active' : ''}`}
+              href="#/app/admin/users"
+            >
+              Users
+            </a>
+          ) : null}
+          {identity.access.canManagePacks ? (
+            <a
+              className={`workspace-nav__link ${activePage === 'admin-packs' ? 'workspace-nav__link--active' : ''}`}
+              href="#/app/admin/packs"
+            >
+              Packs
+            </a>
+          ) : null}
+        </nav>
+      ) : null}
+
+      {activePage === 'overview' ? (
+        <section className="panels" aria-label="Workspace overview">
+          {navItems
+            .filter((item) => item.id !== 'overview')
+            .map((item) => (
+              <article className="status-card overview-card" key={item.id}>
+                <p className="status-card__label">{item.label}</p>
+                <p className="status-card__value">
+                  {item.id === 'library'
+                    ? `${libraryRecords?.length ?? 0} saved`
+                    : item.id === 'sessions'
+                      ? `${sessionRecords?.length ?? 0} active`
+                      : item.id === 'characters'
+                        ? `${characterRecords?.length ?? 0} ready`
+                        : item.id === 'admin-users'
+                          ? `${workspaceMembers?.length ?? 0} visible`
+                          : `${packRecords?.length ?? 0} registered`}
+                </p>
+                <p className="status-card__copy">
+                  {item.id === 'library'
+                    ? 'Review saved dungeons and load them back into your draft.'
+                    : item.id === 'sessions'
+                      ? 'Create tables, join games, and keep session access handy.'
+                      : item.id === 'characters'
+                        ? 'Manage reusable character sheets and link them to sessions.'
+                        : item.id === 'admin-users'
+                          ? 'Create users, assign roles, and keep access tidy.'
+                          : 'Curate the packs available to your group.'}
+                </p>
+                <a className="hero-panel__button hero-panel__button--secondary" href={item.href}>
+                  Open {item.label}
+                </a>
+              </article>
+            ))}
+        </section>
+      ) : (
+        <section className="page-header" aria-labelledby="workspace-page-title">
+          <p className="panel__eyebrow">{pageIntro[activePage].eyebrow}</p>
+          <h2 className="panel__title" id="workspace-page-title">
+            {pageIntro[activePage].title}
+          </h2>
+          <p className="panel__copy">{pageIntro[activePage].copy}</p>
+        </section>
+      )}
+
       {!identity.access.canManageDungeons &&
       !identity.access.canManageSessions &&
-      !identity.access.canManagePacks ? (
+      !identity.access.canManagePacks &&
+      activePage === 'overview' ? (
         <section className="signed-in-card">
           <div>
             <p className="app-shell__eyebrow">Player access</p>
-            <h2 className="panel__title">Limited workspace tooling</h2>
+            <h2 className="panel__title">Your player tools are ready</h2>
             <p className="panel__copy">
-              This account currently resolves as a player-only member. DM and admin tooling stays hidden
-              until those roles are assigned in Convex.
+              Join sessions and keep your character sheet close by. Dungeon and admin tools appear when
+              your access expands.
             </p>
           </div>
         </section>
       ) : null}
 
-      <section className="panels" id="roadmap" aria-label="Authenticated product modules">
-        {identity.access.canManageDungeons ? (
-          <article className="panel panel--library" id="library">
+      <section className="panels" aria-label="Authenticated product modules">
+        {activePage === 'library' && identity.access.canManageDungeons ? (
+          <article className="panel panel--library">
             <p className="panel__eyebrow">Dungeon Library</p>
-            <h2 className="panel__title">Owned maps</h2>
+            <h2 className="panel__title">Saved dungeons</h2>
             <p className="panel__copy">
-              Durable library records now store the existing portable dungeon JSON payload without changing the editor export format.
+              Keep portable dungeon exports in your library and load them back into your draft whenever you need them.
             </p>
 
             <div className={`library-sync-state library-sync-state--${syncState.tone}`}>
@@ -829,8 +1119,8 @@ function SignedInOverview() {
               <section className="library-card">
                 <div className="library-card__header">
                   <div>
-                    <p className="status-card__label">Durable records</p>
-                    <h3 className="library-card__title">Convex library</h3>
+                    <p className="status-card__label">Saved records</p>
+                    <h3 className="library-card__title">Dungeon library</h3>
                   </div>
                   <button className="hero-panel__button hero-panel__button--secondary" onClick={handleNewDraft} type="button">
                     New local draft
@@ -846,7 +1136,7 @@ function SignedInOverview() {
                         onClick={() => {
                           setSelectedDungeonId(record._id)
                           setDungeonError(null)
-                          setDungeonNotice(`Selected "${record.title}" from the Convex library.`)
+                          setDungeonNotice(`Selected "${record.title}" from your library.`)
                         }}
                         type="button"
                       >
@@ -859,7 +1149,7 @@ function SignedInOverview() {
                     ))}
                   </div>
                 ) : (
-                  <p className="panel__copy">No dungeon records have been saved in this workspace yet.</p>
+                  <p className="panel__copy">No dungeons have been saved here yet.</p>
                 )}
 
                 <div className="library-card__actions">
@@ -938,21 +1228,22 @@ function SignedInOverview() {
           </article>
         ) : null}
 
-        <article className="panel panel--sessions" id="sessions">
+        {activePage === 'sessions' ? (
+          <article className="panel panel--sessions">
           <p className="panel__eyebrow">Sessions</p>
-          <h2 className="panel__title">Durable membership and room access</h2>
+          <h2 className="panel__title">Tables, invites, and access</h2>
           <p className="panel__copy">
-            Convex now owns shareable join codes, durable session membership, and the short-lived tickets the Colyseus room accepts.
+            Create sessions, share join codes, and keep each table ready for play.
           </p>
 
           <div className="library-grid">
             <section className="library-card">
-              <div className="library-card__header">
-                <div>
-                  <p className="status-card__label">Create or join</p>
-                  <h3 className="library-card__title">Session flows</h3>
+                <div className="library-card__header">
+                  <div>
+                    <p className="status-card__label">Create or join</p>
+                    <h3 className="library-card__title">Session setup</h3>
+                  </div>
                 </div>
-              </div>
 
               {identity.access.canManageSessions ? (
                 <label className="auth-card__field">
@@ -1035,7 +1326,7 @@ function SignedInOverview() {
                   ))}
                 </div>
               ) : (
-                <p className="panel__copy">You are not a member of any sessions in the active workspace yet.</p>
+                <p className="panel__copy">You are not a member of any sessions here yet.</p>
               )}
 
               <div className="library-card__actions">
@@ -1045,7 +1336,7 @@ function SignedInOverview() {
                   onClick={() => void handleIssueSessionAccessTicket()}
                   type="button"
                 >
-                  Issue Colyseus ticket
+                  Create access token
                 </button>
               </div>
 
@@ -1053,7 +1344,7 @@ function SignedInOverview() {
                 <div className="session-summary">
                   <p className="status-card__label">Selected session</p>
                   <p className="library-card__title">{selectedSession.title}</p>
-                  <p className="panel__copy">Share join code <strong>{selectedSession.joinCode}</strong> with authenticated players.</p>
+                  <p className="panel__copy">Share join code <strong>{selectedSession.joinCode}</strong> with your players.</p>
                   {sessionPackRecords ? (
                     <p className="panel__copy">
                       Active session packs:{' '}
@@ -1067,7 +1358,7 @@ function SignedInOverview() {
 
               {sessionAccessPayload ? (
                 <label className="auth-card__field">
-                  <span>Room access payload</span>
+                  <span>Session access token</span>
                   <textarea
                     className="library-editor"
                     readOnly
@@ -1079,13 +1370,14 @@ function SignedInOverview() {
             </section>
           </div>
         </article>
+        ) : null}
 
-        {identity.access.canUseCharacterLibrary ? (
-          <article className="panel panel--characters" id="characters">
+        {activePage === 'characters' && identity.access.canUseCharacterLibrary ? (
+          <article className="panel panel--characters">
             <p className="panel__eyebrow">Characters</p>
-            <h2 className="panel__title">Player-owned records</h2>
+            <h2 className="panel__title">Character library</h2>
             <p className="panel__copy">
-              Character identity now lives as durable user-owned records, separate from placed map tokens, with first session-link plumbing in place.
+              Keep reusable character sheets ready for every session and connect them when it is time to play.
             </p>
 
             <div className="library-grid">
@@ -1212,12 +1504,12 @@ function SignedInOverview() {
           </article>
         ) : null}
 
-        {identity.access.canManagePacks ? (
-          <article className="panel panel--packs" id="admin">
+        {activePage === 'admin-packs' && identity.access.canManagePacks ? (
+          <article className="panel panel--packs">
             <p className="panel__eyebrow">Admin</p>
-            <h2 className="panel__title">Pack governance</h2>
+            <h2 className="panel__title">Content packs</h2>
             <p className="panel__copy">
-              The registry now stores canonical pack metadata, activation state, storage-backed manifest or thumbnail files, and namespaced content refs.
+              Keep your pack catalog organized, set defaults, and control what your group can use.
             </p>
 
             <div className="library-grid">
@@ -1225,7 +1517,7 @@ function SignedInOverview() {
                 <div className="library-card__header">
                   <div>
                     <p className="status-card__label">Registry records</p>
-                    <h3 className="library-card__title">Workspace packs</h3>
+                    <h3 className="library-card__title">Available packs</h3>
                   </div>
                   <button className="hero-panel__button hero-panel__button--secondary" onClick={handleNewPackDraft} type="button">
                     New pack
@@ -1252,7 +1544,7 @@ function SignedInOverview() {
                     ))}
                   </div>
                 ) : (
-                  <p className="panel__copy">No workspace packs have been registered yet.</p>
+                  <p className="panel__copy">No packs have been registered yet.</p>
                 )}
               </section>
 
@@ -1389,23 +1681,22 @@ function SignedInOverview() {
                 </div>
 
                 <p className="panel__copy">
-                  New pack-managed refs should use <code>packId:localId</code>. Legacy flat asset IDs are normalized on save, while runtime-generated player refs remain compatible.
+                  Pack-managed references use <code>packId:localId</code> so assets stay tidy across your library.
                 </p>
               </section>
             </div>
           </article>
         ) : null}
-      </section>
 
-      {identity.access.canManageUsers ? (
-        <section className="auth-card" aria-labelledby="role-manager-title">
+        {activePage === 'admin-users' && identity.access.canManageUsers ? (
+          <section className="auth-card" aria-labelledby="role-manager-title">
           <div className="auth-card__header">
-            <p className="app-shell__eyebrow">Admin controls</p>
+            <p className="app-shell__eyebrow">Admin</p>
             <h2 className="panel__title" id="role-manager-title">
-              Manage workspace roles
+              User access
             </h2>
             <p className="panel__copy">
-              Admins can grant or revoke additive roles by email. Global admin applies across every workspace.
+              Add new users, grant roles by email, and keep the right tools in the right hands.
             </p>
           </div>
 
@@ -1439,13 +1730,13 @@ function SignedInOverview() {
               <select
                 className="auth-card__select"
                 disabled={roleToManage === 'admin'}
-                onChange={(event) => setRoleScope(event.target.value as 'workspace' | 'global')}
-                value={roleToManage === 'admin' ? 'global' : roleScope}
-              >
-                <option value="workspace">workspace</option>
-                <option value="global">global</option>
-              </select>
-            </label>
+                  onChange={(event) => setRoleScope(event.target.value as 'workspace' | 'global')}
+                  value={roleToManage === 'admin' ? 'global' : roleScope}
+                >
+                  <option value="workspace">workspace</option>
+                  <option value="global">global</option>
+                </select>
+              </label>
           </div>
 
           {roleError ? <p className="auth-card__error">{roleError}</p> : null}
@@ -1470,7 +1761,7 @@ function SignedInOverview() {
           </div>
 
           <div className="workspace-members">
-            <p className="status-card__label">Visible members</p>
+            <p className="status-card__label">Visible users</p>
             {workspaceMembers && workspaceMembers.length > 0 ? (
               <div className="workspace-members__list">
                 {workspaceMembers.map((member: { userId: string; name: string | null; email: string | null; roles: PlatformRole[] }) => (
@@ -1494,101 +1785,102 @@ function SignedInOverview() {
                 ))}
               </div>
             ) : (
-              <p className="panel__copy">No members are visible in the active workspace yet.</p>
+              <p className="panel__copy">No users are visible here yet.</p>
             )}
           </div>
         </section>
-      ) : null}
+        ) : null}
+      </section>
     </>
   )
 }
 
 function App() {
-  const { isLoading } = useConvexAuth()
+  const { isAuthenticated, isLoading } = useConvexAuth()
+  const [currentPath, setCurrentPath] = useState(() => readHashPath())
+  const publicPath = currentPath === '/login' ? '/login' : '/'
+
+  useEffect(() => {
+    const syncHashPath = () => {
+      setCurrentPath(readHashPath())
+    }
+
+    syncHashPath()
+    window.addEventListener('hashchange', syncHashPath)
+
+    return () => {
+      window.removeEventListener('hashchange', syncHashPath)
+    }
+  }, [])
 
   return (
     <div className="app-shell">
-      <header className="app-shell__header">
-        <div className="app-shell__brand">
-          <p className="app-shell__eyebrow">DungeonPlanner App</p>
-          <h1 className="app-shell__title">Signed-in product shell</h1>
-          <p className="app-shell__subtitle">
-            Local-first authenticated workspace for libraries, sessions, characters, and admin tools.
-          </p>
-        </div>
+      <header className="site-header">
+        <div className="header-inner">
+          <a aria-label="DungeonPlanner home" className="brand" href={isAuthenticated ? '#/app' : '#/'}>
+            <img alt="DungeonPlanner" className="brand-icon" src="/logo.png" />
+          </a>
 
-        <nav className="app-shell__nav" aria-label="Primary">
-          <a className="app-shell__nav-link" href="#hero-title">Overview</a>
-          <a className="app-shell__nav-link" href="#auth">Auth</a>
-          <a className="app-shell__nav-link" href="#roadmap">Workspace</a>
-        </nav>
+          <nav aria-label="Main navigation" className="header-nav">
+            <a href="https://demo.dungeonplanner.com/" rel="noreferrer" target="_blank">
+              Demo
+            </a>
+            <a href="https://docs.dungeonplanner.com/" rel="noreferrer" target="_blank">
+              Docs
+            </a>
+            <a className="nav-gh" href="https://github.com/finger-gun/DungeonPlanner" rel="noreferrer" target="_blank">
+              <GitHubMark />
+              GitHub
+            </a>
+            <a
+              className={!isAuthenticated && publicPath === '/login' ? 'header-nav__link--active' : undefined}
+              href={isAuthenticated ? '#/app' : '#/login'}
+            >
+              {isAuthenticated ? 'Workspace' : 'Login'}
+            </a>
+          </nav>
+        </div>
       </header>
 
-      <main className="app-shell__main">
-        <section className="hero-panel" aria-labelledby="hero-title">
-          <div className="hero-panel__content">
-            <p className="app-shell__eyebrow">Phase one foundation</p>
-            <h2 className="hero-panel__title" id="hero-title">
-              Build the real product without disturbing the public landing page or demo.
-            </h2>
-            <p className="hero-panel__copy">
-              This workspace is the future signed-in surface. The anonymous demo, docs, and landing
-              page stay where they are while Convex auth, libraries, sessions, and pack management
-              come online here first.
-            </p>
-            <div className="hero-panel__actions">
-              <a className="hero-panel__button hero-panel__button--primary" href="#auth">
-                Auth flow placeholder
-              </a>
-              <a className="hero-panel__button hero-panel__button--secondary" href="#roadmap">
-                Workspace roadmap
-              </a>
-            </div>
-          </div>
-
-          <div className="hero-panel__status">
-            <article className="status-card">
-              <p className="status-card__label">Auth</p>
-              <p className="status-card__value">Convex Auth</p>
-              <p className="status-card__copy">Starts here, not in the public site or demo.</p>
-            </article>
-            <article className="status-card">
-              <p className="status-card__label">Persistence</p>
-              <p className="status-card__value">Manual saves first</p>
-              <p className="status-card__copy">Latest-only dungeon records before version history.</p>
-            </article>
-            <article className="status-card">
-              <p className="status-card__label">Multiplayer</p>
-              <p className="status-card__value">Colyseus stays live</p>
-              <p className="status-card__copy">Durable identity moves to Convex, live transport stays separate.</p>
-            </article>
-          </div>
-        </section>
-
-        {isLoading ? (
+      <main className={`app-shell__main ${!isAuthenticated && publicPath === '/' ? 'app-shell__main--public' : ''}`}>
+        {!isAuthenticated ? (
+          <>
+            {isLoading ? (
+              <section className="signed-in-card signed-in-card--loading" aria-live="polite">
+                <div>
+                  <p className="app-shell__eyebrow">Loading</p>
+                  <h2 className="panel__title">Checking your sign-in…</h2>
+                  <p className="panel__copy">Just a moment while DungeonPlanner opens your table.</p>
+                </div>
+              </section>
+            ) : publicPath === '/login' ? (
+              <section className="login-screen" aria-labelledby="login-screen-title">
+                <div className="login-screen__intro">
+                  <p className="app-shell__eyebrow">Login</p>
+                  <h1 className="panel__title" id="login-screen-title">
+                    Welcome back to DungeonPlanner
+                  </h1>
+                  <p className="panel__copy">Sign in to open your saved dungeons, sessions, characters, and packs.</p>
+                </div>
+                <PasswordAuthCard />
+              </section>
+            ) : (
+              <PublicLandingScreen />
+            )}
+          </>
+        ) : isLoading ? (
           <section className="signed-in-card signed-in-card--loading" aria-live="polite">
             <div>
-              <p className="app-shell__eyebrow">Connecting</p>
-              <h2 className="panel__title">Waiting for local Convex auth state...</h2>
-              <p className="panel__copy">
-                The app is hydrating the current browser session against the self-hosted Convex backend.
-              </p>
+              <p className="app-shell__eyebrow">Loading</p>
+              <h2 className="panel__title">Opening your table…</h2>
+              <p className="panel__copy">Just a moment while DungeonPlanner loads your latest workspace.</p>
             </div>
           </section>
-        ) : null}
+        ) : (
+          <SignedInOverview currentPath={currentPath} />
+        )}
 
-        <Unauthenticated>
-          <PasswordAuthCard />
-        </Unauthenticated>
-
-        <Authenticated>
-          <SignedInOverview />
-        </Authenticated>
-
-        <footer className="app-shell__footer" id="auth">
-          Local setup target: start self-hosted Convex, set the generated admin key in
-          <code>app/.env.local</code>, then run <code>pnpm --filter dungeonplanner-app convex:dev</code>.
-        </footer>
+        <footer className="app-shell__footer"></footer>
       </main>
     </div>
   )

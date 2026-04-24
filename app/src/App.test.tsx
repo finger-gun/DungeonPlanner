@@ -99,6 +99,7 @@ vi.mock('./lib/auth', () => ({
 
 describe('authenticated app shell', () => {
   beforeEach(() => {
+    window.location.hash = ''
     mock.authState.isLoading = false
     mock.authState.isAuthenticated = false
     mock.viewerIdentity = {
@@ -127,11 +128,24 @@ describe('authenticated app shell', () => {
     cleanup()
   })
 
-  it('submits the password sign-in form when unauthenticated', async () => {
+  it('shows the public landing page when unauthenticated', async () => {
+    render(<App />)
+
+    expect(screen.getByRole('heading', { name: /build dungeons\.\s*run epic sessions\./i })).toBeTruthy()
+    expect(screen.getByRole('img', { name: 'DungeonPlanner logo' })).toBeTruthy()
+    expect(screen.getByRole('heading', { name: 'Why DungeonPlanner?' })).toBeTruthy()
+    expect(screen.getByRole('link', { name: 'Login' })).toBeTruthy()
+  })
+
+  it('submits the password sign-in form on the login screen', async () => {
     const user = userEvent.setup()
     mock.signIn.mockResolvedValue(undefined)
+    window.location.hash = '#/login'
 
     render(<App />)
+
+    expect(screen.getByRole('heading', { name: 'Welcome back to DungeonPlanner' })).toBeTruthy()
+    expect(screen.getByRole('heading', { name: 'Sign in to DungeonPlanner' })).toBeTruthy()
 
     await user.type(screen.getByLabelText('Email'), 'user@example.com')
     await user.type(screen.getByLabelText('Password'), 'DungeonPlanner123!')
@@ -262,7 +276,44 @@ describe('authenticated app shell', () => {
     await user.click(screen.getByRole('button', { name: /Archived Keep/i }))
     await user.click(screen.getByRole('button', { name: 'Load selected into draft' }))
 
-    await waitFor(() => expect(screen.getByLabelText('Title')).toHaveValue('Archived Keep'))
-    expect(screen.getByLabelText('Portable dungeon JSON')).toHaveValue('{"version":1,"name":"Archived Keep","rooms":[]}')
+    await waitFor(() =>
+      expect((screen.getByLabelText('Title') as HTMLInputElement).value).toBe('Archived Keep'),
+    )
+    expect((screen.getByLabelText('Portable dungeon JSON') as HTMLTextAreaElement).value).toBe(
+      '{"version":1,"name":"Archived Keep","rooms":[]}',
+    )
+  })
+
+  it('shows dedicated admin user management pages for administrators', async () => {
+    window.location.hash = '#/app/admin/users'
+    mock.authState.isAuthenticated = true
+    mock.viewerIdentity = {
+      viewer: { name: 'Admin User', email: 'admin@example.com' },
+      workspace: { name: 'Guild Hall' },
+      roles: ['admin'],
+      access: {
+        isAdmin: true,
+        canManageUsers: true,
+        canManagePacks: true,
+        canManageDungeons: true,
+        canManageSessions: true,
+        canUseCharacterLibrary: true,
+      },
+    }
+    mock.queries = {
+      'dungeons.listViewerDungeons': [],
+      'sessions.listViewerSessions': [],
+      'characters.listViewerCharacters': [],
+      'packs.listWorkspacePacks': [],
+      'roles.listActiveWorkspaceUsers': [],
+    }
+
+    render(<App />)
+
+    expect(screen.getByRole('heading', { name: 'User access' })).toBeTruthy()
+    expect(screen.getByLabelText('User email')).toBeTruthy()
+    expect(screen.getByRole('link', { name: 'Admin' })).toBeTruthy()
+    expect(screen.getByRole('navigation', { name: 'Admin pages' })).toBeTruthy()
+    expect(screen.getByRole('link', { name: 'Packs' })).toBeTruthy()
   })
 })
