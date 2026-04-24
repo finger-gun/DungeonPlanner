@@ -497,6 +497,30 @@ describe('useDungeonStore history', () => {
       cellKey: '1:0:floor',
     })
 
+    expect(moved).toBe(true)
+    expect(useDungeonStore.getState().placedObjects[placedId!]?.cell).toEqual([1, 0])
+  })
+
+  it('does not move a prop into blocked outdoor terrain', () => {
+    useDungeonStore.getState().newDungeon('outdoor')
+
+    const placedId = useDungeonStore.getState().placeObject({
+      type: 'prop',
+      assetId: 'kaykit.forest_tree_1_a_color1',
+      position: [1, 0, 1],
+      rotation: [0, 0, 0],
+      props: { connector: 'FLOOR', direction: null },
+      cell: [0, 0],
+      cellKey: '0:0:floor',
+    })
+    useDungeonStore.getState().paintBlockedCells([[1, 0]])
+
+    const moved = useDungeonStore.getState().moveObject(placedId!, {
+      position: [3, 0, 1],
+      cell: [1, 0],
+      cellKey: '1:0:floor',
+    })
+
     expect(moved).toBe(false)
   })
 
@@ -686,7 +710,7 @@ describe('useDungeonStore history', () => {
     expect(useDungeonStore.getState().tool).toBe('prop')
 
     useDungeonStore.getState().undo()
-    expect(useDungeonStore.getState().tool).toBe('move')
+    expect(useDungeonStore.getState().tool).toBe('select')
 
     useDungeonStore.getState().redo()
     expect(useDungeonStore.getState().tool).toBe('prop')

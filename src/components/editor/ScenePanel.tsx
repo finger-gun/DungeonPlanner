@@ -19,6 +19,7 @@ type FloorData = {
 // ── Main panel ────────────────────────────────────────────────────────────────
 
 export function ScenePanel() {
+  const mapMode = useDungeonStore((s) => s.mapMode)
   const floors       = useDungeonStore((s) => s.floors)
   const floorOrder   = useDungeonStore((s) => s.floorOrder)
   const activeFloorId = useDungeonStore((s) => s.activeFloorId)
@@ -63,6 +64,39 @@ export function ScenePanel() {
     () => [...floorOrder].sort((a, b) => (floors[b]?.level ?? 0) - (floors[a]?.level ?? 0)),
     [floorOrder, floors],
   )
+
+  if (mapMode === 'outdoor') {
+    const outdoorData = getFloorData(activeFloorId)
+    return (
+      <OutdoorScenePanel
+        data={outdoorData}
+        selection={selection}
+        onSelectProp={(id) => {
+          selectObject(id)
+          const assetId = outdoorData.placedObjects[id]?.assetId
+          const asset = assetId ? getContentPackAssetById(assetId) : null
+          if (asset) {
+            setAssetBrowserCategory(getAssetBrowserCategory(asset))
+            setAssetBrowserSubcategory(getAssetBrowserSubcategory(asset))
+          }
+          setTool(asset?.category === 'player' || isGeneratedCharacterAssetId(asset?.id) ? 'character' : 'prop')
+        }}
+        onSelectOpening={(id) => {
+          selectObject(id)
+          const openingAssetId = outdoorData.wallOpenings[id]?.assetId
+          const asset = openingAssetId ? getContentPackAssetById(openingAssetId) : null
+          if (asset) {
+            setAssetBrowserCategory(getAssetBrowserCategory(asset))
+            setAssetBrowserSubcategory(getAssetBrowserSubcategory(asset))
+          } else {
+            setAssetBrowserCategory('openings')
+            setAssetBrowserSubcategory(null)
+          }
+          setTool('prop')
+        }}
+      />
+    )
+  }
 
   return (
     <section>
@@ -148,6 +182,93 @@ export function ScenePanel() {
   )
 }
 
+function OutdoorScenePanel({
+  data,
+  selection,
+  onSelectProp,
+  onSelectOpening,
+}: {
+  data: FloorData
+  selection: string | null
+  onSelectProp: (id: string) => void
+  onSelectOpening: (id: string) => void
+}) {
+  const [expanded, setExpanded] = useState(false)
+  const placedProps = Object.values(data.placedObjects)
+    .sort((left, right) => {
+      const leftName = left.assetId ? (getContentPackAssetById(left.assetId)?.name ?? left.id) : left.id
+      const rightName = right.assetId ? (getContentPackAssetById(right.assetId)?.name ?? right.id) : right.id
+      return leftName.localeCompare(rightName)
+    })
+  const openings = Object.values(data.wallOpenings)
+    .sort((left, right) => left.id.localeCompare(right.id))
+
+  return (
+    <section>
+      <p className="mb-3 text-xs font-semibold uppercase tracking-[0.32em] text-sky-200/75">
+        Map
+      </p>
+
+      <div className="rounded-2xl border border-stone-600/60 bg-stone-900/70">
+        <div className="flex items-center gap-1.5 px-2.5 py-2">
+          <button
+            type="button"
+            onClick={() => setExpanded((value) => !value)}
+            aria-label="Toggle outdoor map"
+            className="flex h-4 w-4 shrink-0 items-center justify-center text-stone-500"
+          >
+            <ChevronRight size={11} strokeWidth={2} className={`transition-transform ${expanded ? 'rotate-90' : ''}`} />
+          </button>
+
+          <div className="min-w-0 flex-1">
+            <span className="block truncate text-xs font-semibold text-stone-100">Outdoor Map</span>
+          </div>
+
+          <span className="shrink-0 rounded px-1 py-px text-[9px] uppercase tracking-[0.15em] bg-sky-900/40 text-sky-400/80">
+            active
+          </span>
+        </div>
+
+        {expanded && (
+          <div className="flex flex-col gap-0.5 border-t border-stone-800/50 px-3 pb-2 pt-1.5">
+            {placedProps.length === 0 && openings.length === 0 ? (
+              <p className="text-[11px] text-stone-700">No props placed on this map.</p>
+            ) : (
+              <>
+                {placedProps.map((object) => {
+                  const asset = object.assetId ? getContentPackAssetById(object.assetId) : null
+                  return (
+                    <LeafRow
+                      key={object.id}
+                      label={asset?.name ?? 'Unknown prop'}
+                      detail={object.cellKey}
+                      active={selection === object.id}
+                      onClick={() => onSelectProp(object.id)}
+                    />
+                  )
+                })}
+                {openings.map((opening) => {
+                  const asset = opening.assetId ? getContentPackAssetById(opening.assetId) : null
+                  const direction = opening.wallKey.split(':')[2]
+                  return (
+                    <LeafRow
+                      key={opening.id}
+                      label={opening.assetId ? (asset?.name ?? 'Unknown opening') : 'Open passage'}
+                      detail={direction}
+                      active={selection === opening.id}
+                      onClick={() => onSelectOpening(opening.id)}
+                    />
+                  )
+                })}
+              </>
+            )}
+          </div>
+        )}
+      </div>
+    </section>
+  )
+}
+
 // ── Floor node ────────────────────────────────────────────────────────────────
 
 type FloorNodeProps = {
@@ -171,7 +292,7 @@ function FloorNode({
   onActivate, onRename, onDelete,
   onSelectProp, onSelectOpening, onRenameRoom, onDeleteRoom,
 }: FloorNodeProps) {
-  const [expanded, setExpanded] = useState(true)
+  const [expanded, setExpanded] = useState(false)
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState(floor.name)
   const inputRef = useRef<HTMLInputElement>(null)
@@ -202,6 +323,7 @@ function FloorNode({
         <button
           type="button"
           onClick={() => setExpanded((v) => !v)}
+          aria-label={`Toggle ${floor.name}`}
           className="flex h-4 w-4 shrink-0 items-center justify-center text-stone-500"
         >
           <ChevronRight size={11} strokeWidth={2} className={`transition-transform ${expanded ? 'rotate-90' : ''}`} />

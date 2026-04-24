@@ -5,6 +5,7 @@ import { getWebGpuSupportMessage } from '../rendering/webgpuSupport'
 type Props = {
   children: ReactNode
   title?: string
+  onError?: (error: Error) => void
 }
 
 type State = {
@@ -20,7 +21,9 @@ export class RendererErrorBoundary extends Component<Props, State> {
     return { error }
   }
 
-  componentDidCatch(_error: Error, _errorInfo: ErrorInfo) {}
+  componentDidCatch(error: Error, _errorInfo: ErrorInfo) {
+    this.props.onError?.(error)
+  }
 
   render() {
     if (this.state.error) {

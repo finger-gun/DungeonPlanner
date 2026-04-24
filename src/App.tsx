@@ -14,7 +14,6 @@ import { RoomToolPanel } from './components/editor/RoomToolPanel'
 import { PropToolPanel } from './components/editor/PropToolPanel'
 import { CharacterToolPanel } from './components/editor/CharacterToolPanel'
 import { SelectToolPanel } from './components/editor/SelectToolPanel'
-import { LayerPanel } from './components/editor/LayerPanel'
 import { ScenePanel } from './components/editor/ScenePanel'
 import { CharacterSheetOverlay } from './components/editor/CharacterSheetOverlay'
 import { getDebugCameraPose, projectDebugWorldPoint } from './components/canvas/debugCameraBridge'
@@ -30,7 +29,7 @@ import {
 import type {
   CameraPreset,
 } from './store/useDungeonStore'
-import { RotateCcw } from 'lucide-react'
+import { ChevronLeft, ChevronRight, RotateCcw } from 'lucide-react'
 import { RendererErrorBoundary } from './components/RendererErrorBoundary'
 import { WebGpuRequiredNotice } from './components/WebGpuRequiredNotice'
 import { getWebGpuSupportMessage, isWebGpuSupported } from './rendering/webgpuSupport'
@@ -47,42 +46,63 @@ const FpsOverlay = lazy(() =>
   })),
 )
 
-function RightPanel() {
+function RightPanel({
+  panelMode,
+  onExitSettings,
+}: {
+  panelMode: 'tool' | 'settings'
+  onExitSettings?: () => void
+}) {
   const tool = useDungeonStore((state) => state.tool)
   const mapMode = useDungeonStore((state) => state.mapMode)
+  const showSettings = panelMode === 'settings'
   return (
-    <aside data-testid="editor-right-panel" className="flex h-full flex-col overflow-hidden border-l border-stone-800/80 bg-stone-950/85 backdrop-blur">
-      {/* Scene graph — always visible at the top */}
-      <div className="shrink-0 border-b border-stone-800/60 p-5">
-        <ScenePanel />
-      </div>
+    <aside
+      id="editor-right-panel"
+      data-testid="editor-right-panel"
+      className="flex h-full flex-col overflow-hidden border-l border-stone-800/80 bg-stone-950/85 backdrop-blur"
+    >
+      {!showSettings && (
+        <div className="shrink-0 border-b border-stone-800/60 p-5">
+          <ScenePanel />
+        </div>
+      )}
 
       {/* Tool-specific panel */}
       <div className="flex-1 overflow-y-auto p-5">
-        <p className="mb-5 text-xs font-semibold uppercase tracking-[0.32em] text-sky-200/75">
-          {tool === 'play'
-            ? 'Play'
-            : tool === 'select'
-              ? 'Select'
-              : tool === 'move'
-                ? 'Settings'
-                : tool === 'room'
-                  ? mapMode === 'outdoor' ? 'Terrain' : 'Room'
-                  : tool === 'character'
-                    ? 'Characters'
-                    : 'Assets'}
-        </p>
-        {tool === 'play' && null}
-        {tool === 'select' && <SelectToolPanel />}
-        {tool === 'move' && <MoveToolPanel />}
-        {tool === 'room' && <RoomToolPanel />}
-        {tool === 'character' && <CharacterToolPanel />}
-        {tool === 'prop' && <PropToolPanel />}
-      </div>
-
-      {/* Layers — always visible at the bottom */}
-      <div className="shrink-0 border-t border-stone-800/60 p-5 flex flex-col gap-6">
-        <LayerPanel />
+        <div className="mb-5 flex items-center justify-between gap-3">
+          <p className="text-xs font-semibold uppercase tracking-[0.32em] text-sky-200/75">
+            {showSettings
+              ? 'Settings'
+              : tool === 'play'
+              ? 'Play'
+              : tool === 'select'
+                ? 'Select'
+                : tool === 'move'
+                  ? 'Move'
+                  : tool === 'room'
+                    ? mapMode === 'outdoor' ? 'Terrain' : 'Room'
+                    : tool === 'character'
+                      ? 'Characters'
+                      : 'Assets'}
+          </p>
+          {showSettings && onExitSettings && (
+            <button
+              type="button"
+              aria-label="Back from settings"
+              onClick={onExitSettings}
+              className="flex h-8 w-8 items-center justify-center rounded-xl text-stone-400 transition hover:bg-stone-800 hover:text-stone-100"
+            >
+              <ChevronLeft size={16} strokeWidth={1.8} />
+            </button>
+          )}
+        </div>
+        {showSettings && <MoveToolPanel />}
+        {!showSettings && tool === 'play' && null}
+        {!showSettings && tool === 'select' && <SelectToolPanel />}
+        {!showSettings && tool === 'room' && <RoomToolPanel />}
+        {!showSettings && tool === 'character' && <CharacterToolPanel />}
+        {!showSettings && tool === 'prop' && <PropToolPanel />}
       </div>
     </aside>
   )
@@ -94,6 +114,8 @@ function App() {
   const roomEditMode = useDungeonStore((state) => state.roomEditMode)
   const outdoorBrushMode = useDungeonStore((state) => state.outdoorBrushMode)
   const isPlayMode = tool === 'play'
+  const [sidebarPanel, setSidebarPanel] = useState<'tool' | 'settings'>('tool')
+  const [sidebarOpen, setSidebarOpen] = useState(true)
   const [debugPanelOpen, setDebugPanelOpen] = useState(false)
   const selectedAssetIds = useDungeonStore((state) => state.selectedAssetIds)
   const surfaceBrushAssetIds = useDungeonStore((state) => state.surfaceBrushAssetIds)
@@ -135,6 +157,9 @@ function App() {
   const debugAssetSourcePath = debugAssetId ? getContentPackAssetSourcePath(debugAssetId) : null
   const debugAssetSourceLink = debugAssetId ? getContentPackAssetSourceLink(debugAssetId) : null
   const webGpuSupported = isWebGpuSupported()
+  const showSettingsPanel = sidebarPanel === 'settings'
+  const sidebarVisible = sidebarOpen && (!isPlayMode || showSettingsPanel)
+  const cameraRightOffset = sidebarVisible ? 400 : 16
 
   const onWindowKeyDown = useEffectEvent((event: KeyboardEvent) => {
     if (event.ctrlKey && event.shiftKey && event.key === 'F12') {
@@ -292,15 +317,15 @@ function App() {
     tool === 'play'
       ? 'Drag characters to move them'
       : tool === 'move'
-      ? 'Application settings and viewport controls'
+      ? 'Navigate the scene and open settings when needed'
         : tool === 'room'
           ? roomEditMode === 'rooms'
             ? mapMode === 'outdoor'
               ? outdoorBrushMode === 'terrain-style'
-                ? 'Left-drag to paint terrain styles · right-drag to reset cells to the map default style'
+                ? 'Left-drag to paint terrain styles · right-drag to reset cells to the map default'
                 : outdoorBrushMode === 'terrain-sculpt'
                   ? 'Left-drag to raise stepped terrain · right-drag to lower stepped terrain into pits and trenches'
-                  : 'Left-drag to paint terrain surroundings with the selected color variant · right-drag to erase surrounding areas'
+                  : 'Left-drag to paint nature with the selected style · right-drag to erase nature areas'
               : 'Click room to select · drag room edges to resize · rectangular rooms also show corner handles · left-drag empty space to build · right-drag to erase'
             : roomEditMode === 'walls'
               ? 'Top-down wall editing · drag to preview an axis-locked wall run · release to add or remove it'
@@ -320,102 +345,157 @@ function App() {
       <div className="relative flex h-screen">
         {/* Narrow vertical icon toolbar */}
         <div className="z-10 w-14 shrink-0">
-          <EditorToolbar />
+          <EditorToolbar
+            settingsOpen={showSettingsPanel}
+            onOpenSettings={() => {
+              setSidebarPanel('settings')
+              setSidebarOpen(true)
+            }}
+            onSelectTool={() => {
+              setSidebarPanel('tool')
+            }}
+          />
         </div>
 
-        {/* Canvas + right panel */}
-        <div className="flex flex-1 overflow-hidden">
-          <section
-            data-testid="editor-canvas-shell"
-            className="relative flex-1 overflow-hidden bg-stone-950"
-            onContextMenu={(event) => event.preventDefault()}
+        <section
+          data-testid="editor-canvas-shell"
+          className="relative flex-1 overflow-hidden bg-stone-950"
+          onContextMenu={(event) => event.preventDefault()}
+        >
+          <Suspense
+            fallback={
+              <div className="absolute inset-0 grid place-items-center bg-stone-950 text-sm uppercase tracking-[0.28em] text-stone-400">
+                Loading editor scene
+              </div>
+            }
           >
-            <Suspense
-              fallback={
-                <div className="absolute inset-0 grid place-items-center bg-stone-950 text-sm uppercase tracking-[0.28em] text-stone-400">
-                  Loading editor scene
-                </div>
-              }
-            >
-              {webGpuSupported ? (
-                <RendererErrorBoundary title="Scene unavailable">
-                  <Scene />
-                </RendererErrorBoundary>
-              ) : (
-                <WebGpuRequiredNotice message={getWebGpuSupportMessage()} />
-              )}
-            </Suspense>
+            {webGpuSupported ? (
+              <RendererErrorBoundary title="Scene unavailable">
+                <Scene />
+              </RendererErrorBoundary>
+            ) : (
+              <WebGpuRequiredNotice message={getWebGpuSupportMessage()} />
+            )}
+          </Suspense>
 
-            {!isPlayMode && <CharacterSheetOverlay />}
+          {!isPlayMode && <CharacterSheetOverlay />}
 
-            <CameraDropdown />
+          <CameraDropdown rightOffset={cameraRightOffset} />
 
-            {/* Floor-switch transition overlay — opacity driven imperatively by FloorTransitionController */}
-            <div
-              ref={overlayDomRef}
-              className="pointer-events-none absolute inset-0 bg-stone-950"
-              style={{ opacity: 0 }}
+          {/* Floor-switch transition overlay — opacity driven imperatively by FloorTransitionController */}
+          <div
+            ref={overlayDomRef}
+            className="pointer-events-none absolute inset-0 bg-stone-950"
+            style={{ opacity: 0 }}
+          />
+
+          {/* Tool hint overlay */}
+          <div className="absolute left-4 top-4 rounded-2xl border border-amber-300/15 bg-stone-950/78 px-4 py-3 backdrop-blur">
+            <p className="text-xs font-semibold uppercase tracking-[0.3em] text-amber-300/80">
+              {tool === 'play'
+                ? 'Play'
+                : tool === 'select'
+                  ? 'Select'
+                : tool === 'move'
+                    ? 'Move'
+                    : tool === 'character'
+                      ? 'Characters'
+                    : tool === 'room'
+                      ? mapMode === 'outdoor' ? 'Terrain' : 'Room'
+                      : 'Assets'}
+            </p>
+            <p className="mt-1.5 text-xs text-stone-400">{toolHint}</p>
+          </div>
+
+          {debugPanelOpen && (
+            <DebugVisibilityPanel
+              exploredCellCount={exploredCellCount}
+              clearExploredCells={clearExploredCells}
+              showLosDebugMask={showLosDebugMask}
+              showLosDebugRays={showLosDebugRays}
+              showLensFocusDebugPoint={showLensFocusDebugPoint}
+              showProjectionDebugMesh={showProjectionDebugMesh}
+              setShowLosDebugMask={setShowLosDebugMask}
+              setShowLosDebugRays={setShowLosDebugRays}
+              setShowLensFocusDebugPoint={setShowLensFocusDebugPoint}
+              setShowProjectionDebugMesh={setShowProjectionDebugMesh}
+              debugAssetName={debugAsset?.name ?? null}
+              debugAssetSourcePath={debugAssetSourcePath}
+              debugAssetSourceLink={debugAssetSourceLink}
             />
+          )}
 
-            {/* Tool hint overlay */}
-            <div className="absolute left-4 top-4 rounded-2xl border border-amber-300/15 bg-stone-950/78 px-4 py-3 backdrop-blur">
-              <p className="text-xs font-semibold uppercase tracking-[0.3em] text-amber-300/80">
-                {tool === 'play'
-                  ? 'Play'
-                  : tool === 'select'
-                    ? 'Select'
-                  : tool === 'move'
-                      ? 'Settings'
-                      : tool === 'character'
-                        ? 'Characters'
-                      : tool === 'room'
-                        ? mapMode === 'outdoor' ? 'Terrain' : 'Room'
-                        : 'Assets'}
-              </p>
-              <p className="mt-1.5 text-xs text-stone-400">{toolHint}</p>
-            </div>
+          {/* Stats counter */}
+          <div
+            data-testid="placement-counter"
+            className="pointer-events-none absolute bottom-4 left-4 rounded-full border border-teal-300/20 bg-stone-950/75 px-4 py-2 text-xs uppercase tracking-[0.25em] text-teal-200/85 backdrop-blur"
+          >
+            {formatCount(paintedCellCount, 'room cell')} •{' '}
+            {formatCount(propCount, 'prop')}
+          </div>
 
-            {debugPanelOpen && (
-              <DebugVisibilityPanel
-                exploredCellCount={exploredCellCount}
-                clearExploredCells={clearExploredCells}
-                showLosDebugMask={showLosDebugMask}
-                showLosDebugRays={showLosDebugRays}
-                showLensFocusDebugPoint={showLensFocusDebugPoint}
-                showProjectionDebugMesh={showProjectionDebugMesh}
-                setShowLosDebugMask={setShowLosDebugMask}
-                setShowLosDebugRays={setShowLosDebugRays}
-                setShowLensFocusDebugPoint={setShowLensFocusDebugPoint}
-                setShowProjectionDebugMesh={setShowProjectionDebugMesh}
-                debugAssetName={debugAsset?.name ?? null}
-                debugAssetSourcePath={debugAssetSourcePath}
-                debugAssetSourceLink={debugAssetSourceLink}
-              />
-            )}
-
-            {/* Stats counter */}
-            <div
-              data-testid="placement-counter"
-              className="pointer-events-none absolute bottom-4 left-4 rounded-full border border-teal-300/20 bg-stone-950/75 px-4 py-2 text-xs uppercase tracking-[0.25em] text-teal-200/85 backdrop-blur"
-            >
-              {formatCount(paintedCellCount, 'room cell')} •{' '}
-              {formatCount(propCount, 'prop')}
-            </div>
-
-            {webGpuSupported && (
-              <Suspense fallback={null}>
-                <FpsOverlay />
-              </Suspense>
-            )}
-          </section>
-
-          {/* Right panel */}
           {!isPlayMode && (
-            <div className="w-[22rem] shrink-0">
-              <RightPanel />
+            <div
+              className={`pointer-events-none absolute inset-y-0 right-0 z-30 flex items-center transition-transform duration-200 ease-out ${
+                sidebarVisible ? 'translate-x-0' : 'translate-x-[22rem]'
+              }`}
+            >
+              <div className="pointer-events-auto">
+                <button
+                  type="button"
+                  aria-controls="editor-right-panel"
+                  aria-expanded={sidebarVisible}
+                  aria-label={sidebarVisible ? 'Hide sidebar' : 'Show sidebar'}
+                  onClick={() => setSidebarOpen((open) => !open)}
+                  className="flex h-16 w-8 items-center justify-center rounded-l-2xl border border-r-0 border-stone-700/70 bg-stone-950/90 text-stone-300 shadow-2xl backdrop-blur transition hover:border-stone-500 hover:text-stone-100"
+                >
+                  {sidebarVisible ? <ChevronRight size={16} strokeWidth={1.8} /> : <ChevronLeft size={16} strokeWidth={1.8} />}
+                </button>
+              </div>
+              <div
+                data-testid="editor-right-panel-shell"
+                data-sidebar-visible={sidebarVisible}
+                data-sidebar-panel={showSettingsPanel ? 'settings' : 'tool'}
+                aria-hidden={!sidebarVisible}
+                className={`h-full w-[22rem] pointer-events-auto ${
+                  sidebarVisible ? '' : 'pointer-events-none'
+                }`}
+              >
+                <RightPanel
+                  panelMode={showSettingsPanel ? 'settings' : 'tool'}
+                  onExitSettings={() => {
+                    setSidebarPanel('tool')
+                  }}
+                />
+              </div>
             </div>
           )}
-        </div>
+
+          {webGpuSupported && (
+            <Suspense fallback={null}>
+              <FpsOverlay />
+            </Suspense>
+          )}
+
+          {isPlayMode && (
+            <div
+              data-testid="editor-right-panel-shell"
+              data-sidebar-visible={sidebarVisible}
+              data-sidebar-panel={showSettingsPanel ? 'settings' : 'tool'}
+              aria-hidden={!sidebarVisible}
+              className={`absolute inset-y-0 right-0 z-30 h-full w-[22rem] transition-transform duration-200 ease-out ${
+                sidebarVisible ? 'translate-x-0 pointer-events-auto' : 'translate-x-full pointer-events-none'
+              }`}
+            >
+              <RightPanel
+                panelMode={showSettingsPanel ? 'settings' : 'tool'}
+                onExitSettings={() => {
+                  setSidebarPanel('tool')
+                }}
+              />
+            </div>
+          )}
+        </section>
       </div>
     </div>
   )

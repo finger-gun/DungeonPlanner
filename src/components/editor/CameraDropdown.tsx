@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Axis3D, LayoutGrid, Triangle, Video } from 'lucide-react'
+import { Axis3D, Grid, LayoutGrid, Triangle, Video } from 'lucide-react'
 import { useDungeonStore, type CameraPreset } from '../../store/useDungeonStore'
 
 type PresetEntry = {
@@ -12,14 +12,17 @@ type PresetEntry = {
 const CAMERA_PRESETS: PresetEntry[] = [
   { id: 'perspective', label: 'Perspective', sub: 'Full orbit', Icon: Triangle },
   { id: 'isometric', label: 'Isometric', sub: 'Locked angle', Icon: Axis3D },
+  { id: 'classic', label: 'Classic', sub: 'SNES / Zelda', Icon: LayoutGrid },
   { id: 'top-down', label: 'Top Down', sub: 'Print / TTRPG', Icon: LayoutGrid },
 ]
 
-export function CameraDropdown() {
+export function CameraDropdown({ rightOffset = 16 }: { rightOffset?: number } = {}) {
   const [open, setOpen] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
   const activeCameraMode = useDungeonStore((state) => state.activeCameraMode)
+  const showGrid = useDungeonStore((state) => state.showGrid)
   const setCameraPreset = useDungeonStore((state) => state.setCameraPreset)
+  const setShowGrid = useDungeonStore((state) => state.setShowGrid)
 
   useEffect(() => {
     if (!open) {
@@ -39,7 +42,7 @@ export function CameraDropdown() {
   const activePreset = CAMERA_PRESETS.find((preset) => preset.id === activeCameraMode) ?? CAMERA_PRESETS[0]
 
   return (
-    <div ref={menuRef} className="absolute right-4 top-4 z-20">
+    <div ref={menuRef} className="absolute top-4 z-20 transition-[right] duration-200 ease-out" style={{ right: `${rightOffset}px` }}>
       <button
         type="button"
         title="Camera"
@@ -97,6 +100,28 @@ export function CameraDropdown() {
                 </button>
               )
             })}
+          </div>
+
+          <div className="mt-2 border-t border-stone-800/80 px-1 pt-2">
+            <button
+              type="button"
+              aria-label="Grid"
+              aria-pressed={showGrid}
+              onClick={() => setShowGrid(!showGrid)}
+              className={`flex w-full items-center gap-3 rounded-xl border px-3 py-2.5 text-left transition ${
+                showGrid
+                  ? 'border-teal-300/35 bg-teal-400/10 text-teal-200'
+                  : 'border-stone-800 bg-stone-950/40 text-stone-300 hover:border-stone-700 hover:bg-stone-800/80'
+              }`}
+            >
+              <Grid size={15} strokeWidth={1.5} />
+              <div className="flex-1">
+                <p className="text-sm font-medium leading-tight">Grid</p>
+                <p className="mt-0.5 text-[10px] uppercase tracking-[0.18em] text-stone-500">
+                  {showGrid ? 'Visible' : 'Hidden'}
+                </p>
+              </div>
+            </button>
           </div>
         </div>
       )}

@@ -9,6 +9,7 @@ import {
   withObjectLightOverrides,
   type EditablePropLightSettings,
 } from '../../store/lightOverrides'
+import { CompactPillButton } from './CompactPillButton'
 
 type SelectedPropInspectorProps = {
   object: DungeonObjectRecord
@@ -38,13 +39,14 @@ export function SelectedPropInspector({
               {object.id.slice(0, 8)}
             </p>
           </div>
-          <button
+          <CompactPillButton
             type="button"
             onClick={onDelete}
-            className="rounded-full border border-rose-400/30 bg-rose-500/10 px-3 py-1 text-xs text-rose-200 transition hover:border-rose-300/60 hover:bg-rose-500/20"
+            tone="rose"
+            size="sm"
           >
             Delete
-          </button>
+          </CompactPillButton>
         </div>
         <div className="grid gap-2 text-xs">
           <InfoRow label="Position" value={object.position.map((v) => v.toFixed(2)).join(', ')} />

@@ -21,4 +21,26 @@ describe('ScenePanel', () => {
     fireEvent.click(screen.getByText('Ground Floor'))
     expect(useDungeonStore.getState().floorViewMode).toBe('active')
   })
+
+  it('keeps floors collapsed by default', () => {
+    render(<ScenePanel />)
+
+    expect(screen.queryByText('No rooms on this floor.')).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: /toggle ground floor/i }))
+
+    expect(screen.getByText('No rooms on this floor.')).toBeInTheDocument()
+  })
+
+  it('shows map-oriented scene copy in outdoor mode', () => {
+    useDungeonStore.getState().newDungeon('outdoor')
+    render(<ScenePanel />)
+
+    expect(screen.getByText('Map')).toBeInTheDocument()
+    expect(screen.getByText('Outdoor Map')).toBeInTheDocument()
+    expect(screen.queryByText('Ground Floor')).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: /toggle outdoor map/i }))
+    expect(screen.getByText('No props placed on this map.')).toBeInTheDocument()
+  })
 })

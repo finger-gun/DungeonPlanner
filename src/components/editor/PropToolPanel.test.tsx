@@ -32,6 +32,14 @@ describe('PropToolPanel', () => {
     expect(getButtonByLabel('Furniture')).toBeInTheDocument()
     expect(getButtonByLabel('Openings')).toBeInTheDocument()
     expect(getButtonByLabel('Surfaces')).toBeInTheDocument()
+    expect(getButtonByLabel('Nature')).not.toBeInTheDocument()
+  })
+
+  it('shows a nature category in outdoor mode', () => {
+    useDungeonStore.getState().newDungeon('outdoor')
+    render(<PropToolPanel />)
+
+    expect(getButtonByLabel('Nature')).toBeInTheDocument()
   })
 
   it('updates the selected prop asset when a prop catalog card is clicked', () => {
@@ -104,6 +112,21 @@ describe('PropToolPanel', () => {
     fireEvent.click(assetButton!)
 
     expect(useDungeonStore.getState().surfaceBrushAssetIds.floor).toBe(floorAsset!.id)
+  })
+
+  it('shows forest props under the outdoor nature category', () => {
+    const treeAsset = getContentPackAssetsByCategory('prop').find((asset) => asset.id === 'kaykit.forest_tree_1_a_color1')
+    expect(treeAsset).toBeDefined()
+
+    useDungeonStore.getState().newDungeon('outdoor')
+    render(<PropToolPanel />)
+
+    fireEvent.click(getButtonByLabel('Nature')!)
+
+    expect(screen.getByText('Subcategories')).toBeInTheDocument()
+    expect(getButtonByLabel('Trees')).toBeInTheDocument()
+    expect(getButtonByLabel('Rocks')).toBeInTheDocument()
+    expect(getCatalogButtonByAssetName(treeAsset!.name)).not.toBeNull()
   })
 
   it('shows light controls for a selected light-emitting prop and commits intensity on release', () => {

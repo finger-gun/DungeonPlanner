@@ -24,6 +24,7 @@ type SphericalDest = {
 const PRESET_TARGETS: Record<CameraPreset, SphericalDest> = {
   perspective: { r: PERSP_DIST, phi: Math.acos(11 / PERSP_DIST), theta: Math.PI / 4, fov: 42 },
   isometric:   { r: ISO_DIST,   phi: Math.acos(1 / Math.sqrt(3)), theta: Math.PI / 4, orthoZoom: 3.25 },
+  classic:     { r: 22,         phi: 0.68,                        theta: 0,           orthoZoom: 1.65 },
   'top-down':  { r: 24,         phi: 0.001,                       theta: 0,           orthoZoom: 1.0 },
 }
 
@@ -43,7 +44,7 @@ function makeOrthoCamera(aspect: number): THREE.OrthographicCamera {
 }
 
 function usesOrthographicProjection(preset: CameraPreset) {
-  return preset === 'isometric' || preset === 'top-down'
+  return preset === 'isometric' || preset === 'top-down' || preset === 'classic'
 }
 
 export function CameraPresetManager() {

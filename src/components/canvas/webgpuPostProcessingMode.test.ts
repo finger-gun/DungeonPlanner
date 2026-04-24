@@ -16,6 +16,13 @@ describe('shouldApplyWebGpuLensBlur', () => {
     })).toBe(false)
   })
 
+  it('disables lens blur in classic mode', () => {
+    expect(shouldApplyWebGpuLensBlur({
+      activeCameraMode: 'classic',
+      lensEnabled: true,
+    })).toBe(false)
+  })
+
   it('disables lens blur when the setting is off', () => {
     expect(shouldApplyWebGpuLensBlur({
       activeCameraMode: 'perspective',

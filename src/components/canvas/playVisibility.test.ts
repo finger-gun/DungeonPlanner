@@ -158,6 +158,19 @@ describe('computeVisibleCellKeys', () => {
     )
   })
 
+  it('casts visibility from every player even when another player already revealed their cell', () => {
+    const paintedCells = makeCells([
+      { cell: [0, 0], roomId: 'room-a' },
+      { cell: [1, 0], roomId: 'room-a' },
+      { cell: [2, 0], roomId: 'room-a' },
+      { cell: [3, 0], roomId: 'room-a' },
+    ])
+
+    expect(computeVisibleCellKeys(paintedCells, {}, [[0, 0], [2, 0]], 2)).toEqual(
+      expect.arrayContaining(['0:0', '1:0', '2:0', '3:0']),
+    )
+  })
+
   it('can see through a blocker cell when the actual blocker mesh does not intersect the ray', () => {
     const paintedCells = makeCells([
       { cell: [0, 0], roomId: 'room-a' },

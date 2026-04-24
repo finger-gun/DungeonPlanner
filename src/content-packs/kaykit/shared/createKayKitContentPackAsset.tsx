@@ -32,6 +32,15 @@ type KayKitAssetDefinition = {
 const DEFAULT_POSITION = [0, 0, 0] as const
 const DEFAULT_ROTATION = [0, 0, 0] as const
 const DEFAULT_SCALE = 1
+const THUMBNAIL_URLS = import.meta.glob('../../../assets/models/forrest/**/*.png', {
+  eager: true,
+  import: 'default',
+  query: '?url',
+}) as Record<string, string>
+
+const thumbnailAssetUrls = Object.fromEntries(
+  Object.entries(THUMBNAIL_URLS).map(([key, url]) => [getAssetName(key), url]),
+) as Record<string, string>
 
 export function createKayKitContentPackAsset(definition: KayKitAssetDefinition): ContentPackAsset {
   const assetUrl = resolveKayKitModelAssetUrl(definition.modelName)
@@ -39,6 +48,7 @@ export function createKayKitContentPackAsset(definition: KayKitAssetDefinition):
     throw new Error(`Missing KayKit model asset: ${definition.modelName}`)
   }
 
+  const thumbnailUrl = resolveKayKitThumbnailAssetUrl(definition.modelName)
   const resolvedTransform = resolveTransform(definition.transform)
   const Component = createStaticModelComponent(assetUrl, definition.transform)
 
@@ -48,6 +58,7 @@ export function createKayKitContentPackAsset(definition: KayKitAssetDefinition):
     name: definition.name,
     category: definition.category,
     assetUrl,
+    ...(thumbnailUrl ? { thumbnailUrl } : {}),
     Component,
     batchRender: {
       getAssetUrl: () => assetUrl,
@@ -82,6 +93,17 @@ function createStaticModelComponent(assetUrl: string, transform?: KayKitTransfor
   }
 
   return KayKitModel
+}
+
+function resolveKayKitThumbnailAssetUrl(name: string) {
+  return thumbnailAssetUrls[name]
+}
+
+function getAssetName(key: string) {
+  return key
+    .split('/')
+    .pop()
+    ?.replace(/\.png$/i, '') ?? key
 }
 
 function resolveTransform(transform?: KayKitTransform) {

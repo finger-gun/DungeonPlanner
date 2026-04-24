@@ -1,4 +1,5 @@
 import { useMemo, type JSX } from 'react'
+import * as THREE from 'three'
 import { cloneSceneWithNodeMaterials } from '../../../rendering/nodeMaterialUtils'
 import { useGLTF } from '../../../rendering/useGLTF'
 import { OUTDOOR_TERRAIN_STYLES, type OutdoorTerrainStyle } from '../../../store/outdoorTerrainStyles'
@@ -118,6 +119,17 @@ export function resolveSteppedOutdoorTerrainAssetUrl(
   return resolveKayKitModelAssetUrl(getTerrainModelName(STEPPED_OUTDOOR_TERRAIN_ASSETS[key].modelBaseName, terrainStyle))
 }
 
+export function applyTerrainShadowSettings(root: THREE.Object3D) {
+  root.traverse((object) => {
+    if (object instanceof THREE.Mesh) {
+      object.castShadow = true
+      object.receiveShadow = true
+    }
+  })
+
+  return root
+}
+
 for (const terrainStyle of OUTDOOR_TERRAIN_STYLES) {
   for (const assetKey of Object.keys(STEPPED_OUTDOOR_TERRAIN_ASSETS) as SteppedOutdoorTerrainAssetKey[]) {
     useGLTF.preload(resolveSteppedOutdoorTerrainAssetUrl(assetKey, terrainStyle))
@@ -134,7 +146,10 @@ export function SteppedOutdoorTerrainAsset({
 }) {
   const assetUrl = resolveSteppedOutdoorTerrainAssetUrl(assetKey, terrainStyle)
   const gltf = useGLTF(assetUrl)
-  const scene = useMemo(() => cloneSceneWithNodeMaterials(gltf.scene), [gltf.scene])
+  const scene = useMemo(
+    () => applyTerrainShadowSettings(cloneSceneWithNodeMaterials(gltf.scene)),
+    [gltf.scene],
+  )
 
   return (
     <group {...props}>

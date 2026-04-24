@@ -1,6 +1,7 @@
 import * as THREE from 'three'
 import { describe, expect, it } from 'vitest'
 import {
+  createTerrainStyleOverlayMaterial,
   createTerrainStyleMask,
   getTerrainEdgeTransitionTransform,
   makeTexturePixelsOpaque,
@@ -58,5 +59,19 @@ describe('OutdoorGround helpers', () => {
       position: [6, 7],
       rotationY: Math.PI / 2,
     })
+  })
+
+  it('keeps style overlays flush with the terrain while avoiding z-fighting', () => {
+    const texture = new THREE.Texture()
+    const mask = new THREE.Texture()
+
+    const material = createTerrainStyleOverlayMaterial(texture, mask, 1)
+
+    expect(material.depthWrite).toBe(false)
+    expect(material.polygonOffset).toBe(true)
+    expect(material.polygonOffsetFactor).toBe(-1)
+    expect(material.polygonOffsetUnits).toBe(-1)
+
+    material.dispose()
   })
 })

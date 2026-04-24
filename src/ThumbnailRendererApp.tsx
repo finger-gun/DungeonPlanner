@@ -1,15 +1,14 @@
-import { Suspense, useEffect, useMemo, useRef } from 'react'
-import { Canvas, useThree } from '@react-three/fiber'
+import { Suspense, useEffect, useMemo, useRef, useState } from 'react'
+import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import { OrthographicCamera } from '@react-three/drei'
 import * as THREE from 'three'
 import { SkeletonUtils } from 'three-stdlib'
 import { getThumbnailLayout } from './thumbnail/thumbnailLayout'
 import { upgradeStandardMaterialsToNodeMaterials } from './rendering/nodeMaterialUtils'
 import { RendererErrorBoundary } from './components/RendererErrorBoundary'
-import { WebGpuRequiredNotice } from './components/WebGpuRequiredNotice'
-import { getWebGpuSupportMessage, isWebGpuSupported } from './rendering/webgpuSupport'
 import { createWebGpuRenderer } from './rendering/createWebGpuRenderer'
 import { useGLTF } from './rendering/useGLTF'
+import { registerGLTFRenderer } from './rendering/useGLTF'
 
 function getRenderableBounds(root: THREE.Object3D) {
   root.updateWorldMatrix(true, true)
@@ -53,12 +52,22 @@ declare global {
 
 function ThumbnailModel({
   assetUrl,
+  useNodeMaterials,
 }: {
   assetUrl: string
+  useNodeMaterials: boolean
 }) {
   const gltf = useGLTF(assetUrl)
-  const scene = useMemo(() => upgradeStandardMaterialsToNodeMaterials(SkeletonUtils.clone(gltf.scene)), [gltf.scene])
+  const scene = useMemo(
+    () => (
+      useNodeMaterials
+        ? upgradeStandardMaterialsToNodeMaterials(SkeletonUtils.clone(gltf.scene))
+        : SkeletonUtils.clone(gltf.scene)
+    ),
+    [gltf.scene, useNodeMaterials],
+  )
   const groupRef = useRef<THREE.Group>(null)
+  const renderedFramesRef = useRef(-1)
   const { camera, invalidate, size } = useThree()
 
   useEffect(() => {
@@ -83,21 +92,23 @@ function ThumbnailModel({
     camera.zoom = layout.zoom
     camera.updateProjectionMatrix()
     camera.updateMatrixWorld()
+    renderedFramesRef.current = 0
     invalidate()
-
-    let settleFrame = 0
-    const frame = window.requestAnimationFrame(() => {
-      invalidate()
-      settleFrame = window.requestAnimationFrame(() => {
-        window.__THUMBNAIL_READY__ = true
-      })
-    })
-
-    return () => {
-      window.cancelAnimationFrame(frame)
-      window.cancelAnimationFrame(settleFrame)
-    }
   }, [camera, invalidate, scene, size.height, size.width])
+
+  useFrame(() => {
+    if (renderedFramesRef.current < 0 || window.__THUMBNAIL_READY__) {
+      return
+    }
+
+    renderedFramesRef.current += 1
+    if (renderedFramesRef.current < 3) {
+      invalidate()
+      return
+    }
+
+    window.__THUMBNAIL_READY__ = true
+  })
 
   return (
     <group ref={groupRef}>
@@ -106,11 +117,31 @@ function ThumbnailModel({
   )
 }
 
-function ThumbnailViewport({ assetUrl }: { assetUrl: string }) {
+function createThumbnailWebGlRenderer(props: THREE.WebGLRendererParameters) {
+  const renderer = new THREE.WebGLRenderer({
+    canvas: props.canvas as HTMLCanvasElement | undefined,
+    antialias: props.antialias ?? true,
+    alpha: props.alpha ?? true,
+    preserveDrawingBuffer: true,
+    powerPreference: props.powerPreference,
+  })
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
+  renderer.setSize(window.innerWidth, window.innerHeight, false)
+  registerGLTFRenderer(renderer)
+  return renderer
+}
+
+function ThumbnailViewport({
+  assetUrl,
+  useWebGpu,
+}: {
+  assetUrl: string
+  useWebGpu: boolean
+}) {
   return (
     <Canvas
       data-testid="thumbnail-canvas"
-      gl={createWebGpuRenderer}
+      gl={useWebGpu ? createWebGpuRenderer : createThumbnailWebGlRenderer}
       dpr={1}
     >
       <OrthographicCamera
@@ -126,7 +157,7 @@ function ThumbnailViewport({ assetUrl }: { assetUrl: string }) {
       <directionalLight position={[6, 8, 6]} intensity={2.2} />
       <directionalLight position={[-4, 5, 3]} intensity={0.8} />
       <Suspense fallback={null}>
-        <ThumbnailModel assetUrl={assetUrl} />
+        <ThumbnailModel assetUrl={assetUrl} useNodeMaterials={useWebGpu} />
       </Suspense>
     </Canvas>
   )
@@ -135,30 +166,68 @@ function ThumbnailViewport({ assetUrl }: { assetUrl: string }) {
 export default function ThumbnailRendererApp() {
   const params = new URLSearchParams(window.location.search)
   const assetUrl = params.get('asset')
-  const webGpuSupported = isWebGpuSupported()
+  const [useWebGpu, setUseWebGpu] = useState<boolean | null>(null)
 
   useEffect(() => {
     window.__THUMBNAIL_READY__ = false
     window.__THUMBNAIL_ERROR__ = assetUrl ? undefined : 'Missing asset query parameter.'
   }, [assetUrl])
 
+  useEffect(() => {
+    if (!assetUrl) {
+      setUseWebGpu(false)
+      return
+    }
+
+    let cancelled = false
+
+    async function resolveRendererMode() {
+      if (typeof navigator === 'undefined' || !navigator.gpu) {
+        if (!cancelled) {
+          setUseWebGpu(false)
+        }
+        return
+      }
+
+      try {
+        const adapter = await navigator.gpu.requestAdapter()
+        if (!cancelled) {
+          setUseWebGpu(Boolean(adapter))
+        }
+      } catch {
+        if (!cancelled) {
+          setUseWebGpu(false)
+        }
+      }
+    }
+
+    void resolveRendererMode()
+
+    return () => {
+      cancelled = true
+    }
+  }, [assetUrl])
+
   if (!assetUrl) {
+    return null
+  }
+
+  if (useWebGpu === null) {
     return null
   }
 
   return (
     <div className="flex h-screen w-screen items-center justify-center bg-transparent">
-      {webGpuSupported ? (
-        <div className="h-[320px] w-[320px]">
-          <RendererErrorBoundary title="Thumbnail renderer unavailable">
-            <ThumbnailViewport assetUrl={assetUrl} />
-          </RendererErrorBoundary>
-        </div>
-      ) : (
-        <div className="relative h-[320px] w-[320px] overflow-hidden rounded-3xl border border-stone-800 bg-stone-950">
-          <WebGpuRequiredNotice message={getWebGpuSupportMessage()} />
-        </div>
-      )}
+      <div className="h-[320px] w-[320px]">
+        <RendererErrorBoundary
+          title="Thumbnail renderer unavailable"
+          onError={(error) => {
+            window.__THUMBNAIL_ERROR__ = error.message
+          }}
+        >
+          <ThumbnailViewport assetUrl={assetUrl} useWebGpu={useWebGpu} />
+        </RendererErrorBoundary>
+      </div>
     </div>
   )
 }

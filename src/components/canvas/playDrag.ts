@@ -62,10 +62,17 @@ export function updatePlayDragState(
   targetPainted: boolean,
   occupantId?: string,
   outdoorTerrainHeights?: OutdoorTerrainHeightfield,
+  targetCell?: GridCell | null,
 ): PlayDragState {
   const displayX = pointerPoint.x + state.grabOffset[0]
   const displayZ = pointerPoint.z + state.grabOffset[1]
-  const snapped = snapWorldPointToGrid({ x: displayX, y: pointerPoint.y, z: displayZ })
+  const snapped = targetCell
+    ? {
+        cell: targetCell,
+        key: `${targetCell[0]}:${targetCell[1]}`,
+        position: cellToWorldPosition(targetCell),
+      }
+    : snapWorldPointToGrid({ x: displayX, y: pointerPoint.y, z: displayZ })
   const valid = targetPainted && (!occupantId || occupantId === state.objectId)
   const positionY = outdoorTerrainHeights
     ? sampleOutdoorTerrainHeight(outdoorTerrainHeights, snapped.position[0], snapped.position[2])

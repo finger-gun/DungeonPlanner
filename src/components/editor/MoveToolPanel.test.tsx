@@ -3,7 +3,6 @@ import userEvent from '@testing-library/user-event'
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { MoveToolPanel } from './MoveToolPanel'
 import { useDungeonStore } from '../../store/useDungeonStore'
-import { FORWARD_PLUS_BACKEND_LABEL } from '../../rendering/forwardPlusConfig'
 
 describe('MoveToolPanel', () => {
   beforeEach(() => {
@@ -28,22 +27,6 @@ describe('MoveToolPanel', () => {
     expect(screen.getByText(/dungeon ambience/i)).toBeInTheDocument()
   })
 
-  it('lets users enable the synthetic light stress benchmark and choose a count', async () => {
-    const user = userEvent.setup()
-    render(<MoveToolPanel />)
-
-    const toggle = screen.getByLabelText('Synthetic Light Stress')
-    expect(toggle).toHaveAttribute('aria-pressed', 'false')
-
-    await user.click(toggle)
-    await user.click(screen.getByRole('button', { name: '256' }))
-
-    expect(useDungeonStore.getState().lightBenchmark.enabled).toBe(true)
-    expect(useDungeonStore.getState().lightBenchmark.count).toBe(256)
-    expect(screen.getByText(FORWARD_PLUS_BACKEND_LABEL)).toBeInTheDocument()
-    expect(screen.getByText('256/256')).toBeInTheDocument()
-  })
-
   it('lets users toggle pixelation from the settings panel', async () => {
     const user = userEvent.setup()
     render(<MoveToolPanel />)
@@ -66,5 +49,18 @@ describe('MoveToolPanel', () => {
     fireEvent.change(slider, { target: { value: '10' } })
 
     expect(useDungeonStore.getState().postProcessing.pixelSize).toBe(10)
+  })
+
+  it('does not show a viewport section in settings', () => {
+    render(<MoveToolPanel />)
+
+    expect(screen.queryByText('Viewport')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Grid' })).not.toBeInTheDocument()
+  })
+
+  it('does not show synthetic light stress controls', () => {
+    render(<MoveToolPanel />)
+
+    expect(screen.queryByText('Synthetic Light Stress')).not.toBeInTheDocument()
   })
 })

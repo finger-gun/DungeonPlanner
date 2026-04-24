@@ -4,12 +4,14 @@ import { getContentPackAssetById, getContentPackAssetsByCategory } from '../../c
 import type { AssetBrowserCategory, AssetBrowserSubcategory, ContentPackAsset } from '../../content-packs/types'
 import { useDungeonStore } from '../../store/useDungeonStore'
 import { AssetCatalog, type AssetCatalogSection } from './AssetCatalog'
+import { CompactPillButton } from './CompactPillButton'
 import { SelectedPropInspector } from './SelectedPropInspector'
 
 const ASSET_BROWSER_CATEGORIES: Array<{ id: AssetBrowserCategory; label: string }> = [
   { id: 'furniture', label: 'Furniture' },
   { id: 'storage', label: 'Storage' },
   { id: 'decor', label: 'Decor' },
+  { id: 'nature', label: 'Nature' },
   { id: 'treasure', label: 'Treasure' },
   { id: 'structure', label: 'Structure' },
   { id: 'openings', label: 'Openings' },
@@ -27,6 +29,11 @@ const SUBCATEGORY_LABELS: Record<AssetBrowserSubcategory, string> = {
   banners: 'Banners',
   tabletop: 'Tabletop',
   books: 'Books',
+  trees: 'Trees',
+  'bare-trees': 'Bare Trees',
+  bushes: 'Bushes',
+  grass: 'Grass',
+  rocks: 'Rocks',
   loot: 'Loot',
   tools: 'Tools',
   rubble: 'Rubble',
@@ -58,6 +65,9 @@ export function PropToolPanel() {
   const setAssetBrowserSubcategory = useDungeonStore((state) => state.setAssetBrowserSubcategory)
   const removeSelectedObject = useDungeonStore((state) => state.removeSelectedObject)
   const removeOpening = useDungeonStore((state) => state.removeOpening)
+  const visibleCategories = mapMode === 'outdoor'
+    ? ASSET_BROWSER_CATEGORIES
+    : ASSET_BROWSER_CATEGORIES.filter(({ id }) => id !== 'nature')
 
   const allAssets = [
     ...getContentPackAssetsByCategory('prop'),
@@ -101,11 +111,11 @@ export function PropToolPanel() {
         <p className="mb-3 text-xs font-semibold uppercase tracking-[0.3em] text-amber-200/70">
           Asset Categories
         </p>
-        <div className="grid grid-cols-2 gap-2">
-          {ASSET_BROWSER_CATEGORIES.map(({ id, label }) => {
+        <div className="flex flex-wrap gap-1.5">
+          {visibleCategories.map(({ id, label }) => {
             const active = assetBrowser.category === id
             return (
-              <button
+              <CompactPillButton
                 key={id}
                 type="button"
                 onClick={() => {
@@ -114,14 +124,12 @@ export function PropToolPanel() {
                     setWallConnectionMode('door')
                   }
                 }}
-                className={`rounded-2xl border px-3 py-2 text-xs font-medium uppercase tracking-[0.2em] transition ${
-                  active
-                    ? 'border-teal-300/35 bg-teal-400/10 text-teal-200'
-                    : 'border-stone-800 bg-stone-950/60 text-stone-400 hover:border-stone-700 hover:text-stone-200'
-                }`}
+                active={active}
+                tone="teal"
+                size="sm"
               >
                 {label}
-              </button>
+              </CompactPillButton>
             )
           })}
         </div>
@@ -142,33 +150,29 @@ export function PropToolPanel() {
           <p className="mb-3 text-xs font-semibold uppercase tracking-[0.3em] text-amber-200/70">
             Subcategories
           </p>
-          <div className="flex flex-wrap gap-2">
-            <button
+          <div className="flex flex-wrap gap-1.5">
+            <CompactPillButton
               type="button"
               onClick={() => setAssetBrowserSubcategory(null)}
-              className={`rounded-full border px-3 py-1.5 text-[10px] font-medium uppercase tracking-[0.2em] transition ${
-                assetBrowser.subcategory === null
-                  ? 'border-sky-300/35 bg-sky-400/10 text-sky-200'
-                  : 'border-stone-800 bg-stone-950/60 text-stone-400 hover:border-stone-700 hover:text-stone-200'
-              }`}
+              active={assetBrowser.subcategory === null}
+              tone="sky"
+              size="xs"
             >
               All
-            </button>
+            </CompactPillButton>
             {subcategorySections.map((section) => {
               const active = assetBrowser.subcategory === section.id
               return (
-                <button
+                <CompactPillButton
                   key={section.id}
                   type="button"
                   onClick={() => setAssetBrowserSubcategory(section.id)}
-                  className={`rounded-full border px-3 py-1.5 text-[10px] font-medium uppercase tracking-[0.2em] transition ${
-                    active
-                      ? 'border-sky-300/35 bg-sky-400/10 text-sky-200'
-                      : 'border-stone-800 bg-stone-950/60 text-stone-400 hover:border-stone-700 hover:text-stone-200'
-                  }`}
+                  active={active}
+                  tone="sky"
+                  size="xs"
                 >
                   {section.title}
-                </button>
+                </CompactPillButton>
               )
             })}
           </div>
@@ -208,6 +212,8 @@ export function PropToolPanel() {
         <p className="mt-1">
           {assetBrowser.category === 'openings'
             ? 'Browse doors and stairs here. Shared-wall editing now lives under Room -> Walls.'
+            : assetBrowser.category === 'nature'
+              ? 'Browse outdoor nature props by family. Only full placeable assets appear here; terrain cliff and top pieces stay out of the prop browser.'
             : assetBrowser.category === 'surfaces'
               ? 'Browse floor and wall variants here. Selecting a surface asset keeps the faster brush workflow on the canvas.'
               : 'Browse props by category and subcategory. Wall, floor, and surface-aware placement still comes from asset metadata.'}
@@ -241,13 +247,14 @@ export function PropToolPanel() {
                   {selectedOpening.id.slice(0, 8)}
                 </p>
               </div>
-              <button
+              <CompactPillButton
                 type="button"
                 onClick={() => removeOpening(selectedOpening.id)}
-                className="rounded-full border border-rose-400/30 bg-rose-500/10 px-3 py-1 text-xs text-rose-200 transition hover:border-rose-300/60 hover:bg-rose-500/20"
+                tone="rose"
+                size="sm"
               >
                 Delete
-              </button>
+              </CompactPillButton>
             </div>
             <div className="grid gap-2 text-xs">
               <PropRow label="Wall" value={selectedOpening.wallKey} />
@@ -299,7 +306,7 @@ function getAssetBadgeLabel(asset: ContentPackAsset, active: boolean) {
   if (asset.category === 'floor' || asset.category === 'wall') return asset.category
   if (tags.includes('light')) return 'light'
 
-  return getAssetBrowserSubcategory(asset)
+  return SUBCATEGORY_LABELS[getAssetBrowserSubcategory(asset)].toLowerCase()
 }
 
 function getAssetBadgeClassName(asset: ContentPackAsset, active: boolean) {

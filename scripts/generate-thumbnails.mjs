@@ -3,7 +3,7 @@ import { spawn } from 'node:child_process'
 import path from 'node:path'
 import process from 'node:process'
 import { chromium } from '@playwright/test'
-import { listModelFiles, getRelativeModelPath, resolvePackDir } from './model-pipeline.mjs'
+import { listModelFiles, getRelativeModelPath, modelRootDir, resolvePackDir } from './model-pipeline.mjs'
 
 const rootDir = process.cwd()
 const host = '127.0.0.1'
@@ -144,7 +144,7 @@ async function main() {
 }
 
 function parseArgs(args) {
-  let target = 'core'
+  let target = modelRootDir
   let filter = null
   let missingOnly = false
 

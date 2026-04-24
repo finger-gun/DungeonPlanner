@@ -23,7 +23,15 @@ const TOOLS: { id: DungeonTool; Icon: React.ComponentType<{ size?: number; strok
   { id: 'prop',    Icon: Box,           label: 'Assets' },
 ]
 
-export function EditorToolbar() {
+export function EditorToolbar({
+  settingsOpen = false,
+  onOpenSettings,
+  onSelectTool,
+}: {
+  settingsOpen?: boolean
+  onOpenSettings?: () => void
+  onSelectTool?: (tool: DungeonTool) => void
+} = {}) {
   const tool = useDungeonStore((state) => state.tool)
   const mapMode = useDungeonStore((state) => state.mapMode)
   const setTool = useDungeonStore((state) => state.setTool)
@@ -52,7 +60,10 @@ export function EditorToolbar() {
                 key={id}
                 type="button"
                 title={label}
-                onClick={() => setTool(id)}
+                onClick={() => {
+                  setTool(id)
+                  onSelectTool?.(id)
+                }}
                 className={`group flex h-10 w-10 items-center justify-center rounded-xl transition ${
                   active
                     ? 'bg-amber-400/20 text-amber-300'
@@ -69,7 +80,12 @@ export function EditorToolbar() {
       {/* File menu + Undo/Redo at bottom */}
       <div className="flex flex-col items-center gap-1">
         <FileMenuButton />
-        <SettingsButton />
+        <SettingsButton
+          active={settingsOpen}
+          onOpenSettings={() => {
+            onOpenSettings?.()
+          }}
+        />
         <div className="my-1 h-px w-6 bg-stone-800" />
         <button
           type="button"
@@ -94,16 +110,12 @@ export function EditorToolbar() {
   )
 }
 
-function SettingsButton() {
-  const tool = useDungeonStore((state) => state.tool)
-  const setTool = useDungeonStore((state) => state.setTool)
-  const active = tool === 'move'
-
+function SettingsButton({ active, onOpenSettings }: { active: boolean; onOpenSettings: () => void }) {
   return (
     <button
       type="button"
       title="Settings"
-      onClick={() => setTool('move')}
+      onClick={onOpenSettings}
       className={`flex h-10 w-10 items-center justify-center rounded-xl transition ${
         active
           ? 'bg-amber-400/20 text-amber-300'
@@ -122,6 +134,7 @@ function FileMenuButton() {
   const [confirmNew, setConfirmNew] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const menuItemClass = 'flex w-full items-center gap-3 px-3 py-2 text-left text-sm transition'
 
   const downloadDungeon = useDungeonStore((s) => s.downloadDungeon)
   const loadDungeon = useDungeonStore((s) => s.loadDungeon)
@@ -173,7 +186,7 @@ function FileMenuButton() {
       </button>
 
       {open && (
-        <div className="absolute bottom-0 left-14 z-50 w-44 rounded-2xl border border-stone-700/60 bg-stone-900 py-1.5 shadow-xl">
+        <div className="absolute bottom-0 left-14 z-50 w-56 rounded-2xl border border-stone-700/60 bg-stone-900 py-1.5 shadow-xl">
           {/* New */}
           <button
             type="button"
@@ -184,9 +197,9 @@ function FileMenuButton() {
               }
               handleNew('indoor')
             }}
-            className={`flex w-full items-center gap-3 px-3 py-2 text-left text-sm transition ${
+            className={`${menuItemClass} ${
               confirmNew
-                ? 'bg-red-900/40 text-red-300 hover:bg-red-900/60'
+                ? 'bg-stone-800 text-stone-100 hover:bg-stone-700'
                 : 'text-stone-300 hover:bg-stone-800'
             }`}
           >
@@ -198,7 +211,7 @@ function FileMenuButton() {
             <button
               type="button"
               onClick={() => handleNew('outdoor')}
-              className="flex w-full items-center gap-3 px-3 py-2 text-left text-sm text-emerald-200 transition hover:bg-emerald-900/40"
+              className={`${menuItemClass} text-stone-300 hover:bg-stone-800 hover:text-stone-100`}
             >
               <FilePlus2 size={14} strokeWidth={1.5} className="shrink-0" />
               New Outdoor Map
@@ -211,7 +224,7 @@ function FileMenuButton() {
           <button
             type="button"
             onClick={() => { downloadDungeon(); setOpen(false) }}
-            className="flex w-full items-center gap-3 px-3 py-2 text-left text-sm text-stone-300 transition hover:bg-stone-800"
+            className={`${menuItemClass} text-stone-300 hover:bg-stone-800`}
           >
             <Download size={14} strokeWidth={1.5} className="shrink-0" />
             Save Dungeon
@@ -221,7 +234,7 @@ function FileMenuButton() {
           <button
             type="button"
             onClick={() => fileInputRef.current?.click()}
-            className="flex w-full items-center gap-3 px-3 py-2 text-left text-sm text-stone-300 transition hover:bg-stone-800"
+            className={`${menuItemClass} text-stone-300 hover:bg-stone-800`}
           >
             <Upload size={14} strokeWidth={1.5} className="shrink-0" />
             Load Dungeon

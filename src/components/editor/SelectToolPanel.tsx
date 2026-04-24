@@ -1,5 +1,6 @@
 import { getContentPackAssetById } from '../../content-packs/registry'
 import { useDungeonStore } from '../../store/useDungeonStore'
+import { CompactPillButton } from './CompactPillButton'
 import { SelectedPropInspector } from './SelectedPropInspector'
 
 export function SelectToolPanel() {
@@ -47,13 +48,14 @@ export function SelectToolPanel() {
                   {selectedOpening.id.slice(0, 8)}
                 </p>
               </div>
-              <button
+              <CompactPillButton
                 type="button"
                 onClick={() => removeOpening(selectedOpening.id)}
-                className="rounded-full border border-rose-400/30 bg-rose-500/10 px-3 py-1 text-xs text-rose-200 transition hover:border-rose-300/60 hover:bg-rose-500/20"
+                tone="rose"
+                size="sm"
               >
                 Delete
-              </button>
+              </CompactPillButton>
             </div>
             <div className="grid gap-2 text-xs">
               <InfoRow label="Wall" value={selectedOpening.wallKey} />
