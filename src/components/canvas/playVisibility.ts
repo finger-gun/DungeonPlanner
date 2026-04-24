@@ -109,6 +109,7 @@ export function usePlayVisibility(): PlayVisibility {
   const objectRegistryVersion = useObjectRegistryVersion()
 
   const workerInput = useMemo(() => {
+    void objectRegistryVersion
     if (tool !== 'play' || mapMode === 'outdoor') {
       return null
     }
@@ -117,11 +118,11 @@ export function usePlayVisibility(): PlayVisibility {
       .map((object) => object.cell)
     const blockerLookup = getBlockingObjectIdsByCell(placedObjects, layers)
     return {
-        paintedCells,
-        wallOpenings,
-        wallSurfaceProps,
-        innerWalls,
-        origins: playerOrigins,
+      paintedCells,
+      wallOpenings,
+      wallSurfaceProps,
+      innerWalls,
+      origins: playerOrigins,
       range: PLAYER_VISION_RANGE,
       blockingCellKeys: [...blockerLookup.keys()],
       blockerLookupEntries: [...blockerLookup.entries()].flatMap(([cellKey, value]) => {

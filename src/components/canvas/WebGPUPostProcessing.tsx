@@ -141,7 +141,6 @@ export function WebGPUPostProcessing() {
       visibleLosCameraRef.current = null
       exploredLosCameraRef.current = null
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [camera, renderer, scene, settings.enabled, settings.pixelateEnabled, settings.pixelSize, activeCameraMode])
 
   // Multi-frame delay after each pipeline rebuild — lets Three.js begin WebGPU
@@ -166,7 +165,6 @@ export function WebGPUPostProcessing() {
       cancelAnimationFrame(rafId)
       pipelineReadyRef.current = false
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [camera, renderer, scene, settings.enabled, settings.pixelateEnabled, settings.pixelSize, activeCameraMode, invalidate])
 
   // Update shader uniforms only when settings actually change — not every frame.

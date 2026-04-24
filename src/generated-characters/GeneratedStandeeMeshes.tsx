@@ -113,13 +113,14 @@ export function GeneratedStandeeCardSurfaceMesh({
   )
 
   useLayoutEffect(() => {
-    if (!meshRef.current) {
+    const mesh = meshRef.current
+    if (!mesh) {
       return
     }
-    meshRef.current.customDepthMaterial = depthMaterial
+    mesh.customDepthMaterial = depthMaterial
     return () => {
-      if (meshRef.current?.customDepthMaterial === depthMaterial) {
-        meshRef.current.customDepthMaterial = undefined
+      if (mesh.customDepthMaterial === depthMaterial) {
+        mesh.customDepthMaterial = undefined
       }
     }
   }, [depthMaterial])

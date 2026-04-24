@@ -367,10 +367,13 @@ function SceneOverviewContent() {
     wallSurfaceProps,
   ])
   const floorLightBudgets = useMemo(
-    () => distributeForwardPlusLightBudget(
-      floorEntries.map((entry) => lightEffectsEnabled ? getRegisteredLightSourceCount(entry.id) : 0),
-      MAX_FORWARD_PLUS_POINT_LIGHTS,
-    ),
+    () => {
+      void objectSourceRegistryVersion
+      return distributeForwardPlusLightBudget(
+        floorEntries.map((entry) => (lightEffectsEnabled ? getRegisteredLightSourceCount(entry.id) : 0)),
+        MAX_FORWARD_PLUS_POINT_LIGHTS,
+      )
+    },
     [floorEntries, lightEffectsEnabled, objectSourceRegistryVersion],
   )
 
@@ -441,7 +444,13 @@ function FloorContent({ startY = 0 }: { startY?: number }) {
   const topLevelObjects = useMemo(() => getTopLevelObjects(objects), [objects])
   const childrenByParent = useMemo(() => buildObjectChildrenIndex(objects), [objects])
   const [propLightBudget] = useMemo(
-    () => distributeForwardPlusLightBudget([lightEffectsEnabled ? getRegisteredLightSourceCount(activeFloorId) : 0], MAX_FORWARD_PLUS_POINT_LIGHTS),
+    () => {
+      void objectSourceRegistryVersion
+      return distributeForwardPlusLightBudget(
+        [lightEffectsEnabled ? getRegisteredLightSourceCount(activeFloorId) : 0],
+        MAX_FORWARD_PLUS_POINT_LIGHTS,
+      )
+    },
     [activeFloorId, lightEffectsEnabled, objectSourceRegistryVersion],
   )
   const showPostProcessing = true
@@ -535,7 +544,7 @@ function FloorContent({ startY = 0 }: { startY?: number }) {
     }, PLAYER_ANIMATION_MS.pickup)
 
     return () => window.clearTimeout(timeoutId)
-  }, [dragState?.animationState, dragState?.objectId, invalidate])
+  }, [dragState, invalidate])
 
   const clearDragListeners = useCallback(() => {
     dragCleanupRef.current?.()
@@ -706,6 +715,7 @@ function FloorContent({ startY = 0 }: { startY?: number }) {
     tool,
     updateDragFromClientPosition,
     wallOpenings,
+    wallSurfaceProps,
   ])
 
   useEffect(() => {
