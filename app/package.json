@@ -1,0 +1,42 @@
+{
+  "name": "dungeonplanner-app",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "packageManager": "pnpm@10.33.0",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "lint": "eslint .",
+    "preview": "vite preview",
+    "convex:dev": "convex dev",
+    "convex:codegen": "convex dev --once",
+    "convex:self-hosted:up": "docker compose -f convex/self-hosted/docker-compose.yml up -d",
+    "convex:self-hosted:down": "docker compose -f convex/self-hosted/docker-compose.yml down",
+    "convex:self-hosted:admin-key": "docker compose -f convex/self-hosted/docker-compose.yml exec backend ./generate_admin_key.sh",
+    "convex:auth:keys": "node scripts/generate-convex-auth-keys.mjs",
+    "seed:dev": "convex run seed:seedDevAccounts"
+  },
+  "dependencies": {
+    "@auth/core": "0.37.0",
+    "@convex-dev/auth": "^0.0.91",
+    "convex": "^1.36.1",
+    "react": "^19.2.4",
+    "react-dom": "^19.2.4"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.4",
+    "@types/node": "^24.12.2",
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^6.0.1",
+    "eslint": "^9.39.4",
+    "eslint-plugin-react-hooks": "^7.0.1",
+    "eslint-plugin-react-refresh": "^0.5.2",
+    "globals": "^17.4.0",
+    "jose": "^6.2.2",
+    "typescript": "~6.0.2",
+    "typescript-eslint": "^8.58.0",
+    "vite": "^8.0.4"
+  }
+}
