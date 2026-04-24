@@ -21,8 +21,8 @@ import type {
   MapMode,
   OutdoorTerrainDensity,
   OutdoorTerrainHeightfield,
-  OutdoorGroundTextureCells,
-  OutdoorGroundTextureType,
+  OutdoorTerrainStyleCells,
+  OutdoorTerrainStyle,
   OutdoorTerrainProfile,
   OutdoorTerrainType,
   OpeningRecord,
@@ -31,8 +31,13 @@ import type {
 } from './useDungeonStore'
 import type { GridCell } from '../hooks/useSnapToGrid'
 import { getCellKey } from '../hooks/useSnapToGrid'
+import { OUTDOOR_TERRAIN_LEVEL_HEIGHT } from './outdoorTerrain'
+import {
+  DEFAULT_OUTDOOR_TERRAIN_STYLE,
+  OUTDOOR_TERRAIN_STYLES,
+} from './outdoorTerrainStyles'
 
-const CURRENT_VERSION = 13
+const CURRENT_VERSION = 15
 
 // ── Serialized shapes (compact, no redundant keys) ────────────────────────────
 
@@ -83,11 +88,11 @@ type SerializedFloor = {
     z: number
     height: number
   }>
-  outdoorGroundTextureCells?: Array<{
+  outdoorTerrainStyleCells?: Array<{
     x: number
     z: number
     layerId: string
-    textureType: OutdoorGroundTextureType
+    terrainStyle: OutdoorTerrainStyle
   }>
   exploredCells: string[]
   floorTileAssetIds?: Record<string, string>
@@ -103,6 +108,7 @@ export type DungeonFile = {
   name: string
   mapMode?: MapMode
   outdoorTimeOfDay?: number
+  defaultOutdoorTerrainStyle?: OutdoorTerrainStyle
   outdoorTerrainProfiles?: Partial<Record<OutdoorTerrainType, Partial<OutdoorTerrainProfile>>>
   outdoorTerrainDensity?: OutdoorTerrainDensity
   outdoorTerrainType?: OutdoorTerrainType
@@ -128,6 +134,7 @@ export type SerializableState = {
   name?: string
   mapMode?: MapMode
   outdoorTimeOfDay?: number
+  defaultOutdoorTerrainStyle?: OutdoorTerrainStyle
   outdoorTerrainProfiles?: Partial<Record<OutdoorTerrainType, Partial<OutdoorTerrainProfile>>>
   outdoorTerrainDensity?: OutdoorTerrainDensity
   outdoorTerrainType?: OutdoorTerrainType
@@ -150,7 +157,7 @@ export type SerializableState = {
   paintedCells: PaintedCells
   blockedCells: BlockedCells
   outdoorTerrainHeights: OutdoorTerrainHeightfield
-  outdoorGroundTextureCells: OutdoorGroundTextureCells
+  outdoorTerrainStyleCells: OutdoorTerrainStyleCells
   exploredCells: Record<string, true>
   floorTileAssetIds: Record<string, string>
   wallSurfaceAssetIds: Record<string, string>
@@ -179,7 +186,7 @@ function serializeFloorData(
     paintedCells: PaintedCells
     blockedCells: BlockedCells
     outdoorTerrainHeights: OutdoorTerrainHeightfield
-    outdoorGroundTextureCells: OutdoorGroundTextureCells
+    outdoorTerrainStyleCells: OutdoorTerrainStyleCells
     exploredCells: Record<string, true>
     floorTileAssetIds: Record<string, string>
       wallSurfaceAssetIds: Record<string, string>
@@ -204,10 +211,10 @@ function serializeFloorData(
       x: r.cell[0], z: r.cell[1], layerId: r.layerId,
     })),
     outdoorTerrainHeights: Object.values(snapshot.outdoorTerrainHeights).map((record) => ({
-      x: record.cell[0], z: record.cell[1], height: record.height,
+      x: record.cell[0], z: record.cell[1], height: record.level,
     })),
-    outdoorGroundTextureCells: Object.values(snapshot.outdoorGroundTextureCells).map((r) => ({
-      x: r.cell[0], z: r.cell[1], layerId: r.layerId, textureType: r.textureType,
+    outdoorTerrainStyleCells: Object.values(snapshot.outdoorTerrainStyleCells).map((r) => ({
+      x: r.cell[0], z: r.cell[1], layerId: r.layerId, terrainStyle: r.terrainStyle,
     })),
     exploredCells: Object.keys(snapshot.exploredCells),
     floorTileAssetIds: { ...snapshot.floorTileAssetIds },
@@ -246,7 +253,7 @@ export function serializeDungeon(state: SerializableState): string {
       paintedCells: state.paintedCells,
       blockedCells: state.blockedCells,
       outdoorTerrainHeights: state.outdoorTerrainHeights,
-      outdoorGroundTextureCells: state.outdoorGroundTextureCells,
+      outdoorTerrainStyleCells: state.outdoorTerrainStyleCells,
       exploredCells: state.exploredCells,
       floorTileAssetIds: state.floorTileAssetIds,
       wallSurfaceAssetIds: state.wallSurfaceAssetIds,
@@ -449,8 +456,8 @@ export function deserializeDungeon(json: string): SerializableState | null {
     raw = {
       ...r,
       floors: (r.floors as unknown[]).map((floor) =>
-        isObject(floor) && !Array.isArray(floor.outdoorGroundTextureCells)
-          ? { ...floor, outdoorGroundTextureCells: [] }
+        isObject(floor) && !Array.isArray(floor.outdoorTerrainStyleCells)
+          ? { ...floor, outdoorTerrainStyleCells: [] }
           : floor,
       ),
     }
@@ -468,6 +475,13 @@ export function deserializeDungeon(json: string): SerializableState | null {
     }
   }
 
+  if (version < 15) {
+    raw = {
+      defaultOutdoorTerrainStyle: DEFAULT_OUTDOOR_TERRAIN_STYLE,
+      ...(isObject(raw) ? raw : {}),
+    }
+  }
+
   return parseFile(raw as Record<string, unknown>)
 }
 
@@ -481,7 +495,7 @@ function parseFloorData(raw: Record<string, unknown>): {
   paintedCells: PaintedCells
   blockedCells: BlockedCells
   outdoorTerrainHeights: OutdoorTerrainHeightfield
-  outdoorGroundTextureCells: OutdoorGroundTextureCells
+  outdoorTerrainStyleCells: OutdoorTerrainStyleCells
   exploredCells: Record<string, true>
   floorTileAssetIds: Record<string, string>
   wallSurfaceAssetIds: Record<string, string>
@@ -563,31 +577,30 @@ function parseFloorData(raw: Record<string, unknown>): {
       typeof record.x === 'number' ? record.x : 0,
       typeof record.z === 'number' ? record.z : 0,
     ]
-    const height = typeof record.height === 'number' ? record.height : 0
-    if (height === 0) {
+    const rawHeight = typeof record.height === 'number' ? record.height : 0
+    const level = Number.isInteger(rawHeight)
+      ? rawHeight
+      : Math.round(rawHeight / OUTDOOR_TERRAIN_LEVEL_HEIGHT)
+    if (level === 0) {
       continue
     }
-    outdoorTerrainHeights[getCellKey(cell)] = { cell, height }
+    outdoorTerrainHeights[getCellKey(cell)] = { cell, level }
   }
-  const outdoorGroundTextureCells: OutdoorGroundTextureCells = {}
-  const outdoorGroundTextureCellsArr = Array.isArray(raw.outdoorGroundTextureCells)
-    ? (raw.outdoorGroundTextureCells as unknown[])
+  const outdoorTerrainStyleCells: OutdoorTerrainStyleCells = {}
+  const outdoorTerrainStyleCellsArr = Array.isArray(raw.outdoorTerrainStyleCells)
+    ? (raw.outdoorTerrainStyleCells as unknown[])
     : []
-  for (const c of outdoorGroundTextureCellsArr) {
+  for (const c of outdoorTerrainStyleCellsArr) {
     if (!isObject(c)) continue
     const cell: GridCell = [
       typeof c.x === 'number' ? c.x : 0,
       typeof c.z === 'number' ? c.z : 0,
     ]
     const layerId = typeof c.layerId === 'string' && layers[c.layerId] ? c.layerId : 'default'
-    const textureType: OutdoorGroundTextureType =
-      c.textureType === 'dry-dirt' ||
-      c.textureType === 'rough-stone' ||
-      c.textureType === 'wet-dirt' ||
-      c.textureType === 'short-grass'
-        ? c.textureType
-        : 'short-grass'
-    outdoorGroundTextureCells[getCellKey(cell)] = { cell, layerId, textureType }
+    const terrainStyle: OutdoorTerrainStyle = OUTDOOR_TERRAIN_STYLES.includes(c.terrainStyle as OutdoorTerrainStyle)
+      ? c.terrainStyle as OutdoorTerrainStyle
+      : DEFAULT_OUTDOOR_TERRAIN_STYLE
+    outdoorTerrainStyleCells[getCellKey(cell)] = { cell, layerId, terrainStyle }
   }
 
   const exploredCells = Object.fromEntries(
@@ -658,7 +671,7 @@ function parseFloorData(raw: Record<string, unknown>): {
     paintedCells,
     blockedCells,
     outdoorTerrainHeights,
-    outdoorGroundTextureCells,
+    outdoorTerrainStyleCells,
     exploredCells,
     floorTileAssetIds,
     wallSurfaceAssetIds,
@@ -744,6 +757,10 @@ function parseFile(raw: Record<string, unknown>): SerializableState | null {
         typeof raw.outdoorTimeOfDay === 'number'
           ? Math.max(0, Math.min(1, raw.outdoorTimeOfDay))
           : 0.5,
+      defaultOutdoorTerrainStyle:
+        OUTDOOR_TERRAIN_STYLES.includes(raw.defaultOutdoorTerrainStyle as OutdoorTerrainStyle)
+          ? raw.defaultOutdoorTerrainStyle as OutdoorTerrainStyle
+          : DEFAULT_OUTDOOR_TERRAIN_STYLE,
       outdoorTerrainProfiles: parseOutdoorTerrainProfiles(raw.outdoorTerrainProfiles),
       outdoorTerrainDensity:
         raw.outdoorTerrainDensity === 'sparse' || raw.outdoorTerrainDensity === 'medium' || raw.outdoorTerrainDensity === 'dense'

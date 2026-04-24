@@ -3,6 +3,7 @@ import { serializeDungeon, deserializeDungeon } from './serialization'
 import type { SerializableState } from './serialization'
 import type { FloorRecord } from './useDungeonStore'
 import { DEFAULT_POST_PROCESSING_SETTINGS } from '../postprocessing/tiltShiftMath'
+import { DEFAULT_OUTDOOR_TERRAIN_STYLE } from './outdoorTerrainStyles'
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 
@@ -18,7 +19,7 @@ function emptyFloorSnapshot() {
     paintedCells: {},
     blockedCells: {},
     outdoorTerrainHeights: {},
-    outdoorGroundTextureCells: {},
+    outdoorTerrainStyleCells: {},
     exploredCells: {},
     floorTileAssetIds: {},
     wallSurfaceAssetIds: {},
@@ -47,6 +48,7 @@ function baseState(): SerializableState {
     name: 'Test Dungeon',
     mapMode: 'indoor',
     outdoorTimeOfDay: 0.5,
+    defaultOutdoorTerrainStyle: DEFAULT_OUTDOOR_TERRAIN_STYLE,
     outdoorTerrainProfiles: {
       mixed: { density: 'medium', overpaintRegenerate: false },
       rocks: { density: 'medium', overpaintRegenerate: false },
@@ -141,19 +143,19 @@ describe('serializeDungeon / deserializeDungeon roundtrip', () => {
 
   it('preserves outdoor ground texture paint cells', () => {
     const state = baseState()
-    state.floors!['floor-1'].snapshot.outdoorGroundTextureCells['6:7'] = {
+    state.floors!['floor-1'].snapshot.outdoorTerrainStyleCells['6:7'] = {
       cell: [6, 7],
       layerId: 'default',
-      textureType: 'rough-stone',
+      terrainStyle: 'Color4',
     }
 
     const result = deserializeDungeon(serializeDungeon(state))
     expect(result).not.toBeNull()
-    const outdoorGroundTextureCells = result!.outdoorGroundTextureCells
-      ?? result!.floors?.['floor-1']?.snapshot?.outdoorGroundTextureCells
-    expect(outdoorGroundTextureCells?.['6:7']).toMatchObject({
+    const outdoorTerrainStyleCells = result!.outdoorTerrainStyleCells
+      ?? result!.floors?.['floor-1']?.snapshot?.outdoorTerrainStyleCells
+    expect(outdoorTerrainStyleCells?.['6:7']).toMatchObject({
       cell: [6, 7],
-      textureType: 'rough-stone',
+      terrainStyle: 'Color4',
     })
   })
 
@@ -161,7 +163,7 @@ describe('serializeDungeon / deserializeDungeon roundtrip', () => {
     const state = baseState()
     state.floors!['floor-1'].snapshot.outdoorTerrainHeights['3:4'] = {
       cell: [3, 4],
-      height: 1.25,
+      level: 2,
     }
 
     const result = deserializeDungeon(serializeDungeon(state))
@@ -170,7 +172,7 @@ describe('serializeDungeon / deserializeDungeon roundtrip', () => {
       ?? result!.floors?.['floor-1']?.snapshot?.outdoorTerrainHeights
     expect(outdoorTerrainHeights?.['3:4']).toMatchObject({
       cell: [3, 4],
-      height: 1.25,
+      level: 2,
     })
   })
 
@@ -377,5 +379,37 @@ describe('deserializeDungeon version migrations', () => {
     const result = deserializeDungeon(v12File)
     expect(result).not.toBeNull()
     expect(result!.outdoorTerrainHeights).toEqual({})
+  })
+
+  it('v13→v14: rounds legacy outdoor terrain heights to stepped levels', () => {
+    const v13File = JSON.stringify({
+      version: 13,
+      name: 'Legacy Stepped Outdoor',
+      mapMode: 'outdoor',
+      sceneLighting: { intensity: 1 },
+      postProcessing: { ...DEFAULT_POST_PROCESSING_SETTINGS },
+      activeFloorId: 'floor-1',
+      floorOrder: ['floor-1'],
+      floors: [{
+        id: 'floor-1',
+        name: 'Ground Floor',
+        level: 0,
+        layers: [{ id: 'default', name: 'Default', visible: true, locked: false }],
+        layerOrder: ['default'],
+        activeLayerId: 'default',
+        rooms: [],
+        cells: [],
+        blockedCells: [],
+        outdoorTerrainHeights: [{ x: 3, z: 4, height: 1.25 }],
+        exploredCells: [],
+        objects: [],
+        openings: [],
+        nextRoomNumber: 1,
+      }],
+    })
+
+    const result = deserializeDungeon(v13File)
+    expect(result).not.toBeNull()
+    expect(result!.outdoorTerrainHeights['3:4']).toMatchObject({ cell: [3, 4], level: 1 })
   })
 })

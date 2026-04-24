@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { ContentPackAsset } from '../../content-packs/types'
+import type { OutdoorTerrainHeightfield } from '../../store/outdoorTerrain'
 import type { PaintedCellRecord } from '../../store/useDungeonStore'
 import { calculatePropSnapPosition } from './propPlacement'
 
@@ -34,6 +35,13 @@ const THREE_BY_THREE_ROOM: Record<string, PaintedCellRecord> = {
   '0:2': { cell: [0, 2], layerId: 'default', roomId: 'room-a' },
   '1:2': { cell: [1, 2], layerId: 'default', roomId: 'room-a' },
   '2:2': { cell: [2, 2], layerId: 'default', roomId: 'room-a' },
+}
+
+const OUTDOOR_TERRAIN_HEIGHTS: OutdoorTerrainHeightfield = {
+  '1:2': {
+    cell: [1, 2],
+    level: 2,
+  },
 }
 
 function createTestAsset(metadata: ContentPackAsset['metadata']): ContentPackAsset {
@@ -249,5 +257,121 @@ describe('calculatePropSnapPosition', () => {
     expect(placement?.position[0]).toBeCloseTo(1.5)
     expect(placement?.position[1]).toBeCloseTo(1)
     expect(placement?.position[2]).toBeCloseTo(0.35)
+  })
+
+  it('allows floor props to snap on outdoor terrain without painted indoor cells', () => {
+    const asset = createTestAsset({
+      connectsTo: 'FLOOR',
+      snapsTo: 'GRID',
+      connectors: [{ type: 'FLOOR', point: [0, 0, 0] }],
+    })
+
+    const placement = calculatePropSnapPosition(
+      asset,
+      { x: 3, y: 0, z: 5 },
+      {},
+      null,
+      null,
+      true,
+    )
+
+    expect(placement).not.toBeNull()
+    expect(placement?.connector.type).toBe('FLOOR')
+    expect(placement?.cell).toEqual([1, 2])
+    expect(placement?.cellKey).toBe('1:2')
+    expect(placement?.position[0]).toBeCloseTo(3)
+    expect(placement?.position[2]).toBeCloseTo(5)
+  })
+
+  it('uses outdoor terrain height for grid floor snap instead of raw cursor height', () => {
+    const asset = createTestAsset({
+      connectsTo: 'FLOOR',
+      snapsTo: 'GRID',
+      connectors: [{ type: 'FLOOR', point: [0, 0, 0] }],
+    })
+
+    const placement = calculatePropSnapPosition(
+      asset,
+      { x: 3, y: -2, z: 5 },
+      {},
+      null,
+      null,
+      true,
+      OUTDOOR_TERRAIN_HEIGHTS,
+    )
+
+    expect(placement).not.toBeNull()
+    expect(placement?.cell).toEqual([1, 2])
+    expect(placement?.position).toEqual([3, 4, 5])
+  })
+
+  it('uses outdoor terrain height for free floor snap instead of wall-hit height', () => {
+    const asset = createTestAsset({
+      connectsTo: 'FLOOR',
+      snapsTo: 'FREE',
+      connectors: [{ type: 'FLOOR', point: [0, 0, 0] }],
+    })
+
+    const placement = calculatePropSnapPosition(
+      asset,
+      { x: 3.2, y: 1.1, z: 5.4 },
+      {},
+      null,
+      null,
+      true,
+      OUTDOOR_TERRAIN_HEIGHTS,
+    )
+
+    expect(placement).not.toBeNull()
+    expect(placement?.cell).toEqual([1, 2])
+    expect(placement?.position).toEqual([3.2, 4, 5.4])
+  })
+
+  it('uses the owning terrain top cell instead of the overhang hit x/z cell', () => {
+    const asset = createTestAsset({
+      connectsTo: 'FLOOR',
+      snapsTo: 'GRID',
+      connectors: [{ type: 'FLOOR', point: [0, 0, 0] }],
+    })
+
+    const placement = calculatePropSnapPosition(
+      asset,
+      { x: 1.95, y: 0.5, z: 5 },
+      {},
+      null,
+      null,
+      true,
+      OUTDOOR_TERRAIN_HEIGHTS,
+      [1, 2],
+    )
+
+    expect(placement).not.toBeNull()
+    expect(placement?.cell).toEqual([1, 2])
+    expect(placement?.cellKey).toBe('1:2')
+    expect(placement?.position).toEqual([3, 4, 5])
+  })
+
+  it('keeps free floor placement x/z while using the owning terrain top cell', () => {
+    const asset = createTestAsset({
+      connectsTo: 'FLOOR',
+      snapsTo: 'FREE',
+      connectors: [{ type: 'FLOOR', point: [0, 0, 0] }],
+    })
+
+    const placement = calculatePropSnapPosition(
+      asset,
+      { x: 1.95, y: 0.5, z: 5.4 },
+      {},
+      null,
+      null,
+      true,
+      OUTDOOR_TERRAIN_HEIGHTS,
+      [1, 2],
+    )
+
+    expect(placement).not.toBeNull()
+    expect(placement?.cell).toEqual([1, 2])
+    expect(placement?.cellKey).toBe('1:2')
+    expect(placement?.position).toEqual([1.95, 4, 5.4])
   })
 })

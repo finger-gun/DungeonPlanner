@@ -1,9 +1,10 @@
 import { dungeonContentPack } from './dungeon'
 import { warnIfUsesDeprecatedConnectsTo } from './deprecations'
+import { kaykitContentPack } from './kaykit'
 import type { ContentPackCategory } from './types'
 import { getRuntimeAssetById, getRuntimeAssetsByCategory } from './runtimeRegistry'
 
-export const contentPacks = [dungeonContentPack]
+export const contentPacks = [dungeonContentPack, kaykitContentPack]
 
 export const contentPackAssets = contentPacks.flatMap((pack) => pack.assets)
 

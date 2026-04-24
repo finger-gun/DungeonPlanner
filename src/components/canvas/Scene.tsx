@@ -1,5 +1,5 @@
 import { Canvas, useFrame, useThree, type ThreeEvent } from '@react-three/fiber'
-import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import * as THREE from 'three'
 import { FpsMeterNode } from './FpsCounter'
 import { Grid } from './Grid'
@@ -9,8 +9,6 @@ import { CameraPresetManager } from './CameraPresetManager'
 import { DungeonObject } from './DungeonObject'
 import { PlayerSelectionRing } from './DungeonObject'
 import { DungeonRoom } from './DungeonRoom'
-import { WebGPUPostProcessing } from './WebGPUPostProcessing'
-import { FireParticleSystem } from './effects/fireParticleSystem'
 import {
   distributeForwardPlusLightBudget,
   getDesiredPropLightPoolSize,
@@ -31,6 +29,18 @@ import { getEnvironmentLightingState } from './environmentLighting'
 import { createWebGpuRenderer } from '../../rendering/createWebGpuRenderer'
 import { MAX_FORWARD_PLUS_POINT_LIGHTS } from '../../rendering/forwardPlusConfig'
 import { FogOfWarProvider } from './fogOfWar'
+
+const WebGPUPostProcessing = lazy(() =>
+  import('./WebGPUPostProcessing').then((module) => ({
+    default: module.WebGPUPostProcessing,
+  })),
+)
+
+const FireParticleSystem = lazy(() =>
+  import('./effects/fireParticleSystem').then((module) => ({
+    default: module.FireParticleSystem,
+  })),
+)
 
 const SCENE_OVERVIEW_FLOOR_HEIGHT_UNIT = 3
 const PLAYER_ANIMATION_MS = {
@@ -100,7 +110,8 @@ export default Scene
 function GlobalContent() {
   const lightIntensity = useDungeonStore((state) => state.sceneLighting.intensity)
   const mapMode = useDungeonStore((state) => state.mapMode)
-  const outdoorGroundTextureCells = useDungeonStore((state) => state.outdoorGroundTextureCells)
+  const defaultOutdoorTerrainStyle = useDungeonStore((state) => state.defaultOutdoorTerrainStyle)
+  const outdoorTerrainStyleCells = useDungeonStore((state) => state.outdoorTerrainStyleCells)
   const outdoorTerrainHeights = useDungeonStore((state) => state.outdoorTerrainHeights)
   const outdoorTimeOfDay = useDungeonStore((state) => state.outdoorTimeOfDay)
   const tool = useDungeonStore((state) => state.tool)
@@ -133,8 +144,8 @@ function GlobalContent() {
     <>
       {mapMode === 'outdoor' && (
         <OutdoorGround
-          outdoorBlend={outdoorBlend}
-          outdoorGroundTextureCells={outdoorGroundTextureCells}
+          defaultOutdoorTerrainStyle={defaultOutdoorTerrainStyle}
+          outdoorTerrainStyleCells={outdoorTerrainStyleCells}
           outdoorTerrainHeights={outdoorTerrainHeights}
         />
       )}
@@ -315,7 +326,11 @@ function SceneOverviewContent() {
 
   return (
     <>
-      {postProcessingEnabled && <WebGPUPostProcessing />}
+      {postProcessingEnabled && (
+        <Suspense fallback={null}>
+          <WebGPUPostProcessing />
+        </Suspense>
+      )}
       {floorEntries.map((entry, index) => (
         <group key={entry.id} position={[0, entry.level * SCENE_OVERVIEW_FLOOR_HEIGHT_UNIT, 0]}>
           <DungeonRoom data={entry.data} visibility={ALWAYS_VISIBLE} enableBuildAnimation={false} />
@@ -383,7 +398,7 @@ function FloorContent({ startY = 0 }: { startY?: number }) {
   const groupRef = useRef<THREE.Group>(null)
   const animYRef = useRef(startY)
   const dragStateRef = useRef<PlayDragState | null>(null)
-  const { camera, gl, invalidate } = useThree()
+  const { camera, gl, invalidate, scene } = useThree()
   const [dragState, setDragState] = useState<PlayDragState | null>(null)
 
   useFrame((_, delta) => {
@@ -424,15 +439,34 @@ function FloorContent({ startY = 0 }: { startY?: number }) {
     invalidate()
   }, [invalidate, setObjectDragActive])
 
+  const getOutdoorTerrainDragPoint = useCallback((ray: THREE.Ray) => {
+    const raycaster = new THREE.Raycaster(ray.origin, ray.direction.clone().normalize())
+    const intersections = raycaster.intersectObjects(scene.children, true)
+
+    for (const intersection of intersections) {
+      let current: THREE.Object3D | null = intersection.object
+      while (current) {
+        if (current.userData.outdoorTerrainSurface === true) {
+          return intersection.point.clone()
+        }
+        current = current.parent
+      }
+    }
+
+    return null
+  }, [scene.children])
+
   const startDrag = useCallback((object: DungeonObjectRecord, event: ThreeEvent<PointerEvent>) => {
     if (tool !== 'play' || object.type !== 'player') {
       return
     }
 
-    const pointerPoint = event.ray.intersectPlane(
-      new THREE.Plane(new THREE.Vector3(0, 1, 0), 0),
-      new THREE.Vector3(),
-    )
+    const pointerPoint = mapMode === 'outdoor'
+      ? getOutdoorTerrainDragPoint(event.ray)
+      : event.ray.intersectPlane(
+          new THREE.Plane(new THREE.Vector3(0, 1, 0), 0),
+          new THREE.Vector3(),
+        )
     const nextState = createPlayDragState(
       object,
       pointerPoint,
@@ -444,14 +478,13 @@ function FloorContent({ startY = 0 }: { startY?: number }) {
     dragStateRef.current = nextState
     setObjectDragActive(true)
     invalidate()
-  }, [invalidate, mapMode, outdoorTerrainHeights, selectObject, setObjectDragActive, tool])
+  }, [getOutdoorTerrainDragPoint, invalidate, mapMode, outdoorTerrainHeights, selectObject, setObjectDragActive, tool])
 
   useEffect(() => {
     if (!dragState) {
       return
     }
 
-    const plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0)
     const raycaster = new THREE.Raycaster()
     const ndc = new THREE.Vector2()
     const point = new THREE.Vector3()
@@ -468,7 +501,10 @@ function FloorContent({ startY = 0 }: { startY?: number }) {
       )
 
       raycaster.setFromCamera(ndc, camera)
-      if (!raycaster.ray.intersectPlane(plane, point)) {
+      const nextPoint = mapMode === 'outdoor'
+        ? getOutdoorTerrainDragPoint(raycaster.ray)
+        : raycaster.ray.intersectPlane(new THREE.Plane(new THREE.Vector3(0, 1, 0), 0), point)
+      if (!nextPoint) {
         return
       }
 
@@ -477,9 +513,9 @@ function FloorContent({ startY = 0 }: { startY?: number }) {
         return
       }
 
-      const nextDisplayX = point.x + current.grabOffset[0]
-      const nextDisplayZ = point.z + current.grabOffset[1]
-      const snapped = snapWorldPointToGrid({ x: nextDisplayX, y: point.y, z: nextDisplayZ })
+      const nextDisplayX = nextPoint.x + current.grabOffset[0]
+      const nextDisplayZ = nextPoint.z + current.grabOffset[1]
+      const snapped = snapWorldPointToGrid({ x: nextDisplayX, y: nextPoint.y, z: nextDisplayZ })
       const targetKey = getCellKey(snapped.cell)
       const anchorKey = `${targetKey}:floor`
       const occupantId = occupancy[anchorKey]
@@ -487,7 +523,7 @@ function FloorContent({ startY = 0 }: { startY?: number }) {
       setDragState((current) => current
         ? updatePlayDragState(
             current,
-            point,
+            nextPoint,
             mapMode === 'outdoor'
               ? !blockedCells[targetKey]
               : Boolean(paintedCells[targetKey]),
@@ -538,6 +574,7 @@ function FloorContent({ startY = 0 }: { startY?: number }) {
     blockedCells,
     camera,
     dragState,
+    getOutdoorTerrainDragPoint,
     gl,
     invalidate,
     mapMode,
@@ -560,9 +597,9 @@ function FloorContent({ startY = 0 }: { startY?: number }) {
     <FogOfWarProvider visibility={visibility}>
       <group ref={groupRef} position={[0, startY, 0]}>
         {showPostProcessing && (
-          <WebGPUPostProcessing
-            key={postProcessingKey}
-          />
+          <Suspense fallback={null}>
+            <WebGPUPostProcessing key={postProcessingKey} />
+          </Suspense>
         )}
         <DungeonRoom visibility={visibility} />
         <RoomResizeOverlay />
@@ -592,7 +629,9 @@ function FloorContent({ startY = 0 }: { startY?: number }) {
             <PlayerSelectionRing assetId={dragState.assetId} color={dragState.valid ? '#d4a72c' : '#ef4444'} />
           </group>
         )}
-        <FireParticleSystem objects={objects} visibility={visibility} />
+        <Suspense fallback={null}>
+          <FireParticleSystem objects={objects} visibility={visibility} />
+        </Suspense>
       </group>
     </FogOfWarProvider>
   )

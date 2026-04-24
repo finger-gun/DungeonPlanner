@@ -1,8 +1,9 @@
-import { existsSync, readdirSync, statSync, writeFileSync } from 'node:fs'
+import { existsSync, statSync, writeFileSync } from 'node:fs'
 import { spawn } from 'node:child_process'
 import path from 'node:path'
 import process from 'node:process'
 import { chromium } from '@playwright/test'
+import { listModelFiles, getRelativeModelPath, resolvePackDir } from './model-pipeline.mjs'
 
 const rootDir = process.cwd()
 const host = '127.0.0.1'
@@ -12,12 +13,9 @@ const viewportSize = 320
 
 async function main() {
   const { targetDir, filter, missingOnly } = parseArgs(process.argv.slice(2))
-  const allModelFiles = readdirSync(targetDir)
-    .filter((file) => file.endsWith('.glb') || file.endsWith('.gltf'))
-    .filter((file) => !filter || file.includes(filter))
-    .sort((left, right) => left.localeCompare(right))
+  const allModelFiles = listModelFiles(targetDir, filter)
   const modelFiles = missingOnly
-    ? allModelFiles.filter((file) => shouldGenerateThumbnail(targetDir, file))
+    ? allModelFiles.filter((filePath) => shouldGenerateThumbnail(filePath))
     : allModelFiles
 
   if (allModelFiles.length === 0) {
@@ -38,11 +36,11 @@ async function main() {
       deviceScaleFactor: 1,
     })
 
-    for (const fileName of modelFiles) {
-      const assetPath = path.join(targetDir, fileName)
+    for (const assetPath of modelFiles) {
       const outputPath = assetPath.replace(/\.(glb|gltf)$/i, '.png')
       const assetUrl = toViteFsUrl(assetPath)
       const renderUrl = `${baseUrl}/?thumbnail-renderer=1&asset=${encodeURIComponent(assetUrl)}`
+      const fileName = getRelativeModelPath(targetDir, assetPath)
 
       console.log(`Rendering ${fileName}`)
       await page.goto(renderUrl, { waitUntil: 'networkidle' })
@@ -174,16 +172,14 @@ function parseArgs(args) {
 }
 
 function resolveContentPackDir(input) {
-  const directPath = path.resolve(rootDir, input)
   if (input.includes(path.sep) || input.startsWith('.')) {
-    return directPath
+    return path.resolve(rootDir, input)
   }
 
-  return path.join(rootDir, 'src/assets/models', input)
+  return resolvePackDir(input)
 }
 
-function shouldGenerateThumbnail(targetDir, fileName) {
-  const assetPath = path.join(targetDir, fileName)
+function shouldGenerateThumbnail(assetPath) {
   const outputPath = assetPath.replace(/\.(glb|gltf)$/i, '.png')
 
   if (!existsSync(outputPath)) {
