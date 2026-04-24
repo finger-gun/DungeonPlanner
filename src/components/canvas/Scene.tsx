@@ -519,15 +519,23 @@ function FloorContent({ startY = 0 }: { startY?: number }) {
       const targetKey = getCellKey(snapped.cell)
       const anchorKey = `${targetKey}:floor`
       const occupantId = occupancy[anchorKey]
+      const occupant =
+        occupantId && mapMode === 'outdoor'
+          ? placedObjects[occupantId]
+          : null
+      const blockingOccupantId =
+        occupant && occupant.props.generatedBy === 'surrounding-forest'
+          ? undefined
+          : occupantId
 
       setDragState((current) => current
         ? updatePlayDragState(
             current,
             nextPoint,
             mapMode === 'outdoor'
-              ? !blockedCells[targetKey]
+              ? true
               : Boolean(paintedCells[targetKey]),
-            occupantId,
+            blockingOccupantId,
             mapMode === 'outdoor' ? outdoorTerrainHeights : undefined,
           )
         : current)
@@ -580,6 +588,7 @@ function FloorContent({ startY = 0 }: { startY?: number }) {
     mapMode,
     moveObject,
     occupancy,
+    placedObjects,
     outdoorTerrainHeights,
     paintedCells,
     stopDrag,

@@ -147,7 +147,10 @@ export function Controls() {
   const isObjectDragActive = useDungeonStore((state) => state.isObjectDragActive)
   const activeCameraMode = useDungeonStore((state) => state.activeCameraMode)
   const isPerspective = activeCameraMode === 'perspective'
-  const isOrthographic = activeCameraMode === 'isometric' || activeCameraMode === 'top-down'
+  const isOrthographic =
+    activeCameraMode === 'isometric'
+    || activeCameraMode === 'top-down'
+    || activeCameraMode === 'classic'
 
   useEffect(() => {
     if (!import.meta.env.DEV) {

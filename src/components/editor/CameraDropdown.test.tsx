@@ -28,4 +28,15 @@ describe('CameraDropdown', () => {
     expect(gridToggle).toHaveAttribute('aria-pressed', 'false')
     expect(screen.getByText('Hidden')).toBeInTheDocument()
   })
+
+  it('lets users switch to the classic angled orthographic preset', async () => {
+    const user = userEvent.setup()
+    render(<CameraDropdown />)
+
+    await user.click(screen.getByRole('button', { name: /camera/i }))
+    await user.click(screen.getByRole('button', { name: /classic/i }))
+
+    expect(useDungeonStore.getState().cameraPreset).toBe('classic')
+    expect(useDungeonStore.getState().activeCameraMode).toBe('classic')
+  })
 })

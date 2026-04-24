@@ -60,7 +60,7 @@ export { getOpeningSegments } from './openingSegments'
 
 export type DungeonTool = 'move' | 'room' | 'prop' | 'character' | 'opening' | 'select' | 'play'
 export type CameraMode = 'orbit'
-export type CameraPreset = 'perspective' | 'isometric' | 'top-down'
+export type CameraPreset = 'perspective' | 'isometric' | 'top-down' | 'classic'
 export type RoomEditMode = 'rooms' | 'walls' | 'floor-variants' | 'wall-variants'
 export type SelectedAssetIds = Record<ContentPackCategory, string | null>
 export type SurfaceBrushAssetIds = {
@@ -1821,16 +1821,27 @@ export const useDungeonStore = create<DungeonState>()(
 
     const consumesOccupancy = objectConsumesOccupancy(object.assetId, object.props.connector)
 
+    const isOutdoorPlayerMove = state.mapMode === 'outdoor' && object.type === 'player'
+
     if (state.mapMode !== 'outdoor' && !state.paintedCells[getCellKey(input.cell)]) {
       return false
     }
-    if (state.mapMode === 'outdoor' && state.blockedCells[getCellKey(input.cell)]) {
+    if (state.mapMode === 'outdoor' && !isOutdoorPlayerMove && state.blockedCells[getCellKey(input.cell)]) {
       return false
     }
 
     const occupantId = consumesOccupancy ? state.occupancy[input.cellKey] : null
+    const occupant = occupantId ? state.placedObjects[occupantId] : null
+    const ignoresOccupant =
+      isOutdoorPlayerMove &&
+      occupant !== null &&
+      isSurroundingGeneratedObject(occupant)
     if (occupantId && occupantId !== id) {
-      return false
+      if (ignoresOccupant) {
+        // Let players move across generated outdoor surroundings without deleting the scenery.
+      } else {
+        return false
+      }
     }
 
     const nextPositionY =

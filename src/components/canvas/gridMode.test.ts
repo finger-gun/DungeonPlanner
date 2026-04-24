@@ -13,6 +13,7 @@ describe('gridMode', () => {
     expect(isPassiveGridMode('room', false)).toBe(false)
     expect(shouldRenderGridOverlay(false, false)).toBe(false)
     expect(getGridOverlayRadius('top-down', false)).toBe(10000)
+    expect(getGridOverlayRadius('classic', false)).toBe(10000)
     expect(getGridOverlayRadius('perspective', false)).toBe(10)
   })
 })

@@ -12,6 +12,7 @@ type PresetEntry = {
 const CAMERA_PRESETS: PresetEntry[] = [
   { id: 'perspective', label: 'Perspective', sub: 'Full orbit', Icon: Triangle },
   { id: 'isometric', label: 'Isometric', sub: 'Locked angle', Icon: Axis3D },
+  { id: 'classic', label: 'Classic', sub: 'SNES / Zelda', Icon: LayoutGrid },
   { id: 'top-down', label: 'Top Down', sub: 'Print / TTRPG', Icon: LayoutGrid },
 ]
 

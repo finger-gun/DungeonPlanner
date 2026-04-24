@@ -13,5 +13,5 @@ export function getGridOverlayRadius(activeCameraMode: CameraPreset, playMode: b
     return 10
   }
 
-  return activeCameraMode === 'top-down' ? 10000 : 10
+  return activeCameraMode === 'top-down' || activeCameraMode === 'classic' ? 10000 : 10
 }
