@@ -46,7 +46,7 @@
 
 ## 8. Validation and regression coverage
 
-- [ ] 8.1 Add or update unit tests covering auth, role checks, dungeon library behavior, session membership, character ownership, pack reference handling, and authenticated app shell routing.
-- [ ] 8.2 Add or update integration or e2e coverage for sign-in, dungeon save/load, and session join flows using existing test infrastructure.
-- [ ] 8.3 Run `pnpm run test` and `pnpm run build` after implementation updates.
+- [x] 8.1 Add or update unit tests covering auth, role checks, dungeon library behavior, session membership, character ownership, pack reference handling, and authenticated app shell routing.
+- [x] 8.2 Add or update integration or e2e coverage for sign-in, dungeon save/load, and session join flows using existing test infrastructure.
+- [x] 8.3 Run `pnpm run test` and `pnpm run build` after implementation updates.
 - [ ] 8.4 Run `pnpm run verify` before considering the change ready to archive.

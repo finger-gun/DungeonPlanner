@@ -219,4 +219,50 @@ describe('authenticated app shell', () => {
       }),
     )
   })
+
+  it('loads a saved dungeon record back into the local draft', async () => {
+    const user = userEvent.setup()
+    mock.authState.isAuthenticated = true
+    mock.viewerIdentity = {
+      viewer: { name: 'Dungeon Master', email: 'dm@example.com' },
+      workspace: { name: 'DM Workspace' },
+      roles: ['dm'],
+      access: {
+        isAdmin: false,
+        canManageUsers: false,
+        canManagePacks: false,
+        canManageDungeons: true,
+        canManageSessions: false,
+        canUseCharacterLibrary: false,
+      },
+    }
+    mock.queries = {
+      'dungeons.listViewerDungeons': [
+        {
+          _id: 'dungeon-1',
+          title: 'Archived Keep',
+          description: 'Basement layout',
+          createdAt: 1,
+          updatedAt: 2,
+        },
+      ],
+      'dungeons.getViewerDungeon': {
+        _id: 'dungeon-1',
+        title: 'Archived Keep',
+        description: 'Basement layout',
+        serializedDungeon: '{"version":1,"name":"Archived Keep","rooms":[]}',
+        createdAt: 1,
+        updatedAt: 2,
+      },
+      'sessions.listViewerSessions': [],
+    }
+
+    render(<App />)
+
+    await user.click(screen.getByRole('button', { name: /Archived Keep/i }))
+    await user.click(screen.getByRole('button', { name: 'Load selected into draft' }))
+
+    await waitFor(() => expect(screen.getByLabelText('Title')).toHaveValue('Archived Keep'))
+    expect(screen.getByLabelText('Portable dungeon JSON')).toHaveValue('{"version":1,"name":"Archived Keep","rooms":[]}')
+  })
 })
