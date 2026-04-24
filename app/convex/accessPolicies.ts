@@ -8,6 +8,10 @@ export type CharacterLike = {
   ownerUserId: string
 }
 
+export type DungeonLike = {
+  ownerUserId: string
+}
+
 export type PackLike = {
   isActive: boolean
   visibility: 'global' | 'public' | 'private'
@@ -23,6 +27,10 @@ export function viewerCanManageSession(session: SessionLike, userId: string) {
 
 export function viewerOwnsCharacter(character: CharacterLike, userId: string) {
   return character.ownerUserId === userId
+}
+
+export function viewerOwnsDungeon(dungeon: DungeonLike, userId: string) {
+  return dungeon.ownerUserId === userId
 }
 
 export function sessionPackIsVisible(pack: PackLike) {

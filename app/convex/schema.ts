@@ -74,6 +74,16 @@ export default defineSchema({
   })
     .index('by_token', ['token'])
     .index('by_sessionId', ['sessionId']),
+  dungeonEditorAccessTokens: defineTable({
+    dungeonId: v.id('dungeons'),
+    userId: v.id('users'),
+    token: v.string(),
+    issuedAt: v.number(),
+    expiresAt: v.number(),
+    consumedAt: v.optional(v.number()),
+  })
+    .index('by_token', ['token'])
+    .index('by_dungeonId', ['dungeonId']),
   characters: defineTable({
     ownerUserId: v.id('users'),
     workspaceId: v.optional(v.id('workspaces')),

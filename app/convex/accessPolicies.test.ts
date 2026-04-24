@@ -3,6 +3,7 @@ import {
   sessionPackIsVisible,
   viewerCanAccessSession,
   viewerCanManageSession,
+  viewerOwnsDungeon,
   viewerOwnsCharacter,
 } from './accessPolicies'
 
@@ -42,6 +43,11 @@ describe('access policies', () => {
   it('treats characters as owned records independent of placement', () => {
     expect(viewerOwnsCharacter({ ownerUserId: 'u1' }, 'u1')).toBe(true)
     expect(viewerOwnsCharacter({ ownerUserId: 'u1' }, 'u2')).toBe(false)
+  })
+
+  it('treats dungeons as private owned records', () => {
+    expect(viewerOwnsDungeon({ ownerUserId: 'u1' }, 'u1')).toBe(true)
+    expect(viewerOwnsDungeon({ ownerUserId: 'u1' }, 'u2')).toBe(false)
   })
 
   it('hides inactive or private packs from session members', () => {

@@ -36,4 +36,33 @@ http.route({
   }),
 })
 
+http.route({
+  path: '/editor-dungeon/consume',
+  method: 'POST',
+  handler: httpAction(async (ctx, request) => {
+    const body = (await request.json()) as {
+      dungeonId?: string
+      accessToken?: string
+    }
+
+    if (!body.dungeonId || !body.accessToken) {
+      return Response.json({ error: 'dungeonId and accessToken are required.' }, { status: 400 })
+    }
+
+    try {
+      const dungeon = await ctx.runMutation(internal.dungeons.consumeEditorAccessTicket, {
+        dungeonId: body.dungeonId as never,
+        accessToken: body.accessToken,
+      })
+
+      return Response.json(dungeon)
+    } catch (error) {
+      return Response.json(
+        { error: error instanceof Error ? error.message : 'Dungeon access denied.' },
+        { status: 403 },
+      )
+    }
+  }),
+})
+
 export default http

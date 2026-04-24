@@ -1,8 +1,14 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import userEvent from '@testing-library/user-event'
-import { cleanup, render, screen } from '@testing-library/react'
+import { cleanup, render, screen, waitFor } from '@testing-library/react'
 import App from './App'
 import { useDungeonStore } from './store/useDungeonStore'
+
+const handoffMock = vi.hoisted(() => ({
+  parseEditorDungeonHandoff: vi.fn(),
+  consumeEditorDungeonHandoff: vi.fn(),
+  stripEditorDungeonHandoff: vi.fn(() => ''),
+}))
 
 vi.mock('./components/editor/EditorToolbar', () => ({
   EditorToolbar: ({
@@ -79,9 +85,19 @@ vi.mock('./rendering/webgpuSupport', () => ({
   getWebGpuSupportMessage: () => 'WebGPU unavailable',
 }))
 
+vi.mock('./lib/editorDungeonHandoff', () => ({
+  parseEditorDungeonHandoff: handoffMock.parseEditorDungeonHandoff,
+  consumeEditorDungeonHandoff: handoffMock.consumeEditorDungeonHandoff,
+  stripEditorDungeonHandoff: handoffMock.stripEditorDungeonHandoff,
+}))
+
 describe('App sidebar drawer', () => {
   beforeEach(() => {
     useDungeonStore.getState().reset()
+    handoffMock.parseEditorDungeonHandoff.mockReset()
+    handoffMock.consumeEditorDungeonHandoff.mockReset()
+    handoffMock.stripEditorDungeonHandoff.mockReset()
+    handoffMock.stripEditorDungeonHandoff.mockReturnValue('')
   })
 
   afterEach(() => {
@@ -156,5 +172,26 @@ describe('App sidebar drawer', () => {
     expect(screen.getByTestId('toolbar-settings-state')).toHaveTextContent('closed')
     expect(screen.getByTestId('editor-right-panel-shell')).toHaveAttribute('data-sidebar-panel', 'tool')
     expect(screen.getByTestId('editor-right-panel-shell')).toHaveAttribute('data-sidebar-visible', 'true')
+  })
+
+  it('loads a remotely handed-off dungeon when editor launch params are present', async () => {
+    handoffMock.parseEditorDungeonHandoff.mockReturnValue({
+      dungeonId: 'dungeon-1',
+      accessToken: 'ticket-123',
+      backendUrl: 'http://127.0.0.1:3210',
+    })
+    handoffMock.consumeEditorDungeonHandoff.mockResolvedValue({
+      _id: 'dungeon-1',
+      title: 'Remote Keep',
+      description: null,
+      serializedDungeon: '{"version":1,"name":"Remote Keep","rooms":[]}',
+      createdAt: 1,
+      updatedAt: 2,
+    })
+
+    render(<App />)
+
+    await waitFor(() => expect(useDungeonStore.getState().dungeonName).toBe('Remote Keep'))
+    expect(handoffMock.consumeEditorDungeonHandoff).toHaveBeenCalledTimes(1)
   })
 })

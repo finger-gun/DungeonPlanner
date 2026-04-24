@@ -126,18 +126,18 @@ pnpm --filter dungeonplanner-app convex:auth:keys
 ## Role model
 
 - `admin` can manage users and packs
-- `dm` can create dungeon and session records
-- `player` can use the character library
+- `dm` can run sessions
+- `player` can create and manage private dungeon records and use the character library
 
 Roles are additive. Global admin overrides workspace-level restrictions.
 
 ## Dungeon library flow
 
 - The authenticated app stores the existing portable dungeon JSON export format in Convex as the durable payload.
-- Import a `.dungeon.json` file or paste a portable payload into the **Dungeon Library** draft editor.
-- Use **Save as new record** or **Update saved record** to persist the latest manual version.
-- The draft panel shows whether the local browser draft is unsaved, synced, or diverged from the last saved Convex record.
-- Downloading the draft exports the same portable JSON shape, so existing editor imports stay compatible.
+- The **Dungeon Library** lists each user's private saved dungeons.
+- Opening a saved dungeon launches the main editor with a short-lived backend handoff so the map loads directly into the normal editing workflow.
+- Importing a `.dungeon.json` file or pasting a portable payload still lets you create or update durable library records from the authenticated app.
+- The editor continues to support its existing local-first save/load behavior when opened without backend handoff parameters.
 
 ## Session flow
 

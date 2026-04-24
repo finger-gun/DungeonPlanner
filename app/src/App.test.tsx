@@ -25,10 +25,11 @@ const mock = vi.hoisted(() => ({
   queries: {} as Record<string, unknown>,
   signIn: vi.fn(),
   signOut: vi.fn(),
-  mutations: {
-    'roles.grantRoleByEmail': vi.fn(),
-    'roles.revokeRoleByEmail': vi.fn(),
-    'dungeons.saveDungeon': vi.fn(),
+    mutations: {
+      'roles.grantRoleByEmail': vi.fn(),
+      'roles.revokeRoleByEmail': vi.fn(),
+      'dungeons.issueEditorAccessTicket': vi.fn(),
+      'dungeons.saveDungeon': vi.fn(),
     'sessions.createSession': vi.fn(),
     'sessions.joinSessionByCode': vi.fn(),
     'sessions.issueServerAccessTicket': vi.fn(),
@@ -58,6 +59,7 @@ vi.mock('../convex/_generated/api', () => ({
     dungeons: {
       listViewerDungeons: 'dungeons.listViewerDungeons',
       getViewerDungeon: 'dungeons.getViewerDungeon',
+      issueEditorAccessTicket: 'dungeons.issueEditorAccessTicket',
       saveDungeon: 'dungeons.saveDungeon',
     },
     sessions: {
@@ -98,6 +100,8 @@ vi.mock('./lib/auth', () => ({
 }))
 
 describe('authenticated app shell', () => {
+  const openSpy = vi.spyOn(window, 'open').mockImplementation(() => null)
+
   beforeEach(() => {
     window.location.hash = ''
     mock.authState.isLoading = false
@@ -122,6 +126,7 @@ describe('authenticated app shell', () => {
     Object.values(mock.mutations).forEach((fn) => fn.mockReset())
     mock.signIn.mockReset()
     mock.signOut.mockReset()
+    openSpy.mockClear()
   })
 
   afterEach(() => {
@@ -156,8 +161,7 @@ describe('authenticated app shell', () => {
     expect(mock.signIn.mock.calls[0]?.[1]).toBeInstanceOf(FormData)
   })
 
-  it('shows the dungeon save flow for authenticated players', async () => {
-    const user = userEvent.setup()
+  it('shows a launcher-only dungeon library for authenticated players', async () => {
     window.location.hash = '#/app/library'
     mock.authState.isAuthenticated = true
     mock.viewerIdentity = {
@@ -178,23 +182,14 @@ describe('authenticated app shell', () => {
       'sessions.listViewerSessions': [],
       'characters.listViewerCharacters': [],
     }
-    mock.mutations['dungeons.saveDungeon'].mockResolvedValue('dungeon-1')
 
     render(<App />)
 
-    await user.type(screen.getByLabelText('Title'), 'Sunken Keep')
-    await user.click(screen.getByLabelText('Portable dungeon JSON'))
-    await user.paste('{"version":1,"rooms":[]}')
-    await user.click(screen.getByRole('button', { name: 'Save as new record' }))
-
-    await waitFor(() =>
-      expect(mock.mutations['dungeons.saveDungeon']).toHaveBeenCalledWith({
-        dungeonId: undefined,
-        title: 'Sunken Keep',
-        description: undefined,
-        serializedDungeon: '{"version":1,"rooms":[]}',
-      }),
-    )
+    expect(screen.getByRole('button', { name: 'New in editor' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Open selected in editor' })).toBeTruthy()
+    expect(screen.queryByText('Import dungeon file')).toBeNull()
+    expect(screen.queryByLabelText('Portable dungeon JSON')).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Save as new record' })).toBeNull()
   })
 
   it('reveals admin debug views only after the hidden shortcut', async () => {
@@ -235,7 +230,7 @@ describe('authenticated app shell', () => {
     expect(screen.getByRole('link', { name: 'Packs' })).toBeTruthy()
   })
 
-  it('loads a saved dungeon record back into the local draft', async () => {
+  it('opens a saved dungeon in the editor', async () => {
     const user = userEvent.setup()
     window.location.hash = '#/app/library'
     mock.authState.isAuthenticated = true
@@ -272,18 +267,25 @@ describe('authenticated app shell', () => {
       },
       'sessions.listViewerSessions': [],
     }
+    mock.mutations['dungeons.issueEditorAccessTicket'].mockResolvedValue({
+      dungeonId: 'dungeon-1',
+      accessToken: 'ticket-123',
+      expiresAt: 123,
+    })
 
     render(<App />)
 
     await user.click(screen.getByRole('button', { name: /Archived Keep/i }))
-    await user.click(screen.getByRole('button', { name: 'Load selected into draft' }))
+    await user.click(screen.getByRole('button', { name: 'Open selected in editor' }))
 
     await waitFor(() =>
-      expect((screen.getByLabelText('Title') as HTMLInputElement).value).toBe('Archived Keep'),
+      expect(mock.mutations['dungeons.issueEditorAccessTicket']).toHaveBeenCalledWith({
+        dungeonId: 'dungeon-1',
+      }),
     )
-    expect((screen.getByLabelText('Portable dungeon JSON') as HTMLTextAreaElement).value).toBe(
-      '{"version":1,"name":"Archived Keep","rooms":[]}',
-    )
+    expect(openSpy).toHaveBeenCalledTimes(1)
+    expect(openSpy.mock.calls[0]?.[0]).toContain('appDungeonId=dungeon-1')
+    expect(openSpy.mock.calls[0]?.[0]).toContain('appDungeonToken=ticket-123')
   })
 
   it('shows dedicated admin user management pages for administrators after dev unlock', async () => {

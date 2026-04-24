@@ -33,6 +33,11 @@ import { ChevronLeft, ChevronRight, RotateCcw } from 'lucide-react'
 import { RendererErrorBoundary } from './components/RendererErrorBoundary'
 import { WebGpuRequiredNotice } from './components/WebGpuRequiredNotice'
 import { getWebGpuSupportMessage, isWebGpuSupported } from './rendering/webgpuSupport'
+import {
+  consumeEditorDungeonHandoff,
+  parseEditorDungeonHandoff,
+  stripEditorDungeonHandoff,
+} from './lib/editorDungeonHandoff'
 
 const Scene = lazy(() =>
   import('./components/canvas/Scene').then((module) => ({
@@ -233,6 +238,43 @@ function App() {
   useEffect(() => {
     window.addEventListener('keydown', onWindowKeyDown)
     return () => window.removeEventListener('keydown', onWindowKeyDown)
+  }, [])
+
+  useEffect(() => {
+    const handoff = parseEditorDungeonHandoff(window.location.search)
+
+    if (!handoff) {
+      return
+    }
+
+    let cancelled = false
+
+    void (async () => {
+      try {
+        const dungeon = await consumeEditorDungeonHandoff(handoff)
+
+        if (cancelled) {
+          return
+        }
+
+        const loaded = useDungeonStore.getState().loadDungeon(dungeon.serializedDungeon)
+
+        if (!loaded) {
+          console.error('Remote dungeon handoff payload could not be loaded.')
+        }
+      } catch (error) {
+        console.error(error)
+      } finally {
+        if (!cancelled) {
+          const nextSearch = stripEditorDungeonHandoff(window.location.search)
+          window.history.replaceState({}, '', `${window.location.pathname}${nextSearch}${window.location.hash}`)
+        }
+      }
+    })()
+
+    return () => {
+      cancelled = true
+    }
   }, [])
 
   useEffect(() => {

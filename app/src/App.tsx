@@ -1,17 +1,12 @@
 import './App.css'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useAuthActions } from '@convex-dev/auth/react'
 import { useConvexAuth, useMutation, useQuery } from 'convex/react'
 import { api } from '../convex/_generated/api'
 import type { Id } from '../convex/_generated/dataModel'
 import { useViewerIdentity } from './lib/auth'
 import { type PlatformRole } from './lib/roles'
-import {
-  getDungeonSyncState,
-  inferDungeonTitle,
-  isPortableDungeonPayload,
-  type SavedDungeonSnapshot,
-} from './lib/dungeonLibrary'
+import { buildEditorLaunchUrl, resolveEditorBaseUrl } from './lib/editorLaunch'
 
 const DEFAULT_PACK_ENTRIES_JSON = `[
   {
@@ -333,7 +328,7 @@ function SignedInOverview({
   )
   const grantRoleByEmail = useMutation(api.roles.grantRoleByEmail)
   const revokeRoleByEmail = useMutation(api.roles.revokeRoleByEmail)
-  const saveDungeon = useMutation(api.dungeons.saveDungeon)
+  const issueEditorAccessTicket = useMutation(api.dungeons.issueEditorAccessTicket)
   const createSession = useMutation(api.sessions.createSession)
   const joinSessionByCode = useMutation(api.sessions.joinSessionByCode)
   const issueServerAccessTicket = useMutation(api.sessions.issueServerAccessTicket)
@@ -351,16 +346,9 @@ function SignedInOverview({
   const [isManagingRoles, setIsManagingRoles] = useState(false)
 
   const [selectedDungeonId, setSelectedDungeonId] = useState<Id<'dungeons'> | null>(null)
-  const selectedDungeon = useQuery(
-    api.dungeons.getViewerDungeon,
-    selectedDungeonId ? { dungeonId: selectedDungeonId } : 'skip',
-  )
-  const [draftTitle, setDraftTitle] = useState('')
-  const [draftDescription, setDraftDescription] = useState('')
-  const [draftSerializedDungeon, setDraftSerializedDungeon] = useState('')
   const [dungeonNotice, setDungeonNotice] = useState<string | null>(null)
   const [dungeonError, setDungeonError] = useState<string | null>(null)
-  const [isSavingDungeon, setIsSavingDungeon] = useState(false)
+  const [isOpeningDungeon, setIsOpeningDungeon] = useState(false)
   const [sessionTitle, setSessionTitle] = useState('')
   const [sessionJoinCode, setSessionJoinCode] = useState('')
   const [sessionNotice, setSessionNotice] = useState<string | null>(null)
@@ -407,31 +395,11 @@ function SignedInOverview({
   const [packError, setPackError] = useState<string | null>(null)
   const [isWorkingPacks, setIsWorkingPacks] = useState(false)
 
-  const selectedSnapshot = useMemo<SavedDungeonSnapshot | null>(() => {
-    if (!selectedDungeon) {
-      return null
-    }
-
-    return {
-      id: selectedDungeon._id,
-      title: selectedDungeon.title,
-      description: selectedDungeon.description ?? '',
-      serializedDungeon: selectedDungeon.serializedDungeon,
-    }
-  }, [selectedDungeon])
-
-  const syncState = getDungeonSyncState(
-    {
-      title: draftTitle,
-      description: draftDescription,
-      serializedDungeon: draftSerializedDungeon,
-    },
-    selectedSnapshot,
-  )
-
   const selectedSession = sessionRecords?.find((session) => session._id === selectedSessionId) ?? null
   const selectedPackRecord = packRecords?.find((pack) => pack._id === selectedPackRecordId) ?? null
   const canAccessDevMenu = identity.access.isAdmin && isDevMenuVisible
+  const editorBaseUrl = resolveEditorBaseUrl(window.location, import.meta.env.VITE_EDITOR_URL)
+  const backendUrl = import.meta.env.VITE_CONVEX_URL ?? 'http://127.0.0.1:3210'
   const requestedPage = getWorkspacePageFromPath(currentPath)
   const workspaceNavItems = [
     { id: 'overview', label: 'Overview', href: '#/app' },
@@ -530,100 +498,45 @@ function SignedInOverview({
     setIsManagingRoles(false)
   }
 
-  async function handleDungeonFileImport(event: React.ChangeEvent<HTMLInputElement>) {
-    const file = event.target.files?.[0]
-    event.target.value = ''
-
-    if (!file) {
-      return
-    }
-
-    const payload = await file.text()
-
-    if (!isPortableDungeonPayload(payload)) {
-      setDungeonError('This file does not look like a portable DungeonPlanner dungeon export.')
-      setDungeonNotice(null)
-      return
-    }
-
-    setSelectedDungeonId(null)
-    setDraftSerializedDungeon(payload)
-    setDraftTitle(inferDungeonTitle(payload, file.name.replace(/\.[^.]+$/, '') || 'Imported Dungeon'))
-    setDraftDescription('')
-    setDungeonError(null)
-    setDungeonNotice('Imported portable dungeon JSON into the local draft. Save it when you want a durable library record.')
-  }
-
-  function handleLoadSavedDungeon() {
-    if (!selectedDungeon) {
-      return
-    }
-
-    setDraftTitle(selectedDungeon.title)
-    setDraftDescription(selectedDungeon.description ?? '')
-    setDraftSerializedDungeon(selectedDungeon.serializedDungeon)
-    setDungeonError(null)
-    setDungeonNotice(`Loaded "${selectedDungeon.title}" into your draft.`)
-  }
-
-  async function handleSaveDungeon() {
-    const normalizedTitle = draftTitle.trim()
-    const normalizedPayload = draftSerializedDungeon.trim()
-
-    if (!normalizedTitle) {
-      setDungeonError('Give the dungeon a title before saving it.')
-      setDungeonNotice(null)
-      return
-    }
-
-    if (!isPortableDungeonPayload(normalizedPayload)) {
-      setDungeonError('Save expects the existing portable dungeon JSON format. Import or paste a valid export first.')
-      setDungeonNotice(null)
+  async function handleOpenSavedDungeon() {
+    if (!selectedDungeonId || !backendUrl) {
       return
     }
 
     setDungeonError(null)
     setDungeonNotice(null)
-    setIsSavingDungeon(true)
+    setIsOpeningDungeon(true)
 
     try {
-      const savedId = await saveDungeon({
-        dungeonId: selectedDungeonId ?? undefined,
-        title: normalizedTitle,
-        description: draftDescription.trim() || undefined,
-        serializedDungeon: normalizedPayload,
+      const ticket = await issueEditorAccessTicket({
+        dungeonId: selectedDungeonId,
       })
 
-      setSelectedDungeonId(savedId)
-      setDraftTitle(normalizedTitle)
-      setDraftSerializedDungeon(normalizedPayload)
-      setDungeonNotice(selectedDungeonId ? 'Updated the saved dungeon.' : 'Saved a new dungeon.')
+      window.open(
+        buildEditorLaunchUrl({
+          editorBaseUrl,
+          backendUrl,
+          ticket: {
+            dungeonId: String(ticket.dungeonId),
+            accessToken: ticket.accessToken,
+          },
+        }),
+        '_blank',
+        'noopener,noreferrer',
+      )
+      setDungeonNotice('Opened the saved dungeon in the editor.')
     } catch (mutationError) {
       console.error(mutationError)
-      setDungeonError('Saving the dungeon failed. Make sure this account can still manage dungeons.')
+      setDungeonError('Opening the dungeon in the editor failed.')
     }
 
-    setIsSavingDungeon(false)
+    setIsOpeningDungeon(false)
   }
 
-  function handleDownloadDraft() {
-    const normalizedTitle = draftTitle.trim() || 'dungeon'
-    const blob = new Blob([draftSerializedDungeon], { type: 'application/json' })
-    const url = URL.createObjectURL(blob)
-    const anchor = document.createElement('a')
-    anchor.href = url
-    anchor.download = `${normalizedTitle.replace(/[^a-z0-9]/gi, '_')}.dungeon.json`
-    anchor.click()
-    URL.revokeObjectURL(url)
-  }
-
-  function handleNewDraft() {
-    setSelectedDungeonId(null)
-    setDraftTitle('')
-    setDraftDescription('')
-    setDraftSerializedDungeon('')
+  function handleOpenBlankEditor() {
     setDungeonError(null)
-    setDungeonNotice('Started a fresh local draft with no linked saved record.')
+    setDungeonNotice('Opened a fresh editor session.')
+    window.open(buildEditorLaunchUrl({ editorBaseUrl }), '_blank', 'noopener,noreferrer')
   }
 
   function handleNewCharacterDraft() {
@@ -1135,15 +1048,17 @@ function SignedInOverview({
             <p className="panel__eyebrow">Dungeon Library</p>
             <h2 className="panel__title">Saved dungeons</h2>
             <p className="panel__copy">
-              Keep portable dungeon exports in your private library and load them back into your draft whenever you need them.
+              Browse your private dungeon library and continue building any saved map in the main editor.
             </p>
 
-            <div className={`library-sync-state library-sync-state--${syncState.tone}`}>
+            <div className="library-sync-state library-sync-state--muted">
               <div>
-                <p className="status-card__label">Draft status</p>
-                <p className="library-sync-state__title">{syncState.label}</p>
+                <p className="status-card__label">Library status</p>
+                <p className="library-sync-state__title">{libraryRecords?.length ?? 0} saved dungeons</p>
               </div>
-              <p className="panel__copy">{syncState.detail}</p>
+              <p className="panel__copy">
+                Select a saved dungeon, then open it in the editor to continue building.
+              </p>
             </div>
 
             <div className="library-grid">
@@ -1153,8 +1068,8 @@ function SignedInOverview({
                     <p className="status-card__label">Saved records</p>
                     <h3 className="library-card__title">Dungeon library</h3>
                   </div>
-                  <button className="hero-panel__button hero-panel__button--secondary" onClick={handleNewDraft} type="button">
-                    New local draft
+                  <button className="hero-panel__button hero-panel__button--secondary" onClick={handleOpenBlankEditor} type="button">
+                    New in editor
                   </button>
                 </div>
 
@@ -1183,75 +1098,23 @@ function SignedInOverview({
                   <p className="panel__copy">No dungeons have been saved here yet.</p>
                 )}
 
-                <div className="library-card__actions">
-                  <button
-                    className="hero-panel__button hero-panel__button--secondary"
-                    disabled={!selectedDungeon}
-                    onClick={handleLoadSavedDungeon}
-                    type="button"
-                  >
-                    Load selected into draft
-                  </button>
-                </div>
-              </section>
-
-              <section className="library-card">
-                <div className="library-card__header">
-                  <div>
-                    <p className="status-card__label">Local draft</p>
-                    <h3 className="library-card__title">Manual save and load</h3>
-                  </div>
-                  <label className="hero-panel__button hero-panel__button--secondary library-import-button">
-                    Import dungeon file
-                    <input accept=".json,.dungeon.json" hidden onChange={(event) => void handleDungeonFileImport(event)} type="file" />
-                  </label>
-                </div>
-
-                <label className="auth-card__field">
-                  <span>Title</span>
-                  <input onChange={(event) => setDraftTitle(event.target.value)} placeholder="Sunken Keep" type="text" value={draftTitle} />
-                </label>
-
-                <label className="auth-card__field">
-                  <span>Description</span>
-                  <input
-                    onChange={(event) => setDraftDescription(event.target.value)}
-                    placeholder="Latest manual save for tonight's crawl"
-                    type="text"
-                    value={draftDescription}
-                  />
-                </label>
-
-                <label className="auth-card__field">
-                  <span>Portable dungeon JSON</span>
-                  <textarea
-                    className="library-editor"
-                    onChange={(event) => setDraftSerializedDungeon(event.target.value)}
-                    placeholder='Paste a portable dungeon export, e.g. {"version":1,"name":"Sunken Keep",...}'
-                    rows={14}
-                    value={draftSerializedDungeon}
-                  />
-                </label>
+                {!backendUrl ? (
+                  <p className="panel__copy">
+                    Editor launching is unavailable until the app has a backend URL configured.
+                  </p>
+                ) : null}
 
                 {dungeonError ? <p className="auth-card__error">{dungeonError}</p> : null}
                 {dungeonNotice ? <p className="library-notice">{dungeonNotice}</p> : null}
 
                 <div className="library-card__actions">
                   <button
-                    className="hero-panel__button hero-panel__button--primary"
-                    disabled={isSavingDungeon}
-                    onClick={() => void handleSaveDungeon()}
-                    type="button"
-                  >
-                    {isSavingDungeon ? 'Saving...' : selectedDungeonId ? 'Update saved record' : 'Save as new record'}
-                  </button>
-                  <button
                     className="hero-panel__button hero-panel__button--secondary"
-                    disabled={!draftSerializedDungeon.trim()}
-                    onClick={handleDownloadDraft}
+                    disabled={!selectedDungeonId || !backendUrl || isOpeningDungeon}
+                    onClick={() => void handleOpenSavedDungeon()}
                     type="button"
                   >
-                    Download draft JSON
+                    {isOpeningDungeon ? 'Opening...' : 'Open selected in editor'}
                   </button>
                 </div>
               </section>
