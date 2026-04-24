@@ -8,6 +8,7 @@
  * @module
  */
 
+import type * as accessPolicies from "../accessPolicies.js";
 import type * as auth from "../auth.js";
 import type * as characters from "../characters.js";
 import type * as devSeedAccounts from "../devSeedAccounts.js";
@@ -32,6 +33,7 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  accessPolicies: typeof accessPolicies;
   auth: typeof auth;
   characters: typeof characters;
   devSeedAccounts: typeof devSeedAccounts;

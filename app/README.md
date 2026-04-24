@@ -10,6 +10,7 @@ It stays separate from the current public landing page, docs, and anonymous demo
 - The authenticated React shell
 - Local self-hosted Convex setup for development
 - Early backend models for users, roles, dungeons, sessions, characters, and packs
+- Manual dungeon-library save/load for portable `.dungeon.json` payloads
 
 ## Local setup
 
@@ -129,6 +130,35 @@ pnpm --filter dungeonplanner-app convex:auth:keys
 - `player` can use the character library
 
 Roles are additive. Global admin overrides workspace-level restrictions.
+
+## Dungeon library flow
+
+- The authenticated app stores the existing portable dungeon JSON export format in Convex as the durable payload.
+- Import a `.dungeon.json` file or paste a portable payload into the **Dungeon Library** draft editor.
+- Use **Save as new record** or **Update saved record** to persist the latest manual version.
+- The draft panel shows whether the local browser draft is unsaved, synced, or diverged from the last saved Convex record.
+- Downloading the draft exports the same portable JSON shape, so existing editor imports stay compatible.
+
+## Session flow
+
+- DMs can create durable session records and share the generated join code with authenticated players.
+- Players join through the authenticated app, which persists session membership in Convex.
+- The sessions panel can issue a short-lived Colyseus access ticket for a selected session.
+- The local server now validates room access through Convex-backed membership instead of trusting localhost as DM authority.
+
+## Character flow
+
+- Players can create, update, list, and delete their own durable character records.
+- Character records stay independent from map placement and can exist before they are ever used in a session.
+- The authenticated app can attach a selected character record to a selected session as the first durable reference path.
+
+## Pack registry flow
+
+- Admins can register or update workspace-owned pack records with canonical entry metadata for both scene assets and rules/data entries.
+- Pack entries use namespaced refs in the shape `packId:localId`; legacy flat asset IDs are normalized on save.
+- Runtime-generated player asset refs stay compatible and are not force-converted into pack-managed refs.
+- Pack records can upload and store manifest or thumbnail files through Convex storage-backed upload URLs.
+- Session pack availability is derived from the owning workspace and only exposes active non-private packs to session members.
 
 ## Notes
 

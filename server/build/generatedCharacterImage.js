@@ -25,6 +25,30 @@ export async function handleGeneratedCharacterImageRequest(body, config = {}) {
     }, config.ollamaBaseUrl ?? DEFAULT_OLLAMA_BASE_URL);
     return { model, imageDataUrl };
 }
+export async function listGeneratedCharacterModels(config = {}) {
+    const defaultModel = config.defaultModel ?? DEFAULT_OLLAMA_IMAGE_MODEL;
+    const ollamaBaseUrl = config.ollamaBaseUrl ?? DEFAULT_OLLAMA_BASE_URL;
+    let response;
+    try {
+        response = await fetch(`${ollamaBaseUrl}/api/tags`);
+    }
+    catch {
+        throw new Error(`Could not reach Ollama at ${ollamaBaseUrl}. Make sure Ollama is running and the ${defaultModel} model is available.`);
+    }
+    if (!response.ok) {
+        throw new Error(await readOllamaError(response));
+    }
+    const payload = await response.json();
+    const installedModels = Array.isArray(payload.models)
+        ? payload.models
+            .map((model) => normalizeModelName(model?.name))
+            .filter((model) => Boolean(model))
+        : [];
+    return {
+        defaultModel,
+        models: dedupeModelNames([defaultModel, ...installedModels]),
+    };
+}
 async function generateCharacterImage(body, ollamaBaseUrl) {
     const requestBody = {
         ...body,
@@ -82,4 +106,23 @@ async function readOllamaError(response) {
         // Ignore JSON parse failures and fall back to status text.
     }
     return `Ollama request failed with ${response.status} ${response.statusText}.`;
+}
+function normalizeModelName(value) {
+    if (typeof value !== 'string') {
+        return null;
+    }
+    const trimmed = value.trim();
+    return trimmed.length > 0 ? trimmed : null;
+}
+function dedupeModelNames(models) {
+    const seen = new Set();
+    const unique = [];
+    for (const model of models) {
+        if (seen.has(model)) {
+            continue;
+        }
+        seen.add(model);
+        unique.push(model);
+    }
+    return unique;
 }

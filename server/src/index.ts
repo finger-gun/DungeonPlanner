@@ -117,7 +117,7 @@ const gameServer = new Server({
   }),
 })
 
-gameServer.define('dungeon', DungeonRoom)
+gameServer.define('dungeon', DungeonRoom).filterBy(['sessionId'])
 
 // ── Start ─────────────────────────────────────────────────────────────────────
 gameServer.listen(PORT).then(() => {

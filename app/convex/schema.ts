@@ -1,7 +1,13 @@
 import { authTables } from '@convex-dev/auth/server'
 import { defineSchema, defineTable } from 'convex/server'
 import { v } from 'convex/values'
-import { packKindValidator, packVisibilityValidator, roleValidator } from './model'
+import {
+  canonicalPackEntryValidator,
+  packDefaultAssetRefsValidator,
+  packKindValidator,
+  packVisibilityValidator,
+  roleValidator,
+} from './model'
 
 export default defineSchema({
   ...authTables,
@@ -36,7 +42,7 @@ export default defineSchema({
     workspaceId: v.id('workspaces'),
     title: v.string(),
     description: v.optional(v.string()),
-    serializedDungeon: v.any(),
+    serializedDungeon: v.string(),
     createdAt: v.number(),
     updatedAt: v.number(),
   })
@@ -57,6 +63,17 @@ export default defineSchema({
     .index('by_ownerUserId', ['ownerUserId'])
     .index('by_joinCode', ['joinCode'])
     .index('by_workspaceId', ['workspaceId']),
+  sessionAccessTokens: defineTable({
+    sessionId: v.id('sessions'),
+    userId: v.id('users'),
+    token: v.string(),
+    role: roleValidator,
+    issuedAt: v.number(),
+    expiresAt: v.number(),
+    consumedAt: v.optional(v.number()),
+  })
+    .index('by_token', ['token'])
+    .index('by_sessionId', ['sessionId']),
   characters: defineTable({
     ownerUserId: v.id('users'),
     workspaceId: v.optional(v.id('workspaces')),
@@ -80,6 +97,8 @@ export default defineSchema({
     isActive: v.boolean(),
     manifestStorageId: v.optional(v.id('_storage')),
     thumbnailStorageId: v.optional(v.id('_storage')),
+    defaultAssetRefs: v.optional(packDefaultAssetRefsValidator),
+    entries: v.array(canonicalPackEntryValidator),
     createdAt: v.number(),
     updatedAt: v.number(),
   })

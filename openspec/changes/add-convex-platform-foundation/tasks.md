@@ -19,30 +19,30 @@
 
 ## 4. Dungeon library persistence
 
-- [ ] 4.1 Add Convex-backed dungeon library records with ownership and metadata needed for listing and retrieval.
-- [ ] 4.2 Implement explicit manual save and load flows that translate between local editor state and latest-only durable dungeon records.
-- [ ] 4.3 Preserve compatibility for existing serialized dungeon payloads and document any required compatibility mapping.
-- [ ] 4.4 Update save/load UI to distinguish local editor state from backend-saved dungeon state.
+- [x] 4.1 Add Convex-backed dungeon library records with ownership and metadata needed for listing and retrieval.
+- [x] 4.2 Implement explicit manual save and load flows that translate between local editor state and latest-only durable dungeon records.
+- [x] 4.3 Preserve compatibility for existing serialized dungeon payloads and document any required compatibility mapping.
+- [x] 4.4 Update save/load UI to distinguish local editor state from backend-saved dungeon state.
 
 ## 5. Session membership and server integration
 
-- [ ] 5.1 Implement durable play-session creation, join mechanism generation, and membership persistence in Convex.
-- [ ] 5.2 Replace localhost-derived DM/player authority in `server/` with authenticated membership checks.
-- [ ] 5.3 Connect session join/share flows in the authenticated app to the new backend-backed session model.
-- [ ] 5.4 Verify Colyseus room access and protected session actions honor authenticated membership rather than client locality.
+- [x] 5.1 Implement durable play-session creation, join mechanism generation, and membership persistence in Convex.
+- [x] 5.2 Replace localhost-derived DM/player authority in `server/` with authenticated membership checks.
+- [x] 5.3 Connect session join/share flows in the authenticated app to the new backend-backed session model.
+- [x] 5.4 Verify Colyseus room access and protected session actions honor authenticated membership rather than client locality.
 
 ## 6. Character library foundation
 
-- [ ] 6.1 Add Convex-backed player character records owned by authenticated users.
-- [ ] 6.2 Implement character library list/create/update/delete flows in the authenticated app without coupling character identity to placed map objects.
-- [ ] 6.3 Add reference plumbing so sessions and future map flows can point at persistent character records.
+- [x] 6.1 Add Convex-backed player character records owned by authenticated users.
+- [x] 6.2 Implement character library list/create/update/delete flows in the authenticated app without coupling character identity to placed map objects.
+- [x] 6.3 Add reference plumbing so sessions and future map flows can point at persistent character records.
 
 ## 7. Content pack registry and pack interop
 
-- [ ] 7.1 Define canonical pack metadata models for asset packs and rules/data packs under a shared registry shape.
-- [ ] 7.2 Implement admin-only pack registration, workspace-scoped activation, visibility modes (`global`, `public`, `private`), and file-reference storage flows.
-- [ ] 7.3 Introduce canonical `packId:localId` content references for newly persisted pack-managed records.
-- [ ] 7.4 Add compatibility handling for existing flat asset IDs and runtime-generated character assets where namespaced refs are not yet available.
+- [x] 7.1 Define canonical pack metadata models for asset packs and rules/data packs under a shared registry shape.
+- [x] 7.2 Implement admin-only pack registration, workspace-scoped activation, visibility modes (`global`, `public`, `private`), and file-reference storage flows.
+- [x] 7.3 Introduce canonical `packId:localId` content references for newly persisted pack-managed records.
+- [x] 7.4 Add compatibility handling for existing flat asset IDs and runtime-generated character assets where namespaced refs are not yet available.
 
 ## 8. Validation and regression coverage
 

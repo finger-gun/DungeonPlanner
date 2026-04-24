@@ -8,7 +8,7 @@ import { WebSocketTransport } from '@colyseus/ws-transport';
 import { networkInterfaces } from 'os';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { GeneratedCharacterRequestError, handleGeneratedCharacterImageRequest, } from './generatedCharacterImage.js';
+import { GeneratedCharacterRequestError, handleGeneratedCharacterImageRequest, listGeneratedCharacterModels, } from './generatedCharacterImage.js';
 import { deleteGeneratedCharacterAssets, GENERATED_CHARACTER_ASSET_PUBLIC_PATH, GENERATED_CHARACTER_STORAGE_DIR, GeneratedCharacterStorageError, saveGeneratedCharacterAssets, } from './generatedCharacterStorage.js';
 import { DungeonRoom } from './rooms/DungeonRoom.js';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -33,6 +33,16 @@ app.post('/api/generated-characters/image', async (req, res) => {
     catch (error) {
         res.status(error instanceof GeneratedCharacterRequestError ? error.status : 502).json({
             error: error instanceof Error ? error.message : 'Image generation failed.',
+        });
+    }
+});
+app.get('/api/generated-characters/models', async (_req, res) => {
+    try {
+        res.json(await listGeneratedCharacterModels());
+    }
+    catch (error) {
+        res.status(502).json({
+            error: error instanceof Error ? error.message : 'Could not list installed Ollama models.',
         });
     }
 });
@@ -86,7 +96,7 @@ const gameServer = new Server({
         maxPayload: 50 * 1024 * 1024, // 50 MB — map JSON can be large
     }),
 });
-gameServer.define('dungeon', DungeonRoom);
+gameServer.define('dungeon', DungeonRoom).filterBy(['sessionId']);
 // ── Start ─────────────────────────────────────────────────────────────────────
 gameServer.listen(PORT).then(() => {
     const lanIp = getLanIp();

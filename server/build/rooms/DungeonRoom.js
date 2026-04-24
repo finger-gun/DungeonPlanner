@@ -1,41 +1,40 @@
 import { Room } from 'colyseus';
 import { DungeonState, Entity } from '../schema/DungeonStateSchema.js';
 import { GRID_SIZE } from '../utils/grid.js';
+import { consumeSessionAccessTicket } from '../sessionAccess.js';
 export class DungeonRoom extends Room {
     maxClients = 16;
-    // Track which sessionId has the DM role
     dmSessionId = null;
-    // Typed accessor for the room state
+    roomSessionId = null;
+    clientRoles = new Map();
     get ds() {
         return this.state;
     }
-    onCreate(_options) {
+    onCreate(options) {
+        if (!options.sessionId) {
+            throw new Error('DungeonRoom requires a sessionId.');
+        }
+        this.roomSessionId = options.sessionId;
         this.setState(new DungeonState());
-        this.setPatchRate(50); // 20 patches/sec
-        // ── Map sync ──────────────────────────────────────────────────────────────
-        // DM sends the full map JSON; server stores it and re-broadcasts to all
+        this.setPatchRate(50);
         this.onMessage('uploadMap', (client, json) => {
             if (!this.isDM(client))
                 return;
             try {
-                JSON.parse(json); // validate it's parseable
+                JSON.parse(json);
                 this.ds.mapJson = json;
-                // Broadcast to players (not back to DM who sent it)
                 this.broadcast('mapSync', json, { except: client });
             }
             catch {
                 client.send('error', 'Invalid dungeon JSON');
             }
         });
-        // DM pushes incremental map change — server re-broadcasts as full state
-        // (simple v1 approach: full re-sync on every DM edit)
         this.onMessage('mapUpdate', (client, json) => {
             if (!this.isDM(client))
                 return;
             this.ds.mapJson = json;
             this.broadcast('mapSync', json, { except: client });
         });
-        // ── Entity / token management (DM only) ──────────────────────────────────
         this.onMessage('placeToken', (client, msg) => {
             if (!this.isDM(client))
                 return;
@@ -63,13 +62,12 @@ export class DungeonRoom extends Room {
             if (entity)
                 entity.visibleToPlayers = msg.visible;
         });
-        // ── Movement ─────────────────────────────────────────────────────────────
         this.onMessage('requestMove', (client, msg) => {
             const entity = this.ds.entities.get(msg.entityId);
             if (!entity)
                 return;
             if (entity.type === 'NPC' && !this.isDM(client))
-                return; // players can't move NPCs
+                return;
             const wallGrid = this.getWallGrid();
             const path = this.bfsPath([entity.cellX, entity.cellZ], msg.targetCell, wallGrid);
             if (path === null || path > entity.movementRange) {
@@ -88,7 +86,6 @@ export class DungeonRoom extends Room {
             this.applyMove(entity, msg.targetCell);
             this.broadcastLoSFilter();
         });
-        // DM can update entity properties (name, movementRange, etc.)
         this.onMessage('patchEntity', (client, msg) => {
             if (!this.isDM(client))
                 return;
@@ -103,45 +100,44 @@ export class DungeonRoom extends Room {
                 entity.type = msg.patch.type;
         });
     }
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    onAuth(client, _options, context) {
-        const ip = context?.socket?.remoteAddress ?? context?.request?.socket?.remoteAddress ?? '';
-        const role = ip === '127.0.0.1' || ip === '::1' || ip === '::ffff:127.0.0.1'
-            ? 'dm'
-            : 'player';
-        // First DM wins; subsequent localhost connections are still DM (e.g. multiple windows)
-        if (role === 'dm' && this.dmSessionId === null) {
+    async onAuth(_client, options) {
+        if (!options.sessionId || !options.accessToken) {
+            throw new Error('Session access requires both sessionId and accessToken.');
+        }
+        if (this.roomSessionId !== null && options.sessionId !== this.roomSessionId) {
+            throw new Error('Session mismatch.');
+        }
+        const access = await consumeSessionAccessTicket(options.sessionId, options.accessToken);
+        if (this.roomSessionId !== null && access.sessionId !== this.roomSessionId) {
+            throw new Error('Session mismatch.');
+        }
+        return access;
+    }
+    onJoin(client, _options, auth) {
+        this.clientRoles.set(client.sessionId, auth.role);
+        if (auth.role === 'dm') {
             this.dmSessionId = client.sessionId;
             this.ds.dmSessionId = client.sessionId;
         }
-        return { role };
-    }
-    onJoin(client, _options, auth) {
-        console.log(`[DungeonRoom] ${auth.role} joined: ${client.sessionId}`);
-        // Send current map state to the joining client
+        console.log(`[DungeonRoom] ${auth.role} joined session ${auth.sessionId}: ${client.sessionId}`);
         if (this.ds.mapJson) {
             client.send('mapSync', this.ds.mapJson);
         }
     }
     onLeave(client) {
         console.log(`[DungeonRoom] client left: ${client.sessionId}`);
+        this.clientRoles.delete(client.sessionId);
         if (client.sessionId === this.dmSessionId) {
-            // DM disconnected — find next localhost client or null
             this.dmSessionId = null;
+            this.ds.dmSessionId = '';
         }
     }
     onDispose() {
         console.log('[DungeonRoom] room disposed');
     }
-    /**
-     * Send per-client LoS visibility snapshots after entity moves.
-     * Tells each player client which NPC IDs are currently visible to them,
-     * so they can hide tokens that exit their LoS.
-     */
     broadcastLoSFilter() {
-        const LOS_RADIUS = 10;
-        const players = Array.from(this.ds.entities.values()).filter((e) => e.type === 'PLAYER');
-        // Build visible NPC set (any PLAYER within LOS_RADIUS)
+        const losRadius = 10;
+        const players = Array.from(this.ds.entities.values()).filter((entity) => entity.type === 'PLAYER');
         const visibleNpcIds = new Set();
         for (const [id, entity] of this.ds.entities) {
             if (entity.type !== 'NPC' || !entity.visibleToPlayers)
@@ -149,13 +145,12 @@ export class DungeonRoom extends Room {
             for (const player of players) {
                 const dx = player.cellX - entity.cellX;
                 const dz = player.cellZ - entity.cellZ;
-                if (dx * dx + dz * dz <= LOS_RADIUS * LOS_RADIUS) {
+                if (dx * dx + dz * dz <= losRadius * losRadius) {
                     visibleNpcIds.add(id);
                     break;
                 }
             }
         }
-        // Broadcast visible NPC list to all non-DM clients
         for (const client of this.clients) {
             if (this.isDM(client))
                 continue;
@@ -163,7 +158,7 @@ export class DungeonRoom extends Room {
         }
     }
     isDM(client) {
-        return client.sessionId === this.dmSessionId;
+        return this.clientRoles.get(client.sessionId) === 'dm';
     }
     applyMove(entity, targetCell) {
         entity.cellX = targetCell[0];
@@ -171,28 +166,19 @@ export class DungeonRoom extends Room {
         entity.worldX = (targetCell[0] + 0.5) * GRID_SIZE;
         entity.worldZ = (targetCell[1] + 0.5) * GRID_SIZE;
     }
-    /**
-     * Build a Set of wall-blocked cells from the current mapJson.
-     * A cell is "solid" if it is NOT in paintedCells of the active floor.
-     * Returns a function (x, z) => boolean (true = blocked).
-     */
     getWallGrid() {
         try {
             const file = JSON.parse(this.ds.mapJson);
-            const activeFloor = file.floors.find((f) => f.id === file.activeFloorId);
+            const activeFloor = file.floors.find((floor) => floor.id === file.activeFloorId);
             if (!activeFloor)
-                return () => true; // no data = everything blocked
-            const painted = new Set(activeFloor.cells.map((c) => `${c.x}:${c.z}`));
+                return () => true;
+            const painted = new Set(activeFloor.cells.map((cell) => `${cell.x}:${cell.z}`));
             return (x, z) => !painted.has(`${x}:${z}`);
         }
         catch {
-            return () => false; // parse error = nothing blocked
+            return () => false;
         }
     }
-    /**
-     * BFS to find the shortest walkable path between two grid cells.
-     * Returns path length (in cells) or null if no path exists.
-     */
     bfsPath(from, to, isBlocked) {
         if (from[0] === to[0] && from[1] === to[1])
             return 0;
@@ -203,7 +189,12 @@ export class DungeonRoom extends Room {
         visited.add(`${from[0]}:${from[1]}`);
         while (queue.length > 0) {
             const { pos, dist } = queue.shift();
-            for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+            for (const [dx, dz] of [
+                [1, 0],
+                [-1, 0],
+                [0, 1],
+                [0, -1],
+            ]) {
                 const nx = pos[0] + dx;
                 const nz = pos[1] + dz;
                 const key = `${nx}:${nz}`;
@@ -217,6 +208,6 @@ export class DungeonRoom extends Room {
                 queue.push({ pos: [nx, nz], dist: dist + 1 });
             }
         }
-        return null; // no path found
+        return null;
     }
 }
