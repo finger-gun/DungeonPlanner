@@ -17,15 +17,15 @@
 import { useEffect, useLayoutEffect, useRef } from 'react'
 import { useThree, useFrame } from '@react-three/fiber'
 import * as THREE from 'three/webgpu'
-import { pass, uniform } from 'three/tsl'
+import { orthographicDepthToViewZ, pass, uniform } from 'three/tsl'
 import { pixelate } from '../../postprocessing/pixelate'
 import { tiltShift } from '../../postprocessing/tiltShift'
 import { DEFAULT_AUTOFOCUS_SMOOTH_TIME } from '../../postprocessing/tiltShiftMath'
 import { selectionOutline, alphaOver, SELECTION_OUTLINE_LAYER } from '../../postprocessing/selectionOutline'
 import { useDungeonStore } from '../../store/useDungeonStore'
 import { getRegisteredObject } from './objectRegistry'
-import { resolveAutofocusTarget } from './autofocusTarget'
-import { shouldApplyWebGpuLensBlur } from './webgpuPostProcessingMode'
+import { getAutofocusDistance, resolveAutofocusTarget } from './autofocusTarget'
+import { getWebGpuPostProcessingPipeline } from './webgpuPostProcessingMode'
 
 export { SELECTION_OUTLINE_LAYER }
 
@@ -88,21 +88,33 @@ export function WebGPUPostProcessing() {
     const baseScenePass = pass(scene as any, camera as any) as any
     const baseSceneColor = baseScenePass.getTextureNode() as any
     const baseSceneDepth = baseScenePass.getTextureNode('depth') as any
+    const baseSceneViewZ = (camera as any).isOrthographicCamera
+      ? orthographicDepthToViewZ(
+          baseSceneDepth,
+          (camera as any).near ?? 0.1,
+          (camera as any).far ?? 100,
+        )
+      : baseScenePass.getViewZNode()
 
-    const shouldApplyBlur = !settings.pixelateEnabled && shouldApplyWebGpuLensBlur({
+    const { applyBlur, applyPixelate } = getWebGpuPostProcessingPipeline({
       activeCameraMode,
       lensEnabled: settings.enabled,
+      pixelateEnabled: settings.pixelateEnabled,
     })
-    let outputNode = settings.pixelateEnabled
-      ? pixelate(baseSceneColor, baseSceneDepth, { pixelSize: settings.pixelSize })
-      : shouldApplyBlur
-        ? tiltShift(baseSceneColor, baseScenePass.getViewZNode(), {
-            focusDistance: focusDistanceUniform.current,
-            nearFocusRange: nearFocusRangeUniform.current,
-            farFocusRange: farFocusRangeUniform.current,
-            blurRadius: blurRadiusUniform.current,
-          })
-        : baseSceneColor
+    let outputNode = baseSceneColor
+
+    if (applyBlur) {
+      outputNode = tiltShift(outputNode, baseSceneViewZ, {
+        focusDistance: focusDistanceUniform.current,
+        nearFocusRange: nearFocusRangeUniform.current,
+        farFocusRange: farFocusRangeUniform.current,
+        blurRadius: blurRadiusUniform.current,
+      })
+    }
+
+    if (applyPixelate) {
+      outputNode = pixelate(outputNode, baseSceneDepth, { pixelSize: settings.pixelSize })
+    }
 
     const outlineCamera = (camera as any).clone() as THREE.Camera
     ;(outlineCamera as any).layers.disableAll()
@@ -132,7 +144,7 @@ export function WebGPUPostProcessing() {
       exploredLosCameraRef.current = null
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [camera, renderer, scene, settings.enabled, settings.pixelateEnabled, activeCameraMode])
+  }, [camera, renderer, scene, settings.enabled, settings.pixelateEnabled, settings.pixelSize, activeCameraMode])
 
   // Multi-frame delay after each pipeline rebuild — lets Three.js begin WebGPU
   // shader compilation (especially for complex scenes with many lights) before
@@ -157,7 +169,7 @@ export function WebGPUPostProcessing() {
       pipelineReadyRef.current = false
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [camera, renderer, scene, settings.enabled, settings.pixelateEnabled, activeCameraMode, invalidate])
+  }, [camera, renderer, scene, settings.enabled, settings.pixelateEnabled, settings.pixelSize, activeCameraMode, invalidate])
 
   // Update shader uniforms only when settings actually change — not every frame.
   useEffect(() => {
@@ -248,7 +260,7 @@ export function WebGPUPostProcessing() {
 
       focusDistanceUniform.current.value = Math.max(
         (cam as any).near ?? 0.01,
-        cam.position.distanceTo(focusPointRef.current),
+        getAutofocusDistance(cam, focusPointRef.current),
       )
 
       if (focusMarker) {

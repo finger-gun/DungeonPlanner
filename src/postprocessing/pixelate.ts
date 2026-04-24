@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import {
   Fn,
+  convertToTexture,
   float,
   max,
   mix,
@@ -30,6 +31,8 @@ export function pixelate(
   sceneDepth: any,
   opts: PixelateOptions = {},
 ): any {
+  const colorTexture = convertToTexture(sceneColor)
+  const depthTexture = convertToTexture(sceneDepth)
   const pixelSize = float(opts.pixelSize ?? DEFAULT_PIXELATION_SIZE)
   const depthEdgeStrength = float(opts.depthEdgeStrength ?? DEFAULT_PIXELATION_DEPTH_EDGE_STRENGTH)
 
@@ -43,12 +46,12 @@ export function pixelate(
       .add(float(0.5))
       .div(renderResolution)
 
-    const color = sceneColor.sample(pixelUv)
-    const depth = sceneDepth.sample(pixelUv).r
-    const dR = sceneDepth.sample(pixelUv.add(vec2(px, float(0)))).r
-    const dL = sceneDepth.sample(pixelUv.sub(vec2(px, float(0)))).r
-    const dU = sceneDepth.sample(pixelUv.add(vec2(float(0), py))).r
-    const dD = sceneDepth.sample(pixelUv.sub(vec2(float(0), py))).r
+    const color = colorTexture.sample(pixelUv)
+    const depth = depthTexture.sample(pixelUv).r
+    const dR = depthTexture.sample(pixelUv.add(vec2(px, float(0)))).r
+    const dL = depthTexture.sample(pixelUv.sub(vec2(px, float(0)))).r
+    const dU = depthTexture.sample(pixelUv.add(vec2(float(0), py))).r
+    const dD = depthTexture.sample(pixelUv.sub(vec2(float(0), py))).r
 
     const depthDiff = max(
       max(dR.sub(depth).max(0), dL.sub(depth).max(0)),

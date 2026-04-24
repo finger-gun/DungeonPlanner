@@ -20,6 +20,8 @@ import { usePlayVisibility } from './playVisibility'
 import { ContentPackInstance } from './ContentPackInstance'
 import { getCellKey, snapWorldPointToGrid } from '../../hooks/useSnapToGrid'
 import { createPlayDragState, updatePlayDragState, type PlayDragState } from './playDrag'
+import { MovementRangeOverlay } from './MovementRangeOverlay'
+import { buildMovementRange, type MovementRange } from './playMovement'
 import { RoomResizeOverlay } from './RoomResizeOverlay'
 import { getEffectiveFloorViewMode } from './floorViewMode'
 import type { DungeonRoomData } from './DungeonRoom'
@@ -404,11 +406,15 @@ function SceneOverviewContent() {
 function FloorContent({ startY = 0 }: { startY?: number }) {
   const placedObjects = useDungeonStore((state) => state.placedObjects)
   const paintedCells = useDungeonStore((state) => state.paintedCells)
+  const blockedCells = useDungeonStore((state) => state.blockedCells)
   const outdoorTerrainHeights = useDungeonStore((state) => state.outdoorTerrainHeights)
   const mapMode = useDungeonStore((state) => state.mapMode)
   const occupancy = useDungeonStore((state) => state.occupancy)
   const layers = useDungeonStore((state) => state.layers)
   const tool = useDungeonStore((state) => state.tool)
+  const selection = useDungeonStore((state) => state.selection)
+  const wallOpenings = useDungeonStore((state) => state.wallOpenings)
+  const innerWalls = useDungeonStore((state) => state.innerWalls)
   const showLensFocusDebugPoint = useDungeonStore((state) => state.showLensFocusDebugPoint)
   const moveObject = useDungeonStore((state) => state.moveObject)
   const selectObject = useDungeonStore((state) => state.selectObject)
@@ -440,6 +446,7 @@ function FloorContent({ startY = 0 }: { startY?: number }) {
   const groupRef = useRef<THREE.Group>(null)
   const animYRef = useRef(startY)
   const dragStateRef = useRef<PlayDragState | null>(null)
+  const movementRangeRef = useRef<MovementRange | null>(null)
   const dragCleanupRef = useRef<(() => void) | null>(null)
   const { camera, gl, invalidate, controls } = useThree()
   const [dragState, setDragState] = useState<PlayDragState | null>(null)
@@ -457,6 +464,55 @@ function FloorContent({ startY = 0 }: { startY?: number }) {
   useEffect(() => {
     dragStateRef.current = dragState
   }, [dragState])
+
+  const activeMovementObject = useMemo(() => {
+    if (tool !== 'play') {
+      return null
+    }
+
+    if (dragState) {
+      return placedObjects[dragState.objectId] ?? null
+    }
+
+    if (!selection) {
+      return null
+    }
+
+    const selectedObject = placedObjects[selection]
+    return selectedObject?.type === 'player' ? selectedObject : null
+  }, [dragState, placedObjects, selection, tool])
+
+  const movementRange = useMemo(() => {
+    if (!activeMovementObject) {
+      return null
+    }
+
+    return buildMovementRange({
+      object: activeMovementObject,
+      originCell: dragState?.originCell ?? activeMovementObject.cell,
+      mapMode,
+      paintedCells,
+      blockedCells,
+      wallOpenings,
+      innerWalls,
+      occupancy,
+      placedObjects,
+    })
+  }, [
+    activeMovementObject,
+    blockedCells,
+    dragState?.originCell,
+    innerWalls,
+    mapMode,
+    occupancy,
+    paintedCells,
+    placedObjects,
+    wallOpenings,
+  ])
+
+  useEffect(() => {
+    movementRangeRef.current = movementRange
+  }, [movementRange])
 
   useEffect(() => {
     if (!dragState || dragState.animationState !== 'pickup') {
@@ -522,31 +578,34 @@ function FloorContent({ startY = 0 }: { startY?: number }) {
     const nextDisplayX = nextPoint.x + current.grabOffset[0]
     const nextDisplayZ = nextPoint.z + current.grabOffset[1]
     const snapped = snapWorldPointToGrid({ x: nextDisplayX, y: nextPoint.y, z: nextDisplayZ })
-    const targetKey = getCellKey(snapped.cell)
-    const anchorKey = `${targetKey}:floor`
+      const targetKey = getCellKey(snapped.cell)
+      const anchorKey = `${targetKey}:floor`
     const occupantId = occupancy[anchorKey]
     const occupant =
       occupantId && mapMode === 'outdoor'
         ? placedObjects[occupantId]
         : null
-    const blockingOccupantId =
-      occupant && occupant.props.generatedBy === 'surrounding-forest'
-        ? undefined
-        : occupantId
+      const blockingOccupantId =
+        occupant && occupant.props.generatedBy === 'surrounding-forest'
+          ? undefined
+          : occupantId
+      const withinMovementRange = movementRangeRef.current?.reachableCellKeys.has(targetKey) ?? true
 
-    setDragState((dragging) => dragging
-      ? updatePlayDragState(
+      setDragState((dragging) => dragging
+        ? updatePlayDragState(
           dragging,
           nextPoint,
-          mapMode === 'outdoor'
-            ? true
-            : Boolean(paintedCells[targetKey]),
+          (
+            mapMode === 'outdoor'
+              ? !blockedCells[targetKey]
+              : Boolean(paintedCells[targetKey])
+          ) && withinMovementRange,
           blockingOccupantId,
           mapMode === 'outdoor' ? outdoorTerrainHeights : undefined,
         )
-      : dragging)
-    invalidate()
-  }, [camera, getDragPointerPoint, gl, invalidate, mapMode, occupancy, outdoorTerrainHeights, paintedCells, placedObjects])
+        : dragging)
+      invalidate()
+  }, [blockedCells, camera, getDragPointerPoint, gl, invalidate, mapMode, occupancy, outdoorTerrainHeights, paintedCells, placedObjects])
 
   const commitDrag = useCallback(() => {
     const current = dragStateRef.current
@@ -584,6 +643,17 @@ function FloorContent({ startY = 0 }: { startY?: number }) {
       pointerPoint,
       mapMode === 'outdoor' ? outdoorTerrainHeights : undefined,
     )
+    movementRangeRef.current = buildMovementRange({
+      object,
+      originCell: object.cell,
+      mapMode,
+      paintedCells,
+      blockedCells,
+      wallOpenings,
+      innerWalls,
+      occupancy,
+      placedObjects,
+    })
 
     selectObject(object.id)
     setDragState(nextState)
@@ -611,7 +681,25 @@ function FloorContent({ startY = 0 }: { startY?: number }) {
       orbitControls.enabled = false
     }
     invalidate()
-  }, [clearDragListeners, commitDrag, controls, getDragPointerPoint, invalidate, outdoorTerrainHeights, selectObject, setObjectDragActive, tool, updateDragFromClientPosition])
+  }, [
+    blockedCells,
+    clearDragListeners,
+    commitDrag,
+    controls,
+    getDragPointerPoint,
+    innerWalls,
+    invalidate,
+    mapMode,
+    occupancy,
+    outdoorTerrainHeights,
+    paintedCells,
+    placedObjects,
+    selectObject,
+    setObjectDragActive,
+    tool,
+    updateDragFromClientPosition,
+    wallOpenings,
+  ])
 
   useEffect(() => {
     if (tool === 'play') {
@@ -628,6 +716,9 @@ function FloorContent({ startY = 0 }: { startY?: number }) {
           <Suspense fallback={null}>
             <WebGPUPostProcessing key={postProcessingKey} />
           </Suspense>
+        )}
+        {movementRange && (
+          <MovementRangeOverlay cells={movementRange.reachableCells} />
         )}
         <DungeonRoom visibility={visibility} />
         <RoomResizeOverlay />

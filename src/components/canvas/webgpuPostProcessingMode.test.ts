@@ -1,39 +1,30 @@
 import { describe, expect, it } from 'vitest'
-import { shouldApplyWebGpuLensBlur } from './webgpuPostProcessingMode'
+import { getWebGpuPostProcessingPipeline, shouldApplyWebGpuLensBlur } from './webgpuPostProcessingMode'
 
-describe('shouldApplyWebGpuLensBlur', () => {
-  it('disables lens blur in top-down mode', () => {
+describe('webgpuPostProcessingMode', () => {
+  it('applies lens blur in any camera mode when lens is enabled', () => {
+    expect(shouldApplyWebGpuLensBlur({
+      activeCameraMode: 'perspective',
+      lensEnabled: true,
+    })).toBe(true)
     expect(shouldApplyWebGpuLensBlur({
       activeCameraMode: 'top-down',
       lensEnabled: true,
-    })).toBe(false)
-  })
-
-  it('disables lens blur in isometric mode', () => {
-    expect(shouldApplyWebGpuLensBlur({
-      activeCameraMode: 'isometric',
-      lensEnabled: true,
-    })).toBe(false)
-  })
-
-  it('disables lens blur in classic mode', () => {
-    expect(shouldApplyWebGpuLensBlur({
-      activeCameraMode: 'classic',
-      lensEnabled: true,
-    })).toBe(false)
-  })
-
-  it('disables lens blur when the setting is off', () => {
+    })).toBe(true)
     expect(shouldApplyWebGpuLensBlur({
       activeCameraMode: 'perspective',
       lensEnabled: false,
     })).toBe(false)
   })
 
-  it('keeps lens blur enabled for perspective views', () => {
-    expect(shouldApplyWebGpuLensBlur({
-      activeCameraMode: 'perspective',
+  it('treats blur and pixelate as independent pipeline stages', () => {
+    expect(getWebGpuPostProcessingPipeline({
+      activeCameraMode: 'top-down',
       lensEnabled: true,
-    })).toBe(true)
+      pixelateEnabled: true,
+    })).toEqual({
+      applyBlur: true,
+      applyPixelate: true,
+    })
   })
 })
