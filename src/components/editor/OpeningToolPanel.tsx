@@ -4,6 +4,7 @@ import { metadataSupportsConnectorType } from '../../content-packs/connectors'
 import { useDungeonStore } from '../../store/useDungeonStore'
 import { AssetCatalog } from './AssetCatalog'
 import { CompactPillButton } from './CompactPillButton'
+import { SelectedOpeningInspector } from './SelectedOpeningInspector'
 
 export function OpeningToolPanel() {
   const selectedAssetIds = useDungeonStore((state) => state.selectedAssetIds)
@@ -94,46 +95,12 @@ export function OpeningToolPanel() {
 
       {/* Inline inspector when an opening is selected */}
       {selectedOpening && (
-        <section>
-          <p className="mb-3 text-xs font-semibold uppercase tracking-[0.3em] text-sky-200/70">
-            Selected Opening
-          </p>
-          <div className="rounded-2xl border border-stone-800 bg-stone-900/80 p-4">
-            <div className="mb-3 flex items-start justify-between gap-3">
-              <div>
-                <p className="text-xs uppercase tracking-[0.24em] text-stone-500">
-                  {selectedOpening.assetId ? (selectedAsset?.name ?? 'Unknown opening') : 'Open passage'}
-                </p>
-                <p className="mt-1 font-mono text-sm text-stone-200">
-                  {selectedOpening.id.slice(0, 8)}
-                </p>
-              </div>
-              <CompactPillButton
-                type="button"
-                onClick={() => removeOpening(selectedOpening.id)}
-                tone="rose"
-                size="sm"
-              >
-                Delete
-              </CompactPillButton>
-            </div>
-            <div className="grid gap-2 text-xs">
-              <PropRow label="Wall" value={selectedOpening.wallKey} />
-              <PropRow label="Width" value={`${selectedOpening.width} segment${selectedOpening.width > 1 ? 's' : ''}`} />
-              <PropRow label="Direction" value={selectedOpening.wallKey.split(':')[2]} />
-            </div>
-          </div>
-        </section>
+        <SelectedOpeningInspector
+          opening={selectedOpening}
+          asset={selectedAsset}
+          onDelete={() => removeOpening(selectedOpening.id)}
+        />
       )}
-    </div>
-  )
-}
-
-function PropRow({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="flex justify-between gap-2 rounded-xl border border-stone-800 bg-stone-950/60 px-3 py-2">
-      <span className="uppercase tracking-[0.2em] text-stone-500">{label}</span>
-      <span className="break-all text-right text-stone-300">{value}</span>
     </div>
   )
 }

@@ -172,6 +172,7 @@ type DungeonSnapshot = {
   exploredCells: Record<string, true>
   floorTileAssetIds: Record<string, string>
   wallSurfaceAssetIds: Record<string, string>
+  wallSurfaceProps: Record<string, Record<string, unknown>>
   placedObjects: Record<string, DungeonObjectRecord>
   wallOpenings: Record<string, OpeningRecord>
   innerWalls: Record<string, InnerWallRecord>
@@ -295,6 +296,7 @@ type DungeonState = DungeonSnapshot & {
   focusAssetBrowserForAsset: (assetId: string | null) => void
   setFloorTileAsset: (cellKey: string, assetId: string | null) => boolean
   setWallSurfaceAsset: (wallKey: string, assetId: string | null) => boolean
+  setWallSurfaceProps: (wallKey: string, props: Record<string, unknown>) => boolean
   setPaintingStrokeActive: (active: boolean) => void
   setObjectDragActive: (active: boolean) => void
   setSceneLightingIntensity: (intensity: number) => void
@@ -358,6 +360,7 @@ type DungeonState = DungeonSnapshot & {
   placeOpening: (input: PlaceOpeningInput) => string | null
   placeOpenPassages: (wallKeys: string[]) => void
   restoreOpenPassages: (wallKeys: string[]) => number
+  setOpeningAsset: (id: string, assetId: string | null) => boolean
   removeOpening: (id: string) => void
   // Persistence
   dungeonName: string
@@ -448,6 +451,9 @@ function cloneSnapshot(snapshot: DungeonSnapshot): DungeonSnapshot {
     exploredCells: { ...snapshot.exploredCells },
     floorTileAssetIds: { ...snapshot.floorTileAssetIds },
     wallSurfaceAssetIds: { ...snapshot.wallSurfaceAssetIds },
+    wallSurfaceProps: Object.fromEntries(
+      Object.entries(snapshot.wallSurfaceProps).map(([wallKey, props]) => [wallKey, { ...props }]),
+    ),
     placedObjects: Object.fromEntries(
       Object.entries(snapshot.placedObjects).map(([id, object]) => [
         id,
@@ -502,6 +508,7 @@ function cloneSnapshotForObjectPlacement(snapshot: DungeonSnapshot): DungeonSnap
     exploredCells: snapshot.exploredCells,
     floorTileAssetIds: snapshot.floorTileAssetIds,
     wallSurfaceAssetIds: snapshot.wallSurfaceAssetIds,
+    wallSurfaceProps: snapshot.wallSurfaceProps,
     placedObjects: Object.fromEntries(
       Object.entries(snapshot.placedObjects).map(([id, object]) => [
         id,
@@ -571,6 +578,7 @@ function createEmptySnapshot(): DungeonSnapshot {
     exploredCells: {},
     floorTileAssetIds: {},
     wallSurfaceAssetIds: {},
+    wallSurfaceProps: {},
     placedObjects: {},
     wallOpenings: {},
     innerWalls: {},
@@ -1292,7 +1300,7 @@ function pruneInvalidConnectedProps(
 }
 
 function pruneInvalidSurfaceOverrides(
-  current: Pick<DungeonSnapshot, 'floorTileAssetIds' | 'wallSurfaceAssetIds'>,
+  current: Pick<DungeonSnapshot, 'floorTileAssetIds' | 'wallSurfaceAssetIds' | 'wallSurfaceProps'>,
   paintedCells: PaintedCells,
 ) {
   const floorTileAssetIds = Object.fromEntries(
@@ -1301,8 +1309,11 @@ function pruneInvalidSurfaceOverrides(
   const wallSurfaceAssetIds = Object.fromEntries(
     Object.entries(current.wallSurfaceAssetIds).filter(([wallKey]) => getCanonicalWallKey(wallKey, paintedCells) === wallKey),
   )
+  const wallSurfaceProps = Object.fromEntries(
+    Object.entries(current.wallSurfaceProps).filter(([wallKey]) => getCanonicalWallKey(wallKey, paintedCells) === wallKey),
+  )
 
-  return { floorTileAssetIds, wallSurfaceAssetIds }
+  return { floorTileAssetIds, wallSurfaceAssetIds, wallSurfaceProps }
 }
 
 const FALLBACK_PERSIST_STORAGE: Storage = {
@@ -1443,7 +1454,7 @@ export const useDungeonStore = create<DungeonState>()(
         wallOpenings,
         innerWalls,
       } = pruneInvalidConnectedProps(current, paintedCells, nextCells)
-      const { floorTileAssetIds, wallSurfaceAssetIds } = pruneInvalidSurfaceOverrides(
+      const { floorTileAssetIds, wallSurfaceAssetIds, wallSurfaceProps } = pruneInvalidSurfaceOverrides(
         current,
         paintedCells,
       )
@@ -1453,6 +1464,7 @@ export const useDungeonStore = create<DungeonState>()(
         paintedCells,
         floorTileAssetIds,
         wallSurfaceAssetIds,
+        wallSurfaceProps,
         placedObjects,
         wallOpenings,
         innerWalls,
@@ -1697,7 +1709,7 @@ export const useDungeonStore = create<DungeonState>()(
         wallOpenings,
         innerWalls,
       } = pruneInvalidConnectedProps(current, paintedCells, removedCells)
-      const { floorTileAssetIds, wallSurfaceAssetIds } = pruneInvalidSurfaceOverrides(
+      const { floorTileAssetIds, wallSurfaceAssetIds, wallSurfaceProps } = pruneInvalidSurfaceOverrides(
         current,
         paintedCells,
       )
@@ -1707,6 +1719,7 @@ export const useDungeonStore = create<DungeonState>()(
         paintedCells,
         floorTileAssetIds,
         wallSurfaceAssetIds,
+        wallSurfaceProps,
         placedObjects,
         wallOpenings,
         innerWalls,
@@ -2408,15 +2421,50 @@ export const useDungeonStore = create<DungeonState>()(
     const previousSnapshot = cloneSnapshot(state)
     set((current) => {
       const wallSurfaceAssetIds = { ...current.wallSurfaceAssetIds }
+      const wallSurfaceProps = { ...current.wallSurfaceProps }
       if (nextAssetId) {
         wallSurfaceAssetIds[canonicalWallKey] = nextAssetId
       } else {
         delete wallSurfaceAssetIds[canonicalWallKey]
       }
+      if (currentAssetId !== nextAssetId) {
+        delete wallSurfaceProps[canonicalWallKey]
+      }
 
       return {
         ...current,
         wallSurfaceAssetIds,
+        wallSurfaceProps,
+        history: [...current.history, previousSnapshot],
+        future: [],
+      }
+    })
+    return true
+  },
+  setWallSurfaceProps: (wallKey, props) => {
+    const state = get()
+    const canonicalWallKey = getCanonicalWallKey(wallKey, state.paintedCells)
+    if (!canonicalWallKey) {
+      return false
+    }
+
+    const currentProps = state.wallSurfaceProps[canonicalWallKey] ?? {}
+    if (JSON.stringify(currentProps) === JSON.stringify(props)) {
+      return true
+    }
+
+    const previousSnapshot = cloneSnapshot(state)
+    set((current) => {
+      if (!getCanonicalWallKey(canonicalWallKey, current.paintedCells)) {
+        return current
+      }
+
+      return {
+        ...current,
+        wallSurfaceProps: {
+          ...current.wallSurfaceProps,
+          [canonicalWallKey]: { ...props },
+        },
         history: [...current.history, previousSnapshot],
         future: [],
       }
@@ -2913,7 +2961,7 @@ export const useDungeonStore = create<DungeonState>()(
           paintedCells,
           removedCells,
         )
-      const { floorTileAssetIds, wallSurfaceAssetIds } = pruneInvalidSurfaceOverrides(
+      const { floorTileAssetIds, wallSurfaceAssetIds, wallSurfaceProps } = pruneInvalidSurfaceOverrides(
         current,
         paintedCells,
       )
@@ -2924,6 +2972,7 @@ export const useDungeonStore = create<DungeonState>()(
         paintedCells,
         floorTileAssetIds,
         wallSurfaceAssetIds,
+        wallSurfaceProps,
         placedObjects,
         wallOpenings,
         innerWalls,
@@ -2958,7 +3007,7 @@ export const useDungeonStore = create<DungeonState>()(
         wallOpenings,
         innerWalls,
       } = pruneInvalidConnectedProps(current, paintedCells, changedCells)
-      const { floorTileAssetIds, wallSurfaceAssetIds } = pruneInvalidSurfaceOverrides(
+      const { floorTileAssetIds, wallSurfaceAssetIds, wallSurfaceProps } = pruneInvalidSurfaceOverrides(
         current,
         paintedCells,
       )
@@ -2967,6 +3016,7 @@ export const useDungeonStore = create<DungeonState>()(
         paintedCells,
         floorTileAssetIds,
         wallSurfaceAssetIds,
+        wallSurfaceProps,
         placedObjects,
         occupancy,
         selection,
@@ -3059,7 +3109,7 @@ export const useDungeonStore = create<DungeonState>()(
           paintedCells,
           changedCells,
         )
-      const { floorTileAssetIds, wallSurfaceAssetIds } = pruneInvalidSurfaceOverrides(
+      const { floorTileAssetIds, wallSurfaceAssetIds, wallSurfaceProps } = pruneInvalidSurfaceOverrides(
         current,
         paintedCells,
       )
@@ -3069,6 +3119,7 @@ export const useDungeonStore = create<DungeonState>()(
         paintedCells,
         floorTileAssetIds,
         wallSurfaceAssetIds,
+        wallSurfaceProps,
         placedObjects,
         wallOpenings,
         innerWalls,
@@ -3139,7 +3190,7 @@ export const useDungeonStore = create<DungeonState>()(
 
       const { placedObjects, occupancy, selection, wallOpenings, innerWalls } =
         pruneInvalidConnectedProps(current, paintedCells, changedCells)
-      const { floorTileAssetIds, wallSurfaceAssetIds } = pruneInvalidSurfaceOverrides(
+      const { floorTileAssetIds, wallSurfaceAssetIds, wallSurfaceProps } = pruneInvalidSurfaceOverrides(
         current,
         paintedCells,
       )
@@ -3149,6 +3200,7 @@ export const useDungeonStore = create<DungeonState>()(
         paintedCells,
         floorTileAssetIds,
         wallSurfaceAssetIds,
+        wallSurfaceProps,
         placedObjects,
         wallOpenings,
         innerWalls,
@@ -3512,6 +3564,39 @@ export const useDungeonStore = create<DungeonState>()(
     })
     return removedCount
   },
+  setOpeningAsset: (id, assetId) => {
+    const state = get()
+    const opening = state.wallOpenings[id]
+    if (!opening) {
+      return false
+    }
+
+    if ((opening.assetId ?? null) === assetId) {
+      return true
+    }
+
+    const previousSnapshot = cloneSnapshot(state)
+    set((current) => {
+      const currentOpening = current.wallOpenings[id]
+      if (!currentOpening) {
+        return current
+      }
+
+      return {
+        ...current,
+        wallOpenings: {
+          ...current.wallOpenings,
+          [id]: {
+            ...currentOpening,
+            assetId,
+          },
+        },
+        history: [...current.history, previousSnapshot],
+        future: [],
+      }
+    })
+    return true
+  },
   removeOpening: (id) => {
     set((current) => {
       if (!current.wallOpenings[id]) return current
@@ -3564,6 +3649,7 @@ export const useDungeonStore = create<DungeonState>()(
       exploredCells: state.exploredCells,
       floorTileAssetIds: state.floorTileAssetIds,
       wallSurfaceAssetIds: state.wallSurfaceAssetIds,
+      wallSurfaceProps: state.wallSurfaceProps,
       placedObjects: state.placedObjects,
       wallOpenings: state.wallOpenings,
       innerWalls: state.innerWalls,

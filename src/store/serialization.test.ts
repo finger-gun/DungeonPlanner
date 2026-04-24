@@ -23,6 +23,7 @@ function emptyFloorSnapshot() {
     exploredCells: {},
     floorTileAssetIds: {},
     wallSurfaceAssetIds: {},
+    wallSurfaceProps: {},
     placedObjects: {},
     wallOpenings: {},
     innerWalls: {},

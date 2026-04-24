@@ -36,6 +36,7 @@ function createSnapshot() {
     exploredCells: {},
     floorTileAssetIds: {},
     wallSurfaceAssetIds: {},
+    wallSurfaceProps: {},
     placedObjects: {},
     wallOpenings: {
       opening1: {

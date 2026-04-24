@@ -58,7 +58,7 @@ export const DungeonObject = memo(function DungeonObject({
       const nextProps = asset?.getPlayModeNextProps?.(object.props) ?? null
       if (nextProps) {
         event.stopPropagation()
-        setObjectProps(object.id, nextProps)
+        setObjectProps(object.id, { ...object.props, ...nextProps })
       }
       return
     }

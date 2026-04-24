@@ -616,6 +616,24 @@ describe('useDungeonStore history', () => {
     expect(useDungeonStore.getState().wallSurfaceAssetIds['1:0:west']).toBeUndefined()
   })
 
+  it('stores wall props on the canonical wall key and supports undo/redo', () => {
+    const state = useDungeonStore.getState()
+    state.paintCells([[0, 0]])
+    state.paintCells([[1, 0]])
+
+    const applied = state.setWallSurfaceProps('1:0:west', { open: true })
+
+    expect(applied).toBe(true)
+    expect(useDungeonStore.getState().wallSurfaceProps['0:0:east']).toEqual({ open: true })
+    expect(useDungeonStore.getState().wallSurfaceProps['1:0:west']).toBeUndefined()
+
+    state.undo()
+    expect(useDungeonStore.getState().wallSurfaceProps['0:0:east']).toBeUndefined()
+
+    state.redo()
+    expect(useDungeonStore.getState().wallSurfaceProps['0:0:east']).toEqual({ open: true })
+  })
+
   it('creates an adjacent floor for staircase assets using their paired metadata', () => {
     const pairedStairAsset = getContentPackAssetById('core.props_staircase_up')
     if (!pairedStairAsset?.metadata?.pairedAssetId) {

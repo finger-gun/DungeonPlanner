@@ -66,6 +66,25 @@ describe('computeVisibleCellKeys', () => {
     )
   })
 
+  it('passes through wall segments with open wall state', () => {
+    const paintedCells = makeCells([
+      { cell: [0, 0], roomId: 'room-a' },
+      { cell: [1, 0], roomId: 'room-b' },
+    ])
+
+    expect(
+      computeVisibleCellKeys(
+        paintedCells,
+        {},
+        [[0, 0]],
+        3,
+        [],
+        new Map(),
+        { '0:0:east': { open: true } },
+      ),
+    ).toEqual(expect.arrayContaining(['0:0', '1:0']))
+  })
+
   it('shows the occluding cell but hides cells behind a blocking prop', () => {
     const paintedCells = makeCells([
       { cell: [0, 0], roomId: 'room-a' },
@@ -344,6 +363,22 @@ describe('castVisibilityMaskRay', () => {
     }
 
     const point = castVisibilityMaskRay([0, 0], 0.67, paintedCells, wallOpenings, 3)
+    expect(point[0]).toBeGreaterThan(2.3)
+  })
+
+  it('treats opened wall state as a full-width LOS portal', () => {
+    const paintedCells = makeCells([
+      { cell: [0, 0], roomId: 'room-a' },
+      { cell: [1, 0], roomId: 'room-b' },
+      { cell: [2, 0], roomId: 'room-c' },
+      { cell: [1, 1], roomId: 'room-b' },
+      { cell: [2, 1], roomId: 'room-c' },
+    ])
+
+    const point = castVisibilityMaskRay([0, 0], 0.67, paintedCells, {}, 3, [], new Map(), {
+      '0:0:east': { open: true },
+    })
+
     expect(point[0]).toBeGreaterThan(2.3)
   })
 })

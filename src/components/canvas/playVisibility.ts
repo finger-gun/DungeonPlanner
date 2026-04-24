@@ -4,6 +4,7 @@ import { getContentPackAssetById } from '../../content-packs/registry'
 import { metadataSupportsConnectorType } from '../../content-packs/connectors'
 import { GRID_SIZE, getCellKey, type GridCell } from '../../hooks/useSnapToGrid'
 import { getOpeningSegments } from '../../store/openingSegments'
+import { buildOpenWallSegmentSet } from '../../store/openWallSegments'
 import { useDungeonStore, type OpeningRecord, type PaintedCells } from '../../store/useDungeonStore'
 import type { DungeonObjectRecord, Layer } from '../../store/useDungeonStore'
 import { getRegisteredObject, useObjectRegistryVersion } from './objectRegistry'
@@ -101,6 +102,7 @@ export function usePlayVisibility(): PlayVisibility {
   const wallOpenings = useDungeonStore((state) => state.wallOpenings)
   const innerWalls = useDungeonStore((state) => state.innerWalls)
   const placedObjects = useDungeonStore((state) => state.placedObjects)
+  const wallSurfaceProps = useDungeonStore((state) => state.wallSurfaceProps)
   const layers = useDungeonStore((state) => state.layers)
   const generatedCharacters = useDungeonStore((state) => state.generatedCharacters)
   const mergeExploredCells = useDungeonStore((state) => state.mergeExploredCells)
@@ -115,10 +117,11 @@ export function usePlayVisibility(): PlayVisibility {
       .map((object) => object.cell)
     const blockerLookup = getBlockingObjectIdsByCell(placedObjects, layers)
     return {
-      paintedCells,
-      wallOpenings,
-      innerWalls,
-      origins: playerOrigins,
+        paintedCells,
+        wallOpenings,
+        wallSurfaceProps,
+        innerWalls,
+        origins: playerOrigins,
       range: PLAYER_VISION_RANGE,
       blockingCellKeys: [...blockerLookup.keys()],
       blockerLookupEntries: [...blockerLookup.entries()].flatMap(([cellKey, value]) => {
@@ -136,6 +139,7 @@ export function usePlayVisibility(): PlayVisibility {
     placedObjects,
     tool,
     wallOpenings,
+    wallSurfaceProps,
   ])
   const playerOrigins = useMemo(
     () => (tool !== 'play' || mapMode === 'outdoor'
@@ -279,8 +283,9 @@ export function computeVisibleCellKeys(
   range: number,
   blockingCellKeys: Iterable<string> = [],
   blockerLookup: BlockerLookup = new Map(),
+  wallSurfaceProps: Record<string, Record<string, unknown>> = {},
 ): string[] {
-  const openWalls = buildOpenWallSet(wallOpenings)
+  const openWalls = buildOpenWallSegmentSet(wallOpenings, wallSurfaceProps)
   const blockingCells = new Set(blockingCellKeys)
   const visible = new Set<string>()
   const maxOffset = Math.ceil(range)
@@ -314,23 +319,6 @@ export function computeVisibleCellKeys(
   }
 
   return [...visible]
-}
-
-function buildOpenWallSet(wallOpenings: Record<string, OpeningRecord>) {
-  const openWalls = new Set<string>()
-
-  for (const opening of Object.values(wallOpenings)) {
-    for (const wallKey of getOpeningSegments(opening.wallKey, opening.width)) {
-      openWalls.add(wallKey)
-
-      const parsed = parseWallKey(wallKey)
-      if (parsed) {
-        openWalls.add(parsed.mirroredWallKey)
-      }
-    }
-  }
-
-  return openWalls
 }
 
 function hasLineOfSight(
@@ -494,6 +482,9 @@ function parseWallKey(wallKey: string) {
   const neighborCellKey = `${x + direction.delta[0]}:${z + direction.delta[1]}`
 
   return {
+    x,
+    z,
+    direction: directionText,
     cellKey,
     neighborCellKey,
     mirroredWallKey: `${neighborCellKey}:${direction.opposite}`,
@@ -522,6 +513,7 @@ export function computeVisibilityMask(
   range: number,
   blockingCellKeys: Iterable<string>,
   blockerLookup: BlockerLookup = new Map(),
+  wallSurfaceProps: Record<string, Record<string, unknown>> = {},
 ): PlayVisibilityMask | null {
   const paintedCellKeys = Object.keys(paintedCells)
   if (paintedCellKeys.length === 0 || origins.length === 0) {
@@ -529,7 +521,7 @@ export function computeVisibilityMask(
   }
 
   const blockingCells = new Set(blockingCellKeys)
-  const portalLookup = buildPortalLookup(wallOpenings)
+  const portalLookup = buildPortalLookup(wallOpenings, wallSurfaceProps)
   const sources = origins
     .map((origin) => {
       const samples = computeVisibilitySamples(
@@ -731,6 +723,7 @@ export function castVisibilityMaskRay(
   range: number,
   blockingCellKeys: Iterable<string> = [],
   blockerLookup: BlockerLookup = new Map(),
+  wallSurfaceProps: Record<string, Record<string, unknown>> = {},
 ): readonly [number, number] {
   const origin: readonly [number, number] = [
     (originCell[0] + 0.5) * GRID_SIZE,
@@ -741,7 +734,7 @@ export function castVisibilityMaskRay(
     origin,
     angle,
     paintedCells,
-    buildPortalLookup(wallOpenings),
+    buildPortalLookup(wallOpenings, wallSurfaceProps),
     new Set(blockingCellKeys),
     range * GRID_SIZE,
     blockerLookup,
@@ -945,7 +938,10 @@ function addEdgeAngles(
   angles.push(angle - MASK_ANGLE_EPSILON, angle, angle + MASK_ANGLE_EPSILON)
 }
 
-export function buildPortalLookup(wallOpenings: Record<string, OpeningRecord>) {
+export function buildPortalLookup(
+  wallOpenings: Record<string, OpeningRecord>,
+  wallSurfaceProps: Record<string, Record<string, unknown>> = {},
+) {
   const lookup = new Map<string, PortalSegment>()
 
   for (const opening of Object.values(wallOpenings)) {
@@ -956,6 +952,12 @@ export function buildPortalLookup(wallOpenings: Record<string, OpeningRecord>) {
       if (parsed) {
         lookup.set(parsed.mirroredWallKey, portal)
       }
+    }
+  }
+  const openWalls = buildOpenWallSegmentSet(wallOpenings, wallSurfaceProps)
+  for (const wallKey of openWalls) {
+    if (!lookup.has(wallKey)) {
+      lookup.set(wallKey, getWallPortalSegment(wallKey))
     }
   }
 
@@ -1007,6 +1009,36 @@ function normalizePortalSegment(portal: PortalSegment): PortalSegment {
     min: midpoint - 0.05,
     max: midpoint + 0.05,
   }
+}
+
+function getWallPortalSegment(wallKey: string): PortalSegment {
+  const parsed = parseWallKey(wallKey)
+  if (!parsed) {
+    return normalizePortalSegment({
+      orientation: 'horizontal',
+      fixed: 0,
+      min: 0,
+      max: GRID_SIZE,
+    })
+  }
+
+  if (parsed.direction === 'north' || parsed.direction === 'south') {
+    const fixed = parsed.direction === 'north' ? (parsed.z + 1) * GRID_SIZE : parsed.z * GRID_SIZE
+    return normalizePortalSegment({
+      orientation: 'horizontal',
+      fixed,
+      min: parsed.x * GRID_SIZE + MASK_DISTANCE_EPSILON,
+      max: (parsed.x + 1) * GRID_SIZE - MASK_DISTANCE_EPSILON,
+    })
+  }
+
+  const fixed = parsed.direction === 'east' ? (parsed.x + 1) * GRID_SIZE : parsed.x * GRID_SIZE
+  return normalizePortalSegment({
+    orientation: 'vertical',
+    fixed,
+    min: parsed.z * GRID_SIZE + MASK_DISTANCE_EPSILON,
+    max: (parsed.z + 1) * GRID_SIZE - MASK_DISTANCE_EPSILON,
+  })
 }
 
 function canTraverseRayBoundary(

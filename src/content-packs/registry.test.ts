@@ -44,6 +44,18 @@ describe('content pack registry', () => {
     expect(asset.getLight?.({ lit: false })).toBeNull()
   })
 
+  it('registers the dungeon wall doorway as a play-toggleable wall', () => {
+    const asset = getContentPackAssetById('dungeon.wall_wall_doorway')
+
+    if (!asset) {
+      expect(asset).toBeNull()
+      return
+    }
+
+    expect(asset.getPlayModeNextProps?.({})).toEqual({ open: true })
+    expect(asset.getPlayModeNextProps?.({ open: true })).toEqual({ open: false })
+  })
+
   it('surfaces generated standees through the runtime registry', () => {
     syncGeneratedCharacterAssets({
       'generated.player.test': {

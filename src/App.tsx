@@ -14,6 +14,7 @@ import { RoomToolPanel } from './components/editor/RoomToolPanel'
 import { PropToolPanel } from './components/editor/PropToolPanel'
 import { CharacterToolPanel } from './components/editor/CharacterToolPanel'
 import { SelectToolPanel } from './components/editor/SelectToolPanel'
+import { getSelectedWallAssetId } from './components/editor/SelectedWallInspector'
 import { ScenePanel } from './components/editor/ScenePanel'
 import { CharacterSheetOverlay } from './components/editor/CharacterSheetOverlay'
 import { getDebugCameraPose, projectDebugWorldPoint } from './components/canvas/debugCameraBridge'
@@ -127,6 +128,7 @@ function App() {
   const selectedOpening = useDungeonStore((state) =>
     selection ? state.wallOpenings[selection] : null,
   )
+  const selectedWallAssetId = useDungeonStore((state) => getSelectedWallAssetId(selection, state))
   const propCount = useDungeonStore(
     (state) => Object.keys(state.placedObjects).length,
   )
@@ -152,6 +154,7 @@ function App() {
     assetBrowser,
     selectedObject,
     selectedOpening,
+    selectedWallAssetId,
   })
   const debugAsset = debugAssetId ? getContentPackAssetById(debugAssetId) : null
   const debugAssetSourcePath = debugAssetId ? getContentPackAssetSourcePath(debugAssetId) : null

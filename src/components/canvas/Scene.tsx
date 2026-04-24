@@ -236,6 +236,7 @@ function SceneOverviewContent() {
   const layers = useDungeonStore((state) => state.layers)
   const rooms = useDungeonStore((state) => state.rooms)
   const wallOpenings = useDungeonStore((state) => state.wallOpenings)
+  const wallSurfaceProps = useDungeonStore((state) => state.wallSurfaceProps)
   const innerWalls = useDungeonStore((state) => state.innerWalls)
   const placedObjects = useDungeonStore((state) => state.placedObjects)
   const floorTileAssetIds = useDungeonStore((state) => state.floorTileAssetIds)
@@ -269,6 +270,7 @@ function SceneOverviewContent() {
             placedObjects,
             floorTileAssetIds,
             wallSurfaceAssetIds,
+            wallSurfaceProps,
             globalFloorAssetId,
             globalWallAssetId,
           },
@@ -293,10 +295,11 @@ function SceneOverviewContent() {
              wallOpenings: snapshot.wallOpenings,
              innerWalls: snapshot.innerWalls,
              placedObjects: snapshot.placedObjects,
-            floorTileAssetIds: snapshot.floorTileAssetIds,
-            wallSurfaceAssetIds: snapshot.wallSurfaceAssetIds,
-             globalFloorAssetId: snapshot.selectedAssetIds.floor,
-             globalWallAssetId: snapshot.selectedAssetIds.wall,
+             floorTileAssetIds: snapshot.floorTileAssetIds,
+             wallSurfaceAssetIds: snapshot.wallSurfaceAssetIds,
+             wallSurfaceProps: snapshot.wallSurfaceProps,
+              globalFloorAssetId: snapshot.selectedAssetIds.floor,
+              globalWallAssetId: snapshot.selectedAssetIds.wall,
         },
         objects: visibleObjects,
         lightSourceCount: precomputeLightSources(visibleObjects).length,
@@ -318,6 +321,7 @@ function SceneOverviewContent() {
     wallOpenings,
     innerWalls,
     wallSurfaceAssetIds,
+    wallSurfaceProps,
   ])
   const floorLightBudgets = useMemo(
     () => distributeForwardPlusLightBudget(
@@ -372,6 +376,7 @@ function FloorContent({ startY = 0 }: { startY?: number }) {
   const tool = useDungeonStore((state) => state.tool)
   const selection = useDungeonStore((state) => state.selection)
   const wallOpenings = useDungeonStore((state) => state.wallOpenings)
+  const wallSurfaceProps = useDungeonStore((state) => state.wallSurfaceProps)
   const innerWalls = useDungeonStore((state) => state.innerWalls)
   const showLensFocusDebugPoint = useDungeonStore((state) => state.showLensFocusDebugPoint)
   const moveObject = useDungeonStore((state) => state.moveObject)
@@ -452,6 +457,7 @@ function FloorContent({ startY = 0 }: { startY?: number }) {
       paintedCells,
       blockedCells,
       wallOpenings,
+      wallSurfaceProps,
       innerWalls,
       occupancy,
       placedObjects,
@@ -466,6 +472,7 @@ function FloorContent({ startY = 0 }: { startY?: number }) {
     paintedCells,
     placedObjects,
     wallOpenings,
+    wallSurfaceProps,
   ])
 
   useEffect(() => {
@@ -608,6 +615,7 @@ function FloorContent({ startY = 0 }: { startY?: number }) {
       paintedCells,
       blockedCells,
       wallOpenings,
+      wallSurfaceProps,
       innerWalls,
       occupancy,
       placedObjects,
