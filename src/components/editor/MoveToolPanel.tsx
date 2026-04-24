@@ -18,6 +18,8 @@ export function MoveToolPanel() {
   const setOutdoorTimeOfDay = useDungeonStore((state) => state.setOutdoorTimeOfDay)
   const fpsLimit = useDungeonStore((state) => state.fpsLimit)
   const setFpsLimit = useDungeonStore((state) => state.setFpsLimit)
+  const lightEffectsEnabled = useDungeonStore((state) => state.lightEffectsEnabled)
+  const setLightEffectsEnabled = useDungeonStore((state) => state.setLightEffectsEnabled)
   const particleEffectsEnabled = useDungeonStore((state) => state.particleEffectsEnabled)
   const setParticleEffectsEnabled = useDungeonStore((state) => state.setParticleEffectsEnabled)
 
@@ -51,6 +53,25 @@ export function MoveToolPanel() {
                 </button>
               )
             })}
+          </div>
+        </div>
+        <div className="mt-3 rounded-2xl border border-stone-800 bg-stone-950/60 px-4 py-3">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-xs uppercase tracking-[0.22em] text-stone-400">Light Effects</p>
+              <p className="mt-1 text-xs text-stone-500">
+                Real prop lights such as candles and torches.
+              </p>
+            </div>
+            <button
+              type="button"
+              aria-label="Light Effects"
+              aria-pressed={lightEffectsEnabled}
+              onClick={() => setLightEffectsEnabled(!lightEffectsEnabled)}
+              className={`relative h-4 w-7 rounded-full transition ${lightEffectsEnabled ? 'bg-amber-500' : 'bg-stone-700'}`}
+            >
+              <span className={`absolute top-0.5 h-3 w-3 rounded-full bg-white shadow transition-all ${lightEffectsEnabled ? 'left-[14px]' : 'left-0.5'}`} />
+            </button>
           </div>
         </div>
         <div className="mt-3 rounded-2xl border border-stone-800 bg-stone-950/60 px-4 py-3">
@@ -188,18 +209,20 @@ export function MoveToolPanel() {
             <div>
               <p className="text-xs uppercase tracking-[0.22em] text-stone-400">Autofocus</p>
               <p className="mt-2 text-xs leading-relaxed text-stone-400">
-                Focus follows whatever the camera center ray hits.
+                Focus follows whatever the camera center ray hits. Selection outlines stay enabled even when lens blur is off.
               </p>
             </div>
             <button
               type="button"
+              aria-label="Autofocus"
+              aria-pressed={pp.enabled}
               onClick={() => setPostProcessing({ enabled: !pp.enabled })}
               className={`relative h-4 w-7 rounded-full transition ${pp.enabled ? 'bg-sky-500' : 'bg-stone-700'}`}
             >
               <span className={`absolute top-0.5 h-3 w-3 rounded-full bg-white shadow transition-all ${pp.enabled ? 'left-[14px]' : 'left-0.5'}`} />
             </button>
           </div>
-          <div className={`flex flex-col gap-4 transition-opacity ${pp.enabled ? 'opacity-100' : 'opacity-40 pointer-events-none'}`}>
+          <div className={`flex flex-col gap-4 ${pp.enabled ? 'opacity-100' : 'pointer-events-none opacity-40'}`}>
           {([
             { label: 'Near Range', value: pp.focalLength, min: 0.5, max: 12, step: 0.25, fmt: (v: number) => v.toFixed(2),             key: 'focalLength'   as const },
             { label: 'Far Range',  value: pp.backgroundFocalLength, min: 0.5, max: 12, step: 0.25, fmt: (v: number) => v.toFixed(2),   key: 'backgroundFocalLength' as const },

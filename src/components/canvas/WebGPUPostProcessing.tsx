@@ -121,9 +121,7 @@ export function WebGPUPostProcessing() {
     ;(outlineCamera as any).layers.enable(SELECTION_OUTLINE_LAYER)
     outlineCameraRef.current = outlineCamera
 
-    if (settings.enabled) {
-      outputNode = alphaOver(outputNode, selectionOutline(scene, outlineCamera))
-    }
+    outputNode = alphaOver(outputNode, selectionOutline(scene, outlineCamera))
 
     visibleLosCameraRef.current = null
     exploredLosCameraRef.current = null
@@ -229,6 +227,15 @@ export function WebGPUPostProcessing() {
     }
 
     const focusMarker = focusMarkerRef.current as any
+    if (!settings.enabled) {
+      focusPointInitializedRef.current = false
+      if (focusMarker) {
+        focusMarker.visible = false
+      }
+      postProcessingRef.current.render()
+      return
+    }
+
     const raycaster = focusRaycasterRef.current
     raycaster.layers.mask = (cam as any).layers.mask
     raycaster.setFromCamera(focusNdcRef.current, cam as any)

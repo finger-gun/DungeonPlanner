@@ -23,6 +23,7 @@ describe('tiltShift helpers', () => {
       backgroundFocalLength: 4,
       bokehScale: 0.5,
     })
+    expect(normalizePostProcessingSettings()).toMatchObject({ enabled: true })
     expect(normalizePostProcessingSettings({ focalLength: 4, backgroundFocalLength: 7 }))
       .toMatchObject({ focalLength: 4, backgroundFocalLength: 7 })
   })

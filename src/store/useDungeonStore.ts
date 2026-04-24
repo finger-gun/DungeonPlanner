@@ -53,6 +53,12 @@ import {
   type OutdoorTerrainHeightfield,
   type OutdoorTerrainSculptMode,
 } from './outdoorTerrain'
+import {
+  collectOverlappingFloorSurfaceAnchors,
+  findFloorSurfaceAnchorAtCell,
+  getInheritedFloorAssetIdForCellKey,
+  isFloorSurfacePlacementValid,
+} from './floorSurfaceLayout'
 
 export type { InnerWallRecord } from './manualWalls'
 
@@ -81,8 +87,8 @@ export type FloorRecord = {
   name: string
   level: number   // 0 = ground, positive = above ground, negative = cellar/underground
   snapshot: DungeonSnapshot
-  history: DungeonSnapshot[]
-  future: DungeonSnapshot[]
+  history: HistoryEntry[]
+  future: HistoryEntry[]
 }
 
 export type Layer = {
@@ -187,6 +193,20 @@ type DungeonSnapshot = {
   nextRoomNumber: number
 }
 
+type ObjectHistoryPatchState = {
+  objects: Record<string, DungeonObjectRecord | null>
+  occupancy: Record<string, string | null>
+  selection: string | null
+}
+
+type ObjectHistoryEntry = {
+  kind: 'object-patch'
+  before: ObjectHistoryPatchState
+  after: ObjectHistoryPatchState
+}
+
+type HistoryEntry = DungeonSnapshot | ObjectHistoryEntry
+
 type PlaceObjectInput = Pick<
   DungeonObjectRecord,
   'type' | 'assetId' | 'position' | 'rotation' | 'props' | 'cell' | 'cellKey'
@@ -259,8 +279,8 @@ type DungeonState = DungeonSnapshot & {
   cameraPreset: CameraPreset | null
   previousCameraPreset: CameraPreset | null
   objectLightPreviewOverrides: Record<string, ObjectLightOverrides>
-  history: DungeonSnapshot[]
-  future: DungeonSnapshot[]
+  history: HistoryEntry[]
+  future: HistoryEntry[]
   paintCells: (cells: GridCell[]) => number
   eraseCells: (cells: GridCell[]) => number
   paintBlockedCells: (cells: GridCell[]) => number
@@ -314,6 +334,8 @@ type DungeonState = DungeonSnapshot & {
   setShowLosDebugRays: (show: boolean) => void
   setShowLensFocusDebugPoint: (show: boolean) => void
   setShowProjectionDebugMesh: (show: boolean) => void
+  lightEffectsEnabled: boolean
+  setLightEffectsEnabled: (enabled: boolean) => void
   particleEffectsEnabled: boolean
   setParticleEffectsEnabled: (enabled: boolean) => void
   setFloorViewMode: (mode: FloorViewMode) => void
@@ -496,6 +518,24 @@ function cloneSnapshot(snapshot: DungeonSnapshot): DungeonSnapshot {
   }
 }
 
+function cloneDungeonObjectRecord(object: DungeonObjectRecord): DungeonObjectRecord {
+  return {
+    ...object,
+    position: [...object.position] as DungeonObjectRecord['position'],
+    rotation: [...object.rotation] as DungeonObjectRecord['rotation'],
+    localPosition: object.localPosition
+      ? [...object.localPosition] as DungeonObjectRecord['localPosition']
+      : object.localPosition ?? null,
+    localRotation: object.localRotation
+      ? [...object.localRotation] as DungeonObjectRecord['localRotation']
+      : object.localRotation ?? null,
+    parentObjectId: object.parentObjectId ?? null,
+    supportCellKey: object.supportCellKey ?? getCellKey(object.cell),
+    cell: [...object.cell] as GridCell,
+    props: { ...object.props },
+  }
+}
+
 function cloneSnapshotForObjectPlacement(snapshot: DungeonSnapshot): DungeonSnapshot {
   return {
     // Object placement only replaces placedObjects/occupancy/selection. Sharing the
@@ -541,6 +581,131 @@ function cloneSnapshotForObjectPlacement(snapshot: DungeonSnapshot): DungeonSnap
     rooms: snapshot.rooms,
     nextRoomNumber: snapshot.nextRoomNumber,
   }
+}
+
+function isObjectHistoryEntry(entry: HistoryEntry): entry is ObjectHistoryEntry {
+  return 'kind' in entry && entry.kind === 'object-patch'
+}
+
+function collectOccupancyKeysForObjectIds(
+  occupancy: Record<string, string>,
+  objectIds: Iterable<string>,
+) {
+  const targetIds = new Set(objectIds)
+  const keys = new Set<string>()
+
+  Object.entries(occupancy).forEach(([anchorKey, objectId]) => {
+    if (targetIds.has(objectId)) {
+      keys.add(anchorKey)
+    }
+  })
+
+  return keys
+}
+
+function buildObjectHistoryPatchState({
+  placedObjects,
+  occupancy,
+  objectIds,
+  occupancyKeys,
+  selection,
+}: {
+  placedObjects: Record<string, DungeonObjectRecord>
+  occupancy: Record<string, string>
+  objectIds: Iterable<string>
+  occupancyKeys: Iterable<string>
+  selection: string | null
+}): ObjectHistoryPatchState {
+  return {
+    objects: Object.fromEntries(
+      [...new Set(objectIds)].map((objectId) => [
+        objectId,
+        placedObjects[objectId] ? cloneDungeonObjectRecord(placedObjects[objectId]) : null,
+      ]),
+    ),
+    occupancy: Object.fromEntries(
+      [...new Set(occupancyKeys)].map((anchorKey) => [anchorKey, occupancy[anchorKey] ?? null]),
+    ),
+    selection,
+  }
+}
+
+function buildObjectHistoryEntry({
+  beforePlacedObjects,
+  afterPlacedObjects,
+  beforeOccupancy,
+  afterOccupancy,
+  changedObjectIds,
+  selectionBefore,
+  selectionAfter,
+}: {
+  beforePlacedObjects: Record<string, DungeonObjectRecord>
+  afterPlacedObjects: Record<string, DungeonObjectRecord>
+  beforeOccupancy: Record<string, string>
+  afterOccupancy: Record<string, string>
+  changedObjectIds: Iterable<string>
+  selectionBefore: string | null
+  selectionAfter: string | null
+}): ObjectHistoryEntry {
+  const objectIds = [...new Set(changedObjectIds)]
+  const occupancyKeys = new Set<string>([
+    ...collectOccupancyKeysForObjectIds(beforeOccupancy, objectIds),
+    ...collectOccupancyKeysForObjectIds(afterOccupancy, objectIds),
+  ])
+
+  return {
+    kind: 'object-patch',
+    before: buildObjectHistoryPatchState({
+      placedObjects: beforePlacedObjects,
+      occupancy: beforeOccupancy,
+      objectIds,
+      occupancyKeys,
+      selection: selectionBefore,
+    }),
+    after: buildObjectHistoryPatchState({
+      placedObjects: afterPlacedObjects,
+      occupancy: afterOccupancy,
+      objectIds,
+      occupancyKeys,
+      selection: selectionAfter,
+    }),
+  }
+}
+
+function applyObjectHistoryPatch(
+  current: Pick<DungeonSnapshot, 'placedObjects' | 'occupancy' | 'selection'>,
+  patch: ObjectHistoryPatchState,
+) {
+  const placedObjects = { ...current.placedObjects }
+  const occupancy = { ...current.occupancy }
+
+  Object.entries(patch.objects).forEach(([objectId, object]) => {
+    if (object) {
+      placedObjects[objectId] = cloneDungeonObjectRecord(object)
+      return
+    }
+
+    delete placedObjects[objectId]
+  })
+
+  Object.entries(patch.occupancy).forEach(([anchorKey, objectId]) => {
+    if (objectId) {
+      occupancy[anchorKey] = objectId
+      return
+    }
+
+    delete occupancy[anchorKey]
+  })
+
+  return {
+    placedObjects,
+    occupancy,
+    selection: patch.selection,
+  }
+}
+
+function normalizeHistoryEntries(entries: HistoryEntry[] | DungeonSnapshot[] | undefined) {
+  return (entries ?? []).filter((entry): entry is HistoryEntry => Boolean(entry))
 }
 
 function isGeneratedCharacterInUse(
@@ -1304,7 +1469,8 @@ function pruneInvalidSurfaceOverrides(
   paintedCells: PaintedCells,
 ) {
   const floorTileAssetIds = Object.fromEntries(
-    Object.entries(current.floorTileAssetIds).filter(([cellKey]) => Boolean(paintedCells[cellKey])),
+    Object.entries(current.floorTileAssetIds).filter(([cellKey, assetId]) =>
+      isFloorSurfacePlacementValid(cellKey, assetId, paintedCells)),
   )
   const wallSurfaceAssetIds = Object.fromEntries(
     Object.entries(current.wallSurfaceAssetIds).filter(([wallKey]) => getCanonicalWallKey(wallKey, paintedCells) === wallKey),
@@ -1385,6 +1551,7 @@ export const useDungeonStore = create<DungeonState>()(
   showLosDebugRays: false,
   showLensFocusDebugPoint: false,
   showProjectionDebugMesh: false,
+  lightEffectsEnabled: true,
   particleEffectsEnabled: true,
   floorViewMode: 'active' as FloorViewMode,
   generatedCharacters: {},
@@ -1762,7 +1929,6 @@ export const useDungeonStore = create<DungeonState>()(
     }
 
     const nextId = createObjectId()
-    const previousSnapshot = cloneSnapshotForObjectPlacement(state)
     const groundedOutdoorObject =
       state.mapMode === 'outdoor' &&
       !input.parentObjectId &&
@@ -1771,47 +1937,59 @@ export const useDungeonStore = create<DungeonState>()(
     const positionY = groundedOutdoorObject
       ? getOutdoorTerrainCellHeight(state.outdoorTerrainHeights, input.cell)
       : input.position[1]
+    const placedObjects = { ...state.placedObjects }
+    const occupancy = { ...state.occupancy }
+    const changedObjectIds = new Set<string>([nextId])
 
-    set((current) => {
-      const placedObjects = { ...current.placedObjects }
-      const occupancy = { ...current.occupancy }
+    if (existingId) {
+      collectDescendantIds(state.placedObjects, existingId).forEach((objectId) => {
+        changedObjectIds.add(objectId)
+      })
+      removeObjectHierarchy({ placedObjects, occupancy }, existingId)
+    }
 
-      if (existingId) {
-        removeObjectHierarchy({ placedObjects, occupancy }, existingId)
-      }
+    placedObjects[nextId] = {
+      id: nextId,
+      type: input.type,
+      assetId: input.assetId,
+      position: [input.position[0], positionY, input.position[2]] as DungeonObjectRecord['position'],
+      rotation: [...input.rotation] as DungeonObjectRecord['rotation'],
+      localPosition: input.localPosition
+        ? [...input.localPosition] as DungeonObjectRecord['localPosition']
+        : input.localPosition ?? null,
+      localRotation: input.localRotation
+        ? [...input.localRotation] as DungeonObjectRecord['localRotation']
+        : input.localRotation ?? null,
+      parentObjectId: input.parentObjectId ?? null,
+      supportCellKey,
+      props: { ...input.props },
+      cell: [...input.cell] as GridCell,
+      cellKey: input.cellKey,
+      layerId: state.activeLayerId,
+    }
+    if (consumesOccupancy) {
+      occupancy[input.cellKey] = nextId
+    }
 
-      placedObjects[nextId] = {
-        id: nextId,
-        type: input.type,
-        assetId: input.assetId,
-        position: [input.position[0], positionY, input.position[2]] as DungeonObjectRecord['position'],
-        rotation: [...input.rotation] as DungeonObjectRecord['rotation'],
-        localPosition: input.localPosition
-          ? [...input.localPosition] as DungeonObjectRecord['localPosition']
-          : input.localPosition ?? null,
-        localRotation: input.localRotation
-          ? [...input.localRotation] as DungeonObjectRecord['localRotation']
-          : input.localRotation ?? null,
-        parentObjectId: input.parentObjectId ?? null,
-        supportCellKey,
-        props: { ...input.props },
-        cell: [...input.cell] as GridCell,
-        cellKey: input.cellKey,
-        layerId: current.activeLayerId,
-      }
-      if (consumesOccupancy) {
-        occupancy[input.cellKey] = nextId
-      }
-
-      return {
-        ...current,
-        placedObjects,
-        occupancy,
-        selection: input.selectPlaced === false ? current.selection : nextId,
-        history: [...current.history, previousSnapshot],
-        future: [],
-      }
+    const nextSelection = input.selectPlaced === false ? state.selection : nextId
+    const historyEntry = buildObjectHistoryEntry({
+      beforePlacedObjects: state.placedObjects,
+      afterPlacedObjects: placedObjects,
+      beforeOccupancy: state.occupancy,
+      afterOccupancy: occupancy,
+      changedObjectIds,
+      selectionBefore: state.selection,
+      selectionAfter: nextSelection,
     })
+
+    set((current) => ({
+      ...current,
+      placedObjects,
+      occupancy,
+      selection: nextSelection,
+      history: [...current.history, historyEntry],
+      future: [],
+    }))
 
     const stairDirection = getStairDirectionForAssetId(input.assetId)
     const opposingAssetId = getPairedStairAssetId(input.assetId)
@@ -1874,43 +2052,45 @@ export const useDungeonStore = create<DungeonState>()(
       return true
     }
 
-    const previousSnapshot = cloneSnapshotForObjectPlacement(state)
+    const changedObjectIds = collectDescendantIds(state.placedObjects, id)
+    const placedObjects = {
+      ...state.placedObjects,
+      [id]: {
+        ...object,
+        position: [input.position[0], nextPositionY, input.position[2]] as DungeonObjectRecord['position'],
+        cell: [...input.cell] as GridCell,
+        cellKey: input.cellKey,
+        supportCellKey: getCellKey(input.cell),
+      },
+    }
+    const occupancy = { ...state.occupancy }
 
-    set((current) => {
-      const currentObject = current.placedObjects[id]
-      if (!currentObject) {
-        return current
+    if (consumesOccupancy) {
+      if (occupancy[object.cellKey] === id) {
+        delete occupancy[object.cellKey]
       }
+      occupancy[input.cellKey] = id
+    }
+    updateDescendantWorldTransforms(placedObjects, id)
 
-      const placedObjects = {
-        ...current.placedObjects,
-        [id]: {
-          ...currentObject,
-          position: [input.position[0], nextPositionY, input.position[2]] as DungeonObjectRecord['position'],
-          cell: [...input.cell] as GridCell,
-          cellKey: input.cellKey,
-          supportCellKey: getCellKey(input.cell),
-        },
-      }
-      const occupancy = { ...current.occupancy }
-
-      if (consumesOccupancy) {
-        if (occupancy[currentObject.cellKey] === id) {
-          delete occupancy[currentObject.cellKey]
-        }
-        occupancy[input.cellKey] = id
-      }
-      updateDescendantWorldTransforms(placedObjects, id)
-
-      return {
-        ...current,
-        placedObjects,
-        occupancy,
-        selection: id,
-        history: [...current.history, previousSnapshot],
-        future: [],
-      }
+    const historyEntry = buildObjectHistoryEntry({
+      beforePlacedObjects: state.placedObjects,
+      afterPlacedObjects: placedObjects,
+      beforeOccupancy: state.occupancy,
+      afterOccupancy: occupancy,
+      changedObjectIds,
+      selectionBefore: state.selection,
+      selectionAfter: id,
     })
+
+    set((current) => ({
+      ...current,
+      placedObjects,
+      occupancy,
+      selection: id,
+      history: [...current.history, historyEntry],
+      future: [],
+    }))
 
     return true
   },
@@ -1925,30 +2105,32 @@ export const useDungeonStore = create<DungeonState>()(
       return true
     }
 
-    const previousSnapshot = cloneSnapshotForObjectPlacement(state)
-
-    set((current) => {
-      const currentObject = current.placedObjects[id]
-      if (!currentObject) {
-        return current
-      }
-
-      return {
-        ...current,
-        placedObjects: {
-          ...current.placedObjects,
-          [id]: {
-            ...currentObject,
-            props: { ...props },
-          },
-        },
-        objectLightPreviewOverrides: Object.fromEntries(
-          Object.entries(current.objectLightPreviewOverrides).filter(([key]) => key !== id),
-        ),
-        history: [...current.history, previousSnapshot],
-        future: [],
-      }
+    const placedObjects = {
+      ...state.placedObjects,
+      [id]: {
+        ...object,
+        props: { ...props },
+      },
+    }
+    const historyEntry = buildObjectHistoryEntry({
+      beforePlacedObjects: state.placedObjects,
+      afterPlacedObjects: placedObjects,
+      beforeOccupancy: state.occupancy,
+      afterOccupancy: state.occupancy,
+      changedObjectIds: [id],
+      selectionBefore: state.selection,
+      selectionAfter: state.selection,
     })
+
+    set((current) => ({
+      ...current,
+      placedObjects,
+      objectLightPreviewOverrides: Object.fromEntries(
+        Object.entries(current.objectLightPreviewOverrides).filter(([key]) => key !== id),
+      ),
+      history: [...current.history, historyEntry],
+      future: [],
+    }))
 
     return true
   },
@@ -2021,24 +2203,28 @@ export const useDungeonStore = create<DungeonState>()(
     if (!state.placedObjects[id]) {
       return
     }
-
-    const previousSnapshot = cloneSnapshotForObjectPlacement(state)
-
-    set((current) => {
-      const placedObjects = { ...current.placedObjects }
-      const occupancy = { ...current.occupancy }
-
-      const removedIds = removeObjectHierarchy({ placedObjects, occupancy }, id)
-
-      return {
-        ...current,
-        placedObjects,
-        occupancy,
-        selection: current.selection && removedIds.has(current.selection) ? null : current.selection,
-        history: [...current.history, previousSnapshot],
-        future: [],
-      }
+    const placedObjects = { ...state.placedObjects }
+    const occupancy = { ...state.occupancy }
+    const removedIds = removeObjectHierarchy({ placedObjects, occupancy }, id)
+    const nextSelection = state.selection && removedIds.has(state.selection) ? null : state.selection
+    const historyEntry = buildObjectHistoryEntry({
+      beforePlacedObjects: state.placedObjects,
+      afterPlacedObjects: placedObjects,
+      beforeOccupancy: state.occupancy,
+      afterOccupancy: occupancy,
+      changedObjectIds: removedIds,
+      selectionBefore: state.selection,
+      selectionAfter: nextSelection,
     })
+
+    set((current) => ({
+      ...current,
+      placedObjects,
+      occupancy,
+      selection: nextSelection,
+      history: [...current.history, historyEntry],
+      future: [],
+    }))
   },
   removeObjectAtCell: (cellKey) => {
     const objectId = get().occupancy[cellKey]
@@ -2373,22 +2559,61 @@ export const useDungeonStore = create<DungeonState>()(
       return false
     }
 
-    const room = cellRecord.roomId ? state.rooms[cellRecord.roomId] : null
-    const inheritedAssetId = room?.floorAssetId ?? state.selectedAssetIds.floor
+    const inheritedAssetId = getInheritedFloorAssetIdForCellKey(
+      cellKey,
+      state.paintedCells,
+      state.rooms,
+      state.selectedAssetIds.floor,
+    )
     const nextAssetId = assetId && assetId !== inheritedAssetId ? assetId : null
-    const currentAssetId = state.floorTileAssetIds[cellKey] ?? null
-    if (currentAssetId === nextAssetId) {
+    const owningAnchorKey = findFloorSurfaceAnchorAtCell(cellKey, state.paintedCells, state.floorTileAssetIds)
+
+    if (!nextAssetId) {
+      if (!owningAnchorKey) {
+        return false
+      }
+
+      const previousSnapshot = cloneSnapshot(state)
+      set((current) => {
+        const floorTileAssetIds = { ...current.floorTileAssetIds }
+        delete floorTileAssetIds[owningAnchorKey]
+
+        return {
+          ...current,
+          floorTileAssetIds,
+          history: [...current.history, previousSnapshot],
+          future: [],
+        }
+      })
+      return true
+    }
+
+    if (!isFloorSurfacePlacementValid(cellKey, nextAssetId, state.paintedCells)) {
+      return false
+    }
+
+    const overlappingAnchorKeys = collectOverlappingFloorSurfaceAnchors(
+      cellKey,
+      nextAssetId,
+      state.paintedCells,
+      state.floorTileAssetIds,
+    )
+    const isNoOp =
+      overlappingAnchorKeys.length === 1
+      && overlappingAnchorKeys[0] === cellKey
+      && state.floorTileAssetIds[cellKey] === nextAssetId
+
+    if (isNoOp) {
       return false
     }
 
     const previousSnapshot = cloneSnapshot(state)
     set((current) => {
       const floorTileAssetIds = { ...current.floorTileAssetIds }
-      if (nextAssetId) {
-        floorTileAssetIds[cellKey] = nextAssetId
-      } else {
-        delete floorTileAssetIds[cellKey]
-      }
+      overlappingAnchorKeys.forEach((anchorKey) => {
+        delete floorTileAssetIds[anchorKey]
+      })
+      floorTileAssetIds[cellKey] = nextAssetId
 
       return {
         ...current,
@@ -2593,6 +2818,9 @@ export const useDungeonStore = create<DungeonState>()(
   setShowProjectionDebugMesh: (show) => {
     set((state) => ({ ...state, showProjectionDebugMesh: show }))
   },
+  setLightEffectsEnabled: (enabled) => {
+    set((state) => ({ ...state, lightEffectsEnabled: enabled }))
+  },
   setParticleEffectsEnabled: (enabled) => {
     set((state) => ({ ...state, particleEffectsEnabled: enabled }))
   },
@@ -2724,6 +2952,16 @@ export const useDungeonStore = create<DungeonState>()(
       return
     }
 
+    if (isObjectHistoryEntry(previous)) {
+      set((current) => ({
+        ...current,
+        ...applyObjectHistoryPatch(current, previous.before),
+        history: current.history.slice(0, -1),
+        future: [...current.future, previous],
+      }))
+      return
+    }
+
     const presentSnapshot = cloneSnapshot(state)
 
     set((current) => ({
@@ -2738,6 +2976,16 @@ export const useDungeonStore = create<DungeonState>()(
     const next = state.future.at(-1)
 
     if (!next) {
+      return
+    }
+
+    if (isObjectHistoryEntry(next)) {
+      set((current) => ({
+        ...current,
+        ...applyObjectHistoryPatch(current, next.after),
+        history: [...current.history, next],
+        future: current.future.slice(0, -1),
+      }))
       return
     }
 
@@ -3754,10 +4002,12 @@ export const useDungeonStore = create<DungeonState>()(
         outdoorTerrainStyleBrush: state.outdoorTerrainStyleBrush,
         selectedAssetIds: state.selectedAssetIds,
         generatedCharacters: state.generatedCharacters,
+        lightEffectsEnabled: state.lightEffectsEnabled,
         floors: state.floors,
         floorOrder: state.floorOrder,
         activeFloorId: state.activeFloorId,
         fpsLimit: state.fpsLimit,
+        particleEffectsEnabled: state.particleEffectsEnabled,
       }),
       onRehydrateStorage: () => (state) => {
         if (!state) {
@@ -3766,6 +4016,8 @@ export const useDungeonStore = create<DungeonState>()(
         }
 
         Object.assign(state, sanitizePersistedAssetReferences(state))
+        state.history = normalizeHistoryEntries(state.history)
+        state.future = normalizeHistoryEntries(state.future)
         state.innerWalls = state.innerWalls ?? {}
         state.outdoorTerrainStyleCells = (state.outdoorTerrainStyleCells ?? {}) as OutdoorTerrainStyleCells
         state.defaultOutdoorTerrainStyle = state.defaultOutdoorTerrainStyle ?? DEFAULT_OUTDOOR_TERRAIN_STYLE
@@ -3773,6 +4025,8 @@ export const useDungeonStore = create<DungeonState>()(
         Object.values(state.floors ?? {}).forEach((floor) => {
           floor.snapshot.innerWalls = floor.snapshot.innerWalls ?? {}
           floor.snapshot.outdoorTerrainStyleCells = floor.snapshot.outdoorTerrainStyleCells ?? {}
+          floor.history = normalizeHistoryEntries(floor.history)
+          floor.future = normalizeHistoryEntries(floor.future)
         })
         state.outdoorTerrainHeights = (state.outdoorTerrainHeights ?? {}) as OutdoorTerrainHeightfield
         state.outdoorTerrainSculptMode = state.outdoorTerrainSculptMode ?? 'raise'
@@ -3785,6 +4039,8 @@ export const useDungeonStore = create<DungeonState>()(
         state.postProcessing = normalizePostProcessingSettings(
           state.postProcessing as Partial<PostProcessingSettings> | undefined,
         )
+        state.lightEffectsEnabled = state.lightEffectsEnabled ?? true
+        state.particleEffectsEnabled = state.particleEffectsEnabled ?? true
         state.generatedCharacters = normalizeGeneratedCharacters(
           state.generatedCharacters as Record<string, Partial<GeneratedCharacterRecord>> | undefined,
         )

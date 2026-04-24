@@ -412,6 +412,8 @@ function App() {
 
           {debugPanelOpen && (
             <DebugVisibilityPanel
+              rightOffset={cameraRightOffset}
+              sidebarVisible={sidebarVisible}
               exploredCellCount={exploredCellCount}
               clearExploredCells={clearExploredCells}
               showLosDebugMask={showLosDebugMask}
@@ -534,6 +536,8 @@ function formatCount(count: number, singular: string) {
 }
 
 function DebugVisibilityPanel({
+  rightOffset,
+  sidebarVisible,
   exploredCellCount,
   clearExploredCells,
   showLosDebugMask,
@@ -548,6 +552,8 @@ function DebugVisibilityPanel({
   debugAssetSourcePath,
   debugAssetSourceLink,
 }: {
+  rightOffset: number
+  sidebarVisible: boolean
   exploredCellCount: number
   clearExploredCells: () => void
   showLosDebugMask: boolean
@@ -565,7 +571,9 @@ function DebugVisibilityPanel({
   return (
     <aside
       data-testid="debug-visibility-panel"
-      className="absolute right-4 top-20 z-20 flex w-72 flex-col gap-4 rounded-2xl border border-emerald-400/25 bg-stone-950/92 p-4 shadow-2xl backdrop-blur"
+      data-sidebar-visible={sidebarVisible}
+      className="absolute bottom-4 z-20 flex w-72 flex-col gap-4 rounded-2xl border border-emerald-400/25 bg-stone-950/92 p-4 shadow-2xl backdrop-blur transition-[right] duration-200 ease-out"
+      style={{ right: `${rightOffset}px` }}
     >
       <div>
         <p className="text-xs font-semibold uppercase tracking-[0.3em] text-emerald-300/85">

@@ -18,6 +18,20 @@ describe('browserMetadata', () => {
     expect(getAssetBrowserSubcategory(banner!)).toBe('banners')
   })
 
+  it('categorizes reclassified dungeon wall variants as structure props', () => {
+    const barrier = getContentPackAssetsByCategory('prop').find((asset) => asset.id === 'dungeon.wall_barrier')
+    const scaffold = getContentPackAssetsByCategory('prop').find((asset) => asset.id === 'dungeon.wall_scaffold_frame_large')
+
+    expect(barrier).toBeDefined()
+    expect(scaffold).toBeDefined()
+    expect(getAssetBrowserCategory(barrier!)).toBe('structure')
+    expect(getAssetBrowserSubcategory(barrier!)).toBe('walls')
+    expect(getAssetPlacementMode(barrier!)).toBe('prop')
+    expect(getAssetBrowserCategory(scaffold!)).toBe('structure')
+    expect(getAssetBrowserSubcategory(scaffold!)).toBe('pillars')
+    expect(getAssetPlacementMode(scaffold!)).toBe('prop')
+  })
+
   it('categorizes forest props as nature assets', () => {
     const tree = getContentPackAssetsByCategory('prop').find((asset) => asset.id.includes('kaykit.forest_tree_1_a_color1'))
     const rock = getContentPackAssetsByCategory('prop').find((asset) => asset.id.includes('kaykit.forest_rock_2_a_color4'))

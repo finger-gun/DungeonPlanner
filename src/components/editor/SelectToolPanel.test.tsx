@@ -22,7 +22,7 @@ describe('SelectToolPanel', () => {
         [placedId]: {
           id: placedId,
           type: 'prop',
-          assetId: 'dungeon.props_torch_lit',
+          assetId: 'dungeon.props_torch',
           position: [0, 0, 0],
           rotation: [0, 0, 0],
           props: {},
@@ -50,7 +50,7 @@ describe('SelectToolPanel', () => {
         [placedId]: {
           id: placedId,
           type: 'prop',
-          assetId: 'dungeon.props_torch_lit',
+          assetId: 'dungeon.props_torch',
           position: [0, 0, 0],
           rotation: [0, 0, 0],
           props: {},

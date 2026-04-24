@@ -3,6 +3,7 @@ import * as THREE from 'three'
 import type { DungeonObjectRecord } from '../../store/useDungeonStore'
 import type { PropLight } from '../../content-packs/types'
 import {
+  applyPropLightPoolAssignment,
   buildPropLightPoolAssignments,
   buildVisiblePropLightAssignments,
   distributeForwardPlusLightBudget,
@@ -121,7 +122,7 @@ describe('propLightPool', () => {
 
   it('merges committed and preview light overrides into resolved light sources', () => {
     const torch: DungeonObjectRecord = {
-      ...createObject('torch', [0, 0, 0], 'dungeon.props_torch_lit'),
+      ...createObject('torch', [0, 0, 0], 'dungeon.props_torch'),
       props: {
         lightOverrides: {
           color: '#00ff00',
@@ -153,11 +154,26 @@ describe('propLightPool', () => {
     expect(getDesiredPropLightPoolSize(0)).toBe(0)
   })
 
-  it('grows render capacity in stable 32-light chunks', () => {
+  it('preallocates the full pooled light capacity for any active light count', () => {
     expect(getPropLightRenderCapacity(0)).toBe(0)
-    expect(getPropLightRenderCapacity(1)).toBe(32)
-    expect(getPropLightRenderCapacity(32)).toBe(32)
-    expect(getPropLightRenderCapacity(33)).toBe(64)
+    expect(getPropLightRenderCapacity(1)).toBe(256)
+    expect(getPropLightRenderCapacity(32)).toBe(256)
+    expect(getPropLightRenderCapacity(33)).toBe(256)
+  })
+
+  it('parks dormant pooled lights outside the scene and marks them invisible', () => {
+    const pooledLight = new THREE.PointLight('#ffffff', 1, 5, 1)
+    pooledLight.visible = false
+    pooledLight.position.set(3, 4, 5)
+
+    applyPropLightPoolAssignment(pooledLight, undefined, 0)
+
+    expect(pooledLight.visible).toBe(false)
+    expect(pooledLight.position.toArray()).toEqual([0, -1000, 0])
+    expect(pooledLight.intensity).toBe(0)
+    expect(pooledLight.distance).toBe(0)
+    expect(pooledLight.decay).toBe(2)
+    expect(pooledLight.color.getHexString()).toBe('000000')
   })
 
   it('distributes the renderer light budget across multiple light groups', () => {

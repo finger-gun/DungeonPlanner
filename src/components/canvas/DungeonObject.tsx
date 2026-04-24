@@ -5,6 +5,7 @@ import { useDungeonStore, type DungeonObjectRecord } from '../../store/useDungeo
 import { ContentPackInstance } from './ContentPackInstance'
 import { getContentPackAssetById } from '../../content-packs/registry'
 import { registerObject, unregisterObject } from './objectRegistry'
+import { registerObjectSources, unregisterObjectSources } from './objectSourceRegistry'
 import { shouldAllowObjectContextDelete } from './openPassageInteraction'
 import type { PlayVisibility } from './playVisibility'
 import { ProjectedGroundDecal } from './ProjectedGroundDecal'
@@ -17,6 +18,7 @@ import {
 type DungeonObjectProps = {
   object: DungeonObjectRecord
   visibility: PlayVisibility
+  sourceScopeKey: string
   childrenByParent?: Record<string, DungeonObjectRecord[]>
   onPlayDragStart?: (object: DungeonObjectRecord, event: ThreeEvent<PointerEvent>) => void
   playerAnimationState?: 'default' | 'selected' | 'pickup' | 'holding' | 'release'
@@ -25,6 +27,7 @@ type DungeonObjectProps = {
 export const DungeonObject = memo(function DungeonObject({
   object,
   visibility,
+  sourceScopeKey,
   childrenByParent,
   onPlayDragStart,
   playerAnimationState,
@@ -33,7 +36,6 @@ export const DungeonObject = memo(function DungeonObject({
   const selectObject = useDungeonStore((state) => state.selectObject)
   const removeObject = useDungeonStore((state) => state.removeObject)
   const setObjectProps = useDungeonStore((state) => state.setObjectProps)
-  const ppEnabled = useDungeonStore((state) => state.postProcessing.enabled)
   const tool = useDungeonStore((state) => state.tool)
   const assetBrowserCategory = useDungeonStore((state) => state.assetBrowser.category)
   const characterSize = useDungeonStore(
@@ -50,6 +52,20 @@ export const DungeonObject = memo(function DungeonObject({
     if (groupRef.current) registerObject(object.id, groupRef.current)
     return () => unregisterObject(object.id)
   }, [object.id])
+
+  useLayoutEffect(() => {
+    registerObjectSources(sourceScopeKey, object)
+    return () => unregisterObjectSources(sourceScopeKey, object.id)
+  }, [
+    object,
+    object.assetId,
+    object.cellKey,
+    object.id,
+    object.position,
+    object.props,
+    object.rotation,
+    sourceScopeKey,
+  ])
 
   const asset = object.assetId ? getContentPackAssetById(object.assetId) : null
 
@@ -97,7 +113,6 @@ export const DungeonObject = memo(function DungeonObject({
     removeObject(object.id)
   }
 
-  const showHullOutline = selected && !ppEnabled && object.type !== 'player'
   const showPlayerSelectionRing = selected && object.type === 'player'
   const childObjects = childrenByParent?.[object.id] ?? []
   const position = object.parentObjectId ? (object.localPosition ?? object.position) : object.position
@@ -120,7 +135,7 @@ export const DungeonObject = memo(function DungeonObject({
       )}
       <ContentPackInstance
         assetId={object.assetId}
-        selected={showHullOutline}
+        selected={false}
         poseSelected={false}
         playerAnimationState={playerAnimationState ?? 'default'}
         variantKey={object.cellKey}
@@ -139,6 +154,7 @@ export const DungeonObject = memo(function DungeonObject({
           key={childObject.id}
           object={childObject}
           visibility={visibility}
+          sourceScopeKey={sourceScopeKey}
           childrenByParent={childrenByParent}
           onPlayDragStart={onPlayDragStart}
         />

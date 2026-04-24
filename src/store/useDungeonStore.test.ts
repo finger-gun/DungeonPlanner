@@ -605,6 +605,37 @@ describe('useDungeonStore history', () => {
     expect(useDungeonStore.getState().floorTileAssetIds['0:0']).toBeUndefined()
   })
 
+  it('stores multi-tile floor variants on the anchor cell and clears them from covered cells', () => {
+    const state = useDungeonStore.getState()
+    state.paintCells([[0, 0], [1, 0], [0, 1], [1, 1]])
+
+    const applied = state.setFloorTileAsset('0:0', 'dungeon.floor_floor_tile_large')
+
+    expect(applied).toBe(true)
+    expect(useDungeonStore.getState().floorTileAssetIds).toEqual({
+      '0:0': 'dungeon.floor_floor_tile_large',
+    })
+
+    const cleared = state.setFloorTileAsset('1:1', null)
+
+    expect(cleared).toBe(true)
+    expect(useDungeonStore.getState().floorTileAssetIds).toEqual({})
+  })
+
+  it('reanchors overlapping multi-tile floor variants to the latest stamp', () => {
+    const state = useDungeonStore.getState()
+    state.paintCells([
+      [0, 0], [1, 0], [2, 0],
+      [0, 1], [1, 1], [2, 1],
+    ])
+
+    expect(state.setFloorTileAsset('0:0', 'dungeon.floor_floor_tile_large')).toBe(true)
+    expect(state.setFloorTileAsset('1:0', 'dungeon.floor_floor_tile_large')).toBe(true)
+    expect(useDungeonStore.getState().floorTileAssetIds).toEqual({
+      '1:0': 'dungeon.floor_floor_tile_large',
+    })
+  })
+
   it('stores wall variant overrides on the canonical wall key', () => {
     useDungeonStore.getState().paintCells([[0, 0]])
     useDungeonStore.getState().paintCells([[1, 0]])

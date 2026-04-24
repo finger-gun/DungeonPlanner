@@ -1,11 +1,12 @@
 import { getContentPackAssetById, getDefaultAssetIdByCategory } from '../content-packs/registry'
 import type { ContentPackCategory } from '../content-packs/types'
-import type { FloorRecord, OpeningRecord, Room, SelectedAssetIds } from './useDungeonStore'
+import type { DungeonObjectRecord, FloorRecord, OpeningRecord, Room, SelectedAssetIds } from './useDungeonStore'
 
 type SnapshotAssetState = {
   selectedAssetIds?: SelectedAssetIds
   rooms: Record<string, Room>
   wallOpenings: Record<string, OpeningRecord>
+  placedObjects: Record<string, DungeonObjectRecord>
   floorTileAssetIds?: Record<string, string>
   wallSurfaceAssetIds?: Record<string, string>
 }
@@ -54,6 +55,12 @@ export function sanitizeSnapshotAssetReferences<T extends SnapshotAssetState>(sn
     wallSurfaceAssetIds: Object.fromEntries(
       Object.entries(snapshot.wallSurfaceAssetIds ?? {}).filter(([, assetId]) => isValidAssetId(assetId, 'wall')),
     ),
+    placedObjects: Object.fromEntries(
+      Object.entries(snapshot.placedObjects).flatMap(([objectId, object]) => {
+        const sanitized = sanitizePlacedObjectAsset(object)
+        return sanitized ? [[objectId, sanitized]] : []
+      }),
+    ),
   } as T
 }
 
@@ -80,18 +87,21 @@ function sanitizeSelectedAssetId(
   assetId: string | null,
   category: ContentPackCategory,
 ): string | null {
-  return isValidAssetId(assetId, category) ? assetId : getDefaultAssetIdByCategory(category)
+  const mappedAssetId = mapLegacyAssetId(assetId, category)
+  return isValidAssetId(mappedAssetId, category) ? mappedAssetId : getDefaultAssetIdByCategory(category)
 }
 
 function sanitizeRoomAssetId(
   assetId: string | null,
   category: Extract<ContentPackCategory, 'floor' | 'wall'>,
 ): string | null {
-  return isValidAssetId(assetId, category) ? assetId : null
+  const mappedAssetId = mapLegacyAssetId(assetId, category)
+  return isValidAssetId(mappedAssetId, category) ? mappedAssetId : null
 }
 
 function sanitizeOpeningAssetId(assetId: string | null) {
-  return isValidAssetId(assetId, 'opening') ? assetId : null
+  const mappedAssetId = mapLegacyAssetId(assetId, 'opening')
+  return isValidAssetId(mappedAssetId, 'opening') ? mappedAssetId : null
 }
 
 function sanitizeOpeningRecord(opening: OpeningRecord): OpeningRecord {
@@ -118,4 +128,70 @@ function isValidAssetId(assetId: string | null, category: ContentPackCategory) {
 
   const asset = getContentPackAssetById(assetId)
   return asset?.category === category
+}
+
+function mapLegacyAssetId(assetId: string | null, category: ContentPackCategory) {
+  if (assetId === 'dungeon.props_torch_lit' && category === 'prop') {
+    return 'dungeon.props_torch'
+  }
+
+   if (assetId === 'dungeon.props_candle_lit' && category === 'prop') {
+    return 'dungeon.props_candle'
+  }
+
+  if (assetId === 'dungeon.props_candle_thin_lit' && category === 'prop') {
+    return 'dungeon.props_candle_thin'
+  }
+
+  return assetId
+}
+
+function sanitizePlacedObjectAsset<T extends { assetId: string | null; props: Record<string, unknown> }>(object: T): T | null {
+  const mappedAssetId = mapLegacyAssetId(object.assetId, 'prop')
+  if (!mappedAssetId) {
+    return object
+  }
+
+  const asset = getContentPackAssetById(mappedAssetId)
+  if (!asset) {
+    return null
+  }
+
+  if (object.assetId === 'dungeon.props_torch_lit') {
+    return {
+      ...object,
+      assetId: 'dungeon.props_torch',
+      props: {
+        ...object.props,
+        lit: true,
+      },
+    }
+  }
+
+  if (object.assetId === 'dungeon.props_candle_lit') {
+    return {
+      ...object,
+      assetId: 'dungeon.props_candle',
+      props: {
+        ...object.props,
+        lit: true,
+      },
+    }
+  }
+
+  if (object.assetId === 'dungeon.props_candle_thin_lit') {
+    return {
+      ...object,
+      assetId: 'dungeon.props_candle_thin',
+      props: {
+        ...object.props,
+        lit: true,
+      },
+    }
+  }
+
+  return {
+    ...object,
+    assetId: mappedAssetId,
+  }
 }

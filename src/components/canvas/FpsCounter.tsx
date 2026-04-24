@@ -27,10 +27,10 @@ export function FpsMeterNode() {
 /** Render outside <Canvas> in the viewport shell. */
 export function FpsOverlay() {
   return (
-    <div className="pointer-events-none absolute bottom-4 right-4 select-none">
+    <div className="pointer-events-none absolute bottom-4 right-4 z-40 select-none">
       <span
         ref={(el) => { spanRef.current = el }}
-        className="font-mono text-[11px] tabular-nums text-stone-600/70"
+        className="rounded-full border border-stone-500/20 bg-stone-950/70 px-2.5 py-1 font-mono text-[11px] tabular-nums text-stone-300/95 shadow-lg backdrop-blur"
       />
     </div>
   )

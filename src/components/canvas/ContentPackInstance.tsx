@@ -19,37 +19,6 @@ function shouldUseGpuFog(variant: ContentPackInstanceVariant, fogOfWar: ReturnTy
   return fogOfWar !== null && variant === 'floor'
 }
 
-/** Inverted-hull outline: a slightly scaled-up back-face clone with a
- *  bright emissive rim material. Works with any geometry/GLTF. */
-function SelectionOutline({ source }: { source: THREE.Object3D }) {
-  const outline = useMemo(() => {
-    const mat = createStandardCompatibleMaterial({
-      color: '#ff4444',
-      emissive: '#ff2222',
-      emissiveIntensity: 1.5,
-      side: THREE.BackSide,
-      depthWrite: false,
-      transparent: true,
-      opacity: 0.9,
-    })
-    const clone = SkeletonUtils.clone(source)
-    clone.traverse((obj) => {
-      if (obj instanceof THREE.Mesh) {
-        obj.material = mat
-        obj.renderOrder = 999
-        obj.castShadow = false
-        obj.receiveShadow = false
-      }
-    })
-    markIgnoreLosRaycast(clone)
-    disableRaycast(clone)
-    clone.scale.multiplyScalar(1.015)
-    return clone
-  }, [source])
-
-  return <primitive object={outline} />
-}
-
 type ContentPackInstanceVariant = 'floor' | 'wall' | 'prop'
 
 /** Semi-transparent colour overlay — clones the geometry with a translucent material. */
@@ -279,13 +248,12 @@ function GLTFModel({
     !overlayOnly && (usesGpuFog || shouldRenderLineOfSightGeometry(visibility ?? 'visible', useLineOfSightPostMask))
   const canShowOverlay = (visibility ?? 'visible') !== 'hidden'
 
-  return (
-    <group {...groupProps}>
-      {shouldRenderBase && <primitive object={scene} />}
-      {shouldRenderBase && canShowOverlay && selected && <SelectionOutline source={scene} />}
-      {tint && shouldRenderBase && canShowOverlay && (
-        <TintOverlay
-          source={scene}
+    return (
+      <group {...groupProps}>
+        {shouldRenderBase && <primitive object={scene} />}
+        {tint && shouldRenderBase && canShowOverlay && (
+          <TintOverlay
+            source={scene}
           color={tint}
           opacity={tintOpacity}
           refreshKey={variantKey ?? assetPath}
@@ -370,7 +338,6 @@ function ComponentAsset({
       <group ref={contentRef} visible={shouldRenderBase}>
         <Component {...componentProps} />
       </group>
-      {shouldRenderBase && canShowOverlay && selected && overlaySource && <SelectionOutline source={overlaySource} />}
       {tint && overlaySource && shouldRenderBase && canShowOverlay && (
         <TintOverlay
           source={overlaySource}
