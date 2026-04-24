@@ -10,7 +10,12 @@ import {
   copyArtifactsIntoDir,
   formatBytes,
   getDirectorySize,
+  getPreservedArtifactPaths,
+  isCleanupCandidate,
+  isThumbnailForModel,
   getModelPackConfig,
+  listFilesRecursive,
+  listModelFiles,
   mirrorDirectory,
   resolvePackSourceDir,
   resolvePackDir,
@@ -66,6 +71,10 @@ export async function runImportModels({
 
   await generateDerivedTextures(targetDir, packConfig, 'pre-optimize')
 
+  if (packConfig?.convertToGlb) {
+    await convertGltfModelsToGlb(targetDir, filter)
+  }
+
   if (!skipOptimize) {
     await runOptimizeModels({
       targets: [targetDir],
@@ -92,6 +101,8 @@ export async function runImportModels({
       { cwd: rootDir, env: process.env },
     )
   }
+
+  cleanupStaleArtifacts(targetDir)
 }
 
 async function generateDerivedTextures(targetDir, packConfig, phase) {
@@ -336,11 +347,64 @@ async function safeRm(filePath) {
   await rm(path.dirname(filePath), { recursive: true, force: true })
 }
 
+async function convertGltfModelsToGlb(targetDir, filter) {
+  const gltfFiles = listModelFiles(targetDir, filter).filter((filePath) => path.extname(filePath).toLowerCase() === '.gltf')
+  if (gltfFiles.length === 0) {
+    return
+  }
+
+  console.log(`Converting ${gltfFiles.length} GLTF model(s) to GLB in ${targetDir}`)
+
+  const concurrency = Math.max(1, Math.min(typeof os.availableParallelism === 'function' ? os.availableParallelism() : 4, 8))
+  let cursor = 0
+
+  await Promise.all(Array.from({ length: concurrency }, async () => {
+    while (cursor < gltfFiles.length) {
+      const currentIndex = cursor
+      cursor += 1
+
+      const inputPath = gltfFiles[currentIndex]
+      const outputPath = inputPath.replace(/\.gltf$/i, '.glb')
+      await runCommand(
+        process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm',
+        ['exec', 'gltf-transform', 'copy', inputPath, outputPath],
+        { cwd: rootDir, env: process.env, stdio: 'ignore' },
+      )
+      rmSync(inputPath, { force: true })
+    }
+  }))
+}
+
+function cleanupStaleArtifacts(targetDir) {
+  const modelFiles = listModelFiles(targetDir)
+  const referencedArtifacts = new Set(modelFiles.flatMap((modelPath) => collectModelArtifactPaths(modelPath)))
+  const preservedArtifacts = getPreservedArtifactPaths(targetDir)
+  const modelBaseNames = new Set(
+    modelFiles.map((modelPath) => modelPath.slice(0, -path.extname(modelPath).length)),
+  )
+
+  for (const filePath of listFilesRecursive(targetDir)) {
+    if (!isCleanupCandidate(filePath)) {
+      continue
+    }
+
+    if (
+      referencedArtifacts.has(filePath) ||
+      preservedArtifacts.has(filePath) ||
+      isThumbnailForModel(filePath, modelBaseNames)
+    ) {
+      continue
+    }
+
+    rmSync(filePath, { force: true })
+  }
+}
+
 function runCommand(command, args, options) {
   return new Promise((resolve, reject) => {
     const child = spawn(command, args, {
       ...options,
-      stdio: 'inherit',
+      stdio: options?.stdio ?? 'inherit',
     })
 
     child.on('error', reject)

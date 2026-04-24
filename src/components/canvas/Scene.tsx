@@ -1,5 +1,5 @@
 import { Canvas, useFrame, useThree, type ThreeEvent } from '@react-three/fiber'
-import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import * as THREE from 'three'
 import { FpsMeterNode } from './FpsCounter'
 import { Grid } from './Grid'
@@ -9,8 +9,6 @@ import { CameraPresetManager } from './CameraPresetManager'
 import { DungeonObject } from './DungeonObject'
 import { PlayerSelectionRing } from './DungeonObject'
 import { DungeonRoom } from './DungeonRoom'
-import { WebGPUPostProcessing } from './WebGPUPostProcessing'
-import { FireParticleSystem } from './effects/fireParticleSystem'
 import {
   distributeForwardPlusLightBudget,
   getDesiredPropLightPoolSize,
@@ -33,6 +31,18 @@ import { getEnvironmentLightingState } from './environmentLighting'
 import { createWebGpuRenderer } from '../../rendering/createWebGpuRenderer'
 import { MAX_FORWARD_PLUS_POINT_LIGHTS } from '../../rendering/forwardPlusConfig'
 import { createSyntheticLightBenchmarkObjects } from './lightBenchmark'
+
+const WebGPUPostProcessing = lazy(() =>
+  import('./WebGPUPostProcessing').then((module) => ({
+    default: module.WebGPUPostProcessing,
+  })),
+)
+
+const FireParticleSystem = lazy(() =>
+  import('./effects/fireParticleSystem').then((module) => ({
+    default: module.FireParticleSystem,
+  })),
+)
 
 const SCENE_OVERVIEW_FLOOR_HEIGHT_UNIT = 3
 const PLAYER_ANIMATION_MS = {
@@ -317,7 +327,11 @@ function SceneOverviewContent() {
 
   return (
     <>
-      {postProcessingEnabled && <WebGPUPostProcessing />}
+      {postProcessingEnabled && (
+        <Suspense fallback={null}>
+          <WebGPUPostProcessing />
+        </Suspense>
+      )}
       {floorEntries.map((entry, index) => (
         <group key={entry.id} position={[0, entry.level * SCENE_OVERVIEW_FLOOR_HEIGHT_UNIT, 0]}>
           <DungeonRoom data={entry.data} visibility={ALWAYS_VISIBLE} enableBuildAnimation={false} />
@@ -597,10 +611,12 @@ function FloorContent({ startY = 0 }: { startY?: number }) {
   return (
     <group ref={groupRef} position={[0, startY, 0]}>
       {showPostProcessing && (
-        <WebGPUPostProcessing
-          key={postProcessingKey}
-          lineOfSightActive={lineOfSightActive}
-        />
+        <Suspense fallback={null}>
+          <WebGPUPostProcessing
+            key={postProcessingKey}
+            lineOfSightActive={lineOfSightActive}
+          />
+        </Suspense>
       )}
       <DungeonRoom visibility={visibility} />
       <RoomResizeOverlay />
@@ -644,7 +660,9 @@ function FloorContent({ startY = 0 }: { startY?: number }) {
           <PlayerSelectionRing assetId={dragState.assetId} color={dragState.valid ? '#d4a72c' : '#ef4444'} />
         </group>
       )}
-      <FireParticleSystem objects={objects} visibility={visibility} />
+      <Suspense fallback={null}>
+        <FireParticleSystem objects={objects} visibility={visibility} />
+      </Suspense>
     </group>
   )
 }

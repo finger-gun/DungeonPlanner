@@ -76,7 +76,7 @@ export function resolvePackDir(target) {
 
   const config = getModelPackConfig(target)
   if (config) {
-    return config.targetDir
+    return resolvePackDirForConfig(config)
   }
 
   if (target.includes(path.sep) || target.startsWith('.')) {

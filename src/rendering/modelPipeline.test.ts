@@ -4,6 +4,7 @@ import {
   formatBytes,
   getModelPackConfig,
   getPreservedArtifactPaths,
+  resolvePackDir,
   resolvePackSourceDir,
   isThumbnailForModel,
 } from '../../scripts/model-pipeline.mjs'
@@ -54,6 +55,8 @@ describe('model pipeline utilities', () => {
     expect(resolvePackSourceDir('kaykit')).toContain(
       'forrest-assets-tmp/KayKit_Forest_Nature_Pack_1.0_EXTRA/Assets/gltf',
     )
+
+    expect(resolvePackDir('kaykit')).toContain('/src/assets/models/forrest')
 
     expect(
       resolvePackSourceDir('core', null, {

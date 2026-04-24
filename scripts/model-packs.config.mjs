@@ -145,7 +145,6 @@ const kaykitForestAssetNames = listKaykitForestAssetNames(kaykitForestSourceDir)
 
 const kaykitPreservedArtifacts = kaykitTerrainStyles.flatMap((style) => [
   `${style}/forest_grass_patch.png`,
-  `${style}/forest_texture.png`,
 ])
 
 const kaykitDerivedTextures = kaykitTerrainStyles.map((style) => ({
@@ -190,6 +189,7 @@ export const modelPackConfigs = {
     include: kaykitForestAssetNames,
     preserveArtifacts: kaykitPreservedArtifacts,
     derivedTextures: kaykitDerivedTextures,
+    convertToGlb: true,
     clean: true,
   },
 }

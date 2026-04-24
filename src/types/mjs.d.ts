@@ -39,6 +39,7 @@ declare module '*.mjs' {
     source?: string | null,
     env?: Record<string, string | undefined>,
   ): string | null
+  export function resolvePackDir(target: string): string
   export function getPreservedArtifactPaths(targetDir: string): Set<string>
   export function collectLocalArtifactPathsFromGltf(
     json: {
