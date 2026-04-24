@@ -28,7 +28,7 @@ describe('roleAccess', () => {
       isAdmin: false,
       canManageUsers: false,
       canManagePacks: false,
-      canManageDungeons: false,
+      canManageDungeons: true,
       canManageSessions: false,
       canUseCharacterLibrary: true,
     })

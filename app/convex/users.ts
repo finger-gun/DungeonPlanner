@@ -37,7 +37,7 @@ export const initializeViewer = mutation({
       viewer.name ? `${viewer.name}'s Workspace` : 'My Workspace',
     )
 
-    await ensureRoleAssignments(ctx, viewer._id, ['dm', 'player'], workspaceId)
+    await ensureRoleAssignments(ctx, viewer._id, ['player'], workspaceId)
 
     const existingAssignments = await getRoleAssignmentsForUser(ctx, viewer._id)
 

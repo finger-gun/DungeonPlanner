@@ -40,7 +40,10 @@ const DEFAULT_PACK_DEFAULT_REFS_JSON = `{
   "wall": "dungeon:wall_plain"
 }`
 
-type WorkspacePage = 'overview' | 'library' | 'sessions' | 'characters' | 'admin-users' | 'admin-packs'
+type WorkspacePage = 'overview' | 'library' | 'dev' | 'sessions' | 'characters' | 'admin-users' | 'admin-packs'
+type DevWorkspacePage = 'sessions' | 'characters' | 'admin-users' | 'admin-packs'
+
+const DEV_WORKSPACE_PAGES: readonly DevWorkspacePage[] = ['sessions', 'characters', 'admin-users', 'admin-packs']
 
 const GITHUB_ICON_PATH =
   'M12 2C6.48 2 2 6.59 2 12.25c0 4.53 2.87 8.37 6.84 9.72.5.1.68-.22.68-.49 0-.24-.01-1.04-.01-1.89-2.78.62-3.37-1.22-3.37-1.22-.46-1.2-1.12-1.52-1.12-1.52-.92-.64.07-.63.07-.63 1.01.08 1.55 1.08 1.55 1.08.91 1.6 2.38 1.14 2.96.87.09-.68.36-1.14.65-1.4-2.22-.26-4.56-1.14-4.56-5.09 0-1.12.39-2.03 1.03-2.74-.1-.26-.45-1.31.1-2.73 0 0 .85-.28 2.78 1.05a9.33 9.33 0 0 1 5.06 0c1.93-1.33 2.78-1.05 2.78-1.05.55 1.42.2 2.47.1 2.73.64.71 1.03 1.62 1.03 2.74 0 3.96-2.34 4.83-4.57 5.08.37.33.7.97.7 1.96 0 1.42-.01 2.57-.01 2.92 0 .27.18.59.69.49A10.25 10.25 0 0 0 22 12.25C22 6.59 17.52 2 12 2Z'
@@ -99,17 +102,27 @@ function getWorkspacePageFromPath(path: string): WorkspacePage | null {
       return 'overview'
     case '/app/library':
       return 'library'
+    case '/app/dev':
+      return 'dev'
     case '/app/sessions':
+    case '/app/dev/sessions':
       return 'sessions'
     case '/app/characters':
+    case '/app/dev/characters':
       return 'characters'
     case '/app/admin/users':
+    case '/app/dev/users':
       return 'admin-users'
     case '/app/admin/packs':
+    case '/app/dev/packs':
       return 'admin-packs'
     default:
       return null
   }
+}
+
+function isDevWorkspacePage(page: WorkspacePage | null): page is DevWorkspacePage {
+  return page !== null && DEV_WORKSPACE_PAGES.includes(page as DevWorkspacePage)
 }
 
 function GitHubMark() {
@@ -290,16 +303,24 @@ function PasswordAuthCard() {
   )
 }
 
-function SignedInOverview({ currentPath }: { currentPath: string }) {
+function SignedInOverview({
+  currentPath,
+  identity,
+  isDevMenuVisible,
+}: {
+  currentPath: string
+  identity: ReturnType<typeof useViewerIdentity>
+  isDevMenuVisible: boolean
+}) {
   const { signOut } = useAuthActions()
-  const identity = useViewerIdentity()
+  const canAccessDungeonLibrary = identity.access.canManageDungeons
   const workspaceMembers = useQuery(
     api.roles.listActiveWorkspaceUsers,
     identity.access.canManageUsers ? {} : 'skip',
   )
   const libraryRecords = useQuery(
     api.dungeons.listViewerDungeons,
-    identity.access.canManageDungeons ? {} : 'skip',
+    canAccessDungeonLibrary ? {} : 'skip',
   )
   const sessionRecords = useQuery(api.sessions.listViewerSessions, {})
   const characterRecords = useQuery(
@@ -408,67 +429,69 @@ function SignedInOverview({ currentPath }: { currentPath: string }) {
     selectedSnapshot,
   )
 
-  const navItems = [
-    { id: 'overview', label: 'Overview', href: '#/app' },
-    identity.access.canManageDungeons && { id: 'library', label: 'Dungeons', href: '#/app/library' },
-    { id: 'sessions', label: 'Sessions', href: '#/app/sessions' },
-    identity.access.canUseCharacterLibrary && { id: 'characters', label: 'Characters', href: '#/app/characters' },
-    identity.access.canManageUsers && { id: 'admin-users', label: 'Users', href: '#/app/admin/users' },
-    identity.access.canManagePacks && { id: 'admin-packs', label: 'Packs', href: '#/app/admin/packs' },
-  ].filter((item): item is { id: WorkspacePage; label: string; href: string } => Boolean(item))
-
   const selectedSession = sessionRecords?.find((session) => session._id === selectedSessionId) ?? null
   const selectedPackRecord = packRecords?.find((pack) => pack._id === selectedPackRecordId) ?? null
-  const defaultPage: WorkspacePage = identity.access.canManageDungeons ? 'library' : 'sessions'
+  const canAccessDevMenu = identity.access.isAdmin && isDevMenuVisible
   const requestedPage = getWorkspacePageFromPath(currentPath)
-  const activePage = navItems.some((item) => item.id === requestedPage)
-    ? (requestedPage as WorkspacePage)
-    : currentPath === '/app'
-      ? 'overview'
-      : defaultPage
-  const adminEntryHref = identity.access.canManageUsers ? '#/app/admin/users' : '#/app/admin/packs'
   const workspaceNavItems = [
     { id: 'overview', label: 'Overview', href: '#/app' },
-    identity.access.canManageDungeons && { id: 'library', label: 'Dungeons', href: '#/app/library' },
-    { id: 'sessions', label: 'Sessions', href: '#/app/sessions' },
-    identity.access.canUseCharacterLibrary && { id: 'characters', label: 'Characters', href: '#/app/characters' },
-    (identity.access.canManageUsers || identity.access.canManagePacks) && {
-      id: 'admin',
-      label: 'Admin',
-      href: adminEntryHref,
+    canAccessDungeonLibrary && { id: 'library', label: 'Dungeon Library', href: '#/app/library' },
+    canAccessDevMenu && {
+      id: 'dev',
+      label: 'Dev',
+      href: '#/app/dev',
     },
   ].filter((item): item is { id: string; label: string; href: string } => Boolean(item))
+  const devNavItems = [
+    identity.access.canManageSessions && { id: 'sessions', label: 'Sessions', href: '#/app/dev/sessions' },
+    identity.access.canUseCharacterLibrary && { id: 'characters', label: 'Characters', href: '#/app/dev/characters' },
+    identity.access.canManageUsers && { id: 'admin-users', label: 'Users', href: '#/app/dev/users' },
+    identity.access.canManagePacks && { id: 'admin-packs', label: 'Packs', href: '#/app/dev/packs' },
+  ].filter((item): item is { id: DevWorkspacePage; label: string; href: string } => Boolean(item))
+  const activePage: WorkspacePage =
+    requestedPage === 'library' && canAccessDungeonLibrary
+      ? 'library'
+      : requestedPage === 'dev' && canAccessDevMenu
+        ? 'dev'
+        : isDevWorkspacePage(requestedPage) && canAccessDevMenu && devNavItems.some((item) => item.id === requestedPage)
+          ? requestedPage
+          : 'overview'
 
   const pageIntro = {
     overview: {
       eyebrow: 'Overview',
-      title: 'Everything for tonight’s game',
-      copy: 'Jump straight into your dungeons, sessions, characters, and admin tools.',
+      title: 'Your DungeonPlanner workspace',
+      copy: 'Open your private dungeon library, review your access, and get ready for your next session.',
     },
     library: {
       eyebrow: 'Dungeons',
       title: 'Dungeon library',
-      copy: 'Save portable dungeon files, review past maps, and load any draft back into play.',
+      copy: 'Keep your private dungeon drafts in one place, save portable JSON exports, and load any map back into editing.',
+    },
+    dev: {
+      eyebrow: 'Debug',
+      title: 'Developer workspace',
+      copy: 'Open the internal app views for sessions, characters, user roles, and pack management.',
     },
     sessions: {
-      eyebrow: 'Sessions',
-      title: 'Run live tables',
-      copy: 'Create sessions, share join codes, and keep the table moving from one screen.',
+      eyebrow: 'Debug',
+      title: 'Session tools',
+      copy: 'Use the current development session flows for creating tables, joining by code, and issuing server access tickets.',
     },
     characters: {
-      eyebrow: 'Characters',
-      title: 'Keep characters ready',
-      copy: 'Store reusable character sheets and connect them to the sessions you are playing.',
+      eyebrow: 'Debug',
+      title: 'Character tools',
+      copy: 'Use the current development character flows for saved sheets and session attachments.',
     },
     'admin-users': {
-      eyebrow: 'Admin',
-      title: 'Manage user access',
-      copy: 'Grant or remove roles by email so everyone sees the tools they need.',
+      eyebrow: 'Debug',
+      title: 'User access tools',
+      copy: 'Grant or remove roles by email and inspect workspace membership from the current admin debug view.',
     },
     'admin-packs': {
-      eyebrow: 'Admin',
-      title: 'Manage content packs',
-      copy: 'Curate the packs available to your group and keep their defaults in one place.',
+      eyebrow: 'Debug',
+      title: 'Content pack tools',
+      copy: 'Use the internal pack registry view for uploads, visibility, and activation settings.',
     },
   } satisfies Record<WorkspacePage, { eyebrow: string; title: string; copy: string }>
 
@@ -967,7 +990,7 @@ function SignedInOverview({ currentPath }: { currentPath: string }) {
           <h2 className="panel__title" id="signed-in-title">
             {identity.viewer?.name ?? identity.viewer?.email ?? 'DungeonPlanner user'}
           </h2>
-          <p className="panel__copy">Pick up your dungeons, sessions, characters, and packs from one place.</p>
+          <p className="panel__copy">Welcome back. Your private workspace is ready when you are.</p>
         </div>
 
         <div className="signed-in-card__meta">
@@ -998,15 +1021,7 @@ function SignedInOverview({ currentPath }: { currentPath: string }) {
       <nav className="workspace-nav" aria-label="Workspace pages">
         {workspaceNavItems.map((item) => (
           <a
-            className={`workspace-nav__link ${
-              item.id === 'admin'
-                ? activePage === 'admin-users' || activePage === 'admin-packs'
-                  ? 'workspace-nav__link--active'
-                  : ''
-                : activePage === item.id
-                  ? 'workspace-nav__link--active'
-                  : ''
-            }`}
+            className={`workspace-nav__link ${activePage === item.id ? 'workspace-nav__link--active' : ''}`}
             href={item.href}
             key={item.id}
           >
@@ -1015,62 +1030,42 @@ function SignedInOverview({ currentPath }: { currentPath: string }) {
         ))}
       </nav>
 
-      {(activePage === 'admin-users' || activePage === 'admin-packs') &&
-      (identity.access.canManageUsers || identity.access.canManagePacks) ? (
-        <nav className="workspace-nav workspace-nav--nested" aria-label="Admin pages">
-          {identity.access.canManageUsers ? (
+      {canAccessDevMenu && (activePage === 'dev' || isDevWorkspacePage(activePage)) ? (
+        <nav className="workspace-nav workspace-nav--nested" aria-label="Dev pages">
+          <a className={`workspace-nav__link ${activePage === 'dev' ? 'workspace-nav__link--active' : ''}`} href="#/app/dev">
+            Dev Home
+          </a>
+          {devNavItems.map((item) => (
             <a
-              className={`workspace-nav__link ${activePage === 'admin-users' ? 'workspace-nav__link--active' : ''}`}
-              href="#/app/admin/users"
+              className={`workspace-nav__link ${activePage === item.id ? 'workspace-nav__link--active' : ''}`}
+              href={item.href}
+              key={item.id}
             >
-              Users
+              {item.label}
             </a>
-          ) : null}
-          {identity.access.canManagePacks ? (
-            <a
-              className={`workspace-nav__link ${activePage === 'admin-packs' ? 'workspace-nav__link--active' : ''}`}
-              href="#/app/admin/packs"
-            >
-              Packs
-            </a>
-          ) : null}
+          ))}
         </nav>
       ) : null}
 
       {activePage === 'overview' ? (
         <section className="panels" aria-label="Workspace overview">
-          {navItems
-            .filter((item) => item.id !== 'overview')
-            .map((item) => (
-              <article className="status-card overview-card" key={item.id}>
-                <p className="status-card__label">{item.label}</p>
-                <p className="status-card__value">
-                  {item.id === 'library'
-                    ? `${libraryRecords?.length ?? 0} saved`
-                    : item.id === 'sessions'
-                      ? `${sessionRecords?.length ?? 0} active`
-                      : item.id === 'characters'
-                        ? `${characterRecords?.length ?? 0} ready`
-                        : item.id === 'admin-users'
-                          ? `${workspaceMembers?.length ?? 0} visible`
-                          : `${packRecords?.length ?? 0} registered`}
-                </p>
-                <p className="status-card__copy">
-                  {item.id === 'library'
-                    ? 'Review saved dungeons and load them back into your draft.'
-                    : item.id === 'sessions'
-                      ? 'Create tables, join games, and keep session access handy.'
-                      : item.id === 'characters'
-                        ? 'Manage reusable character sheets and link them to sessions.'
-                        : item.id === 'admin-users'
-                          ? 'Create users, assign roles, and keep access tidy.'
-                          : 'Curate the packs available to your group.'}
-                </p>
-                <a className="hero-panel__button hero-panel__button--secondary" href={item.href}>
-                  Open {item.label}
-                </a>
-              </article>
-            ))}
+          {canAccessDungeonLibrary ? (
+            <article className="status-card overview-card">
+              <p className="status-card__label">Dungeon Library</p>
+              <p className="status-card__value">{libraryRecords?.length ?? 0} saved</p>
+              <p className="status-card__copy">Build dungeons for yourself, keep them private, and load any draft back into editing.</p>
+              <a className="hero-panel__button hero-panel__button--secondary" href="#/app/library">
+                Open Dungeon Library
+              </a>
+            </article>
+          ) : null}
+          <article className="status-card overview-card">
+            <p className="status-card__label">Roles</p>
+            <p className="status-card__value">{identity.roles.length > 0 ? identity.roles.join(', ') : 'provisioning'}</p>
+            <p className="status-card__copy">
+              Everyone can build private dungeons. Dungeon master tools stay limited to users with DM access.
+            </p>
+          </article>
         </section>
       ) : (
         <section className="page-header" aria-labelledby="workspace-page-title">
@@ -1089,22 +1084,58 @@ function SignedInOverview({ currentPath }: { currentPath: string }) {
         <section className="signed-in-card">
           <div>
             <p className="app-shell__eyebrow">Player access</p>
-            <h2 className="panel__title">Your player tools are ready</h2>
-            <p className="panel__copy">
-              Join sessions and keep your character sheet close by. Dungeon and admin tools appear when
-              your access expands.
-            </p>
+            <h2 className="panel__title">Your workspace is open</h2>
+            <p className="panel__copy">Start building private dungeons now. Session-running tools appear when your access expands.</p>
           </div>
         </section>
       ) : null}
 
       <section className="panels" aria-label="Authenticated product modules">
-        {activePage === 'library' && identity.access.canManageDungeons ? (
+        {activePage === 'dev' ? (
+          <article className="panel panel--library">
+            <p className="panel__eyebrow">Development</p>
+            <h2 className="panel__title">Hidden development views</h2>
+            <p className="panel__copy">
+              These screens stay tucked behind the debug shortcut so the main product surface can stay focused on player-facing workflows.
+            </p>
+
+            <div className="panels">
+              {devNavItems.map((item) => (
+                <article className="status-card overview-card" key={item.id}>
+                  <p className="status-card__label">{item.label}</p>
+                  <p className="status-card__value">
+                    {item.id === 'sessions'
+                      ? `${sessionRecords?.length ?? 0} active`
+                      : item.id === 'characters'
+                        ? `${characterRecords?.length ?? 0} ready`
+                        : item.id === 'admin-users'
+                          ? `${workspaceMembers?.length ?? 0} visible`
+                          : `${packRecords?.length ?? 0} registered`}
+                  </p>
+                  <p className="status-card__copy">
+                    {item.id === 'sessions'
+                      ? 'Open the current session creation, join, and access-ticket view.'
+                      : item.id === 'characters'
+                        ? 'Open the current character library and session-attachment view.'
+                        : item.id === 'admin-users'
+                          ? 'Open the current role and workspace membership management view.'
+                          : 'Open the current pack upload and activation management view.'}
+                  </p>
+                  <a className="hero-panel__button hero-panel__button--secondary" href={item.href}>
+                    Open {item.label}
+                  </a>
+                </article>
+              ))}
+            </div>
+          </article>
+        ) : null}
+
+        {activePage === 'library' && canAccessDungeonLibrary ? (
           <article className="panel panel--library">
             <p className="panel__eyebrow">Dungeon Library</p>
             <h2 className="panel__title">Saved dungeons</h2>
             <p className="panel__copy">
-              Keep portable dungeon exports in your library and load them back into your draft whenever you need them.
+              Keep portable dungeon exports in your private library and load them back into your draft whenever you need them.
             </p>
 
             <div className={`library-sync-state library-sync-state--${syncState.tone}`}>
@@ -1797,7 +1828,9 @@ function SignedInOverview({ currentPath }: { currentPath: string }) {
 
 function App() {
   const { isAuthenticated, isLoading } = useConvexAuth()
+  const identity = useViewerIdentity()
   const [currentPath, setCurrentPath] = useState(() => readHashPath())
+  const [isDevMenuVisible, setIsDevMenuVisible] = useState(false)
   const publicPath = currentPath === '/login' ? '/login' : '/'
 
   useEffect(() => {
@@ -1812,6 +1845,28 @@ function App() {
       window.removeEventListener('hashchange', syncHashPath)
     }
   }, [])
+
+  useEffect(() => {
+    if (!isAuthenticated || !identity.access.isAdmin) {
+      setIsDevMenuVisible(false)
+      return
+    }
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.ctrlKey && event.shiftKey && event.key === 'F12') {
+        event.preventDefault()
+        setIsDevMenuVisible((current) => !current)
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [identity.access.isAdmin, isAuthenticated])
+
+  const showDevHeaderLink = isAuthenticated && identity.access.isAdmin && isDevMenuVisible
 
   return (
     <div className="app-shell">
@@ -1832,8 +1887,22 @@ function App() {
               <GitHubMark />
               GitHub
             </a>
+            {showDevHeaderLink ? (
+              <a
+                className={currentPath.startsWith('/app/dev') ? 'header-nav__link--active' : undefined}
+                href="#/app/dev"
+              >
+                Dev
+              </a>
+            ) : null}
             <a
-              className={!isAuthenticated && publicPath === '/login' ? 'header-nav__link--active' : undefined}
+              className={
+                !isAuthenticated && publicPath === '/login'
+                  ? 'header-nav__link--active'
+                  : isAuthenticated && currentPath.startsWith('/app') && !currentPath.startsWith('/app/dev')
+                    ? 'header-nav__link--active'
+                    : undefined
+              }
               href={isAuthenticated ? '#/app' : '#/login'}
             >
               {isAuthenticated ? 'Workspace' : 'Login'}
@@ -1877,7 +1946,7 @@ function App() {
             </div>
           </section>
         ) : (
-          <SignedInOverview currentPath={currentPath} />
+          <SignedInOverview currentPath={currentPath} identity={identity} isDevMenuVisible={isDevMenuVisible} />
         )}
 
         <footer className="app-shell__footer"></footer>

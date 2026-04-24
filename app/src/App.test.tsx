@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import { cleanup, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import App from './App'
@@ -134,7 +134,7 @@ describe('authenticated app shell', () => {
     expect(screen.getByRole('heading', { name: /build dungeons\.\s*run epic sessions\./i })).toBeTruthy()
     expect(screen.getByRole('img', { name: 'DungeonPlanner logo' })).toBeTruthy()
     expect(screen.getByRole('heading', { name: 'Why DungeonPlanner?' })).toBeTruthy()
-    expect(screen.getByRole('link', { name: 'Login' })).toBeTruthy()
+    expect(screen.getAllByRole('link', { name: 'Login' }).length).toBeGreaterThan(0)
   })
 
   it('submits the password sign-in form on the login screen', async () => {
@@ -156,19 +156,20 @@ describe('authenticated app shell', () => {
     expect(mock.signIn.mock.calls[0]?.[1]).toBeInstanceOf(FormData)
   })
 
-  it('shows the dungeon save flow for authenticated DMs', async () => {
+  it('shows the dungeon save flow for authenticated players', async () => {
     const user = userEvent.setup()
+    window.location.hash = '#/app/library'
     mock.authState.isAuthenticated = true
     mock.viewerIdentity = {
-      viewer: { name: 'Dungeon Master', email: 'dm@example.com' },
-      workspace: { name: 'DM Workspace' },
-      roles: ['dm', 'player'],
+      viewer: { name: 'Player Builder', email: 'player@example.com' },
+      workspace: { name: 'Player Workspace' },
+      roles: ['player'],
       access: {
         isAdmin: false,
         canManageUsers: false,
         canManagePacks: false,
         canManageDungeons: true,
-        canManageSessions: true,
+        canManageSessions: false,
         canUseCharacterLibrary: true,
       },
     }
@@ -196,46 +197,47 @@ describe('authenticated app shell', () => {
     )
   })
 
-  it('lets authenticated players join a session by code', async () => {
-    const user = userEvent.setup()
+  it('reveals admin debug views only after the hidden shortcut', async () => {
+    window.location.hash = '#/app/dev/users'
     mock.authState.isAuthenticated = true
     mock.viewerIdentity = {
-      viewer: { name: 'Player One', email: 'player@example.com' },
-      workspace: { name: 'Player Workspace' },
-      roles: ['player'],
+      viewer: { name: 'Admin User', email: 'admin@example.com' },
+      workspace: { name: 'Guild Hall' },
+      roles: ['admin'],
       access: {
-        isAdmin: false,
-        canManageUsers: false,
-        canManagePacks: false,
-        canManageDungeons: false,
-        canManageSessions: false,
+        isAdmin: true,
+        canManageUsers: true,
+        canManagePacks: true,
+        canManageDungeons: true,
+        canManageSessions: true,
         canUseCharacterLibrary: true,
       },
     }
     mock.queries = {
+      'dungeons.listViewerDungeons': [],
       'sessions.listViewerSessions': [],
       'characters.listViewerCharacters': [],
+      'packs.listWorkspacePacks': [],
+      'roles.listActiveWorkspaceUsers': [],
     }
-    mock.mutations['sessions.joinSessionByCode'].mockResolvedValue({
-      sessionId: 'session-1',
-      title: 'Friday Delve',
-      joinCode: 'ABC123',
-    })
 
     render(<App />)
 
-    await user.type(screen.getByLabelText('Join code'), 'abc123')
-    await user.click(screen.getByRole('button', { name: 'Join by code' }))
+    const mainNav = screen.getByRole('navigation', { name: 'Main navigation' })
+    expect(within(mainNav).queryByRole('link', { name: 'Dev' })).toBeNull()
+    expect(screen.queryByRole('heading', { name: 'User access tools' })).toBeNull()
 
-    await waitFor(() =>
-      expect(mock.mutations['sessions.joinSessionByCode']).toHaveBeenCalledWith({
-        joinCode: 'ABC123',
-      }),
-    )
+    fireEvent.keyDown(window, { key: 'F12', code: 'F12', ctrlKey: true, shiftKey: true })
+
+    expect(within(mainNav).getByRole('link', { name: 'Dev' })).toBeTruthy()
+    expect(screen.getByRole('heading', { name: 'User access tools' })).toBeTruthy()
+    expect(screen.getByRole('navigation', { name: 'Dev pages' })).toBeTruthy()
+    expect(screen.getByRole('link', { name: 'Packs' })).toBeTruthy()
   })
 
   it('loads a saved dungeon record back into the local draft', async () => {
     const user = userEvent.setup()
+    window.location.hash = '#/app/library'
     mock.authState.isAuthenticated = true
     mock.viewerIdentity = {
       viewer: { name: 'Dungeon Master', email: 'dm@example.com' },
@@ -284,8 +286,8 @@ describe('authenticated app shell', () => {
     )
   })
 
-  it('shows dedicated admin user management pages for administrators', async () => {
-    window.location.hash = '#/app/admin/users'
+  it('shows dedicated admin user management pages for administrators after dev unlock', async () => {
+    window.location.hash = '#/app/dev/users'
     mock.authState.isAuthenticated = true
     mock.viewerIdentity = {
       viewer: { name: 'Admin User', email: 'admin@example.com' },
@@ -310,10 +312,13 @@ describe('authenticated app shell', () => {
 
     render(<App />)
 
-    expect(screen.getByRole('heading', { name: 'User access' })).toBeTruthy()
+    fireEvent.keyDown(window, { key: 'F12', code: 'F12', ctrlKey: true, shiftKey: true })
+
+    const mainNav = screen.getByRole('navigation', { name: 'Main navigation' })
+    expect(screen.getByRole('heading', { name: 'User access tools' })).toBeTruthy()
     expect(screen.getByLabelText('User email')).toBeTruthy()
-    expect(screen.getByRole('link', { name: 'Admin' })).toBeTruthy()
-    expect(screen.getByRole('navigation', { name: 'Admin pages' })).toBeTruthy()
+    expect(within(mainNav).getByRole('link', { name: 'Dev' })).toBeTruthy()
+    expect(screen.getByRole('navigation', { name: 'Dev pages' })).toBeTruthy()
     expect(screen.getByRole('link', { name: 'Packs' })).toBeTruthy()
   })
 })

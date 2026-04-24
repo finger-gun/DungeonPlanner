@@ -38,7 +38,7 @@ export function getRoleCapabilities(roles: ReadonlyArray<PlatformRole>) {
     isAdmin: hasPlatformRole(roles, 'admin'),
     canManageUsers: hasPlatformRole(roles, 'admin'),
     canManagePacks: hasPlatformRole(roles, 'admin'),
-    canManageDungeons: hasPlatformRole(roles, 'dm'),
+    canManageDungeons: hasPlatformRole(roles, 'player') || hasPlatformRole(roles, 'dm'),
     canManageSessions: hasPlatformRole(roles, 'dm'),
     canUseCharacterLibrary: hasPlatformRole(roles, 'player'),
   }
