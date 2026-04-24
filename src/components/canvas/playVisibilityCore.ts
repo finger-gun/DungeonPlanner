@@ -54,8 +54,8 @@ export type BlockerCellEntry = {
 }
 
 export type PlayVisibilityComputation = {
-  visibleCellKeys: string[]
-  mask: PlayVisibilityMask | null
+ visibleCellKeys: string[]
+ mask: PlayVisibilityMask | null
 }
 
 export type PlayVisibilityWorkerInput = {
@@ -86,30 +86,37 @@ const WALL_DIRECTIONS: Record<WallDirection, { delta: GridCell; opposite: WallDi
 }
 
 export function computePlayVisibilityData(input: PlayVisibilityWorkerInput): PlayVisibilityComputation {
-  const blockerLookup = new Map<string, BlockerCellEntry>(input.blockerLookupEntries)
-  const blockingCells = new Set(input.blockingCellKeys)
-  const solidWalls = buildSolidWallSet(input.innerWalls)
-  const visibleCellKeys = computeVisibleCellKeys(
-    input.paintedCells,
-    input.wallOpenings,
-    input.origins,
-    input.range,
-    blockingCells,
-    blockerLookup,
-    solidWalls,
-  )
-  const mask = computeVisibilityMask(
-    input.paintedCells,
-    EMPTY_EXPLORED_CELLS,
-    input.wallOpenings,
-    input.origins,
-    input.range,
-    blockingCells,
-    blockerLookup,
-    solidWalls,
-  )
+ const visibleCellKeys = computeVisibleCellKeysFromInput(input)
+ const blockerLookup = new Map<string, BlockerCellEntry>(input.blockerLookupEntries)
+ const blockingCells = new Set(input.blockingCellKeys)
+ const solidWalls = buildSolidWallSet(input.innerWalls)
+ const mask = computeVisibilityMask(
+   input.paintedCells,
+   EMPTY_EXPLORED_CELLS,
+   input.wallOpenings,
+   input.origins,
+   input.range,
+   blockingCells,
+   blockerLookup,
+   solidWalls,
+ )
 
-  return { visibleCellKeys, mask }
+ return { visibleCellKeys, mask }
+}
+
+export function computeVisibleCellKeysFromInput(input: PlayVisibilityWorkerInput): string[] {
+ const blockerLookup = new Map<string, BlockerCellEntry>(input.blockerLookupEntries)
+ const blockingCells = new Set(input.blockingCellKeys)
+ const solidWalls = buildSolidWallSet(input.innerWalls)
+ return computeVisibleCellKeys(
+   input.paintedCells,
+   input.wallOpenings,
+   input.origins,
+   input.range,
+   blockingCells,
+   blockerLookup,
+   solidWalls,
+ )
 }
 
 export function computeVisibleCellKeys(

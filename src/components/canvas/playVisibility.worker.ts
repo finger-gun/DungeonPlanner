@@ -1,11 +1,11 @@
-import { computePlayVisibilityData } from './playVisibilityCore'
+import { computeVisibleCellKeysFromInput } from './playVisibilityCore'
 
 self.addEventListener('message', (event) => {
   const { requestId, input } = event.data as {
     requestId: number
-    input: Parameters<typeof computePlayVisibilityData>[0]
+    input: Parameters<typeof computeVisibleCellKeysFromInput>[0]
   }
 
-  const result = computePlayVisibilityData(input)
-  self.postMessage({ requestId, result })
+  const visibleCellKeys = computeVisibleCellKeysFromInput(input)
+  self.postMessage({ requestId, visibleCellKeys })
 })

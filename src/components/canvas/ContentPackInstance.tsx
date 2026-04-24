@@ -8,12 +8,16 @@ import type { ContentPackComponentProps } from '../../content-packs/types'
 import { GRID_SIZE } from '../../hooks/useSnapToGrid'
 import type { PlayVisibilityState } from './playVisibility'
 import { shouldRenderLineOfSightGeometry } from './losRendering'
-import { setLosLayers } from './losLayers'
 import {
   cloneSceneWithNodeMaterials,
   createStandardCompatibleMaterial,
 } from '../../rendering/nodeMaterialUtils'
 import { useGLTF } from '../../rendering/useGLTF'
+import { applyFogOfWarToMaterial, applyFogOfWarToObject, useFogOfWarRuntime } from './fogOfWar'
+
+function shouldUseGpuFog(variant: ContentPackInstanceVariant, fogOfWar: ReturnType<typeof useFogOfWarRuntime>) {
+  return fogOfWar !== null && variant === 'floor'
+}
 
 /** Inverted-hull outline: a slightly scaled-up back-face clone with a
  *  bright emissive rim material. Works with any geometry/GLTF. */
@@ -136,6 +140,7 @@ export function ContentPackInstance({
         <FallbackMesh
           selected={selected}
           variant={variant}
+          variantKey={variantKey}
           receiveShadow={receiveShadow}
           tint={tint}
           tintOpacity={tintOpacity}
@@ -154,6 +159,7 @@ export function ContentPackInstance({
           <FallbackMesh
             selected={selected}
             variant={variant}
+            variantKey={variantKey}
             receiveShadow={receiveShadow}
             tint={tint}
             tintOpacity={tintOpacity}
@@ -176,25 +182,27 @@ export function ContentPackInstance({
           receiveShadow={receiveShadow}
           castShadow={castShadow}
           selected={selected}
-           tint={tint}
-           tintOpacity={tintOpacity}
-             overlayOnly={overlayOnly}
-             visibility={visibility}
-             useLineOfSightPostMask={useLineOfSightPostMask}
-             {...groupProps}
-         />
-       ) : (
+          tint={tint}
+          tintOpacity={tintOpacity}
+          overlayOnly={overlayOnly}
+          visibility={visibility}
+          useLineOfSightPostMask={useLineOfSightPostMask}
+          variant={variant}
+          {...groupProps}
+        />
+      ) : (
         <GLTFModel
           assetPath={assetPath!}
-           receiveShadow={receiveShadow}
-           castShadow={castShadow}
-           selected={selected}
+          receiveShadow={receiveShadow}
+          castShadow={castShadow}
+          selected={selected}
           tint={tint}
           tintOpacity={tintOpacity}
           overlayOnly={overlayOnly}
           visibility={visibility}
           useLineOfSightPostMask={useLineOfSightPostMask}
           variantKey={variantKey}
+          variant={variant}
           {...groupProps}
         />
       )}
@@ -227,6 +235,7 @@ function GLTFModel({
   visibility,
   useLineOfSightPostMask = false,
   variantKey,
+  variant,
   ...groupProps
 }: ThreeElements['group'] & {
   assetPath: string
@@ -239,8 +248,15 @@ function GLTFModel({
   visibility?: PlayVisibilityState
   useLineOfSightPostMask?: boolean
   variantKey?: string
+  variant: ContentPackInstanceVariant
 }) {
   const gltf = useGLTF(assetPath)
+  const fogOfWar = useFogOfWarRuntime()
+  const usesGpuFog = shouldUseGpuFog(variant, fogOfWar)
+  const fogCell = useMemo(
+    () => (variant === 'floor' ? parseFogCellKey(variantKey) : null),
+    [variant, variantKey],
+  )
   const scene = useMemo(() => {
     const clone = cloneSceneWithNodeMaterials(gltf.scene)
     clone.traverse((obj) => {
@@ -253,17 +269,21 @@ function GLTFModel({
   }, [castShadow, gltf.scene, receiveShadow])
 
   useEffect(() => {
-    setLosLayers(scene, visibility ?? 'visible')
-  }, [scene, visibility])
+    applyFogOfWarToObject(scene, usesGpuFog ? fogOfWar : null, {
+      variant,
+      cell: fogCell,
+    })
+  }, [fogCell, fogOfWar, scene, usesGpuFog, variant])
 
   const shouldRenderBase =
-    !overlayOnly && shouldRenderLineOfSightGeometry(visibility ?? 'visible', useLineOfSightPostMask)
+    !overlayOnly && (usesGpuFog || shouldRenderLineOfSightGeometry(visibility ?? 'visible', useLineOfSightPostMask))
+  const canShowOverlay = (visibility ?? 'visible') !== 'hidden'
 
   return (
     <group {...groupProps}>
       {shouldRenderBase && <primitive object={scene} />}
-      {shouldRenderBase && selected && <SelectionOutline source={scene} />}
-      {tint && shouldRenderBase && (
+      {shouldRenderBase && canShowOverlay && selected && <SelectionOutline source={scene} />}
+      {tint && shouldRenderBase && canShowOverlay && (
         <TintOverlay
           source={scene}
           color={tint}
@@ -271,11 +291,11 @@ function GLTFModel({
           refreshKey={variantKey ?? assetPath}
         />
       )}
-      {!overlayOnly && !useLineOfSightPostMask && visibility !== 'visible' && (
+      {!overlayOnly && !usesGpuFog && visibility === 'explored' && (
         <TintOverlay
           source={scene}
           color="#050609"
-          opacity={visibility === 'hidden' ? 0.94 : 0.6}
+          opacity={0.6}
         />
       )}
     </group>
@@ -293,6 +313,7 @@ function ComponentAsset({
   overlayOnly,
   visibility,
   useLineOfSightPostMask = false,
+  variant,
   ...groupProps
 }: ThreeElements['group'] & {
   Component: ComponentType<ContentPackComponentProps>
@@ -305,9 +326,16 @@ function ComponentAsset({
   overlayOnly?: boolean
   visibility?: PlayVisibilityState
   useLineOfSightPostMask?: boolean
+  variant: ContentPackInstanceVariant
 }) {
   const contentRef = useRef<THREE.Group>(null)
   const [overlaySource, setOverlaySource] = useState<THREE.Group | null>(null)
+  const fogOfWar = useFogOfWarRuntime()
+  const usesGpuFog = shouldUseGpuFog(variant, fogOfWar)
+  const fogCell = useMemo(
+    () => (variant === 'floor' ? parseFogCellKey(componentProps.variantKey) : null),
+    [componentProps.variantKey, variant],
+  )
 
   useLayoutEffect(() => {
     if (contentRef.current) {
@@ -326,20 +354,24 @@ function ComponentAsset({
 
   useEffect(() => {
     if (contentRef.current) {
-      setLosLayers(contentRef.current, visibility ?? 'visible')
+      applyFogOfWarToObject(contentRef.current, usesGpuFog ? fogOfWar : null, {
+        variant,
+        cell: fogCell,
+      })
     }
-  }, [visibility])
+  }, [fogCell, fogOfWar, usesGpuFog, variant])
 
   const shouldRenderBase =
-    !overlayOnly && shouldRenderLineOfSightGeometry(visibility ?? 'visible', useLineOfSightPostMask)
+    !overlayOnly && (usesGpuFog || shouldRenderLineOfSightGeometry(visibility ?? 'visible', useLineOfSightPostMask))
+  const canShowOverlay = (visibility ?? 'visible') !== 'hidden'
 
   return (
     <group {...groupProps}>
       <group ref={contentRef} visible={shouldRenderBase}>
         <Component {...componentProps} />
       </group>
-      {shouldRenderBase && selected && overlaySource && <SelectionOutline source={overlaySource} />}
-      {tint && overlaySource && shouldRenderBase && (
+      {shouldRenderBase && canShowOverlay && selected && overlaySource && <SelectionOutline source={overlaySource} />}
+      {tint && overlaySource && shouldRenderBase && canShowOverlay && (
         <TintOverlay
           source={overlaySource}
           color={tint}
@@ -347,11 +379,11 @@ function ComponentAsset({
           refreshKey={componentProps.variantKey}
         />
       )}
-      {!overlayOnly && !useLineOfSightPostMask && visibility !== 'visible' && overlaySource && (
+      {!overlayOnly && !usesGpuFog && visibility === 'explored' && overlaySource && (
         <TintOverlay
           source={overlaySource}
           color="#050609"
-          opacity={visibility === 'hidden' ? 0.94 : 0.6}
+          opacity={0.6}
         />
       )}
     </group>
@@ -378,6 +410,7 @@ function FallbackMesh({
   tintOpacity,
   overlayOnly,
   variant,
+  variantKey,
   receiveShadow,
   castShadow = true,
   visibility = 'visible',
@@ -388,6 +421,7 @@ function FallbackMesh({
   tintOpacity?: number
   overlayOnly?: boolean
   variant: ContentPackInstanceVariant
+  variantKey?: string
   receiveShadow: boolean
   castShadow?: boolean
   visibility?: PlayVisibilityState
@@ -405,14 +439,20 @@ function FallbackMesh({
         ? ([GRID_SIZE * 0.96, 3, GRID_SIZE * 0.12] as const)
         : ([0.5, 0.9, 0.5] as const)
   const yOffset = variant === 'floor' ? 0.03 : variant === 'wall' ? 1.5 : 0
-  const opacity = useLineOfSightPostMask
+  const meshRef = useRef<THREE.Mesh>(null)
+  const fogOfWar = useFogOfWarRuntime()
+  const usesGpuFog = shouldUseGpuFog(variant, fogOfWar)
+  const opacity = usesGpuFog
     ? 1
     : visibility === 'hidden'
       ? 0.08
       : visibility === 'explored'
         ? 0.45
         : 1
-  const meshRef = useRef<THREE.Mesh>(null)
+  const fogCell = useMemo(
+    () => (variant === 'floor' ? parseFogCellKey(variantKey) : null),
+    [variant, variantKey],
+  )
   const material = useMemo(
     () => createStandardCompatibleMaterial({
       color,
@@ -427,14 +467,15 @@ function FallbackMesh({
   )
 
   useEffect(() => {
-    if (meshRef.current) {
-      setLosLayers(meshRef.current, visibility)
-    }
-  }, [visibility])
+    applyFogOfWarToMaterial(material, usesGpuFog ? fogOfWar : null, {
+      variant,
+      cell: fogCell,
+    })
+  }, [fogCell, fogOfWar, material, usesGpuFog, variant])
 
   useEffect(() => () => material.dispose(), [material])
 
-  if (!overlayOnly && !shouldRenderLineOfSightGeometry(visibility, useLineOfSightPostMask)) {
+  if (!overlayOnly && !usesGpuFog && !shouldRenderLineOfSightGeometry(visibility, useLineOfSightPostMask)) {
     return null
   }
 
@@ -458,4 +499,15 @@ function FallbackMesh({
       )}
     </mesh>
   )
+}
+
+function parseFogCellKey(cellKey?: string): [number, number] | null {
+  if (!cellKey) {
+    return null
+  }
+
+  const [xText, zText] = cellKey.split(':')
+  const x = Number.parseInt(xText ?? '', 10)
+  const z = Number.parseInt(zText ?? '', 10)
+  return Number.isFinite(x) && Number.isFinite(z) ? [x, z] : null
 }
