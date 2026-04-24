@@ -2,6 +2,7 @@
   "name": "dungeonplanner-server",
   "version": "0.0.1",
   "private": true,
+  "license": "PolyForm-Noncommercial-1.0.0",
   "type": "module",
   "packageManager": "pnpm@10.18.2",
   "scripts": {
@@ -15,6 +16,7 @@
     "@colyseus/ws-transport": "^0.17.13",
     "@types/cors": "^2.8.19",
     "colyseus": "^0.17.9",
+    "convex": "^1.36.1",
     "cors": "^2.8.6",
     "express": "^4.21.0"
   },

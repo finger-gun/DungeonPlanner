@@ -15,9 +15,9 @@ import { PropToolPanel } from './components/editor/PropToolPanel'
 import { CharacterToolPanel } from './components/editor/CharacterToolPanel'
 import { SelectToolPanel } from './components/editor/SelectToolPanel'
 import { ScenePanel } from './components/editor/ScenePanel'
-import { CharacterSheetOverlay } from './components/editor/CharacterSheetOverlay'
 import { getDebugCameraPose, projectDebugWorldPoint } from './components/canvas/debugCameraBridge'
 import { migrateLegacyGeneratedCharacters } from './generated-characters/migration'
+import type { GeneratedCharacterRecord } from './generated-characters/types'
 import { useDungeonStore } from './store/useDungeonStore'
 import { shouldRotateSelectionFromShortcut } from './rotationShortcuts'
 import {
@@ -33,6 +33,19 @@ import { ChevronLeft, ChevronRight, RotateCcw } from 'lucide-react'
 import { RendererErrorBoundary } from './components/RendererErrorBoundary'
 import { WebGpuRequiredNotice } from './components/WebGpuRequiredNotice'
 import { getWebGpuSupportMessage, isWebGpuSupported } from './rendering/webgpuSupport'
+import {
+  copyEditorDungeon,
+  deleteEditorDungeon,
+  consumeEditorDungeonHandoff,
+  listEditorDungeons,
+  openEditorDungeon,
+  parseEditorDungeonHandoff,
+  saveEditorDungeon,
+  stripEditorDungeonHandoff,
+} from './lib/editorDungeonHandoff'
+import { listEditorActors } from './lib/editorActors'
+import type { SavedDungeonSummary } from '@dungeonplanner/shared/editorAccess'
+import type { EditorActorRecord } from '@dungeonplanner/shared/actors'
 
 const Scene = lazy(() =>
   import('./components/canvas/Scene').then((module) => ({
@@ -45,6 +58,8 @@ const FpsOverlay = lazy(() =>
     default: module.FpsOverlay,
   })),
 )
+
+const EDITOR_LIBRARY_SESSION_STORAGE_KEY = 'dungeonplanner.editor-library-access'
 
 function RightPanel({
   panelMode,
@@ -108,15 +123,141 @@ function RightPanel({
   )
 }
 
+function RemoteDungeonLibraryModal({
+  activeDungeonId,
+  busyAction,
+  dungeons,
+  error,
+  isLoading,
+  onClose,
+  onCopy,
+  onDelete,
+  onOpen,
+}: {
+  activeDungeonId: string | null
+  busyAction: string | null
+  dungeons: SavedDungeonSummary[]
+  error: string | null
+  isLoading: boolean
+  onClose: () => void
+  onCopy: (dungeon: SavedDungeonSummary) => void
+  onDelete: (dungeon: SavedDungeonSummary) => void
+  onOpen: (dungeon: SavedDungeonSummary) => void
+}) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-stone-950/80 p-4 backdrop-blur-sm">
+      <div className="flex max-h-[85vh] w-full max-w-4xl flex-col overflow-hidden rounded-3xl border border-stone-700/70 bg-stone-950 shadow-2xl">
+        <div className="flex items-center justify-between border-b border-stone-800/80 px-6 py-5">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.32em] text-amber-300/80">Dungeon Library</p>
+            <h2 className="mt-2 text-2xl font-semibold text-stone-100">Open a saved dungeon</h2>
+            <p className="mt-1 text-sm text-stone-400">
+              Open, copy, or delete private dungeon records without leaving the editor.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-xl border border-stone-700 px-3 py-2 text-sm text-stone-300 transition hover:border-stone-500 hover:text-stone-100"
+          >
+            Close
+          </button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto px-6 py-5">
+          {error ? (
+            <div className="mb-4 rounded-2xl border border-red-500/30 bg-red-950/40 px-4 py-3 text-sm text-red-100">
+              {error}
+            </div>
+          ) : null}
+
+          {isLoading ? (
+            <p className="text-sm text-stone-400">Loading your dungeon library...</p>
+          ) : dungeons.length > 0 ? (
+            <div className="grid gap-4">
+              {dungeons.map((dungeon) => (
+                <article
+                  key={dungeon._id}
+                  className="flex flex-wrap items-start justify-between gap-4 rounded-2xl border border-stone-800/80 bg-stone-900/70 p-4"
+                >
+                  <div className="max-w-2xl">
+                    <div className="flex flex-wrap items-center gap-3">
+                      <h3 className="text-lg font-semibold text-stone-100">{dungeon.title}</h3>
+                      {activeDungeonId === dungeon._id ? (
+                        <span className="rounded-full border border-amber-400/30 bg-amber-400/10 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.2em] text-amber-200">
+                          Current
+                        </span>
+                      ) : null}
+                    </div>
+                    <p className="mt-2 text-sm text-stone-400">{dungeon.description ?? 'No description yet.'}</p>
+                    <p className="mt-3 text-xs uppercase tracking-[0.24em] text-stone-500">
+                      Updated {new Date(dungeon.updatedAt).toLocaleString()}
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap justify-end gap-2">
+                    <button
+                      type="button"
+                      onClick={() => onOpen(dungeon)}
+                      disabled={busyAction === `open:${dungeon._id}`}
+                      className="rounded-xl bg-amber-400 px-4 py-2 text-sm font-semibold text-stone-950 transition hover:bg-amber-300 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      {busyAction === `open:${dungeon._id}` ? 'Opening...' : 'Open'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => onCopy(dungeon)}
+                      disabled={busyAction === `copy:${dungeon._id}`}
+                      className="rounded-xl border border-stone-700 px-4 py-2 text-sm text-stone-200 transition hover:border-stone-500 hover:text-stone-100 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      {busyAction === `copy:${dungeon._id}` ? 'Copying...' : 'Copy'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => onDelete(dungeon)}
+                      disabled={busyAction === `delete:${dungeon._id}`}
+                      className="rounded-xl border border-red-500/30 px-4 py-2 text-sm text-red-200 transition hover:border-red-400/50 hover:bg-red-950/40 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      {busyAction === `delete:${dungeon._id}` ? 'Deleting...' : 'Delete'}
+                    </button>
+                  </div>
+                </article>
+              ))}
+            </div>
+          ) : (
+            <div className="rounded-2xl border border-dashed border-stone-700 px-4 py-8 text-center text-sm text-stone-400">
+              Your dungeon library is empty. Save the current map to create your first record.
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function App() {
   const tool = useDungeonStore((state) => state.tool)
   const mapMode = useDungeonStore((state) => state.mapMode)
   const roomEditMode = useDungeonStore((state) => state.roomEditMode)
   const outdoorBrushMode = useDungeonStore((state) => state.outdoorBrushMode)
+  const dungeonName = useDungeonStore((state) => state.dungeonName)
+  const exportDungeonJson = useDungeonStore((state) => state.exportDungeonJson)
   const isPlayMode = tool === 'play'
   const [sidebarPanel, setSidebarPanel] = useState<'tool' | 'settings'>('tool')
   const [sidebarOpen, setSidebarOpen] = useState(true)
   const [debugPanelOpen, setDebugPanelOpen] = useState(false)
+  const [editorLibraryAccess, setEditorLibraryAccess] = useState<{
+    backendUrl: string
+    accessToken: string
+  } | null>(null)
+  const [editorLibraryOpen, setEditorLibraryOpen] = useState(false)
+  const [editorLibraryRecords, setEditorLibraryRecords] = useState<SavedDungeonSummary[]>([])
+  const [editorLibraryBusyAction, setEditorLibraryBusyAction] = useState<string | null>(null)
+  const [editorLibraryError, setEditorLibraryError] = useState<string | null>(null)
+  const [editorLibraryNotice, setEditorLibraryNotice] = useState<string | null>(null)
+  const [isEditorLibraryLoading, setIsEditorLibraryLoading] = useState(false)
+  const [isSavingRemoteDungeon, setIsSavingRemoteDungeon] = useState(false)
+  const [currentRemoteDungeonId, setCurrentRemoteDungeonId] = useState<string | null>(null)
+  const ingestGeneratedCharacters = useDungeonStore((state) => state.ingestGeneratedCharacters)
   const selectedAssetIds = useDungeonStore((state) => state.selectedAssetIds)
   const surfaceBrushAssetIds = useDungeonStore((state) => state.surfaceBrushAssetIds)
   const assetBrowser = useDungeonStore((state) => state.assetBrowser)
@@ -236,6 +377,231 @@ function App() {
   }, [])
 
   useEffect(() => {
+    const handoff = parseEditorDungeonHandoff(window.location.search)
+    const storedAccess = (() => {
+      try {
+        const raw = window.sessionStorage.getItem(EDITOR_LIBRARY_SESSION_STORAGE_KEY)
+        if (!raw) {
+          return null
+        }
+
+        return JSON.parse(raw) as {
+          backendUrl: string
+          accessToken: string
+        }
+      } catch {
+        return null
+      }
+    })()
+    const access = handoff
+      ? {
+          backendUrl: handoff.backendUrl,
+          accessToken: handoff.accessToken,
+        }
+      : storedAccess
+
+    if (!access) {
+      return
+    }
+
+    setEditorLibraryAccess(access)
+    window.sessionStorage.setItem(EDITOR_LIBRARY_SESSION_STORAGE_KEY, JSON.stringify(access))
+    let cancelled = false
+
+    void listEditorActors(access)
+      .then((actors) => {
+        if (cancelled) {
+          return
+        }
+
+        ingestGeneratedCharacters(actors.map(mapEditorActorToGeneratedCharacter))
+      })
+      .catch((error) => {
+        console.error(error)
+      })
+
+    if (!handoff?.dungeonId) {
+      if (handoff) {
+        const nextSearch = stripEditorDungeonHandoff(window.location.search)
+        window.history.replaceState({}, '', `${window.location.pathname}${nextSearch}${window.location.hash}`)
+      }
+
+      return () => {
+        cancelled = true
+      }
+    }
+
+    void (async () => {
+      try {
+        const dungeon = await consumeEditorDungeonHandoff(handoff)
+
+        if (cancelled) {
+          return
+        }
+
+        const loaded = useDungeonStore.getState().loadDungeon(dungeon.serializedDungeon)
+
+        if (!loaded) {
+          console.error('Remote dungeon handoff payload could not be loaded.')
+          return
+        }
+
+        setCurrentRemoteDungeonId(dungeon._id)
+        setEditorLibraryNotice(`Opened "${dungeon.title}" from your private library.`)
+      } catch (error) {
+        console.error(error)
+      } finally {
+        if (!cancelled) {
+          const nextSearch = stripEditorDungeonHandoff(window.location.search)
+          window.history.replaceState({}, '', `${window.location.pathname}${nextSearch}${window.location.hash}`)
+        }
+      }
+    })()
+
+    return () => {
+      cancelled = true
+    }
+  }, [ingestGeneratedCharacters])
+
+  async function refreshEditorLibrary(access = editorLibraryAccess) {
+    if (!access) {
+      return []
+    }
+
+    setIsEditorLibraryLoading(true)
+
+    try {
+      const dungeons = await listEditorDungeons(access)
+      setEditorLibraryRecords(dungeons)
+      setEditorLibraryError(null)
+      return dungeons
+    } catch (error) {
+      console.error(error)
+      setEditorLibraryError('Loading your dungeon library failed.')
+      return []
+    } finally {
+      setIsEditorLibraryLoading(false)
+    }
+  }
+
+  async function handleOpenRemoteLibrary() {
+    if (!editorLibraryAccess) {
+      return
+    }
+
+    setEditorLibraryOpen(true)
+    await refreshEditorLibrary(editorLibraryAccess)
+  }
+
+  async function handleOpenRemoteDungeon(dungeon: SavedDungeonSummary) {
+    if (!editorLibraryAccess) {
+      return
+    }
+
+    setEditorLibraryBusyAction(`open:${dungeon._id}`)
+
+    try {
+      const record = await openEditorDungeon(editorLibraryAccess, dungeon._id)
+      const loaded = useDungeonStore.getState().loadDungeon(record.serializedDungeon)
+
+      if (!loaded) {
+        setEditorLibraryError('The selected dungeon could not be loaded into the editor.')
+        return
+      }
+
+      setCurrentRemoteDungeonId(record._id)
+      setEditorLibraryNotice(`Opened "${record.title}" from your private library.`)
+      setEditorLibraryError(null)
+      setEditorLibraryOpen(false)
+    } catch (error) {
+      console.error(error)
+      setEditorLibraryError('Opening that dungeon failed.')
+    } finally {
+      setEditorLibraryBusyAction(null)
+    }
+  }
+
+  async function handleCopyRemoteDungeon(dungeon: SavedDungeonSummary) {
+    if (!editorLibraryAccess) {
+      return
+    }
+
+    setEditorLibraryBusyAction(`copy:${dungeon._id}`)
+
+    try {
+      const copiedDungeon = await copyEditorDungeon(editorLibraryAccess, dungeon._id)
+      setEditorLibraryNotice(`Created "${copiedDungeon.title}" in your private library.`)
+      setEditorLibraryError(null)
+      await refreshEditorLibrary(editorLibraryAccess)
+    } catch (error) {
+      console.error(error)
+      setEditorLibraryError('Copying that dungeon failed.')
+    } finally {
+      setEditorLibraryBusyAction(null)
+    }
+  }
+
+  async function handleDeleteRemoteDungeon(dungeon: SavedDungeonSummary) {
+    if (!editorLibraryAccess) {
+      return
+    }
+
+    if (!window.confirm(`Delete "${dungeon.title}" from your dungeon library?`)) {
+      return
+    }
+
+    setEditorLibraryBusyAction(`delete:${dungeon._id}`)
+
+    try {
+      await deleteEditorDungeon(editorLibraryAccess, dungeon._id)
+      if (currentRemoteDungeonId === dungeon._id) {
+        setCurrentRemoteDungeonId(null)
+      }
+      setEditorLibraryNotice(`Deleted "${dungeon.title}" from your private library.`)
+      setEditorLibraryError(null)
+      await refreshEditorLibrary(editorLibraryAccess)
+    } catch (error) {
+      console.error(error)
+      setEditorLibraryError('Deleting that dungeon failed.')
+    } finally {
+      setEditorLibraryBusyAction(null)
+    }
+  }
+
+  async function handleSaveRemoteDungeon() {
+    if (!editorLibraryAccess) {
+      return
+    }
+
+    setIsSavingRemoteDungeon(true)
+
+    try {
+      const savedDungeon = await saveEditorDungeon(editorLibraryAccess, {
+        dungeonId: currentRemoteDungeonId ?? undefined,
+        title: dungeonName,
+        serializedDungeon: exportDungeonJson(),
+      })
+      setCurrentRemoteDungeonId(savedDungeon._id)
+      setEditorLibraryNotice(`Saved "${savedDungeon.title}" to your private library.`)
+      setEditorLibraryError(null)
+      if (editorLibraryOpen) {
+        await refreshEditorLibrary(editorLibraryAccess)
+      }
+    } catch (error) {
+      console.error(error)
+      setEditorLibraryError('Saving to your dungeon library failed.')
+    } finally {
+      setIsSavingRemoteDungeon(false)
+    }
+  }
+
+  function handleNewDungeon() {
+    setCurrentRemoteDungeonId(null)
+    setEditorLibraryError(null)
+    setEditorLibraryNotice(null)
+  }
+
+  useEffect(() => {
     if (!import.meta.env.DEV) {
       return
     }
@@ -346,14 +712,23 @@ function App() {
         {/* Narrow vertical icon toolbar */}
         <div className="z-10 w-14 shrink-0">
           <EditorToolbar
+            isSavingRemoteDungeon={isSavingRemoteDungeon}
+            onNewDungeon={handleNewDungeon}
+            onOpenRemoteLibrary={() => {
+              void handleOpenRemoteLibrary()
+            }}
             settingsOpen={showSettingsPanel}
             onOpenSettings={() => {
               setSidebarPanel('settings')
               setSidebarOpen(true)
             }}
+            onSaveRemoteDungeon={() => {
+              void handleSaveRemoteDungeon()
+            }}
             onSelectTool={() => {
               setSidebarPanel('tool')
             }}
+            remoteLibraryEnabled={Boolean(editorLibraryAccess)}
           />
         </div>
 
@@ -377,8 +752,6 @@ function App() {
               <WebGpuRequiredNotice message={getWebGpuSupportMessage()} />
             )}
           </Suspense>
-
-          {!isPlayMode && <CharacterSheetOverlay />}
 
           <CameraDropdown rightOffset={cameraRightOffset} />
 
@@ -407,8 +780,21 @@ function App() {
             <p className="mt-1.5 text-xs text-stone-400">{toolHint}</p>
           </div>
 
+          {editorLibraryNotice ? (
+            <div className="absolute right-4 top-4 max-w-sm rounded-2xl border border-emerald-500/20 bg-emerald-950/45 px-4 py-3 text-sm text-emerald-100 backdrop-blur">
+              {editorLibraryNotice}
+            </div>
+          ) : null}
+
+          {editorLibraryError && !editorLibraryOpen ? (
+            <div className="absolute right-4 top-20 max-w-sm rounded-2xl border border-red-500/25 bg-red-950/45 px-4 py-3 text-sm text-red-100 backdrop-blur">
+              {editorLibraryError}
+            </div>
+          ) : null}
+
           {debugPanelOpen && (
             <DebugVisibilityPanel
+              rightOffsetClass={!isPlayMode && sidebarVisible ? 'right-[23rem]' : 'right-4'}
               exploredCellCount={exploredCellCount}
               clearExploredCells={clearExploredCells}
               showLosDebugMask={showLosDebugMask}
@@ -477,7 +863,7 @@ function App() {
             </Suspense>
           )}
 
-          {isPlayMode && (
+          {isPlayMode && showSettingsPanel && (
             <div
               data-testid="editor-right-panel-shell"
               data-sidebar-visible={sidebarVisible}
@@ -497,11 +883,50 @@ function App() {
           )}
         </section>
       </div>
+      {editorLibraryOpen ? (
+        <RemoteDungeonLibraryModal
+          activeDungeonId={currentRemoteDungeonId}
+          busyAction={editorLibraryBusyAction}
+          dungeons={editorLibraryRecords}
+          error={editorLibraryError}
+          isLoading={isEditorLibraryLoading}
+          onClose={() => setEditorLibraryOpen(false)}
+          onCopy={(dungeon) => {
+            void handleCopyRemoteDungeon(dungeon)
+          }}
+          onDelete={(dungeon) => {
+            void handleDeleteRemoteDungeon(dungeon)
+          }}
+          onOpen={(dungeon) => {
+            void handleOpenRemoteDungeon(dungeon)
+          }}
+        />
+      ) : null}
     </div>
   )
 }
 
 export default App
+
+function mapEditorActorToGeneratedCharacter(actor: EditorActorRecord): GeneratedCharacterRecord {
+  return {
+    assetId: actor.assetId,
+    storageId: actor.storageId,
+    name: actor.name,
+    kind: actor.kind === 'npc' ? 'npc' : 'player',
+    prompt: actor.prompt,
+    model: actor.model,
+    size: actor.size,
+    originalImageUrl: actor.originalImageUrl,
+    processedImageUrl: actor.processedImageUrl,
+    alphaMaskUrl: actor.alphaMaskUrl,
+    thumbnailUrl: actor.thumbnailUrl,
+    width: actor.width,
+    height: actor.height,
+    createdAt: actor.createdAt,
+    updatedAt: actor.updatedAt,
+  }
+}
 
 function GeneratedCharacterMigrationBootstrap() {
   const generatedCharacters = useDungeonStore((state) => state.generatedCharacters)
@@ -531,6 +956,7 @@ function formatCount(count: number, singular: string) {
 }
 
 function DebugVisibilityPanel({
+  rightOffsetClass,
   exploredCellCount,
   clearExploredCells,
   showLosDebugMask,
@@ -545,6 +971,7 @@ function DebugVisibilityPanel({
   debugAssetSourcePath,
   debugAssetSourceLink,
 }: {
+  rightOffsetClass: string
   exploredCellCount: number
   clearExploredCells: () => void
   showLosDebugMask: boolean
@@ -562,7 +989,7 @@ function DebugVisibilityPanel({
   return (
     <aside
       data-testid="debug-visibility-panel"
-      className="absolute right-4 top-20 z-20 flex w-72 flex-col gap-4 rounded-2xl border border-emerald-400/25 bg-stone-950/92 p-4 shadow-2xl backdrop-blur"
+      className={`absolute top-20 z-40 flex w-72 flex-col gap-4 rounded-2xl border border-emerald-400/25 bg-stone-950/92 p-4 shadow-2xl backdrop-blur ${rightOffsetClass}`}
     >
       <div>
         <p className="text-xs font-semibold uppercase tracking-[0.3em] text-emerald-300/85">
