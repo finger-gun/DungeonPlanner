@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/ban-ts-comment */
 // @ts-nocheck
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useFrame, useThree } from '@react-three/fiber'
@@ -86,7 +87,7 @@ export function FireParticleSystem({
   const [activeEmitters, setActiveEmitters] = useState<ActiveFireEmitter[]>([])
 
   // Shared emitter data buffers — created once, never recreated.
-  const emitterBuffers = useMemo<EmitterBuffers>(createEmitterBuffers, [])
+  const emitterBuffers = useMemo<EmitterBuffers>(() => createEmitterBuffers(), [])
 
   const publishEmitters = useCallback(() => {
     if (!particleEffectsEnabled) {
@@ -270,10 +271,8 @@ function FireGpuLayer({
     const seedBuf2 = instancedArray(totalCount, 'vec4')
 
     // ── Parse layer color constants once ─────────────────────────────────────
-    const cStart = new THREE.Color(layer.colorStart)
-    const cEnd = new THREE.Color(layer.colorEnd)
-    const cStartNode = vec3(cStart.r, cStart.g, cStart.b)
-    const cEndNode = vec3(cEnd.r, cEnd.g, cEnd.b)
+    new THREE.Color(layer.colorStart)
+    new THREE.Color(layer.colorEnd)
 
     const layerCount = uint(layer.count)
     const uTime = uniform(0)
@@ -377,7 +376,7 @@ function FireGpuLayer({
   return (
     <sprite
       ref={spriteRef}
-      // @ts-ignore: THREE.Sprite.count is not in community typedefs but is
+      // @ts-expect-error: THREE.Sprite.count is supported by the WebGPU renderer
       // supported by the WebGPU renderer to drive the instance draw count.
       count={totalCount}
       frustumCulled={false}

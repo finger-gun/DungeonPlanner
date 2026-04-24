@@ -27,10 +27,20 @@ export function EditorToolbar({
   settingsOpen = false,
   onOpenSettings,
   onSelectTool,
+  remoteLibraryEnabled = false,
+  isSavingRemoteDungeon = false,
+  onOpenRemoteLibrary,
+  onSaveRemoteDungeon,
+  onNewDungeon,
 }: {
   settingsOpen?: boolean
   onOpenSettings?: () => void
   onSelectTool?: (tool: DungeonTool) => void
+  remoteLibraryEnabled?: boolean
+  isSavingRemoteDungeon?: boolean
+  onOpenRemoteLibrary?: () => void
+  onSaveRemoteDungeon?: () => void
+  onNewDungeon?: (mode: MapMode) => void
 } = {}) {
   const tool = useDungeonStore((state) => state.tool)
   const mapMode = useDungeonStore((state) => state.mapMode)
@@ -79,7 +89,13 @@ export function EditorToolbar({
 
       {/* File menu + Undo/Redo at bottom */}
       <div className="flex flex-col items-center gap-1">
-        <FileMenuButton />
+        <FileMenuButton
+          isSavingRemoteDungeon={isSavingRemoteDungeon}
+          onNewDungeon={onNewDungeon}
+          onOpenRemoteLibrary={onOpenRemoteLibrary}
+          onSaveRemoteDungeon={onSaveRemoteDungeon}
+          remoteLibraryEnabled={remoteLibraryEnabled}
+        />
         <SettingsButton
           active={settingsOpen}
           onOpenSettings={() => {
@@ -129,7 +145,19 @@ function SettingsButton({ active, onOpenSettings }: { active: boolean; onOpenSet
 
 // ── File menu ─────────────────────────────────────────────────────────────────
 
-function FileMenuButton() {
+function FileMenuButton({
+  remoteLibraryEnabled,
+  isSavingRemoteDungeon,
+  onOpenRemoteLibrary,
+  onSaveRemoteDungeon,
+  onNewDungeon,
+}: {
+  remoteLibraryEnabled: boolean
+  isSavingRemoteDungeon: boolean
+  onOpenRemoteLibrary?: () => void
+  onSaveRemoteDungeon?: () => void
+  onNewDungeon?: (mode: MapMode) => void
+}) {
   const [open, setOpen] = useState(false)
   const [confirmNew, setConfirmNew] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
@@ -168,6 +196,7 @@ function FileMenuButton() {
 
   function handleNew(mode: MapMode) {
     newDungeon(mode)
+    onNewDungeon?.(mode)
     setOpen(false)
     setConfirmNew(false)
   }
@@ -220,25 +249,73 @@ function FileMenuButton() {
 
           <div className="my-1 mx-3 h-px bg-stone-800" />
 
-          {/* Save */}
-          <button
-            type="button"
-            onClick={() => { downloadDungeon(); setOpen(false) }}
-            className={`${menuItemClass} text-stone-300 hover:bg-stone-800`}
-          >
-            <Download size={14} strokeWidth={1.5} className="shrink-0" />
-            Save Dungeon
-          </button>
+          {remoteLibraryEnabled ? (
+            <>
+              <button
+                type="button"
+                onClick={() => {
+                  onSaveRemoteDungeon?.()
+                  setOpen(false)
+                }}
+                className={`${menuItemClass} text-stone-300 hover:bg-stone-800`}
+              >
+                <Download size={14} strokeWidth={1.5} className="shrink-0" />
+                {isSavingRemoteDungeon ? 'Saving...' : 'Save Dungeon'}
+              </button>
 
-          {/* Load */}
-          <button
-            type="button"
-            onClick={() => fileInputRef.current?.click()}
-            className={`${menuItemClass} text-stone-300 hover:bg-stone-800`}
-          >
-            <Upload size={14} strokeWidth={1.5} className="shrink-0" />
-            Load Dungeon
-          </button>
+              <button
+                type="button"
+                onClick={() => {
+                  onOpenRemoteLibrary?.()
+                  setOpen(false)
+                }}
+                className={`${menuItemClass} text-stone-300 hover:bg-stone-800`}
+              >
+                <FolderOpen size={14} strokeWidth={1.5} className="shrink-0" />
+                Open Dungeon
+              </button>
+
+              <div className="my-1 mx-3 h-px bg-stone-800" />
+
+              <button
+                type="button"
+                onClick={() => { downloadDungeon(); setOpen(false) }}
+                className={`${menuItemClass} text-stone-300 hover:bg-stone-800`}
+              >
+                <Download size={14} strokeWidth={1.5} className="shrink-0" />
+                Export JSON
+              </button>
+
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                className={`${menuItemClass} text-stone-300 hover:bg-stone-800`}
+              >
+                <Upload size={14} strokeWidth={1.5} className="shrink-0" />
+                Import JSON
+              </button>
+            </>
+          ) : (
+            <>
+              <button
+                type="button"
+                onClick={() => { downloadDungeon(); setOpen(false) }}
+                className={`${menuItemClass} text-stone-300 hover:bg-stone-800`}
+              >
+                <Download size={14} strokeWidth={1.5} className="shrink-0" />
+                Save Dungeon
+              </button>
+
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                className={`${menuItemClass} text-stone-300 hover:bg-stone-800`}
+              >
+                <Upload size={14} strokeWidth={1.5} className="shrink-0" />
+                Load Dungeon
+              </button>
+            </>
+          )}
 
           <input
             ref={fileInputRef}

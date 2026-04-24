@@ -1,8 +1,6 @@
-import { useMemo, useState } from 'react'
-import { Pencil, Trash2 } from 'lucide-react'
+import { useMemo } from 'react'
 import { getContentPackAssetById, getContentPackAssetsByCategory } from '../../content-packs/registry'
 import { isGeneratedCharacterAssetId } from '../../content-packs/runtimeRegistry'
-import { deleteGeneratedCharacterAssets } from '../../generated-characters/api'
 import {
   getGeneratedCharacterDisplayName,
   isGeneratedCharacterReady,
@@ -10,18 +8,13 @@ import {
 import type { ContentPackAsset } from '../../content-packs/types'
 import { useDungeonStore } from '../../store/useDungeonStore'
 import { AssetCatalog } from './AssetCatalog'
-import { CompactPillButton } from './CompactPillButton'
 
-const CREATE_CHARACTER_CARD_ID = 'generated.character.create-new'
 const EMPTY_COMPONENT = () => null
 
 export function CharacterToolPanel() {
   const selectedAssetIds = useDungeonStore((state) => state.selectedAssetIds)
   const setSelectedAsset = useDungeonStore((state) => state.setSelectedAsset)
   const generatedCharacters = useDungeonStore((state) => state.generatedCharacters)
-  const createGeneratedCharacterDraft = useDungeonStore((state) => state.createGeneratedCharacterDraft)
-  const openCharacterSheet = useDungeonStore((state) => state.openCharacterSheet)
-  const removeGeneratedCharacter = useDungeonStore((state) => state.removeGeneratedCharacter)
   const selection = useDungeonStore((state) => state.selection)
   const selectedObject = useDungeonStore((state) =>
     selection ? state.placedObjects[selection] : null,
@@ -33,10 +26,9 @@ export function CharacterToolPanel() {
     () => getContentPackAssetsByCategory('player').filter((asset) => !isGeneratedCharacterAssetId(asset.id)),
     [],
   )
-  const [characterError, setCharacterError] = useState<string | null>(null)
 
-  const createdCharacterAssets = useMemo(() => {
-    const records = Object.values(generatedCharacters)
+  const actorAssets = useMemo(
+    () => Object.values(generatedCharacters)
       .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))
       .map<ContentPackAsset>((character) => ({
         id: character.assetId,
@@ -45,58 +37,13 @@ export function CharacterToolPanel() {
         category: 'player',
         thumbnailUrl: character.thumbnailUrl ?? undefined,
         Component: EMPTY_COMPONENT,
-      }))
-
-    return [
-      ...records,
-      {
-        id: CREATE_CHARACTER_CARD_ID,
-        slug: 'create-character',
-        name: 'Create New Character',
-        category: 'player' as const,
-        Component: EMPTY_COMPONENT,
-      },
-    ]
-  }, [generatedCharacters])
-
-  async function handleDeleteGeneratedCharacter(assetId: string) {
-    setCharacterError(null)
-    const record = generatedCharacters[assetId]
-    if (!record) {
-      return
-    }
-
-    if (!removeGeneratedCharacter(assetId)) {
-      setCharacterError('Remove this character from the dungeon before deleting it.')
-      return
-    }
-
-    if (!record.storageId) {
-      return
-    }
-
-    try {
-      await deleteGeneratedCharacterAssets(record.storageId)
-    } catch (error) {
-      setCharacterError(error instanceof Error ? error.message : 'Could not delete generated character assets.')
-    }
-  }
+      })),
+    [generatedCharacters],
+  )
 
   function handleCharacterSelect(asset: ContentPackAsset) {
-    if (asset.id === CREATE_CHARACTER_CARD_ID) {
-      const draftId = createGeneratedCharacterDraft()
-      openCharacterSheet(draftId)
-      return
-    }
-
     const generatedCharacter = generatedCharacters[asset.id]
-    if (generatedCharacter) {
-      if (isGeneratedCharacterReady(generatedCharacter)) {
-        setSelectedAsset('player', asset.id)
-        return
-      }
-
-      openCharacterSheet(asset.id)
+    if (generatedCharacter && !isGeneratedCharacterReady(generatedCharacter)) {
       return
     }
 
@@ -108,95 +55,45 @@ export function CharacterToolPanel() {
       <AssetCatalog
         title="Character Library"
         sections={[
-          { title: 'Created Characters', assets: createdCharacterAssets },
+          { title: 'Active Actor Packs', assets: actorAssets },
           ...(corePlayerAssets.length > 0 ? [{ title: 'Core Characters', assets: corePlayerAssets }] : []),
         ]}
         isSelected={(asset) => selectedAssetIds.player === asset.id}
         onSelect={handleCharacterSelect}
-        renderActions={(asset) => {
-          const record = generatedCharacters[asset.id]
-          if (!record) {
-            return null
-          }
-
-          return (
-            <div className="flex gap-2">
-              <button
-                type="button"
-                aria-label={`Edit ${record.name || 'character'}`}
-                title="Edit character"
-                onClick={(event) => {
-                  event.stopPropagation()
-                  openCharacterSheet(asset.id)
-                }}
-                className="flex h-7 w-7 items-center justify-center rounded-full border border-sky-300/30 bg-sky-400/10 text-sky-100 transition hover:border-sky-200/50 hover:bg-sky-400/15"
-              >
-                <Pencil size={12} strokeWidth={1.9} />
-              </button>
-              <button
-                type="button"
-                aria-label={`Delete ${record.name || 'character'}`}
-                title="Delete character"
-                onClick={(event) => {
-                  event.stopPropagation()
-                  void handleDeleteGeneratedCharacter(asset.id)
-                }}
-                className="flex h-7 w-7 items-center justify-center rounded-full border border-rose-400/30 bg-rose-500/10 text-rose-200 transition hover:border-rose-300/60 hover:bg-rose-500/20"
-              >
-                <Trash2 size={12} strokeWidth={1.9} />
-              </button>
-            </div>
-          )
-        }}
         getBadgeLabel={(asset, active) => {
           if (active) {
             return 'Selected'
-          }
-          if (asset.id === CREATE_CHARACTER_CARD_ID) {
-            return 'New'
           }
           const record = generatedCharacters[asset.id]
           if (!record) {
             return 'Core'
           }
-          return isGeneratedCharacterReady(record) ? record.kind.toUpperCase() : 'Draft'
+          return isGeneratedCharacterReady(record) ? record.kind.toUpperCase() : 'Pending'
         }}
         getBadgeClassName={(asset, active) => {
           if (active) {
             return 'bg-teal-300/15 text-teal-100'
-          }
-          if (asset.id === CREATE_CHARACTER_CARD_ID) {
-            return 'bg-amber-400/15 text-amber-200'
           }
           return generatedCharacters[asset.id]
             ? 'bg-sky-400/10 text-sky-200'
             : 'bg-stone-800 text-stone-400'
         }}
         getDescription={(asset) => {
-          if (asset.id === CREATE_CHARACTER_CARD_ID) {
-            return 'Open a blank character sheet with default values.'
-          }
           const record = generatedCharacters[asset.id]
           if (!record) {
             return asset.slug
           }
           if (!isGeneratedCharacterReady(record)) {
-            return 'Draft character — open to finish setup and generate an image.'
+            return 'This actor is still preparing and is not ready for placement yet.'
           }
           return record.prompt.trim() || 'Generated character'
         }}
       />
 
-      {characterError && (
-        <p className="rounded-2xl border border-rose-400/20 bg-rose-500/10 px-4 py-3 text-xs text-rose-200">
-          {characterError}
-        </p>
-      )}
-
       <section className="rounded-2xl border border-stone-800 bg-stone-950/50 p-4 text-xs leading-6 text-stone-400">
         <p className="font-medium text-stone-300">Character Placement</p>
-        <p className="mt-1">Click a ready character to arm it for placement in the viewport.</p>
-        <p>Draft characters reopen in the character sheet until they have a generated standee image.</p>
+        <p className="mt-1">Click a ready actor to arm it for placement in the viewport.</p>
+        <p>Creation and editing now happen in the app. The editor only shows active actor packs.</p>
       </section>
 
       {selectedObject?.type === 'player' && (
@@ -214,16 +111,6 @@ export function CharacterToolPanel() {
                   {selectedObject.id.slice(0, 8)}
                 </p>
               </div>
-              {selectedObject.assetId && generatedCharacters[selectedObject.assetId] && (
-                <CompactPillButton
-                  type="button"
-                  onClick={() => openCharacterSheet(selectedObject.assetId!)}
-                  tone="sky"
-                  size="sm"
-                >
-                  Edit
-                </CompactPillButton>
-              )}
             </div>
             <div className="grid gap-2 text-xs">
               <CharacterRow label="Position" value={selectedObject.position.map((v) => v.toFixed(2)).join(', ')} />

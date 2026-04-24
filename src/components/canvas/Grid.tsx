@@ -1,4 +1,4 @@
-import { useEffect, useEffectEvent, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useEffectEvent, useMemo, useRef, useState } from 'react'
 import type { ThreeEvent } from '@react-three/fiber'
 import { useThree } from '@react-three/fiber'
 import * as THREE from 'three'
@@ -181,7 +181,7 @@ export function Grid({ size = 120, playMode = false }: GridProps) {
       ? placementOrientation.wallFlipped
       : false
 
-  const resolvePlacementSurfaceHit = useEffectEvent((pointerEvent: PointerEvent) => {
+  const resolvePlacementSurfaceHit = useCallback((pointerEvent: PointerEvent) => {
     const rect = gl.domElement.getBoundingClientRect()
     if (rect.width === 0 || rect.height === 0) {
       return null
@@ -199,7 +199,7 @@ export function Grid({ size = 120, playMode = false }: GridProps) {
       placedObjects,
       mapMode,
     )
-  })
+  }, [camera, gl.domElement, mapMode, paintedCells, placedObjects, scene.children])
 
   const roomBrushCells = useMemo<Record<string, PaintedCellRecord>>(() => {
     if (mapMode !== 'outdoor') {
@@ -901,35 +901,20 @@ export function Grid({ size = 120, playMode = false }: GridProps) {
 
   const isNavigationTool = isPassiveGridMode(tool, playMode)
   const renderGridOverlay = shouldRenderGridOverlay(showGrid, playMode)
-  const wallConnectionPlacement = useMemo(
-    () => (tool === 'opening' || isUnifiedOpeningMode) && hoveredPoint
-      ? getWallConnectionPlacement(
-          wallConnectionMode,
-          selectedOpeningAsset,
-          hoveredPoint,
-          paintedCells,
-        )
-      : null,
-    [hoveredPoint, isUnifiedOpeningMode, paintedCells, selectedOpeningAsset, tool, wallConnectionMode],
-  )
-  const hoveredWallConnection = useMemo(
-    () => wallConnectionPlacement
-      ? findWallConnectionAtPlacement(wallConnectionPlacement, wallOpenings)
-      : null,
-    [wallConnectionPlacement, wallOpenings],
-  )
-  const suppressedWallKeys = useMemo(
-    () => getSuppressedWallKeys(wallOpenings),
-    [wallOpenings],
-  )
-  const eligibleOpenPassageWalls = useMemo(
-    () => deriveEligibleOpenPassageWalls(paintedCells, wallOpenings),
-    [paintedCells, wallOpenings],
-  )
-  const eligibleOpenPassageWallKeys = useMemo(
-    () => new Set(eligibleOpenPassageWalls.map((wall) => wall.wallKey)),
-    [eligibleOpenPassageWalls],
-  )
+  const wallConnectionPlacement = (tool === 'opening' || isUnifiedOpeningMode) && hoveredPoint
+    ? getWallConnectionPlacement(
+        wallConnectionMode,
+        selectedOpeningAsset,
+        hoveredPoint,
+        paintedCells,
+      )
+    : null
+  const hoveredWallConnection = wallConnectionPlacement
+    ? findWallConnectionAtPlacement(wallConnectionPlacement, wallOpenings)
+    : null
+  const suppressedWallKeys = getSuppressedWallKeys(wallOpenings)
+  const eligibleOpenPassageWalls = deriveEligibleOpenPassageWalls(paintedCells, wallOpenings)
+  const eligibleOpenPassageWallKeys = new Set(eligibleOpenPassageWalls.map((wall) => wall.wallKey))
   const isFloorVariantMode = (tool === 'room' && roomEditMode === 'floor-variants') || isUnifiedFloorVariantMode
   const isWallVariantMode = (tool === 'room' && roomEditMode === 'wall-variants') || isUnifiedWallVariantMode
   const isRoomWallMode = tool === 'room' && roomEditMode === 'walls'

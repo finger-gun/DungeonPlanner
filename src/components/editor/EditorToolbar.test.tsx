@@ -49,6 +49,18 @@ describe('EditorToolbar', () => {
     expect(outdoorButton.className).not.toMatch(/red|emerald/)
   })
 
+  it('switches file actions to the remote library when backend access is available', () => {
+    render(<EditorToolbar remoteLibraryEnabled onOpenRemoteLibrary={() => {}} onSaveRemoteDungeon={() => {}} />)
+
+    fireEvent.click(screen.getByTitle('File'))
+
+    expect(screen.getByRole('button', { name: /save dungeon/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /open dungeon/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /export json/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /import json/i })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /load dungeon/i })).not.toBeInTheDocument()
+  })
+
   it('hides the opening tool shortcut in outdoor mode', () => {
     useDungeonStore.getState().newDungeon('outdoor')
     render(<EditorToolbar />)

@@ -1,0 +1,14 @@
+{
+  "name": "@dungeonplanner/shared",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "exports": {
+    "./actors": "./src/actors.ts",
+    "./editorAccess": "./src/editorAccess.ts",
+    "./generated-characters/api": "./src/generated-characters/api.ts",
+    "./generated-characters/prompt": "./src/generated-characters/prompt.ts",
+    "./generated-characters/processing": "./src/generated-characters/processing.ts",
+    "./generated-characters/types": "./src/generated-characters/types.ts"
+  }
+}
