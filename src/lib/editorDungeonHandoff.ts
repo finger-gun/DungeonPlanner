@@ -1,66 +1,124 @@
-export type EditorDungeonHandoff = {
-  dungeonId: string
-  accessToken: string
-  backendUrl: string
-}
+import {
+  buildEditorApiUrl,
+  parseEditorLaunchSession,
+  stripEditorLaunchSession,
+  type EditorLaunchSession,
+  type SavedDungeonRecord,
+  type SavedDungeonSummary,
+} from '../../shared/editorAccess'
 
-export type ConsumedEditorDungeon = {
-  _id: string
-  title: string
-  description: string | null
-  serializedDungeon: string
-  createdAt: number
-  updatedAt: number
-}
+export type EditorDungeonHandoff = EditorLaunchSession
+export type ConsumedEditorDungeon = SavedDungeonRecord
+export type EditorDungeonAccess = Pick<EditorLaunchSession, 'backendUrl' | 'accessToken'>
 
 export function parseEditorDungeonHandoff(search: string): EditorDungeonHandoff | null {
-  const params = new URLSearchParams(search)
-  const dungeonId = params.get('appDungeonId')
-  const accessToken = params.get('appDungeonToken')
-  const backendUrl = params.get('appBackendUrl')
-
-  if (!dungeonId || !accessToken || !backendUrl) {
-    return null
-  }
-
-  return {
-    dungeonId,
-    accessToken,
-    backendUrl,
-  }
-}
-
-export function buildEditorDungeonConsumeUrl(backendUrl: string) {
-  return new URL('/editor-dungeon/consume', backendUrl).toString()
+  return parseEditorLaunchSession(search)
 }
 
 export function stripEditorDungeonHandoff(search: string) {
-  const params = new URLSearchParams(search)
-  params.delete('appDungeonId')
-  params.delete('appDungeonToken')
-  params.delete('appBackendUrl')
-  const next = params.toString()
-  return next ? `?${next}` : ''
+  return stripEditorLaunchSession(search)
+}
+
+async function postEditorApi<TResponse>(
+  access: EditorDungeonAccess,
+  path: string,
+  body: Record<string, unknown>,
+  fetchImpl: typeof fetch = fetch,
+) {
+  const response = await fetchImpl(buildEditorApiUrl(access.backendUrl, path), {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      accessToken: access.accessToken,
+      ...body,
+    }),
+  })
+
+  if (!response.ok) {
+    throw new Error('Dungeon library request could not be completed.')
+  }
+
+  return (await response.json()) as TResponse
 }
 
 export async function consumeEditorDungeonHandoff(
   handoff: EditorDungeonHandoff,
   fetchImpl: typeof fetch = fetch,
 ) {
-  const response = await fetchImpl(buildEditorDungeonConsumeUrl(handoff.backendUrl), {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      dungeonId: handoff.dungeonId,
-      accessToken: handoff.accessToken,
-    }),
-  })
-
-  if (!response.ok) {
-    throw new Error('Dungeon handoff could not be completed.')
+  if (!handoff.dungeonId) {
+    throw new Error('Dungeon handoff is missing its dungeon reference.')
   }
 
-  return (await response.json()) as ConsumedEditorDungeon
+  return postEditorApi<ConsumedEditorDungeon>(
+    handoff,
+    '/editor-dungeons/open',
+    { dungeonId: handoff.dungeonId },
+    fetchImpl,
+  )
+}
+
+export async function listEditorDungeons(
+  access: EditorDungeonAccess,
+  fetchImpl: typeof fetch = fetch,
+) {
+  return postEditorApi<SavedDungeonSummary[]>(access, '/editor-dungeons/list', {}, fetchImpl)
+}
+
+export async function openEditorDungeon(
+  access: EditorDungeonAccess,
+  dungeonId: string,
+  fetchImpl: typeof fetch = fetch,
+) {
+  return postEditorApi<ConsumedEditorDungeon>(
+    access,
+    '/editor-dungeons/open',
+    { dungeonId },
+    fetchImpl,
+  )
+}
+
+export async function saveEditorDungeon(
+  access: EditorDungeonAccess,
+  input: {
+    dungeonId?: string
+    title: string
+    description?: string
+    serializedDungeon: string
+  },
+  fetchImpl: typeof fetch = fetch,
+) {
+  return postEditorApi<SavedDungeonSummary>(
+    access,
+    '/editor-dungeons/save',
+    input,
+    fetchImpl,
+  )
+}
+
+export async function copyEditorDungeon(
+  access: EditorDungeonAccess,
+  dungeonId: string,
+  fetchImpl: typeof fetch = fetch,
+) {
+  return postEditorApi<SavedDungeonSummary>(
+    access,
+    '/editor-dungeons/copy',
+    { dungeonId },
+    fetchImpl,
+  )
+}
+
+export async function deleteEditorDungeon(
+  access: EditorDungeonAccess,
+  dungeonId: string,
+  fetchImpl: typeof fetch = fetch,
+) {
+  return postEditorApi<{ dungeonId: string }>(
+    access,
+    '/editor-dungeons/delete',
+    { dungeonId },
+    fetchImpl,
+  )
 }

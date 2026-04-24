@@ -11,6 +11,7 @@
 import type * as accessPolicies from "../accessPolicies.js";
 import type * as auth from "../auth.js";
 import type * as characters from "../characters.js";
+import type * as crossOriginHttp from "../crossOriginHttp.js";
 import type * as devSeedAccounts from "../devSeedAccounts.js";
 import type * as dungeons from "../dungeons.js";
 import type * as errors from "../errors.js";
@@ -36,6 +37,7 @@ declare const fullApi: ApiFromModules<{
   accessPolicies: typeof accessPolicies;
   auth: typeof auth;
   characters: typeof characters;
+  crossOriginHttp: typeof crossOriginHttp;
   devSeedAccounts: typeof devSeedAccounts;
   dungeons: typeof dungeons;
   errors: typeof errors;

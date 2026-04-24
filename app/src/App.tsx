@@ -1,9 +1,10 @@
 import './App.css'
 import { useEffect, useState } from 'react'
-import { useAuthActions } from '@convex-dev/auth/react'
-import { useConvexAuth, useMutation, useQuery } from 'convex/react'
 import { api } from '../convex/_generated/api'
 import type { Id } from '../convex/_generated/dataModel'
+import { useAuthActions, useBackendAuthState } from './lib/backendAuth'
+import { uploadFileThroughBackend, useMutation, useQuery } from './lib/backendData'
+import { resolveBackendApiBaseUrl } from './lib/backendAuthApi'
 import { useViewerIdentity } from './lib/auth'
 import { type PlatformRole } from './lib/roles'
 import { buildEditorLaunchUrl, resolveEditorBaseUrl } from './lib/editorLaunch'
@@ -328,14 +329,15 @@ function SignedInOverview({
   )
   const grantRoleByEmail = useMutation(api.roles.grantRoleByEmail)
   const revokeRoleByEmail = useMutation(api.roles.revokeRoleByEmail)
-  const issueEditorAccessTicket = useMutation(api.dungeons.issueEditorAccessTicket)
+  const issueEditorAccessToken = useMutation(api.dungeons.issueEditorAccessToken)
+  const copyViewerDungeon = useMutation(api.dungeons.copyViewerDungeon)
+  const deleteViewerDungeon = useMutation(api.dungeons.deleteViewerDungeon)
   const createSession = useMutation(api.sessions.createSession)
   const joinSessionByCode = useMutation(api.sessions.joinSessionByCode)
   const issueServerAccessTicket = useMutation(api.sessions.issueServerAccessTicket)
   const saveCharacter = useMutation(api.characters.saveCharacter)
   const deleteCharacter = useMutation(api.characters.deleteCharacter)
   const attachCharacterToSession = useMutation(api.sessions.attachCharacterToSession)
-  const generatePackUploadUrl = useMutation(api.packs.generatePackUploadUrl)
   const savePackRecord = useMutation(api.packs.savePackRecord)
   const setPackActive = useMutation(api.packs.setPackActive)
 
@@ -345,10 +347,9 @@ function SignedInOverview({
   const [roleError, setRoleError] = useState<string | null>(null)
   const [isManagingRoles, setIsManagingRoles] = useState(false)
 
-  const [selectedDungeonId, setSelectedDungeonId] = useState<Id<'dungeons'> | null>(null)
   const [dungeonNotice, setDungeonNotice] = useState<string | null>(null)
   const [dungeonError, setDungeonError] = useState<string | null>(null)
-  const [isOpeningDungeon, setIsOpeningDungeon] = useState(false)
+  const [activeDungeonAction, setActiveDungeonAction] = useState<string | null>(null)
   const [sessionTitle, setSessionTitle] = useState('')
   const [sessionJoinCode, setSessionJoinCode] = useState('')
   const [sessionNotice, setSessionNotice] = useState<string | null>(null)
@@ -399,7 +400,7 @@ function SignedInOverview({
   const selectedPackRecord = packRecords?.find((pack) => pack._id === selectedPackRecordId) ?? null
   const canAccessDevMenu = identity.access.isAdmin && isDevMenuVisible
   const editorBaseUrl = resolveEditorBaseUrl(window.location, import.meta.env.VITE_EDITOR_URL)
-  const backendUrl = import.meta.env.VITE_CONVEX_URL ?? 'http://127.0.0.1:3210'
+  const backendUrl = resolveBackendApiBaseUrl(window.location, import.meta.env.VITE_BACKEND_URL)
   const requestedPage = getWorkspacePageFromPath(currentPath)
   const workspaceNavItems = [
     { id: 'overview', label: 'Overview', href: '#/app' },
@@ -434,7 +435,7 @@ function SignedInOverview({
     library: {
       eyebrow: 'Dungeons',
       title: 'Dungeon library',
-      copy: 'Keep your private dungeon drafts in one place, save portable JSON exports, and load any map back into editing.',
+      copy: 'Open your private dungeon maps in the editor, duplicate a draft, or remove the ones you no longer need.',
     },
     dev: {
       eyebrow: 'Debug',
@@ -498,45 +499,82 @@ function SignedInOverview({
     setIsManagingRoles(false)
   }
 
-  async function handleOpenSavedDungeon() {
-    if (!selectedDungeonId || !backendUrl) {
+  async function handleLaunchEditor(dungeonId?: Id<'dungeons'>) {
+    if (dungeonId && !backendUrl) {
+      setDungeonError('Opening saved dungeons requires a backend connection.')
+      setDungeonNotice(null)
       return
     }
 
     setDungeonError(null)
     setDungeonNotice(null)
-    setIsOpeningDungeon(true)
+    setActiveDungeonAction(dungeonId ? `open:${dungeonId}` : 'new')
 
     try {
-      const ticket = await issueEditorAccessTicket({
-        dungeonId: selectedDungeonId,
-      })
+      if (backendUrl) {
+        const access = await issueEditorAccessToken({})
 
-      window.open(
-        buildEditorLaunchUrl({
-          editorBaseUrl,
-          backendUrl,
-          ticket: {
-            dungeonId: String(ticket.dungeonId),
-            accessToken: ticket.accessToken,
-          },
-        }),
-        '_blank',
-        'noopener,noreferrer',
-      )
-      setDungeonNotice('Opened the saved dungeon in the editor.')
+        window.open(
+          buildEditorLaunchUrl({
+            editorBaseUrl,
+            backendUrl,
+            accessToken: access.accessToken,
+            dungeonId: dungeonId ? String(dungeonId) : undefined,
+          }),
+          '_blank',
+          'noopener,noreferrer',
+        )
+      } else {
+        window.open(buildEditorLaunchUrl({ editorBaseUrl }), '_blank', 'noopener,noreferrer')
+      }
+
+      setDungeonNotice(dungeonId ? 'Opened the saved dungeon in the editor.' : 'Opened a fresh editor session.')
     } catch (mutationError) {
       console.error(mutationError)
-      setDungeonError('Opening the dungeon in the editor failed.')
+      setDungeonError(
+        dungeonId
+          ? 'Opening the dungeon in the editor failed.'
+          : 'Opening a fresh editor session failed.',
+      )
     }
 
-    setIsOpeningDungeon(false)
+    setActiveDungeonAction(null)
   }
 
-  function handleOpenBlankEditor() {
+  async function handleCopyDungeon(dungeonId: Id<'dungeons'>) {
     setDungeonError(null)
-    setDungeonNotice('Opened a fresh editor session.')
-    window.open(buildEditorLaunchUrl({ editorBaseUrl }), '_blank', 'noopener,noreferrer')
+    setDungeonNotice(null)
+    setActiveDungeonAction(`copy:${dungeonId}`)
+
+    try {
+      const copiedDungeon = await copyViewerDungeon({ dungeonId })
+      setDungeonNotice(`Created "${copiedDungeon.title}" in your library.`)
+    } catch (mutationError) {
+      console.error(mutationError)
+      setDungeonError('Copying the dungeon failed.')
+    }
+
+    setActiveDungeonAction(null)
+  }
+
+  async function handleDeleteDungeon(dungeonId: Id<'dungeons'>, title: string) {
+    if (!window.confirm(`Delete "${title}" from your dungeon library?`)) {
+      return
+    }
+
+    setDungeonError(null)
+    setDungeonNotice(null)
+    setActiveDungeonAction(`delete:${dungeonId}`)
+
+    try {
+      await deleteViewerDungeon({ dungeonId })
+      setDungeonNotice(`Deleted "${title}" from your library.`)
+    } catch (mutationError) {
+      console.error(mutationError)
+      setDungeonError('Deleting the dungeon failed.')
+    }
+
+    setActiveDungeonAction(null)
   }
 
   function handleNewCharacterDraft() {
@@ -772,20 +810,7 @@ function SignedInOverview({
   }
 
   async function uploadPackFile(file: File) {
-    const uploadUrl = await generatePackUploadUrl()
-    const response = await fetch(uploadUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': file.type || 'application/octet-stream',
-      },
-      body: file,
-    })
-
-    if (!response.ok) {
-      throw new Error('Pack file upload failed.')
-    }
-
-    const payload = (await response.json()) as { storageId: Id<'_storage'> }
+    const payload = await uploadFileThroughBackend(file) as { storageId: Id<'_storage'> }
     return payload.storageId
   }
 
@@ -1057,7 +1082,7 @@ function SignedInOverview({
                 <p className="library-sync-state__title">{libraryRecords?.length ?? 0} saved dungeons</p>
               </div>
               <p className="panel__copy">
-                Select a saved dungeon, then open it in the editor to continue building.
+                Open any saved dungeon straight in the editor, or duplicate and tidy up your library from here.
               </p>
             </div>
 
@@ -1068,30 +1093,52 @@ function SignedInOverview({
                     <p className="status-card__label">Saved records</p>
                     <h3 className="library-card__title">Dungeon library</h3>
                   </div>
-                  <button className="hero-panel__button hero-panel__button--secondary" onClick={handleOpenBlankEditor} type="button">
-                    New in editor
+                  <button
+                    className="hero-panel__button hero-panel__button--secondary"
+                    disabled={activeDungeonAction === 'new'}
+                    onClick={() => void handleLaunchEditor()}
+                    type="button"
+                  >
+                    {activeDungeonAction === 'new' ? 'Opening...' : 'New in editor'}
                   </button>
                 </div>
 
                 {libraryRecords && libraryRecords.length > 0 ? (
                   <div className="library-records">
                     {libraryRecords.map((record) => (
-                      <button
-                        className={`library-record ${selectedDungeonId === record._id ? 'library-record--selected' : ''}`}
-                        key={record._id}
-                        onClick={() => {
-                          setSelectedDungeonId(record._id)
-                          setDungeonError(null)
-                          setDungeonNotice(`Selected "${record.title}" from your library.`)
-                        }}
-                        type="button"
-                      >
+                      <article className="library-record" key={record._id}>
                         <div>
                           <p className="library-record__title">{record.title}</p>
                           <p className="panel__copy">{record.description ?? 'No description yet.'}</p>
+                          <p className="library-record__meta">Updated {new Date(record.updatedAt).toLocaleString()}</p>
                         </div>
-                        <p className="library-record__meta">Updated {new Date(record.updatedAt).toLocaleString()}</p>
-                      </button>
+                        <div className="library-record__actions">
+                          <button
+                            className="hero-panel__button hero-panel__button--secondary"
+                            disabled={!backendUrl || activeDungeonAction === `open:${record._id}`}
+                            onClick={() => void handleLaunchEditor(record._id)}
+                            type="button"
+                          >
+                            {activeDungeonAction === `open:${record._id}` ? 'Opening...' : 'Open'}
+                          </button>
+                          <button
+                            className="hero-panel__button hero-panel__button--secondary"
+                            disabled={activeDungeonAction === `copy:${record._id}`}
+                            onClick={() => void handleCopyDungeon(record._id)}
+                            type="button"
+                          >
+                            {activeDungeonAction === `copy:${record._id}` ? 'Copying...' : 'Copy'}
+                          </button>
+                          <button
+                            className="hero-panel__button hero-panel__button--secondary library-record__button--danger"
+                            disabled={activeDungeonAction === `delete:${record._id}`}
+                            onClick={() => void handleDeleteDungeon(record._id, record.title)}
+                            type="button"
+                          >
+                            {activeDungeonAction === `delete:${record._id}` ? 'Deleting...' : 'Delete'}
+                          </button>
+                        </div>
+                      </article>
                     ))}
                   </div>
                 ) : (
@@ -1106,17 +1153,6 @@ function SignedInOverview({
 
                 {dungeonError ? <p className="auth-card__error">{dungeonError}</p> : null}
                 {dungeonNotice ? <p className="library-notice">{dungeonNotice}</p> : null}
-
-                <div className="library-card__actions">
-                  <button
-                    className="hero-panel__button hero-panel__button--secondary"
-                    disabled={!selectedDungeonId || !backendUrl || isOpeningDungeon}
-                    onClick={() => void handleOpenSavedDungeon()}
-                    type="button"
-                  >
-                    {isOpeningDungeon ? 'Opening...' : 'Open selected in editor'}
-                  </button>
-                </div>
               </section>
             </div>
           </article>
@@ -1690,7 +1726,7 @@ function SignedInOverview({
 }
 
 function App() {
-  const { isAuthenticated, isLoading } = useConvexAuth()
+  const { isAuthenticated, isLoading } = useBackendAuthState()
   const identity = useViewerIdentity()
   const [currentPath, setCurrentPath] = useState(() => readHashPath())
   const [isDevMenuVisible, setIsDevMenuVisible] = useState(false)
@@ -1710,10 +1746,7 @@ function App() {
   }, [])
 
   useEffect(() => {
-    if (!isAuthenticated || !identity.access.isAdmin) {
-      setIsDevMenuVisible(false)
-      return
-    }
+    if (!isAuthenticated || !identity.access.isAdmin) return
 
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.ctrlKey && event.shiftKey && event.key === 'F12') {

@@ -883,7 +883,6 @@
   color: inherit;
   text-align: left;
   background: rgba(8, 9, 13, 0.58);
-  cursor: pointer;
   transition:
     border-color 160ms ease,
     transform 160ms ease,
@@ -898,15 +897,27 @@
   transform: translateY(-1px);
 }
 
-.library-record--selected {
-  border-color: var(--border-strong);
-  background: rgba(39, 24, 4, 0.42);
-  box-shadow: 0 0 0 1px rgba(245, 158, 11, 0.12);
-}
-
 .library-record__title {
   margin: 0;
   font-size: 1.02rem;
+}
+
+.library-record__actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0.65rem;
+  align-items: center;
+}
+
+.library-record__button--danger {
+  border-color: rgba(248, 113, 113, 0.24);
+  color: #fecaca;
+}
+
+.library-record__button--danger:hover {
+  border-color: rgba(248, 113, 113, 0.4);
+  background: rgba(127, 29, 29, 0.26);
 }
 
 .library-record__meta,

@@ -1,4 +1,3 @@
-import type { ReactNode } from 'react'
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -28,7 +27,9 @@ const mock = vi.hoisted(() => ({
     mutations: {
       'roles.grantRoleByEmail': vi.fn(),
       'roles.revokeRoleByEmail': vi.fn(),
-      'dungeons.issueEditorAccessTicket': vi.fn(),
+      'dungeons.issueEditorAccessToken': vi.fn(),
+      'dungeons.copyViewerDungeon': vi.fn(),
+      'dungeons.deleteViewerDungeon': vi.fn(),
       'dungeons.saveDungeon': vi.fn(),
     'sessions.createSession': vi.fn(),
     'sessions.joinSessionByCode': vi.fn(),
@@ -42,11 +43,12 @@ const mock = vi.hoisted(() => ({
   } as Record<string, ReturnType<typeof vi.fn>>,
 }))
 
-vi.mock('@convex-dev/auth/react', () => ({
+vi.mock('./lib/backendAuth', () => ({
   useAuthActions: () => ({
     signIn: mock.signIn,
     signOut: mock.signOut,
   }),
+  useBackendAuthState: () => mock.authState,
 }))
 
 vi.mock('../convex/_generated/api', () => ({
@@ -59,7 +61,9 @@ vi.mock('../convex/_generated/api', () => ({
     dungeons: {
       listViewerDungeons: 'dungeons.listViewerDungeons',
       getViewerDungeon: 'dungeons.getViewerDungeon',
-      issueEditorAccessTicket: 'dungeons.issueEditorAccessTicket',
+      issueEditorAccessToken: 'dungeons.issueEditorAccessToken',
+      copyViewerDungeon: 'dungeons.copyViewerDungeon',
+      deleteViewerDungeon: 'dungeons.deleteViewerDungeon',
       saveDungeon: 'dungeons.saveDungeon',
     },
     sessions: {
@@ -85,14 +89,10 @@ vi.mock('../convex/_generated/api', () => ({
   },
 }))
 
-vi.mock('convex/react', () => ({
-  useConvexAuth: () => mock.authState,
-  Authenticated: ({ children }: { children: ReactNode }) =>
-    mock.authState.isAuthenticated ? <>{children}</> : null,
-  Unauthenticated: ({ children }: { children: ReactNode }) =>
-    mock.authState.isAuthenticated ? null : <>{children}</>,
+vi.mock('./lib/backendData', () => ({
   useQuery: (queryKey: string, args: unknown) => (args === 'skip' ? undefined : mock.queries[queryKey]),
   useMutation: (mutationKey: string) => mock.mutations[mutationKey] ?? vi.fn(),
+  uploadFileThroughBackend: vi.fn(),
 }))
 
 vi.mock('./lib/auth', () => ({
@@ -101,6 +101,7 @@ vi.mock('./lib/auth', () => ({
 
 describe('authenticated app shell', () => {
   const openSpy = vi.spyOn(window, 'open').mockImplementation(() => null)
+  const confirmSpy = vi.spyOn(window, 'confirm').mockImplementation(() => true)
 
   beforeEach(() => {
     window.location.hash = ''
@@ -127,6 +128,7 @@ describe('authenticated app shell', () => {
     mock.signIn.mockReset()
     mock.signOut.mockReset()
     openSpy.mockClear()
+    confirmSpy.mockClear()
   })
 
   afterEach(() => {
@@ -186,7 +188,7 @@ describe('authenticated app shell', () => {
     render(<App />)
 
     expect(screen.getByRole('button', { name: 'New in editor' })).toBeTruthy()
-    expect(screen.getByRole('button', { name: 'Open selected in editor' })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Open selected in editor' })).toBeNull()
     expect(screen.queryByText('Import dungeon file')).toBeNull()
     expect(screen.queryByLabelText('Portable dungeon JSON')).toBeNull()
     expect(screen.queryByRole('button', { name: 'Save as new record' })).toBeNull()
@@ -230,7 +232,7 @@ describe('authenticated app shell', () => {
     expect(screen.getByRole('link', { name: 'Packs' })).toBeTruthy()
   })
 
-  it('opens a saved dungeon in the editor', async () => {
+  it('opens a saved dungeon in the editor from its card', async () => {
     const user = userEvent.setup()
     window.location.hash = '#/app/library'
     mock.authState.isAuthenticated = true
@@ -257,35 +259,81 @@ describe('authenticated app shell', () => {
           updatedAt: 2,
         },
       ],
-      'dungeons.getViewerDungeon': {
-        _id: 'dungeon-1',
-        title: 'Archived Keep',
-        description: 'Basement layout',
-        serializedDungeon: '{"version":1,"name":"Archived Keep","rooms":[]}',
-        createdAt: 1,
-        updatedAt: 2,
-      },
       'sessions.listViewerSessions': [],
     }
-    mock.mutations['dungeons.issueEditorAccessTicket'].mockResolvedValue({
-      dungeonId: 'dungeon-1',
-      accessToken: 'ticket-123',
+    mock.mutations['dungeons.issueEditorAccessToken'].mockResolvedValue({
+      accessToken: 'token-123',
       expiresAt: 123,
     })
 
     render(<App />)
 
-    await user.click(screen.getByRole('button', { name: /Archived Keep/i }))
-    await user.click(screen.getByRole('button', { name: 'Open selected in editor' }))
+    await user.click(screen.getByRole('button', { name: 'Open' }))
 
     await waitFor(() =>
-      expect(mock.mutations['dungeons.issueEditorAccessTicket']).toHaveBeenCalledWith({
-        dungeonId: 'dungeon-1',
-      }),
+      expect(mock.mutations['dungeons.issueEditorAccessToken']).toHaveBeenCalledWith({}),
     )
     expect(openSpy).toHaveBeenCalledTimes(1)
     expect(openSpy.mock.calls[0]?.[0]).toContain('appDungeonId=dungeon-1')
-    expect(openSpy.mock.calls[0]?.[0]).toContain('appDungeonToken=ticket-123')
+    expect(openSpy.mock.calls[0]?.[0]).toContain('appEditorToken=token-123')
+  })
+
+  it('copies and deletes dungeons from their library cards', async () => {
+    const user = userEvent.setup()
+    window.location.hash = '#/app/library'
+    mock.authState.isAuthenticated = true
+    mock.viewerIdentity = {
+      viewer: { name: 'Dungeon Master', email: 'dm@example.com' },
+      workspace: { name: 'DM Workspace' },
+      roles: ['dm'],
+      access: {
+        isAdmin: false,
+        canManageUsers: false,
+        canManagePacks: false,
+        canManageDungeons: true,
+        canManageSessions: false,
+        canUseCharacterLibrary: false,
+      },
+    }
+    mock.queries = {
+      'dungeons.listViewerDungeons': [
+        {
+          _id: 'dungeon-1',
+          title: 'Archived Keep',
+          description: 'Basement layout',
+          createdAt: 1,
+          updatedAt: 2,
+        },
+      ],
+      'sessions.listViewerSessions': [],
+    }
+    mock.mutations['dungeons.copyViewerDungeon'].mockResolvedValue({
+      _id: 'dungeon-2',
+      title: 'Archived Keep (Copy)',
+      description: 'Basement layout',
+      createdAt: 3,
+      updatedAt: 3,
+    })
+    mock.mutations['dungeons.deleteViewerDungeon'].mockResolvedValue({
+      dungeonId: 'dungeon-1',
+    })
+
+    render(<App />)
+
+    await user.click(screen.getByRole('button', { name: 'Copy' }))
+    await waitFor(() =>
+      expect(mock.mutations['dungeons.copyViewerDungeon']).toHaveBeenCalledWith({
+        dungeonId: 'dungeon-1',
+      }),
+    )
+
+    await user.click(screen.getByRole('button', { name: 'Delete' }))
+    await waitFor(() => expect(confirmSpy).toHaveBeenCalledTimes(1))
+    await waitFor(() =>
+      expect(mock.mutations['dungeons.deleteViewerDungeon']).toHaveBeenCalledWith({
+        dungeonId: 'dungeon-1',
+      }),
+    )
   })
 
   it('shows dedicated admin user management pages for administrators after dev unlock', async () => {

@@ -94,6 +94,7 @@ vi.mock('./lib/editorDungeonHandoff', () => ({
 describe('App sidebar drawer', () => {
   beforeEach(() => {
     useDungeonStore.getState().reset()
+    window.sessionStorage.clear()
     handoffMock.parseEditorDungeonHandoff.mockReset()
     handoffMock.consumeEditorDungeonHandoff.mockReset()
     handoffMock.stripEditorDungeonHandoff.mockReset()

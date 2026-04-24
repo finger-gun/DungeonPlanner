@@ -362,6 +362,7 @@ type DungeonState = DungeonSnapshot & {
   // Persistence
   dungeonName: string
   setDungeonName: (name: string) => void
+  exportDungeonJson: () => string
   downloadDungeon: () => void
   loadDungeon: (json: string) => boolean
 }
@@ -488,6 +489,49 @@ function cloneSnapshot(snapshot: DungeonSnapshot): DungeonSnapshot {
     ),
     nextRoomNumber: snapshot.nextRoomNumber,
   }
+}
+
+function serializeCurrentDungeonState(state: DungeonState) {
+  const floorsWithCurrent = {
+    ...state.floors,
+    [state.activeFloorId]: {
+      ...state.floors[state.activeFloorId],
+      snapshot: cloneSnapshot(state),
+      history: [...state.history],
+      future: [...state.future],
+    },
+  }
+
+  return serializeDungeon({
+    name: state.dungeonName,
+    mapMode: state.mapMode,
+    outdoorTimeOfDay: state.outdoorTimeOfDay,
+    outdoorTerrainProfiles: state.outdoorTerrainProfiles,
+    outdoorTerrainDensity: state.outdoorTerrainDensity,
+    outdoorTerrainType: state.outdoorTerrainType,
+    outdoorOverpaintRegenerate: state.outdoorOverpaintRegenerate,
+    outdoorTerrainHeights: state.outdoorTerrainHeights,
+    sceneLighting: state.sceneLighting,
+    postProcessing: state.postProcessing,
+    layers: state.layers,
+    layerOrder: state.layerOrder,
+    activeLayerId: state.activeLayerId,
+    rooms: state.rooms,
+    paintedCells: state.paintedCells,
+    blockedCells: state.blockedCells,
+    outdoorTerrainStyleCells: state.outdoorTerrainStyleCells,
+    exploredCells: state.exploredCells,
+    floorTileAssetIds: state.floorTileAssetIds,
+    wallSurfaceAssetIds: state.wallSurfaceAssetIds,
+    placedObjects: state.placedObjects,
+    wallOpenings: state.wallOpenings,
+    innerWalls: state.innerWalls,
+    occupancy: state.occupancy,
+    nextRoomNumber: state.nextRoomNumber,
+    floors: floorsWithCurrent,
+    floorOrder: state.floorOrder,
+    activeFloorId: state.activeFloorId,
+  })
 }
 
 function cloneSnapshotForObjectPlacement(snapshot: DungeonSnapshot): DungeonSnapshot {
@@ -3531,48 +3575,13 @@ export const useDungeonStore = create<DungeonState>()(
   setDungeonName: (name) => {
     set((current) => ({ ...current, dungeonName: name }))
   },
+  exportDungeonJson: () => {
+    const state = get()
+    return serializeCurrentDungeonState(state)
+  },
   downloadDungeon: () => {
     const state = get()
-    // Save current working state into the active floor record before serialising
-    const floorsWithCurrent = {
-      ...state.floors,
-      [state.activeFloorId]: {
-        ...state.floors[state.activeFloorId],
-        snapshot: cloneSnapshot(state),
-        history: [...state.history],
-        future: [...state.future],
-      },
-    }
-    const json = serializeDungeon({
-      name: state.dungeonName,
-      mapMode: state.mapMode,
-      outdoorTimeOfDay: state.outdoorTimeOfDay,
-      outdoorTerrainProfiles: state.outdoorTerrainProfiles,
-      outdoorTerrainDensity: state.outdoorTerrainDensity,
-      outdoorTerrainType: state.outdoorTerrainType,
-      outdoorOverpaintRegenerate: state.outdoorOverpaintRegenerate,
-      outdoorTerrainHeights: state.outdoorTerrainHeights,
-      sceneLighting: state.sceneLighting,
-      postProcessing: state.postProcessing,
-      layers: state.layers,
-      layerOrder: state.layerOrder,
-      activeLayerId: state.activeLayerId,
-      rooms: state.rooms,
-      paintedCells: state.paintedCells,
-      blockedCells: state.blockedCells,
-      outdoorTerrainStyleCells: state.outdoorTerrainStyleCells,
-      exploredCells: state.exploredCells,
-      floorTileAssetIds: state.floorTileAssetIds,
-      wallSurfaceAssetIds: state.wallSurfaceAssetIds,
-      placedObjects: state.placedObjects,
-      wallOpenings: state.wallOpenings,
-      innerWalls: state.innerWalls,
-      occupancy: state.occupancy,
-      nextRoomNumber: state.nextRoomNumber,
-      floors: floorsWithCurrent,
-      floorOrder: state.floorOrder,
-      activeFloorId: state.activeFloorId,
-    })
+    const json = serializeCurrentDungeonState(state)
     const blob = new Blob([json], { type: 'application/json' })
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')

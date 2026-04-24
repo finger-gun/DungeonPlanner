@@ -16,14 +16,12 @@ describe('editor launch helpers', () => {
     const url = buildEditorLaunchUrl({
       editorBaseUrl: 'https://demo.dungeonplanner.com/',
       backendUrl: 'http://127.0.0.1:3210',
-      ticket: {
-        dungeonId: 'dungeon-1',
-        accessToken: 'token-123',
-      },
+      dungeonId: 'dungeon-1',
+      accessToken: 'token-123',
     })
 
     expect(url).toContain('appDungeonId=dungeon-1')
-    expect(url).toContain('appDungeonToken=token-123')
+    expect(url).toContain('appEditorToken=token-123')
     expect(url).toContain('appBackendUrl=http%3A%2F%2F127.0.0.1%3A3210')
   })
 })

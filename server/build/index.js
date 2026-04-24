@@ -10,6 +10,8 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { GeneratedCharacterRequestError, handleGeneratedCharacterImageRequest, listGeneratedCharacterModels, } from './generatedCharacterImage.js';
 import { deleteGeneratedCharacterAssets, GENERATED_CHARACTER_ASSET_PUBLIC_PATH, GENERATED_CHARACTER_STORAGE_DIR, GeneratedCharacterStorageError, saveGeneratedCharacterAssets, } from './generatedCharacterStorage.js';
+import { registerAppFacadeRoutes } from './appFacade.js';
+import { registerAuthFacadeRoutes } from './authFacade.js';
 import { DungeonRoom } from './rooms/DungeonRoom.js';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = Number(process.env.PORT) || 2567;
@@ -26,6 +28,8 @@ app.use(cors({
     credentials: true,
 }));
 app.use(express.json({ limit: '50mb' }));
+registerAuthFacadeRoutes(app);
+registerAppFacadeRoutes(app);
 app.post('/api/generated-characters/image', async (req, res) => {
     try {
         res.json(await handleGeneratedCharacterImageRequest(req.body));

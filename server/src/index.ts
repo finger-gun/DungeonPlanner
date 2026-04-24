@@ -20,6 +20,8 @@ import {
   GeneratedCharacterStorageError,
   saveGeneratedCharacterAssets,
 } from './generatedCharacterStorage.js'
+import { registerAppFacadeRoutes } from './appFacade.js'
+import { registerAuthFacadeRoutes } from './authFacade.js'
 import { DungeonRoom } from './rooms/DungeonRoom.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
@@ -39,6 +41,8 @@ app.use(cors({
 }))
 
 app.use(express.json({ limit: '50mb' }))
+registerAuthFacadeRoutes(app)
+registerAppFacadeRoutes(app)
 
 app.post('/api/generated-characters/image', async (req, res) => {
   try {

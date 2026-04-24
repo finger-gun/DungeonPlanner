@@ -14,14 +14,27 @@ The system SHALL allow the main editor to open a saved authenticated-app dungeon
 - **AND** continues using its existing local-file and local-storage startup behavior
 
 ### Requirement: Editor handoff preserves private dungeon access
-The system MUST keep authenticated-app dungeon payloads private while allowing an authenticated user to open their own saved dungeons in the editor.
+The system MUST keep authenticated-app dungeon payloads private while allowing an authenticated user to open and manage their own saved dungeons in the editor.
 
-#### Scenario: Valid ticket grants one handoff fetch
+#### Scenario: Valid editor session token grants library access
 - **WHEN** a user opens the editor from their authenticated dungeon library
-- **THEN** the app issues a short-lived dungeon-specific access ticket
-- **AND** the backend handoff endpoint accepts that ticket only for the referenced dungeon
+- **THEN** the app issues a short-lived editor session token
+- **AND** the backend accepts that token only for the issuing viewer's private dungeon-library operations within the active workspace
 
 #### Scenario: Invalid or expired handoff does not load private data
-- **WHEN** the editor attempts to consume an invalid, reused, or expired dungeon handoff ticket
+- **WHEN** the editor attempts to use an invalid or expired editor session token
 - **THEN** the backend rejects the request
 - **AND** the editor does not receive the private dungeon payload
+
+### Requirement: Editor file actions use the private library when backend access is available
+The system SHALL switch the editor's primary Open and Save actions to the private authenticated dungeon library whenever a valid backend editor session is available.
+
+#### Scenario: Editor opens the private dungeon library modal
+- **WHEN** backend editor access is available and the user chooses Open in the editor
+- **THEN** the editor shows a library modal listing the viewer's saved dungeons
+- **AND** each listed dungeon exposes direct open, copy, and delete actions
+
+#### Scenario: Editor keeps local JSON import and export available
+- **WHEN** backend editor access is available
+- **THEN** the editor still allows manual JSON import and export as explicit local tools
+- **AND** those tools remain separate from the primary backend Save and Open actions
