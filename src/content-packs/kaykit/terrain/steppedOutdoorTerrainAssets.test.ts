@@ -1,5 +1,7 @@
+import * as THREE from 'three'
 import { describe, expect, it } from 'vitest'
 import {
+  applyTerrainShadowSettings,
   STEPPED_OUTDOOR_TERRAIN_ASSETS,
   resolveSteppedOutdoorTerrainAssetUrl,
 } from './steppedOutdoorTerrainAssets'
@@ -24,5 +26,16 @@ describe('steppedOutdoorTerrainAssets', () => {
     const url = resolveSteppedOutdoorTerrainAssetUrl('top-center')
     expect(url).toContain('Hill_Top_E_Center_Color1')
     expect(url).toContain('.glb')
+  })
+
+  it('enables shadow casting and receiving on cloned terrain meshes', () => {
+    const root = new THREE.Group()
+    const mesh = new THREE.Mesh(new THREE.BoxGeometry(), new THREE.MeshBasicMaterial())
+    root.add(mesh)
+
+    applyTerrainShadowSettings(root)
+
+    expect(mesh.castShadow).toBe(true)
+    expect(mesh.receiveShadow).toBe(true)
   })
 })
