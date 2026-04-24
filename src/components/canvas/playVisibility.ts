@@ -288,7 +288,7 @@ export function computeVisibleCellKeys(
 
   for (const origin of origins) {
     const originKey = getCellKey(origin)
-    if (!paintedCells[originKey] || visible.has(originKey)) {
+    if (!paintedCells[originKey]) {
       continue
     }
 
