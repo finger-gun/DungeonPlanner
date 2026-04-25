@@ -5,7 +5,13 @@ import { metadataSupportsConnectorType } from '../../content-packs/connectors'
 import { GRID_SIZE, getCellKey, type GridCell } from '../../hooks/useSnapToGrid'
 import { getOpeningSegments } from '../../store/openingSegments'
 import { buildOpenWallSegmentSet } from '../../store/openWallSegments'
-import { useDungeonStore, type OpeningRecord, type PaintedCells } from '../../store/useDungeonStore'
+import {
+  useDungeonStore,
+  type DungeonTool,
+  type MapMode,
+  type OpeningRecord,
+  type PaintedCells,
+} from '../../store/useDungeonStore'
 import type { DungeonObjectRecord, Layer } from '../../store/useDungeonStore'
 import { getRegisteredObject, useObjectRegistryVersion } from './objectRegistry'
 import { isGeneratedCharacterAssetId } from '../../content-packs/runtimeRegistry'
@@ -65,6 +71,14 @@ export type VisibilitySource = {
   sectors: VisibilityPolygon[]
 }
 
+export function shouldActivatePlayVisibility(
+  tool: DungeonTool,
+  mapMode: MapMode,
+  playerOriginCount: number,
+) {
+  return tool === 'play' && mapMode !== 'outdoor' && playerOriginCount > 0
+}
+
 export type PlayVisibilityMask = {
   bounds: {
     minX: number
@@ -108,13 +122,20 @@ export function usePlayVisibility(): PlayVisibility {
   const mergeExploredCells = useDungeonStore((state) => state.mergeExploredCells)
   const objectRegistryVersion = useObjectRegistryVersion()
 
+  const playerOriginObjects = useMemo(
+    () => (tool !== 'play' || mapMode === 'outdoor'
+      ? []
+      : Object.values(placedObjects)
+          .filter((object) => isVisiblePlayerOrigin(object, paintedCells, layers, generatedCharacters))),
+    [generatedCharacters, layers, mapMode, paintedCells, placedObjects, tool],
+  )
+  const visibilityActive = shouldActivatePlayVisibility(tool, mapMode, playerOriginObjects.length)
   const workerInput = useMemo(() => {
-    void objectRegistryVersion
-    if (tool !== 'play' || mapMode === 'outdoor') {
+    if (!visibilityActive) {
       return null
     }
-    const playerOrigins = Object.values(placedObjects)
-      .filter((object) => isVisiblePlayerOrigin(object, paintedCells, layers, generatedCharacters))
+
+    const playerOrigins = playerOriginObjects
       .map((object) => object.cell)
     const blockerLookup = getBlockingObjectIdsByCell(placedObjects, layers)
     return {
@@ -131,24 +152,21 @@ export function usePlayVisibility(): PlayVisibility {
       }),
     } satisfies PlayVisibilityWorkerInput
   }, [
-    generatedCharacters,
     innerWalls,
     layers,
-    mapMode,
     objectRegistryVersion,
     paintedCells,
     placedObjects,
-    tool,
+    playerOriginObjects,
+    visibilityActive,
     wallOpenings,
     wallSurfaceProps,
   ])
   const playerOrigins = useMemo(
-    () => (tool !== 'play' || mapMode === 'outdoor'
-      ? []
-      : Object.values(placedObjects)
-          .filter((object) => isVisiblePlayerOrigin(object, paintedCells, layers, generatedCharacters))
-          .map((object) => [object.position[0], object.position[2]] as const)),
-    [generatedCharacters, layers, mapMode, paintedCells, placedObjects, tool],
+    () => (visibilityActive
+      ? playerOriginObjects.map((object) => [object.position[0], object.position[2]] as const)
+      : []),
+    [playerOriginObjects, visibilityActive],
   )
   const workerRef = useRef<Worker | null>(null)
   const requestIdRef = useRef(0)
@@ -189,13 +207,13 @@ export function usePlayVisibility(): PlayVisibility {
   }, [tool, workerInput])
 
   useEffect(() => {
-    if (tool === 'play' && mapMode !== 'outdoor') {
+    if (visibilityActive) {
       mergeExploredCells(visibleCellKeys)
     }
-  }, [mapMode, mergeExploredCells, tool, visibleCellKeys])
+  }, [mergeExploredCells, visibilityActive, visibleCellKeys])
 
   return useMemo(() => {
-    if (tool !== 'play' || mapMode === 'outdoor') {
+    if (!visibilityActive) {
       return {
         active: false,
         getCellVisibility: () => 'visible' as const,
@@ -237,7 +255,7 @@ export function usePlayVisibility(): PlayVisibility {
       },
       playerOrigins,
     }
-  }, [exploredCells, generatedCharacters, mapMode, playerOrigins, tool, visibleCellKeys])
+  }, [exploredCells, generatedCharacters, playerOrigins, visibilityActive, visibleCellKeys])
 }
 
 export function isVisiblePlayerOrigin(

@@ -8,6 +8,7 @@ import {
   computeVisibleCellKeys,
   getObjectVisibilityState,
   isVisiblePlayerOrigin,
+  shouldActivatePlayVisibility,
 } from './playVisibility'
 import type { OpeningRecord, PaintedCells } from '../../store/useDungeonStore'
 import { GRID_SIZE } from '../../hooks/useSnapToGrid'
@@ -429,6 +430,16 @@ describe('computeVisibilityMask', () => {
     ])
 
     expect(computeVisibilityMask(paintedCells, {}, {}, [], 4, [])).toBeNull()
+  })
+})
+
+describe('shouldActivatePlayVisibility', () => {
+  it('disables play visibility when there are no player origins', () => {
+    expect(shouldActivatePlayVisibility('play', 'indoor', 0)).toBe(false)
+  })
+
+  it('enables play visibility when an indoor play scene has a player origin', () => {
+    expect(shouldActivatePlayVisibility('play', 'indoor', 1)).toBe(true)
   })
 })
 
