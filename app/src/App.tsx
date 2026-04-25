@@ -1492,7 +1492,7 @@ function App() {
     return () => {
       window.removeEventListener('hashchange', syncHashPath)
     }
-  }, [])
+  }, [setCurrentPath])
 
   useEffect(() => {
     if (!isAuthenticated || !identity.access.isAdmin) return

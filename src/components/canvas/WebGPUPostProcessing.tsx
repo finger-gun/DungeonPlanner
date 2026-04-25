@@ -121,9 +121,7 @@ export function WebGPUPostProcessing() {
     ;(outlineCamera as any).layers.enable(SELECTION_OUTLINE_LAYER)
     outlineCameraRef.current = outlineCamera
 
-    if (settings.enabled) {
-      outputNode = alphaOver(outputNode, selectionOutline(scene, outlineCamera))
-    }
+    outputNode = alphaOver(outputNode, selectionOutline(scene, outlineCamera))
 
     visibleLosCameraRef.current = null
     exploredLosCameraRef.current = null
@@ -143,7 +141,6 @@ export function WebGPUPostProcessing() {
       visibleLosCameraRef.current = null
       exploredLosCameraRef.current = null
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [camera, renderer, scene, settings.enabled, settings.pixelateEnabled, settings.pixelSize, activeCameraMode])
 
   // Multi-frame delay after each pipeline rebuild — lets Three.js begin WebGPU
@@ -168,7 +165,6 @@ export function WebGPUPostProcessing() {
       cancelAnimationFrame(rafId)
       pipelineReadyRef.current = false
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [camera, renderer, scene, settings.enabled, settings.pixelateEnabled, settings.pixelSize, activeCameraMode, invalidate])
 
   // Update shader uniforms only when settings actually change — not every frame.
@@ -229,6 +225,15 @@ export function WebGPUPostProcessing() {
     }
 
     const focusMarker = focusMarkerRef.current as any
+    if (!settings.enabled) {
+      focusPointInitializedRef.current = false
+      if (focusMarker) {
+        focusMarker.visible = false
+      }
+      postProcessingRef.current.render()
+      return
+    }
+
     const raycaster = focusRaycasterRef.current
     raycaster.layers.mask = (cam as any).layers.mask
     raycaster.setFromCamera(focusNdcRef.current, cam as any)

@@ -44,6 +44,105 @@ describe('content pack registry', () => {
     expect(asset.getLight?.({ lit: false })).toBeNull()
   })
 
+  it('registers the dungeon wall doorway as a play-toggleable wall', () => {
+    const asset = getContentPackAssetById('dungeon.wall_wall_doorway')
+
+    if (!asset) {
+      expect(asset).toBeNull()
+      return
+    }
+
+    expect(asset.getPlayModeNextProps?.({})).toEqual({ open: true })
+    expect(asset.getPlayModeNextProps?.({ open: true })).toEqual({ open: false })
+  })
+
+  it('registers the scaffold dungeon wall doorway as a play-toggleable wall', () => {
+    const asset = getContentPackAssetById('dungeon.wall_wall_doorway_scaffold')
+
+    if (!asset) {
+      expect(asset).toBeNull()
+      return
+    }
+
+    expect(asset.getPlayModeNextProps?.({})).toEqual({ open: true })
+    expect(asset.getPlayModeNextProps?.({ open: true })).toEqual({ open: false })
+  })
+
+  it('registers dungeon torches as play-toggleable flame props', () => {
+    for (const assetId of [
+      'dungeon.props_torch',
+      'dungeon.props_torch_mounted',
+    ]) {
+      const asset = getContentPackAssetById(assetId)
+
+      if (!asset) {
+        expect(asset).toBeNull()
+        continue
+      }
+
+      expect(asset.getPlayModeNextProps?.({})).toEqual({ lit: false })
+      expect(asset.getPlayModeNextProps?.({ lit: true })).toEqual({ lit: false })
+      expect(asset.getPlayModeNextProps?.({ lit: false })).toEqual({ lit: true })
+      expect(asset.getLight?.({})).toMatchObject({ flicker: true })
+      expect(asset.getLight?.({ lit: false })).toBeNull()
+    }
+  })
+
+  it('registers dungeon candles as default-on play-toggleable flame props', () => {
+    for (const assetId of [
+      'dungeon.props_candle',
+      'dungeon.props_candle_thin',
+    ]) {
+      const asset = getContentPackAssetById(assetId)
+
+      if (!asset) {
+        expect(asset).toBeNull()
+        continue
+      }
+
+      expect(asset.getPlayModeNextProps?.({})).toEqual({ lit: false })
+      expect(asset.getPlayModeNextProps?.({ lit: true })).toEqual({ lit: false })
+      expect(asset.getPlayModeNextProps?.({ lit: false })).toEqual({ lit: true })
+      expect(asset.getLight?.({})).toMatchObject({ flicker: true })
+      expect(asset.getLight?.({ lit: false })).toBeNull()
+    }
+  })
+
+  it('registers the small dungeon chests as play-toggleable props', () => {
+    for (const assetId of [
+      'dungeon.props_chest',
+      'dungeon.props_chest_gold',
+      'dungeon.props_chest_mimic',
+    ]) {
+      const asset = getContentPackAssetById(assetId)
+
+      if (!asset) {
+        expect(asset).toBeNull()
+        continue
+      }
+
+      expect(asset.getPlayModeNextProps?.({})).toEqual({ open: true })
+      expect(asset.getPlayModeNextProps?.({ open: true })).toEqual({ open: false })
+    }
+  })
+
+  it('registers the large dungeon chests as play-toggleable props', () => {
+    for (const assetId of [
+      'dungeon.props_chest_large',
+      'dungeon.props_chest_large_gold',
+    ]) {
+      const asset = getContentPackAssetById(assetId)
+
+      if (!asset) {
+        expect(asset).toBeNull()
+        continue
+      }
+
+      expect(asset.getPlayModeNextProps?.({})).toEqual({ open: true })
+      expect(asset.getPlayModeNextProps?.({ open: true })).toEqual({ open: false })
+    }
+  })
+
   it('surfaces generated standees through the runtime registry', () => {
     syncGeneratedCharacterAssets({
       'generated.player.test': {
@@ -141,6 +240,24 @@ describe('content pack registry', () => {
       category: 'prop',
       name: 'Dungeon Table Long Tablecloth',
     })
+    expect(getContentPackAssetById('dungeon.wall_barrier')).toMatchObject({
+      category: 'prop',
+      name: 'Dungeon Barrier',
+      metadata: {
+        snapsTo: 'GRID',
+        browserCategory: 'structure',
+        browserSubcategory: 'walls',
+      },
+    })
+    expect(getContentPackAssetById('dungeon.wall_scaffold_frame_large')).toMatchObject({
+      category: 'prop',
+      name: 'Dungeon Scaffold Frame Large',
+      metadata: {
+        snapsTo: 'GRID',
+        browserCategory: 'structure',
+        browserSubcategory: 'pillars',
+      },
+    })
     expect(getContentPackAssetById('dungeon.stairs_stairs')).toMatchObject({
       category: 'opening',
       metadata: {
@@ -212,11 +329,15 @@ describe('content pack registry', () => {
     expect(getDefaultAssetIdByCategory('floor')).toBe('dungeon.floor_floor_tile_small')
     expect(getDefaultAssetIdByCategory('wall')).toBe('dungeon.wall_wall')
     expect(getDefaultAssetIdByCategory('opening')).toBe('dungeon.stairs_stairs')
-    expect(getDefaultAssetIdByCategory('prop')).toBe('dungeon.props_torch_lit')
+    expect(getDefaultAssetIdByCategory('prop')).toBe('dungeon.props_torch')
   })
 
   it('exposes free-prop connectors and prop surfaces in content metadata', () => {
-    expect(getMetadataConnectors(getContentPackAssetById('dungeon.props_candle_lit')?.metadata)[0]?.type).toBe('FLOOR')
+    expect(getMetadataConnectors(getContentPackAssetById('dungeon.props_candle')?.metadata)[0]?.type).toBe('FLOOR')
+    expect(getMetadataConnectors(getContentPackAssetById('dungeon.props_candle_thin')?.metadata)).toEqual([
+      { point: [0, 0, 0], type: 'FLOOR' },
+      { point: [0, 0, 0], type: 'SURFACE' },
+    ])
     expect(getMetadataConnectors(getContentPackAssetById('dungeon.props_candle_triple')?.metadata)[0]?.type).toBe('FLOOR')
     expect(getContentPackAssetById('dungeon.props_bookcase_double')?.metadata?.propSurface).toBe(true)
     expect(getContentPackAssetById('dungeon.props_bookcase_single')?.metadata?.propSurface).toBe(true)

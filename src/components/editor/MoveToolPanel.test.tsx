@@ -40,6 +40,20 @@ describe('MoveToolPanel', () => {
     expect(toggle).toHaveAttribute('aria-pressed', 'true')
   })
 
+  it('lets users toggle light effects independently from particles', async () => {
+    const user = userEvent.setup()
+    render(<MoveToolPanel />)
+
+    const toggle = screen.getByLabelText('Light Effects')
+    expect(toggle).toHaveAttribute('aria-pressed', 'true')
+
+    await user.click(toggle)
+
+    expect(useDungeonStore.getState().lightEffectsEnabled).toBe(false)
+    expect(useDungeonStore.getState().particleEffectsEnabled).toBe(true)
+    expect(toggle).toHaveAttribute('aria-pressed', 'false')
+  })
+
   it('lets users change pixel size from the settings panel', async () => {
     const user = userEvent.setup()
     render(<MoveToolPanel />)
@@ -49,6 +63,19 @@ describe('MoveToolPanel', () => {
     fireEvent.change(slider, { target: { value: '10' } })
 
     expect(useDungeonStore.getState().postProcessing.pixelSize).toBe(10)
+  })
+
+  it('lets users toggle autofocus blur without disabling post-processing', async () => {
+    const user = userEvent.setup()
+    render(<MoveToolPanel />)
+
+    const toggle = screen.getByLabelText('Autofocus')
+    expect(toggle).toHaveAttribute('aria-pressed', 'true')
+
+    await user.click(toggle)
+
+    expect(useDungeonStore.getState().postProcessing.enabled).toBe(false)
+    expect(toggle).toHaveAttribute('aria-pressed', 'false')
   })
 
   it('does not show a viewport section in settings', () => {

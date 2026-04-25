@@ -1,6 +1,6 @@
 import { GRID_SIZE, getCellKey, type GridCell } from '../../hooks/useSnapToGrid'
-import { getOpeningSegments } from '../../store/openingSegments'
-import { getCanonicalInnerWallKey, getMirroredWallKey, type InnerWallRecord } from '../../store/manualWalls'
+import { getCanonicalInnerWallKey, type InnerWallRecord } from '../../store/manualWalls'
+import { buildOpenWallSegmentSet } from '../../store/openWallSegments'
 import { isWallBoundary, type WallDirection } from '../../store/wallSegments'
 import type {
   BlockedCells,
@@ -37,6 +37,7 @@ type BuildMovementRangeInput = {
   paintedCells: PaintedCells
   blockedCells: BlockedCells
   wallOpenings: Record<string, OpeningRecord>
+  wallSurfaceProps?: Record<string, Record<string, unknown>>
   innerWalls: Record<string, InnerWallRecord>
   occupancy: Record<string, string>
   placedObjects: Record<string, DungeonObjectRecord>
@@ -64,6 +65,7 @@ export function buildMovementRange({
   paintedCells,
   blockedCells,
   wallOpenings,
+  wallSurfaceProps = {},
   innerWalls,
   occupancy,
   placedObjects,
@@ -74,7 +76,7 @@ export function buildMovementRange({
   const reachableCellKeys = new Set<string>([originKey])
   const reachableCells: GridCell[] = [[originCell[0], originCell[1]]]
   const queue: Array<{ cell: GridCell, steps: number }> = [{ cell: originCell, steps: 0 }]
-  const suppressedBoundaryWalls = getSuppressedBoundaryWalls(wallOpenings)
+  const suppressedBoundaryWalls = buildOpenWallSegmentSet(wallOpenings, wallSurfaceProps)
 
   for (let index = 0; index < queue.length; index += 1) {
     const current = queue[index]
@@ -136,22 +138,6 @@ export function buildMovementRange({
     reachableCells,
     reachableCellKeys,
   }
-}
-
-function getSuppressedBoundaryWalls(wallOpenings: Record<string, OpeningRecord>) {
-  const suppressed = new Set<string>()
-
-  Object.values(wallOpenings).forEach((opening) => {
-    for (const segment of getOpeningSegments(opening.wallKey, opening.width)) {
-      suppressed.add(segment)
-      const mirrored = getMirroredWallKey(segment)
-      if (mirrored) {
-        suppressed.add(mirrored)
-      }
-    }
-  })
-
-  return suppressed
 }
 
 function canTraverseCell({

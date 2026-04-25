@@ -14,6 +14,7 @@ import { RoomToolPanel } from './components/editor/RoomToolPanel'
 import { PropToolPanel } from './components/editor/PropToolPanel'
 import { CharacterToolPanel } from './components/editor/CharacterToolPanel'
 import { SelectToolPanel } from './components/editor/SelectToolPanel'
+import { getSelectedWallAssetId } from './components/editor/SelectedWallInspector'
 import { ScenePanel } from './components/editor/ScenePanel'
 import { getDebugCameraPose, projectDebugWorldPoint } from './components/canvas/debugCameraBridge'
 import { migrateLegacyGeneratedCharacters } from './generated-characters/migration'
@@ -268,6 +269,7 @@ function App() {
   const selectedOpening = useDungeonStore((state) =>
     selection ? state.wallOpenings[selection] : null,
   )
+  const selectedWallAssetId = useDungeonStore((state) => getSelectedWallAssetId(selection, state))
   const propCount = useDungeonStore(
     (state) => Object.keys(state.placedObjects).length,
   )
@@ -293,6 +295,7 @@ function App() {
     assetBrowser,
     selectedObject,
     selectedOpening,
+    selectedWallAssetId,
   })
   const debugAsset = debugAssetId ? getContentPackAssetById(debugAssetId) : null
   const debugAssetSourcePath = debugAssetId ? getContentPackAssetSourcePath(debugAssetId) : null
@@ -794,7 +797,8 @@ function App() {
 
           {debugPanelOpen && (
             <DebugVisibilityPanel
-              rightOffsetClass={!isPlayMode && sidebarVisible ? 'right-[23rem]' : 'right-4'}
+              rightOffset={cameraRightOffset}
+              sidebarVisible={sidebarVisible}
               exploredCellCount={exploredCellCount}
               clearExploredCells={clearExploredCells}
               showLosDebugMask={showLosDebugMask}
@@ -956,7 +960,8 @@ function formatCount(count: number, singular: string) {
 }
 
 function DebugVisibilityPanel({
-  rightOffsetClass,
+  rightOffset,
+  sidebarVisible,
   exploredCellCount,
   clearExploredCells,
   showLosDebugMask,
@@ -971,7 +976,8 @@ function DebugVisibilityPanel({
   debugAssetSourcePath,
   debugAssetSourceLink,
 }: {
-  rightOffsetClass: string
+  rightOffset: number
+  sidebarVisible: boolean
   exploredCellCount: number
   clearExploredCells: () => void
   showLosDebugMask: boolean
@@ -989,7 +995,9 @@ function DebugVisibilityPanel({
   return (
     <aside
       data-testid="debug-visibility-panel"
-      className={`absolute top-20 z-40 flex w-72 flex-col gap-4 rounded-2xl border border-emerald-400/25 bg-stone-950/92 p-4 shadow-2xl backdrop-blur ${rightOffsetClass}`}
+      data-sidebar-visible={sidebarVisible}
+      className="absolute bottom-4 z-20 flex w-72 flex-col gap-4 rounded-2xl border border-emerald-400/25 bg-stone-950/92 p-4 shadow-2xl backdrop-blur transition-[right] duration-200 ease-out"
+      style={{ right: `${rightOffset}px` }}
     >
       <div>
         <p className="text-xs font-semibold uppercase tracking-[0.3em] text-emerald-300/85">

@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import userEvent from '@testing-library/user-event'
-import { cleanup, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import App from './App'
 import { useDungeonStore } from './store/useDungeonStore'
 
@@ -125,6 +125,23 @@ describe('App sidebar drawer', () => {
 
     expect(shell).toHaveAttribute('data-sidebar-visible', 'true')
     expect(screen.getByTestId('camera-offset')).toHaveTextContent('400')
+  })
+
+  it('anchors the debug panel to the lower right and offsets it when the sidebar toggles', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+
+    fireEvent.keyDown(window, { key: 'F12', ctrlKey: true, shiftKey: true })
+
+    const debugPanel = screen.getByTestId('debug-visibility-panel')
+    expect(debugPanel).toHaveAttribute('data-sidebar-visible', 'true')
+    expect(debugPanel).toHaveStyle({ right: '400px' })
+    expect(debugPanel.className).toContain('bottom-4')
+
+    await user.click(screen.getByRole('button', { name: 'Hide sidebar' }))
+
+    expect(debugPanel).toHaveAttribute('data-sidebar-visible', 'false')
+    expect(debugPanel).toHaveStyle({ right: '16px' })
   })
 
   it('keeps the sidebar off-canvas in play mode without rendering the drawer tab', () => {

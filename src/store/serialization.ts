@@ -37,7 +37,7 @@ import {
   OUTDOOR_TERRAIN_STYLES,
 } from './outdoorTerrainStyles'
 
-const CURRENT_VERSION = 15
+const CURRENT_VERSION = 16
 
 // ── Serialized shapes (compact, no redundant keys) ────────────────────────────
 
@@ -97,6 +97,7 @@ type SerializedFloor = {
   exploredCells: string[]
   floorTileAssetIds?: Record<string, string>
   wallSurfaceAssetIds?: Record<string, string>
+  wallSurfaceProps?: Record<string, Record<string, unknown>>
   objects: SerializedObject[]
   openings: SerializedOpening[]
   innerWalls?: string[]
@@ -161,6 +162,7 @@ export type SerializableState = {
   exploredCells: Record<string, true>
   floorTileAssetIds: Record<string, string>
   wallSurfaceAssetIds: Record<string, string>
+  wallSurfaceProps: Record<string, Record<string, unknown>>
   placedObjects: Record<string, DungeonObjectRecord>
   wallOpenings: Record<string, OpeningRecord>
   innerWalls: Record<string, InnerWallRecord>
@@ -189,11 +191,12 @@ function serializeFloorData(
     outdoorTerrainStyleCells: OutdoorTerrainStyleCells
     exploredCells: Record<string, true>
     floorTileAssetIds: Record<string, string>
-      wallSurfaceAssetIds: Record<string, string>
-      placedObjects: Record<string, DungeonObjectRecord>
-      wallOpenings: Record<string, OpeningRecord>
-      innerWalls: Record<string, InnerWallRecord>
-      nextRoomNumber: number
+    wallSurfaceAssetIds: Record<string, string>
+    wallSurfaceProps: Record<string, Record<string, unknown>>
+    placedObjects: Record<string, DungeonObjectRecord>
+    wallOpenings: Record<string, OpeningRecord>
+    innerWalls: Record<string, InnerWallRecord>
+    nextRoomNumber: number
   },
 ): SerializedFloor {
   return {
@@ -219,6 +222,9 @@ function serializeFloorData(
     exploredCells: Object.keys(snapshot.exploredCells),
     floorTileAssetIds: { ...snapshot.floorTileAssetIds },
     wallSurfaceAssetIds: { ...snapshot.wallSurfaceAssetIds },
+    wallSurfaceProps: Object.fromEntries(
+      Object.entries(snapshot.wallSurfaceProps).map(([wallKey, props]) => [wallKey, { ...props }]),
+    ),
     objects: Object.values(snapshot.placedObjects).map((obj) => ({
       id: obj.id, type: obj.type, assetId: obj.assetId, position: obj.position, rotation: obj.rotation,
       cell: obj.cell, cellKey: obj.cellKey, layerId: obj.layerId, props: obj.props,
@@ -257,6 +263,7 @@ export function serializeDungeon(state: SerializableState): string {
       exploredCells: state.exploredCells,
       floorTileAssetIds: state.floorTileAssetIds,
       wallSurfaceAssetIds: state.wallSurfaceAssetIds,
+      wallSurfaceProps: state.wallSurfaceProps,
       placedObjects: state.placedObjects,
       wallOpenings: state.wallOpenings,
       innerWalls: state.innerWalls,
@@ -482,6 +489,18 @@ export function deserializeDungeon(json: string): SerializableState | null {
     }
   }
 
+  if (version < 16 && Array.isArray((raw as Record<string, unknown>).floors)) {
+    const r = raw as Record<string, unknown>
+    raw = {
+      ...r,
+      floors: (r.floors as unknown[]).map((floor) =>
+        isObject(floor) && !isObject(floor.wallSurfaceProps)
+          ? { ...floor, wallSurfaceProps: {} }
+          : floor,
+      ),
+    }
+  }
+
   return parseFile(raw as Record<string, unknown>)
 }
 
@@ -499,6 +518,7 @@ function parseFloorData(raw: Record<string, unknown>): {
   exploredCells: Record<string, true>
   floorTileAssetIds: Record<string, string>
   wallSurfaceAssetIds: Record<string, string>
+  wallSurfaceProps: Record<string, Record<string, unknown>>
   placedObjects: Record<string, DungeonObjectRecord>
   wallOpenings: Record<string, OpeningRecord>
   innerWalls: Record<string, InnerWallRecord>
@@ -618,6 +638,11 @@ function parseFloorData(raw: Record<string, unknown>): {
       ([wallKey, assetId]) => typeof wallKey === 'string' && typeof assetId === 'string',
     ),
   ) as Record<string, string>
+  const wallSurfaceProps = Object.fromEntries(
+    Object.entries(isObject(raw.wallSurfaceProps) ? raw.wallSurfaceProps : {}).filter(
+      ([wallKey, props]) => typeof wallKey === 'string' && isObject(props),
+    ).map(([wallKey, props]) => [wallKey, { ...(props as Record<string, unknown>) }]),
+  ) as Record<string, Record<string, unknown>>
 
   const placedObjects: Record<string, DungeonObjectRecord> = {}
   const occupancy: Record<string, string> = {}
@@ -675,6 +700,7 @@ function parseFloorData(raw: Record<string, unknown>): {
     exploredCells,
     floorTileAssetIds,
     wallSurfaceAssetIds,
+    wallSurfaceProps,
     placedObjects,
     wallOpenings,
     innerWalls,

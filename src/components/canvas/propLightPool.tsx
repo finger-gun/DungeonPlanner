@@ -13,8 +13,9 @@ import {
 } from '../../store/lightOverrides'
 import type { PlayVisibility } from './playVisibility'
 import { shouldRenderLineOfSightLight } from './losRendering'
+import { useRegisteredLightSources } from './objectSourceRegistry'
 
-export const DEFAULT_POOLED_PROP_LIGHTS = 32
+export const DEFAULT_POOLED_PROP_LIGHTS = 256
 const NEAR_VIEW_LIGHT_MARGIN = 1.5
 const DORMANT_LIGHT_POSITION: [number, number, number] = [0, -1000, 0]
 const positionScratch = new THREE.Vector3()
@@ -92,21 +93,52 @@ export function distributeForwardPlusLightBudget(requestedCounts: number[], tota
   return allocations
 }
 
+export function applyPropLightPoolAssignment(
+  pooledLight: THREE.PointLight,
+  assignment: PropLightPoolAssignment | undefined,
+  elapsedTime: number,
+) {
+  if (!assignment) {
+    pooledLight.position.set(...DORMANT_LIGHT_POSITION)
+    pooledLight.color.copy(dormantColor)
+    pooledLight.intensity = 0
+    pooledLight.distance = 0
+    pooledLight.decay = 2
+    pooledLight.visible = false
+    return
+  }
+
+  pooledLight.position.set(...assignment.position)
+  pooledLight.color.set(assignment.light.color)
+  pooledLight.distance = assignment.light.distance
+  pooledLight.decay = assignment.light.decay ?? 2
+  pooledLight.intensity = getPooledLightIntensity(assignment, elapsedTime)
+  pooledLight.visible = true
+}
+
 export function PropLightPool({
-  objects,
+  scopeKey,
   visibility,
   maxLights = DEFAULT_POOLED_PROP_LIGHTS,
 }: {
-  objects: DungeonObjectRecord[]
+  scopeKey: string
   visibility: PlayVisibility
   maxLights?: number
 }) {
   const { camera, invalidate, scene } = useThree()
   const refs = useRef<Array<THREE.PointLight | null>>([])
   const objectLightPreviewOverrides = useDungeonStore((state) => state.objectLightPreviewOverrides)
+  const registeredLightSources = useRegisteredLightSources(scopeKey)
   const lightSources = useMemo(
-    () => precomputeLightSources(objects, objectLightPreviewOverrides),
-    [objects, objectLightPreviewOverrides],
+    () =>
+      registeredLightSources.flatMap((source) => {
+        const light = mergePropLightWithOverrides(
+          source.light,
+          objectLightPreviewOverrides[source.key] ?? getObjectLightOverrides(source.object.props),
+        )
+        return light ? [{ ...source, light }] : []
+      }),
+    [objectLightPreviewOverrides, registeredLightSources],
   )
   const visibleAssignments = useMemo(
     () => collectVisiblePropLightAssignments({
@@ -141,23 +173,7 @@ export function PropLightPool({
         continue
       }
 
-      const assignment = cameraAwareAssignments[index]
-      if (!assignment) {
-        pooledLight.visible = false
-        pooledLight.position.set(...DORMANT_LIGHT_POSITION)
-        pooledLight.color.copy(dormantColor)
-        pooledLight.intensity = 0
-        pooledLight.distance = 0
-        pooledLight.decay = 2
-        continue
-      }
-
-      pooledLight.visible = true
-      pooledLight.position.set(...assignment.position)
-      pooledLight.color.set(assignment.light.color)
-      pooledLight.distance = assignment.light.distance
-      pooledLight.decay = assignment.light.decay ?? 2
-      pooledLight.intensity = getPooledLightIntensity(assignment, elapsedTime)
+      applyPropLightPoolAssignment(pooledLight, cameraAwareAssignments[index], elapsedTime)
     }
   }, [camera, maxLights, renderCapacity, visibleAssignments])
 
@@ -165,8 +181,7 @@ export function PropLightPool({
     while (refs.current.length < renderCapacity) {
       const pooledLight = new THREE.PointLight('#000000', 0, 0, 2)
       pooledLight.castShadow = FORWARD_PLUS_LOCAL_LIGHT_SHADOWS
-      pooledLight.position.set(...DORMANT_LIGHT_POSITION)
-      pooledLight.visible = false
+      applyPropLightPoolAssignment(pooledLight, undefined, 0)
       refs.current.push(pooledLight)
       scene.add(pooledLight)
     }
@@ -398,7 +413,7 @@ function getStableLightPhase(key: string) {
   return (hash >>> 0) / 4294967296 * Math.PI * 2
 }
 
-function getCameraFrustum(camera: THREE.Camera) {
+export function getCameraFrustum(camera: THREE.Camera) {
   return new THREE.Frustum().setFromProjectionMatrix(
     cameraProjectionMatrixScratch.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse),
   )
@@ -409,7 +424,7 @@ function getCameraPosition(camera: THREE.Camera): [number, number, number] {
   return [cameraPositionScratch.x, cameraPositionScratch.y, cameraPositionScratch.z]
 }
 
-function hasCameraChanged(
+export function hasCameraChanged(
   camera: THREE.Camera,
   lastCameraMatrixElementsRef: MutableRefObject<Float32Array | null>,
   lastProjectionMatrixElementsRef: MutableRefObject<Float32Array | null>,

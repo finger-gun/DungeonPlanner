@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { getContentPackAssetById, getDefaultAssetIdByCategory } from '../content-packs/registry'
+import type { DungeonObjectRecord } from './useDungeonStore'
 import {
   sanitizePersistedAssetReferences,
   sanitizeSelectedAssetIds,
@@ -36,7 +37,8 @@ function createSnapshot() {
     exploredCells: {},
     floorTileAssetIds: {},
     wallSurfaceAssetIds: {},
-    placedObjects: {},
+    wallSurfaceProps: {},
+    placedObjects: {} as Record<string, DungeonObjectRecord>,
     wallOpenings: {
       opening1: {
         id: 'opening1',
@@ -108,6 +110,67 @@ describe('asset reference sanitization', () => {
 
     expect(sanitized.floorTileAssetIds).toEqual({})
     expect(sanitized.wallSurfaceAssetIds).toEqual({})
+  })
+
+  it('remaps removed lit torch assets to the toggleable torch with lit props', () => {
+    const snapshot = createSnapshot()
+    snapshot.selectedAssetIds.prop = 'dungeon.props_torch_lit'
+    snapshot.placedObjects = {
+      torch1: {
+        id: 'torch1',
+        type: 'prop',
+        assetId: 'dungeon.props_torch_lit',
+        position: [0, 0, 0],
+        rotation: [0, 0, 0],
+        props: {},
+        cell: [0, 0],
+        cellKey: '0:0:floor',
+        layerId: 'default',
+      },
+    }
+
+    const sanitized = sanitizeSnapshotAssetReferences(snapshot)
+
+    expect(sanitized.selectedAssetIds.prop).toBe('dungeon.props_torch')
+    expect(sanitized.placedObjects['torch1']?.assetId).toBe('dungeon.props_torch')
+    expect(sanitized.placedObjects['torch1']?.props.lit).toBe(true)
+  })
+
+  it('remaps removed lit candle assets to the toggleable candle props with lit props', () => {
+    const snapshot = createSnapshot()
+    snapshot.selectedAssetIds.prop = 'dungeon.props_candle_lit'
+    snapshot.placedObjects = {
+      candle1: {
+        id: 'candle1',
+        type: 'prop',
+        assetId: 'dungeon.props_candle_lit',
+        position: [0, 0, 0],
+        rotation: [0, 0, 0],
+        props: {},
+        cell: [0, 0],
+        cellKey: '0:0:floor',
+        layerId: 'default',
+      },
+      candleThin1: {
+        id: 'candleThin1',
+        type: 'prop',
+        assetId: 'dungeon.props_candle_thin_lit',
+        position: [1, 0, 0],
+        rotation: [0, 0, 0],
+        props: {},
+        cell: [1, 0],
+        cellKey: '1:0:floor',
+        layerId: 'default',
+      },
+    }
+
+    const sanitized = sanitizeSnapshotAssetReferences(snapshot)
+
+    expect(sanitized.selectedAssetIds.prop).toBe('dungeon.props_candle')
+    expect(sanitized.placedObjects['candle1']?.assetId).toBe('dungeon.props_candle')
+    expect(sanitized.placedObjects['candle1']?.props.lit).toBe(true)
+    expect(sanitized.placedObjects['candleThin1']?.assetId).toBe('dungeon.props_candle_thin')
+    expect(sanitized.placedObjects['candleThin1']?.props.lit).toBe(true)
   })
 
   it('sanitizes floor snapshots in persisted state', () => {

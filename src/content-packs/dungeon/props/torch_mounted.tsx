@@ -26,8 +26,13 @@ export const dungeonTorchMountedAsset = createDungeonAsset({
     ],
     blocksLineOfSight: false,
   },
-  getLight: createDungeonFlameLightGetter(),
+  getLight: createDungeonFlameLightGetter({ defaultLit: true }),
   getEffect: createDungeonFlameEffectGetter({
-    emitters: [{ offset: [0, 1.48, 0], scale: 1.1, intensity: 1.1 }],
+    defaultLit: true,
+    emitters: [{ offset: [0, 1.2, 0], scale: 1.1, intensity: 1.1 }],
   }),
+  getPlayModeNextProps: (objectProps) => {
+    const lit = objectProps.lit !== false
+    return { lit: !lit }
+  },
 })

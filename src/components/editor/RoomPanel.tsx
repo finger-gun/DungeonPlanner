@@ -2,8 +2,9 @@ import { useState, useRef } from 'react'
 import { Plus, Trash2 } from 'lucide-react'
 import { useDungeonStore } from '../../store/useDungeonStore'
 import { getContentPackAssetsByCategory } from '../../content-packs/registry'
+import { isMultiTileFloorAsset } from '../../store/floorSurfaceLayout'
 
-const floorAssets = getContentPackAssetsByCategory('floor')
+const floorAssets = getContentPackAssetsByCategory('floor').filter((asset) => !isMultiTileFloorAsset(asset.id))
 const wallAssets = getContentPackAssetsByCategory('wall')
 
 export function RoomPanel() {
@@ -34,7 +35,7 @@ export function RoomPanel() {
 
       {roomList.length === 0 ? (
         <p className="text-[11px] text-stone-600">
-          No rooms yet. Create one to override floor/wall assets per room.
+          No rooms yet. Create one to override room-wide floor/wall assets.
         </p>
       ) : (
         <div className="flex flex-col gap-2">
@@ -154,7 +155,12 @@ function AssetOverride({
 }) {
   return (
     <div>
-      <p className="mb-1.5 text-[10px] uppercase tracking-[0.2em] text-stone-500">{label}</p>
+            <p className="mb-1.5 text-[10px] uppercase tracking-[0.2em] text-stone-500">{label}</p>
+      {label === 'Floor' && (
+        <p className="mb-1.5 text-[10px] text-stone-500">
+          Large floor surfaces are applied with the floor variant brush.
+        </p>
+      )}
       <select
         value={activeId ?? ''}
         onChange={(e) => onChange(e.target.value || null)}

@@ -24,6 +24,9 @@ export function SelectedPropInspector({
   onDelete,
   title = 'Selected Prop',
 }: SelectedPropInspectorProps) {
+  const setObjectProps = useDungeonStore((state) => state.setObjectProps)
+  const nextStateProps = asset?.getPlayModeNextProps?.(object.props) ?? null
+
   return (
     <section>
       <p className="mb-3 text-xs font-semibold uppercase tracking-[0.3em] text-sky-200/70">
@@ -53,12 +56,48 @@ export function SelectedPropInspector({
           <InfoRow label="Rotation" value={object.rotation.map((v) => v.toFixed(2)).join(', ')} />
           <InfoRow label="Cell" value={object.cellKey} />
         </div>
+        {nextStateProps ? (
+          <div className="mt-4 border-t border-stone-800 pt-4">
+            <p className="mb-3 text-xs font-semibold uppercase tracking-[0.24em] text-amber-200/70">
+              State
+            </p>
+            <CompactPillButton
+              type="button"
+              onClick={() => setObjectProps(object.id, { ...object.props, ...nextStateProps })}
+              tone="amber"
+              size="sm"
+            >
+              {getStateToggleLabel(nextStateProps)}
+            </CompactPillButton>
+          </div>
+        ) : null}
         {asset && (
           <SelectedPropLightSection object={object} asset={asset} />
         )}
       </div>
     </section>
   )
+}
+
+function getStateToggleLabel(nextStateProps: Record<string, unknown>) {
+  const entries = Object.entries(nextStateProps)
+  if (entries.length !== 1) {
+    return 'Toggle State'
+  }
+
+  const [key, value] = entries[0]!
+  if (typeof value !== 'boolean') {
+    return 'Toggle State'
+  }
+
+  if (key === 'open') {
+    return value ? 'Open' : 'Close'
+  }
+  if (key === 'lit') {
+    return value ? 'Turn On' : 'Turn Off'
+  }
+
+  return 'Toggle State'
 }
 
 function SelectedPropLightSection({

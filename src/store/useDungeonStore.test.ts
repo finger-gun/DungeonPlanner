@@ -605,6 +605,37 @@ describe('useDungeonStore history', () => {
     expect(useDungeonStore.getState().floorTileAssetIds['0:0']).toBeUndefined()
   })
 
+  it('stores multi-tile floor variants on the anchor cell and clears them from covered cells', () => {
+    const state = useDungeonStore.getState()
+    state.paintCells([[0, 0], [1, 0], [0, 1], [1, 1]])
+
+    const applied = state.setFloorTileAsset('0:0', 'dungeon.floor_floor_tile_large')
+
+    expect(applied).toBe(true)
+    expect(useDungeonStore.getState().floorTileAssetIds).toEqual({
+      '0:0': 'dungeon.floor_floor_tile_large',
+    })
+
+    const cleared = state.setFloorTileAsset('1:1', null)
+
+    expect(cleared).toBe(true)
+    expect(useDungeonStore.getState().floorTileAssetIds).toEqual({})
+  })
+
+  it('reanchors overlapping multi-tile floor variants to the latest stamp', () => {
+    const state = useDungeonStore.getState()
+    state.paintCells([
+      [0, 0], [1, 0], [2, 0],
+      [0, 1], [1, 1], [2, 1],
+    ])
+
+    expect(state.setFloorTileAsset('0:0', 'dungeon.floor_floor_tile_large')).toBe(true)
+    expect(state.setFloorTileAsset('1:0', 'dungeon.floor_floor_tile_large')).toBe(true)
+    expect(useDungeonStore.getState().floorTileAssetIds).toEqual({
+      '1:0': 'dungeon.floor_floor_tile_large',
+    })
+  })
+
   it('stores wall variant overrides on the canonical wall key', () => {
     useDungeonStore.getState().paintCells([[0, 0]])
     useDungeonStore.getState().paintCells([[1, 0]])
@@ -614,6 +645,24 @@ describe('useDungeonStore history', () => {
     expect(applied).toBe(true)
     expect(useDungeonStore.getState().wallSurfaceAssetIds['0:0:east']).toBe('core.wall')
     expect(useDungeonStore.getState().wallSurfaceAssetIds['1:0:west']).toBeUndefined()
+  })
+
+  it('stores wall props on the canonical wall key and supports undo/redo', () => {
+    const state = useDungeonStore.getState()
+    state.paintCells([[0, 0]])
+    state.paintCells([[1, 0]])
+
+    const applied = state.setWallSurfaceProps('1:0:west', { open: true })
+
+    expect(applied).toBe(true)
+    expect(useDungeonStore.getState().wallSurfaceProps['0:0:east']).toEqual({ open: true })
+    expect(useDungeonStore.getState().wallSurfaceProps['1:0:west']).toBeUndefined()
+
+    state.undo()
+    expect(useDungeonStore.getState().wallSurfaceProps['0:0:east']).toBeUndefined()
+
+    state.redo()
+    expect(useDungeonStore.getState().wallSurfaceProps['0:0:east']).toEqual({ open: true })
   })
 
   it('creates an adjacent floor for staircase assets using their paired metadata', () => {

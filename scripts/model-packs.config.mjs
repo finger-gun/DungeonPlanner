@@ -183,6 +183,12 @@ export const modelPackConfigs = {
     include: corePackAssetNames.map((name) => `${name}.glb`),
     clean: true,
   },
+  dungeon: {
+    sourceDirEnv: 'DUNGEONPLANNER_DUNGEON_SOURCE_DIR',
+    targetDir: path.join('src', 'assets', 'models', 'dungeon'),
+    convertToGlb: true,
+    clean: true,
+  },
   kaykit: {
     sourceDir: kaykitForestSourceDir,
     targetDir: path.join('src', 'assets', 'models', 'forrest'),

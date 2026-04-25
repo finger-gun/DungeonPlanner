@@ -45,7 +45,7 @@ export function PostProcessingPanel() {
             <div>
               <p className="text-xs uppercase tracking-[0.22em] text-stone-400">Autofocus</p>
               <p className="mt-2 text-xs leading-relaxed text-stone-400">
-                Focus follows whatever the camera center ray hits.
+                Focus follows whatever the camera center ray hits. Selection outlines stay enabled even when lens blur is off.
               </p>
             </div>
             <button
@@ -54,7 +54,7 @@ export function PostProcessingPanel() {
               className={`relative h-4 w-7 rounded-full transition ${
                 pp.enabled ? 'bg-sky-500' : 'bg-stone-700'
               }`}
-              title={pp.enabled ? 'Disable post-processing' : 'Enable post-processing'}
+              title={pp.enabled ? 'Disable autofocus blur' : 'Enable autofocus blur'}
             >
               <span
                 className={`absolute top-0.5 h-3 w-3 rounded-full bg-white shadow transition-all ${

@@ -8,6 +8,7 @@ type FloorReceiverCell = {
   cell: GridCell
   receiverScene: THREE.Object3D
   receiverTransform?: ContentPackModelTransform
+  coveredCellKeys?: string[]
 }
 
 export function buildMergedFloorReceiverGeometry({
@@ -20,8 +21,8 @@ export function buildMergedFloorReceiverGeometry({
   const geometries: THREE.BufferGeometry[] = []
 
   for (const cell of cells) {
-    const cellKey = getCellKey(cell.cell)
-    if (blockedFloorCellKeys.has(cellKey)) {
+    const coveredCellKeys = cell.coveredCellKeys ?? [getCellKey(cell.cell)]
+    if (coveredCellKeys.some((cellKey) => blockedFloorCellKeys.has(cellKey))) {
       continue
     }
 

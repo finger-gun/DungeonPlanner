@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { getOpeningHitboxSize } from './DungeonRoom'
 import { deriveWallCornersFromSegments } from './wallCornerLayout'
 import { shouldActivateFloorReceiver } from './floorReceiverMode'
 
@@ -42,5 +43,10 @@ describe('deriveWallCornersFromSegments', () => {
     expect(shouldActivateFloorReceiver('move', false)).toBe(false)
     expect(shouldActivateFloorReceiver('play', false)).toBe(true)
     expect(shouldActivateFloorReceiver('room', true)).toBe(true)
+  })
+
+  it('uses the same hitbox dimensions for asset-backed openings and open passages', () => {
+    expect(getOpeningHitboxSize(1)).toEqual([1.9, 2.2, 0.1])
+    expect(getOpeningHitboxSize(3)).toEqual([5.699999999999999, 2.2, 0.1])
   })
 })

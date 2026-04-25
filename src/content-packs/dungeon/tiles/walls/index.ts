@@ -1,26 +1,4 @@
 import type { ContentPackAsset } from '../../../types'
-import { dungeonBarrierAsset } from "./barrier"
-import { dungeonBarrierColumHalfAsset } from "./barrier_colum_half"
-import { dungeonBarrierColumnAsset } from "./barrier_column"
-import { dungeonBarrierCornerAsset } from "./barrier_corner"
-import { dungeonBarrierHalfAsset } from "./barrier_half"
-import { dungeonFloorFoundationAllsidesAsset } from "./floor_foundation_allsides"
-import { dungeonFloorFoundationCornerAsset } from "./floor_foundation_corner"
-import { dungeonFloorFoundationDiagonalCornerAsset } from "./floor_foundation_diagonal_corner"
-import { dungeonFloorFoundationFrontAsset } from "./floor_foundation_front"
-import { dungeonFloorFoundationFrontAndBackAsset } from "./floor_foundation_front_and_back"
-import { dungeonFloorFoundationFrontAndSidesAsset } from "./floor_foundation_front_and_sides"
-import { dungeonPillarDecoratedAsset } from "./pillar_decorated"
-import { dungeonScaffoldBeamWallAsset } from "./scaffold_beam_wall"
-import { dungeonScaffoldBeamsConnectedAsset } from "./scaffold_beams_connected"
-import { dungeonScaffoldFrameLargeAsset } from "./scaffold_frame_large"
-import { dungeonScaffoldFrameSmallAsset } from "./scaffold_frame_small"
-import { dungeonScaffoldPillarWallAsset } from "./scaffold_pillar_wall"
-import { dungeonScaffoldPillarWallCrossAsset } from "./scaffold_pillar_wall_cross"
-import { dungeonScaffoldPillarWallCrossTopAsset } from "./scaffold_pillar_wall_cross_top"
-import { dungeonScaffoldPillarWallTorchAsset } from "./scaffold_pillar_wall_torch"
-import { dungeonScaffoldPillarsConnectedAsset } from "./scaffold_pillars_connected"
-import { dungeonScaffoldPillarsConnectedTorchAsset } from "./scaffold_pillars_connected_torch"
 import { dungeonWallAsset } from "./wall"
 import { dungeonWallTsplitAsset } from "./wall_Tsplit"
 import { dungeonWallTsplitSlopedAsset } from "./wall_Tsplit_sloped"
@@ -59,28 +37,6 @@ import { dungeonWallWindowOpenAsset } from "./wall_window_open"
 import { dungeonWallWindowOpenScaffoldAsset } from "./wall_window_open_scaffold"
 
 export const dungeonWallAssets: ContentPackAsset[] = [
-  dungeonBarrierAsset,
-  dungeonBarrierColumHalfAsset,
-  dungeonBarrierColumnAsset,
-  dungeonBarrierCornerAsset,
-  dungeonBarrierHalfAsset,
-  dungeonFloorFoundationAllsidesAsset,
-  dungeonFloorFoundationCornerAsset,
-  dungeonFloorFoundationDiagonalCornerAsset,
-  dungeonFloorFoundationFrontAsset,
-  dungeonFloorFoundationFrontAndBackAsset,
-  dungeonFloorFoundationFrontAndSidesAsset,
-  dungeonPillarDecoratedAsset,
-  dungeonScaffoldBeamWallAsset,
-  dungeonScaffoldBeamsConnectedAsset,
-  dungeonScaffoldFrameLargeAsset,
-  dungeonScaffoldFrameSmallAsset,
-  dungeonScaffoldPillarWallAsset,
-  dungeonScaffoldPillarWallCrossAsset,
-  dungeonScaffoldPillarWallCrossTopAsset,
-  dungeonScaffoldPillarWallTorchAsset,
-  dungeonScaffoldPillarsConnectedAsset,
-  dungeonScaffoldPillarsConnectedTorchAsset,
   dungeonWallAsset,
   dungeonWallTsplitAsset,
   dungeonWallTsplitSlopedAsset,

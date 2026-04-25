@@ -2,6 +2,28 @@ import type { ContentPackAsset } from '../../types'
 import { dungeonBannersAssets } from './banners'
 import { dungeonBarsAssets } from './bars'
 import { dungeonPillarsAssets } from './pillars'
+import { dungeonBarrierAsset } from '../tiles/walls/barrier'
+import { dungeonBarrierColumHalfAsset } from '../tiles/walls/barrier_colum_half'
+import { dungeonBarrierColumnAsset } from '../tiles/walls/barrier_column'
+import { dungeonBarrierCornerAsset } from '../tiles/walls/barrier_corner'
+import { dungeonBarrierHalfAsset } from '../tiles/walls/barrier_half'
+import { dungeonFloorFoundationAllsidesAsset } from '../tiles/walls/floor_foundation_allsides'
+import { dungeonFloorFoundationCornerAsset } from '../tiles/walls/floor_foundation_corner'
+import { dungeonFloorFoundationDiagonalCornerAsset } from '../tiles/walls/floor_foundation_diagonal_corner'
+import { dungeonFloorFoundationFrontAsset } from '../tiles/walls/floor_foundation_front'
+import { dungeonFloorFoundationFrontAndBackAsset } from '../tiles/walls/floor_foundation_front_and_back'
+import { dungeonFloorFoundationFrontAndSidesAsset } from '../tiles/walls/floor_foundation_front_and_sides'
+import { dungeonPillarDecoratedAsset } from '../tiles/walls/pillar_decorated'
+import { dungeonScaffoldBeamWallAsset } from '../tiles/walls/scaffold_beam_wall'
+import { dungeonScaffoldBeamsConnectedAsset } from '../tiles/walls/scaffold_beams_connected'
+import { dungeonScaffoldFrameLargeAsset } from '../tiles/walls/scaffold_frame_large'
+import { dungeonScaffoldFrameSmallAsset } from '../tiles/walls/scaffold_frame_small'
+import { dungeonScaffoldPillarWallAsset } from '../tiles/walls/scaffold_pillar_wall'
+import { dungeonScaffoldPillarWallCrossAsset } from '../tiles/walls/scaffold_pillar_wall_cross'
+import { dungeonScaffoldPillarWallCrossTopAsset } from '../tiles/walls/scaffold_pillar_wall_cross_top'
+import { dungeonScaffoldPillarWallTorchAsset } from '../tiles/walls/scaffold_pillar_wall_torch'
+import { dungeonScaffoldPillarsConnectedAsset } from '../tiles/walls/scaffold_pillars_connected'
+import { dungeonScaffoldPillarsConnectedTorchAsset } from '../tiles/walls/scaffold_pillars_connected_torch'
 import { dungeonBarrelLargeAsset } from "./barrel_large"
 import { dungeonBarrelLargeDecoratedAsset } from "./barrel_large_decorated"
 import { dungeonBarrelSmallAsset } from "./barrel_small"
@@ -38,10 +60,8 @@ import { dungeonBoxStackedAsset } from "./box_stacked"
 import { dungeonBucketAsset } from "./bucket"
 import { dungeonBucketPickaxesAsset } from "./bucket_pickaxes"
 import { dungeonCandleAsset } from "./candle"
-import { dungeonCandleLitAsset } from "./candle_lit"
 import { dungeonCandleMeltedAsset } from "./candle_melted"
 import { dungeonCandleThinAsset } from "./candle_thin"
-import { dungeonCandleThinLitAsset } from "./candle_thin_lit"
 import { dungeonCandleTripleAsset } from "./candle_triple"
 import { dungeonChairAsset } from "./chair"
 import { dungeonChestAsset } from "./chest"
@@ -104,7 +124,6 @@ import { dungeonTableSmallDecoratedAAsset } from "./table_small_decorated_A"
 import { dungeonTableSmallDecoratedBAsset } from "./table_small_decorated_B"
 import { dungeonTableSmallDecoratedCAsset } from "./table_small_decorated_C"
 import { dungeonTorchAsset } from "./torch"
-import { dungeonTorchLitAsset } from "./torch_lit"
 import { dungeonTorchMountedAsset } from "./torch_mounted"
 import { dungeonTrunkLargeAAsset } from "./trunk_large_A"
 import { dungeonTrunkLargeBAsset } from "./trunk_large_B"
@@ -120,6 +139,11 @@ export const dungeonPropAssets: ContentPackAsset[] = [
   ...dungeonBannersAssets,
   ...dungeonBarsAssets,
   ...dungeonPillarsAssets,
+  dungeonBarrierAsset,
+  dungeonBarrierColumHalfAsset,
+  dungeonBarrierColumnAsset,
+  dungeonBarrierCornerAsset,
+  dungeonBarrierHalfAsset,
   dungeonBarrelLargeAsset,
   dungeonBarrelLargeDecoratedAsset,
   dungeonBarrelSmallAsset,
@@ -156,10 +180,8 @@ export const dungeonPropAssets: ContentPackAsset[] = [
   dungeonBucketAsset,
   dungeonBucketPickaxesAsset,
   dungeonCandleAsset,
-  dungeonCandleLitAsset,
   dungeonCandleMeltedAsset,
   dungeonCandleThinAsset,
-  dungeonCandleThinLitAsset,
   dungeonCandleTripleAsset,
   dungeonChairAsset,
   dungeonChestAsset,
@@ -175,12 +197,19 @@ export const dungeonPropAssets: ContentPackAsset[] = [
   dungeonCrateLargeDecoratedAsset,
   dungeonCrateSmallAsset,
   dungeonCratesStackedAsset,
+  dungeonFloorFoundationAllsidesAsset,
+  dungeonFloorFoundationCornerAsset,
+  dungeonFloorFoundationDiagonalCornerAsset,
+  dungeonFloorFoundationFrontAsset,
+  dungeonFloorFoundationFrontAndBackAsset,
+  dungeonFloorFoundationFrontAndSidesAsset,
   dungeonKegAsset,
   dungeonKegDecoratedAsset,
   dungeonKeyAsset,
   dungeonKeyGoldAsset,
   dungeonKeyringAsset,
   dungeonKeyringHangingAsset,
+  dungeonPillarDecoratedAsset,
   dungeonPickaxeAsset,
   dungeonPickaxeGoldAsset,
   dungeonPlateAsset,
@@ -222,8 +251,17 @@ export const dungeonPropAssets: ContentPackAsset[] = [
   dungeonTableSmallDecoratedBAsset,
   dungeonTableSmallDecoratedCAsset,
   dungeonTorchAsset,
-  dungeonTorchLitAsset,
   dungeonTorchMountedAsset,
+  dungeonScaffoldBeamWallAsset,
+  dungeonScaffoldBeamsConnectedAsset,
+  dungeonScaffoldFrameLargeAsset,
+  dungeonScaffoldFrameSmallAsset,
+  dungeonScaffoldPillarWallAsset,
+  dungeonScaffoldPillarWallCrossAsset,
+  dungeonScaffoldPillarWallCrossTopAsset,
+  dungeonScaffoldPillarWallTorchAsset,
+  dungeonScaffoldPillarsConnectedAsset,
+  dungeonScaffoldPillarsConnectedTorchAsset,
   dungeonTrunkLargeAAsset,
   dungeonTrunkLargeBAsset,
   dungeonTrunkLargeCAsset,

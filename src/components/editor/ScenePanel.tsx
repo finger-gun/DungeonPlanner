@@ -420,7 +420,6 @@ function useMemoGroupBy(
       acc[roomId].push(obj)
     }
     return acc
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [placedObjects, paintedCells])
 }
 
@@ -439,7 +438,6 @@ function useMemoGroupByOpening(
       acc[roomId].push(opening)
     }
     return acc
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [wallOpenings, paintedCells])
 }
 

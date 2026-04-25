@@ -50,7 +50,7 @@ export function BatchedTileEntries({
       batchableEntries: batchable,
       fallbackEntries: fallback,
     }
-  }, [entries, useLineOfSightPostMask])
+  }, [entries])
 
   return (
     <>

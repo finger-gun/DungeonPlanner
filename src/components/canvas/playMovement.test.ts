@@ -88,6 +88,14 @@ describe('playMovement', () => {
         } satisfies OpeningRecord,
       },
     }).reachableCellKeys.has('0:1')).toBe(true)
+
+    expect(buildMovementRange({
+      ...baseInput,
+      wallOpenings: {},
+      wallSurfaceProps: {
+        '0:0:north': { open: true },
+      },
+    }).reachableCellKeys.has('0:1')).toBe(true)
   })
 
   it('blocks movement through inner walls and prevents diagonal corner cutting', () => {

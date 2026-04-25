@@ -65,23 +65,22 @@ describe('dungeonContentPack', () => {
   })
 
   it('provides reusable fire effects for dungeon flame props', () => {
-    const litTorch = dungeonContentPack.assets.find((asset) => asset.id === 'dungeon.props_torch_lit')
-    const litCandle = dungeonContentPack.assets.find((asset) => asset.id === 'dungeon.props_candle_lit')
-    const unlitCandle = dungeonContentPack.assets.find((asset) => asset.id === 'dungeon.props_candle')
+    const litTorch = dungeonContentPack.assets.find((asset) => asset.id === 'dungeon.props_torch')
+    const candle = dungeonContentPack.assets.find((asset) => asset.id === 'dungeon.props_candle')
 
     expect(litTorch?.getEffect?.({})).toMatchObject({
       preset: 'fire',
-      emitters: [{ offset: [0, 0.3, 0] }],
+      emitters: [{ offset: [0, 0.6, 0] }],
     })
     expect(litTorch?.getEffect?.({ lightOverrides: { color: '#55aaff' } })).toMatchObject({
       preset: 'fire',
-      emitters: [{ offset: [0, 0.3, 0], color: '#55aaff' }],
+      emitters: [{ offset: [0, 0.6, 0], color: '#55aaff' }],
     })
-    expect(litCandle?.getEffect?.({})).toMatchObject({
+    expect(candle?.getEffect?.({})).toMatchObject({
       preset: 'fire',
-      emitters: [{ offset: [0, 0.56, 0] }],
+      emitters: [{ offset: [0, 0.4, 0] }],
     })
-    expect(unlitCandle?.getEffect?.({})).toBeNull()
-    expect(unlitCandle?.getEffect?.({ lit: true })).toMatchObject({ preset: 'fire' })
+    expect(candle?.getEffect?.({ lit: false })).toBeNull()
+    expect(candle?.getEffect?.({ lit: true })).toMatchObject({ preset: 'fire' })
   })
 })

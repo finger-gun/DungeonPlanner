@@ -1,4 +1,5 @@
 import { useMemo } from 'react'
+import type { ComponentType } from 'react'
 import { useGLTF } from '../../../rendering/useGLTF'
 import type {
   ContentPackAsset,
@@ -45,6 +46,7 @@ type DungeonAssetDefinition = {
   thumbnailName?: string
   metadata?: ContentPackAssetMetadata
   transform?: DungeonTransform
+  Component?: ComponentType<ContentPackComponentProps>
   getLight?: (objectProps: Record<string, unknown>) => PropLight | null
   getEffect?: (objectProps: Record<string, unknown>) => ContentPackEffect | null
   getPlayModeNextProps?: (objectProps: Record<string, unknown>) => Record<string, unknown> | null
@@ -64,7 +66,7 @@ export function createDungeonAsset(definition: DungeonAssetDefinition): ContentP
   const assetUrl = resolveDungeonModelAssetUrl(definition.modelName)
   const thumbnailUrl = resolveDungeonAssetUrl(definition.thumbnailName ?? definition.modelName, 'png')
   const resolvedTransform = resolveTransform(definition.transform)
-  const Component = createStaticModelComponent(assetUrl, definition.transform)
+  const Component = definition.Component ?? createStaticModelComponent(assetUrl, definition.transform)
   let metadata = definition.metadata
 
   if (definition.category === 'prop' && isDungeonTabletopModel(definition.modelName)) {

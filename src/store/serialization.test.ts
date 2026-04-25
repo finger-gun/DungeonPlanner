@@ -1,4 +1,5 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it } from 'vitest'
+import { syncGeneratedCharacterAssets } from '../content-packs/runtimeRegistry'
 import { serializeDungeon, deserializeDungeon } from './serialization'
 import type { SerializableState } from './serialization'
 import type { FloorRecord } from './useDungeonStore'
@@ -6,6 +7,10 @@ import { DEFAULT_POST_PROCESSING_SETTINGS } from '../postprocessing/tiltShiftMat
 import { DEFAULT_OUTDOOR_TERRAIN_STYLE } from './outdoorTerrainStyles'
 
 // ── helpers ───────────────────────────────────────────────────────────────────
+
+afterEach(() => {
+  syncGeneratedCharacterAssets({})
+})
 
 function emptyFloorSnapshot() {
   return {
@@ -23,6 +28,7 @@ function emptyFloorSnapshot() {
     exploredCells: {},
     floorTileAssetIds: {},
     wallSurfaceAssetIds: {},
+    wallSurfaceProps: {},
     placedObjects: {},
     wallOpenings: {},
     innerWalls: {},
@@ -205,7 +211,7 @@ describe('serializeDungeon / deserializeDungeon roundtrip', () => {
     state.floors!['floor-1'].snapshot.placedObjects['obj-1'] = {
       id: 'obj-1',
       type: 'prop',
-      assetId: 'core.props_wall_torch',
+      assetId: 'dungeon.props_torch',
       position: [1, 0, 1],
       rotation: [0, 0, 0],
       props: {},
@@ -217,10 +223,30 @@ describe('serializeDungeon / deserializeDungeon roundtrip', () => {
     const result = deserializeDungeon(serializeDungeon(state))
     expect(result).not.toBeNull()
     const objects = result!.placedObjects ?? result!.floors?.['floor-1']?.snapshot?.placedObjects
-    expect(objects?.['obj-1']).toMatchObject({ assetId: 'core.props_wall_torch' })
+    expect(objects?.['obj-1']).toMatchObject({ assetId: 'dungeon.props_torch' })
   })
 
   it('preserves player objects', () => {
+    syncGeneratedCharacterAssets({
+      'generated.player.test': {
+        assetId: 'generated.player.test',
+        storageId: 'storage-test',
+        name: 'Generated Ranger',
+        kind: 'player',
+        prompt: 'A ranger on white background',
+        model: 'x/z-image-turbo',
+        size: 'M',
+        originalImageUrl: 'data:image/png;base64,abc',
+        processedImageUrl: 'data:image/png;base64,abc',
+        alphaMaskUrl: 'data:image/png;base64,def',
+        thumbnailUrl: 'data:image/png;base64,abc',
+        width: 300,
+        height: 600,
+        createdAt: '2026-04-16T00:00:00.000Z',
+        updatedAt: '2026-04-16T00:00:00.000Z',
+      },
+    })
+
     const state = baseState()
     state.floors!['floor-1'].snapshot.placedObjects['obj-player'] = {
       id: 'obj-player',

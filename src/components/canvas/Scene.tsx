@@ -11,8 +11,6 @@ import { PlayerSelectionRing } from './DungeonObject'
 import { DungeonRoom } from './DungeonRoom'
 import {
   distributeForwardPlusLightBudget,
-  getDesiredPropLightPoolSize,
-  precomputeLightSources,
   PropLightPool,
 } from './propLightPool'
 import { useDungeonStore, type DungeonObjectRecord } from '../../store/useDungeonStore'
@@ -31,6 +29,10 @@ import { getEnvironmentLightingState } from './environmentLighting'
 import { createWebGpuRenderer } from '../../rendering/createWebGpuRenderer'
 import { MAX_FORWARD_PLUS_POINT_LIGHTS } from '../../rendering/forwardPlusConfig'
 import { FogOfWarProvider } from './fogOfWar'
+import {
+  getRegisteredLightSourceCount,
+  useObjectSourceRegistryVersion,
+} from './objectSourceRegistry'
 import { registerDebugCameraPoseReader, registerDebugWorldProjector } from './debugCameraBridge'
 
 const WebGPUPostProcessing = lazy(() =>
@@ -239,7 +241,6 @@ type FloorRenderEntry = {
   level: number
   data: DungeonRoomData
   objects: DungeonObjectRecord[]
-  lightSourceCount: number
   topLevelObjects: DungeonObjectRecord[]
   childrenByParent: Record<string, DungeonObjectRecord[]>
 }
@@ -271,6 +272,7 @@ function SceneOverviewContent() {
   const floors = useDungeonStore((state) => state.floors)
   const floorOrder = useDungeonStore((state) => state.floorOrder)
   const activeFloorId = useDungeonStore((state) => state.activeFloorId)
+  const lightEffectsEnabled = useDungeonStore((state) => state.lightEffectsEnabled)
   const postProcessingEnabled = useDungeonStore((state) =>
     state.postProcessing.enabled || state.postProcessing.pixelateEnabled,
   )
@@ -278,12 +280,14 @@ function SceneOverviewContent() {
   const layers = useDungeonStore((state) => state.layers)
   const rooms = useDungeonStore((state) => state.rooms)
   const wallOpenings = useDungeonStore((state) => state.wallOpenings)
+  const wallSurfaceProps = useDungeonStore((state) => state.wallSurfaceProps)
   const innerWalls = useDungeonStore((state) => state.innerWalls)
   const placedObjects = useDungeonStore((state) => state.placedObjects)
   const floorTileAssetIds = useDungeonStore((state) => state.floorTileAssetIds)
   const wallSurfaceAssetIds = useDungeonStore((state) => state.wallSurfaceAssetIds)
   const globalFloorAssetId = useDungeonStore((state) => state.selectedAssetIds.floor)
   const globalWallAssetId = useDungeonStore((state) => state.selectedAssetIds.wall)
+  const objectSourceRegistryVersion = useObjectSourceRegistryVersion()
   const floorEntries = useMemo<FloorRenderEntry[]>(() => {
     const sortedFloorIds = [...floorOrder].sort(
       (left, right) => (floors[right]?.level ?? 0) - (floors[left]?.level ?? 0),
@@ -311,11 +315,11 @@ function SceneOverviewContent() {
             placedObjects,
             floorTileAssetIds,
             wallSurfaceAssetIds,
+            wallSurfaceProps,
             globalFloorAssetId,
             globalWallAssetId,
           },
           objects: visibleObjects,
-          lightSourceCount: precomputeLightSources(visibleObjects).length,
           topLevelObjects: getTopLevelObjects(visibleObjects),
           childrenByParent: buildObjectChildrenIndex(visibleObjects),
         }]
@@ -335,13 +339,13 @@ function SceneOverviewContent() {
              wallOpenings: snapshot.wallOpenings,
              innerWalls: snapshot.innerWalls,
              placedObjects: snapshot.placedObjects,
-            floorTileAssetIds: snapshot.floorTileAssetIds,
-            wallSurfaceAssetIds: snapshot.wallSurfaceAssetIds,
-             globalFloorAssetId: snapshot.selectedAssetIds.floor,
-             globalWallAssetId: snapshot.selectedAssetIds.wall,
+             floorTileAssetIds: snapshot.floorTileAssetIds,
+             wallSurfaceAssetIds: snapshot.wallSurfaceAssetIds,
+             wallSurfaceProps: snapshot.wallSurfaceProps,
+              globalFloorAssetId: snapshot.selectedAssetIds.floor,
+              globalWallAssetId: snapshot.selectedAssetIds.wall,
         },
         objects: visibleObjects,
-        lightSourceCount: precomputeLightSources(visibleObjects).length,
         topLevelObjects: getTopLevelObjects(visibleObjects),
         childrenByParent: buildObjectChildrenIndex(visibleObjects),
       }]
@@ -360,13 +364,17 @@ function SceneOverviewContent() {
     wallOpenings,
     innerWalls,
     wallSurfaceAssetIds,
+    wallSurfaceProps,
   ])
   const floorLightBudgets = useMemo(
-    () => distributeForwardPlusLightBudget(
-      floorEntries.map((entry) => getDesiredPropLightPoolSize(entry.lightSourceCount)),
-      MAX_FORWARD_PLUS_POINT_LIGHTS,
-    ),
-    [floorEntries],
+    () => {
+      void objectSourceRegistryVersion
+      return distributeForwardPlusLightBudget(
+        floorEntries.map((entry) => (lightEffectsEnabled ? getRegisteredLightSourceCount(entry.id) : 0)),
+        MAX_FORWARD_PLUS_POINT_LIGHTS,
+      )
+    },
+    [floorEntries, lightEffectsEnabled, objectSourceRegistryVersion],
   )
 
   return (
@@ -381,7 +389,7 @@ function SceneOverviewContent() {
           <DungeonRoom data={entry.data} visibility={ALWAYS_VISIBLE} enableBuildAnimation={false} />
           {floorLightBudgets[index] > 0 && (
             <PropLightPool
-              objects={entry.objects}
+              scopeKey={entry.id}
               visibility={ALWAYS_VISIBLE}
               maxLights={floorLightBudgets[index]}
             />
@@ -389,13 +397,14 @@ function SceneOverviewContent() {
           {entry.topLevelObjects
             .filter((object) => !isDownStairAssetId(object.assetId))
             .map((object) => (
-              <DungeonObject
-                key={object.id}
-                object={object}
-                visibility={ALWAYS_VISIBLE}
-                childrenByParent={entry.childrenByParent}
-              />
-            ))}
+                <DungeonObject
+                  key={object.id}
+                  object={object}
+                  visibility={ALWAYS_VISIBLE}
+                  sourceScopeKey={entry.id}
+                  childrenByParent={entry.childrenByParent}
+                />
+              ))}
         </group>
       ))}
     </>
@@ -404,6 +413,7 @@ function SceneOverviewContent() {
 
 /** Dungeon room tiles and props — remounts on floor switch for clean state. */
 function FloorContent({ startY = 0 }: { startY?: number }) {
+  const activeFloorId = useDungeonStore((state) => state.activeFloorId)
   const placedObjects = useDungeonStore((state) => state.placedObjects)
   const paintedCells = useDungeonStore((state) => state.paintedCells)
   const blockedCells = useDungeonStore((state) => state.blockedCells)
@@ -414,34 +424,37 @@ function FloorContent({ startY = 0 }: { startY?: number }) {
   const tool = useDungeonStore((state) => state.tool)
   const selection = useDungeonStore((state) => state.selection)
   const wallOpenings = useDungeonStore((state) => state.wallOpenings)
+  const wallSurfaceProps = useDungeonStore((state) => state.wallSurfaceProps)
   const innerWalls = useDungeonStore((state) => state.innerWalls)
   const showLensFocusDebugPoint = useDungeonStore((state) => state.showLensFocusDebugPoint)
   const moveObject = useDungeonStore((state) => state.moveObject)
   const selectObject = useDungeonStore((state) => state.selectObject)
   const setObjectDragActive = useDungeonStore((state) => state.setObjectDragActive)
-  const postProcessingEnabled = useDungeonStore((state) => state.postProcessing.enabled)
+  const lensEnabled = useDungeonStore((state) => state.postProcessing.enabled)
   const pixelateEnabled = useDungeonStore((state) => state.postProcessing.pixelateEnabled)
   const visibility = usePlayVisibility()
+  const lightEffectsEnabled = useDungeonStore((state) => state.lightEffectsEnabled)
+  const objectSourceRegistryVersion = useObjectSourceRegistryVersion()
   const [releaseAnimationIds, setReleaseAnimationIds] = useState<Record<string, true>>({})
 
   const objects = useMemo(
     () => Object.values(placedObjects).filter((obj) => layers[obj.layerId]?.visible !== false),
     [placedObjects, layers],
   )
-  const objectLightCount = useMemo(() => precomputeLightSources(objects).length, [objects])
   const topLevelObjects = useMemo(() => getTopLevelObjects(objects), [objects])
   const childrenByParent = useMemo(() => buildObjectChildrenIndex(objects), [objects])
   const [propLightBudget] = useMemo(
-    () => distributeForwardPlusLightBudget(
-      [
-        getDesiredPropLightPoolSize(objectLightCount),
-      ],
-      MAX_FORWARD_PLUS_POINT_LIGHTS,
-    ),
-    [objectLightCount],
+    () => {
+      void objectSourceRegistryVersion
+      return distributeForwardPlusLightBudget(
+        [lightEffectsEnabled ? getRegisteredLightSourceCount(activeFloorId) : 0],
+        MAX_FORWARD_PLUS_POINT_LIGHTS,
+      )
+    },
+    [activeFloorId, lightEffectsEnabled, objectSourceRegistryVersion],
   )
-  const showPostProcessing = postProcessingEnabled || pixelateEnabled || showLensFocusDebugPoint
-  const postProcessingKey = `${postProcessingEnabled ? 'post' : 'raw'}:${pixelateEnabled ? 'pixel' : 'clean'}:${showLensFocusDebugPoint ? 'focus' : 'nofocus'}`
+  const showPostProcessing = true
+  const postProcessingKey = `${lensEnabled ? 'lens' : 'nolens'}:${pixelateEnabled ? 'pixel' : 'clean'}:${showLensFocusDebugPoint ? 'focus' : 'nofocus'}`
 
   const groupRef = useRef<THREE.Group>(null)
   const animYRef = useRef(startY)
@@ -494,6 +507,7 @@ function FloorContent({ startY = 0 }: { startY?: number }) {
       paintedCells,
       blockedCells,
       wallOpenings,
+      wallSurfaceProps,
       innerWalls,
       occupancy,
       placedObjects,
@@ -508,6 +522,7 @@ function FloorContent({ startY = 0 }: { startY?: number }) {
     paintedCells,
     placedObjects,
     wallOpenings,
+    wallSurfaceProps,
   ])
 
   useEffect(() => {
@@ -529,7 +544,7 @@ function FloorContent({ startY = 0 }: { startY?: number }) {
     }, PLAYER_ANIMATION_MS.pickup)
 
     return () => window.clearTimeout(timeoutId)
-  }, [dragState?.animationState, dragState?.objectId, invalidate])
+  }, [dragState, invalidate])
 
   const clearDragListeners = useCallback(() => {
     dragCleanupRef.current?.()
@@ -650,6 +665,7 @@ function FloorContent({ startY = 0 }: { startY?: number }) {
       paintedCells,
       blockedCells,
       wallOpenings,
+      wallSurfaceProps,
       innerWalls,
       occupancy,
       placedObjects,
@@ -699,6 +715,7 @@ function FloorContent({ startY = 0 }: { startY?: number }) {
     tool,
     updateDragFromClientPosition,
     wallOpenings,
+    wallSurfaceProps,
   ])
 
   useEffect(() => {
@@ -723,7 +740,7 @@ function FloorContent({ startY = 0 }: { startY?: number }) {
         <DungeonRoom visibility={visibility} />
         <RoomResizeOverlay />
         {propLightBudget > 0 && (
-          <PropLightPool objects={objects} visibility={visibility} maxLights={propLightBudget} />
+          <PropLightPool scopeKey={activeFloorId} visibility={visibility} maxLights={propLightBudget} />
         )}
         {topLevelObjects.map((object) => (
           dragState?.objectId === object.id ? null : (
@@ -731,6 +748,7 @@ function FloorContent({ startY = 0 }: { startY?: number }) {
               key={object.id}
               object={object}
               visibility={visibility}
+              sourceScopeKey={activeFloorId}
               childrenByParent={childrenByParent}
               onPlayDragStart={startDrag}
               playerAnimationState={releaseAnimationIds[object.id] ? 'release' : undefined}
@@ -749,7 +767,7 @@ function FloorContent({ startY = 0 }: { startY?: number }) {
           </group>
         )}
         <Suspense fallback={null}>
-          <FireParticleSystem objects={objects} visibility={visibility} />
+          <FireParticleSystem scopeKey={activeFloorId} visibility={visibility} />
         </Suspense>
       </group>
     </FogOfWarProvider>

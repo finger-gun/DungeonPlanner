@@ -46,7 +46,7 @@ export function normalizePostProcessingSettings(settings?: PostProcessingSetting
     : DEFAULT_POST_PROCESSING_SETTINGS.focalLength
 
   return {
-    enabled: settings?.enabled === true,
+    enabled: settings?.enabled !== false,
     pixelateEnabled: settings?.pixelateEnabled === true,
     pixelSize: typeof settings?.pixelSize === 'number'
       ? settings.pixelSize

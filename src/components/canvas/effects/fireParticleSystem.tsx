@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/ban-ts-comment */
 // @ts-nocheck
-import { useEffect, useMemo, useRef } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useFrame, useThree } from '@react-three/fiber'
 import * as THREE from 'three/webgpu'
 import {
@@ -17,13 +17,14 @@ import {
   vec2,
   vec3,
 } from 'three/tsl'
-import { getContentPackAssetById } from '../../../content-packs/registry'
-import type { DungeonObjectRecord } from '../../../store/useDungeonStore'
 import { useDungeonStore } from '../../../store/useDungeonStore'
 import type { PlayVisibility } from '../playVisibility'
 import { shouldRenderLineOfSightLight } from '../losRendering'
 import { FIRE_LAYERS, type ParticleLayerDefinition } from './presets'
 import { createParticleSeeds } from './ObjectEffect'
+import { getCameraFrustum, hasCameraChanged } from '../propLightPool'
+import type { RegisteredEffectSource } from '../objectSourceRegistry'
+import { useRegisteredEffectSources } from '../objectSourceRegistry'
 
 /**
  * Maximum number of simultaneously visible fire emitters.
@@ -40,6 +41,8 @@ import { createParticleSeeds } from './ObjectEffect'
  * work and JS→GPU matrix uploads.
  */
 const MAX_FIRE_EMITTERS = 256
+const FIRE_EMITTER_FRUSTUM_MARGIN = 1.5
+const frustumSphereScratch = new THREE.Sphere()
 
 type ActiveFireEmitter = {
   id: string
@@ -68,48 +71,52 @@ function createEmitterBuffers(): EmitterBuffers {
 }
 
 export function FireParticleSystem({
-  objects,
+  scopeKey,
   visibility,
 }: {
-  objects: DungeonObjectRecord[]
+  scopeKey: string
   visibility: PlayVisibility
 }) {
-  const { invalidate } = useThree()
+  const { camera, invalidate } = useThree()
   const particleEffectsEnabled = useDungeonStore((state) => state.particleEffectsEnabled)
   const useLineOfSightPostMask = visibility.active
+  const effectSources = useRegisteredEffectSources(scopeKey)
+  const lastCameraMatrixElementsRef = useRef<Float32Array | null>(null)
+  const lastProjectionMatrixElementsRef = useRef<Float32Array | null>(null)
 
-  const activeEmitters = useMemo<ActiveFireEmitter[]>(() => {
-    if (!particleEffectsEnabled) return []
-    const result: ActiveFireEmitter[] = []
-    for (const obj of objects) {
-      const asset = obj.assetId ? getContentPackAssetById(obj.assetId) : null
-      if (!asset?.getEffect) continue
-      const effect = asset.getEffect(obj.props)
-      if (!effect || effect.preset !== 'fire') continue
-
-      if (!shouldRenderLineOfSightLight(visibility.getObjectVisibility(obj), useLineOfSightPostMask)) continue
-
-      const [px, py, pz] = obj.position
-      const emitters = effect.emitters?.length ? effect.emitters : [{}]
-      for (let emIdx = 0; emIdx < emitters.length && result.length < MAX_FIRE_EMITTERS; emIdx++) {
-        const em = emitters[emIdx]
-        const [ox, oy, oz] = (em.offset ?? [0, 0, 0]) as [number, number, number]
-        result.push({
-          id: `${obj.id}:${emIdx}`,
-          worldX: px + ox,
-          worldY: py + oy,
-          worldZ: pz + oz,
-          scale: em.scale ?? 1,
-          intensity: em.intensity ?? 1,
-          color: em.color ?? '#ff9944',
-        })
-      }
-    }
-    return result
-  }, [objects, particleEffectsEnabled, visibility, useLineOfSightPostMask])
+  const [activeEmitters, setActiveEmitters] = useState<ActiveFireEmitter[]>([])
 
   // Shared emitter data buffers — created once, never recreated.
   const emitterBuffers = useMemo<EmitterBuffers>(() => createEmitterBuffers(), [])
+
+  const publishEmitters = useCallback(() => {
+    if (!particleEffectsEnabled) {
+      setActiveEmitters((current) => (current.length === 0 ? current : []))
+      return
+    }
+
+    const nextEmitters = buildActiveFireEmitters({
+      effectSources,
+      visibility,
+      useLineOfSightPostMask,
+      cameraFrustum: getCameraFrustum(camera),
+      maxEmitters: MAX_FIRE_EMITTERS,
+    })
+
+    setActiveEmitters((current) => areActiveEmittersEqual(current, nextEmitters) ? current : nextEmitters)
+  }, [camera, effectSources, particleEffectsEnabled, useLineOfSightPostMask, visibility])
+
+  useEffect(() => {
+    publishEmitters()
+  }, [publishEmitters])
+
+  useFrame(() => {
+    if (!hasCameraChanged(camera, lastCameraMatrixElementsRef, lastProjectionMatrixElementsRef)) {
+      return
+    }
+
+    publishEmitters()
+  })
 
   // Sync emitter positions / intensities to GPU whenever the active set changes.
   useEffect(() => {
@@ -162,6 +169,83 @@ export function FireParticleSystem({
       ))}
     </>
   )
+}
+
+export function buildActiveFireEmitters({
+  effectSources,
+  visibility,
+  useLineOfSightPostMask,
+  cameraFrustum,
+  maxEmitters = MAX_FIRE_EMITTERS,
+}: {
+  effectSources: RegisteredEffectSource[]
+  visibility: Pick<PlayVisibility, 'getObjectVisibility'>
+  useLineOfSightPostMask: boolean
+  cameraFrustum?: THREE.Frustum
+  maxEmitters?: number
+}) {
+  const result: ActiveFireEmitter[] = []
+
+  for (const source of effectSources) {
+    if (!shouldRenderLineOfSightLight(visibility.getObjectVisibility(source.object), useLineOfSightPostMask)) {
+      continue
+    }
+
+    const [px, py, pz] = source.object.position
+    const emitters = source.effect.emitters?.length ? source.effect.emitters : [{}]
+    for (let emIdx = 0; emIdx < emitters.length && result.length < maxEmitters; emIdx += 1) {
+      const em = emitters[emIdx]
+      const [ox, oy, oz] = (em.offset ?? [0, 0, 0]) as [number, number, number]
+      const worldX = px + ox
+      const worldY = py + oy
+      const worldZ = pz + oz
+      const scale = em.scale ?? 1
+
+      if (cameraFrustum) {
+        frustumSphereScratch.center.set(worldX, worldY, worldZ)
+        frustumSphereScratch.radius = scale + FIRE_EMITTER_FRUSTUM_MARGIN
+        if (!cameraFrustum.intersectsSphere(frustumSphereScratch)) {
+          continue
+        }
+      }
+
+      result.push({
+        id: `${source.object.id}:${emIdx}`,
+        worldX,
+        worldY,
+        worldZ,
+        scale,
+        intensity: em.intensity ?? 1,
+        color: em.color ?? '#ff9944',
+      })
+    }
+  }
+
+  return result
+}
+
+function areActiveEmittersEqual(left: ActiveFireEmitter[], right: ActiveFireEmitter[]) {
+  if (left.length !== right.length) {
+    return false
+  }
+
+  for (let index = 0; index < left.length; index += 1) {
+    const leftEmitter = left[index]
+    const rightEmitter = right[index]
+    if (
+      leftEmitter.id !== rightEmitter.id
+      || leftEmitter.worldX !== rightEmitter.worldX
+      || leftEmitter.worldY !== rightEmitter.worldY
+      || leftEmitter.worldZ !== rightEmitter.worldZ
+      || leftEmitter.scale !== rightEmitter.scale
+      || leftEmitter.intensity !== rightEmitter.intensity
+      || leftEmitter.color !== rightEmitter.color
+    ) {
+      return false
+    }
+  }
+
+  return true
 }
 
 function FireGpuLayer({

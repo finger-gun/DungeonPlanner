@@ -23,6 +23,11 @@ import {
   type Room,
   type WallConnectionMode,
 } from '../../store/useDungeonStore'
+import {
+  createFloorSurfacePlacement,
+  isFloorSurfacePlacementValid,
+  resolveEffectiveFloorAssetIdForCellKey,
+} from '../../store/floorSurfaceLayout'
 import { getCanonicalInnerWallKey } from '../../store/manualWalls'
 import { getOpeningSegments } from '../../store/openingSegments'
 import { sampleOutdoorTerrainHeight, type OutdoorTerrainHeightfield } from '../../store/outdoorTerrain'
@@ -1179,16 +1184,33 @@ function HoverPreview({
       return null
     }
 
-    const effectiveFloorAssetId =
-      floorTileAssetIds[hoveredCell.key] ??
-      getFloorAssetIdForCellKey(hoveredCell.key, paintedCells, rooms, globalFloorAssetId)
+    const previewPlacement = createFloorSurfacePlacement(hoveredCell.key, floorVariantAssetId)
+    if (!previewPlacement) {
+      return null
+    }
+
+    const effectiveFloorAssetId = resolveEffectiveFloorAssetIdForCellKey(
+      hoveredCell.key,
+      paintedCells,
+      rooms,
+      globalFloorAssetId,
+      floorTileAssetIds,
+    )
+    const placementValid = isFloorSurfacePlacementValid(hoveredCell.key, floorVariantAssetId, paintedCells)
 
     return (
-      <group position={hoveredCell.position}>
+      <group position={previewPlacement.position}>
         <ContentPackInstance
           assetId={floorVariantAssetId}
           variant="floor"
-          tint={effectiveFloorAssetId === floorVariantAssetId ? '#22c55e' : '#7dd3fc'}
+          variantKey={previewPlacement.anchorCellKey}
+          tint={
+            !placementValid
+              ? '#ef4444'
+              : effectiveFloorAssetId === floorVariantAssetId
+                ? '#22c55e'
+                : '#7dd3fc'
+          }
           tintOpacity={0.3}
         />
       </group>
@@ -1922,17 +1944,6 @@ function getRoomWallEditTarget(
   }
 
   return null
-}
-
-function getFloorAssetIdForCellKey(
-  cellKey: string,
-  paintedCells: Record<string, PaintedCellRecord>,
-  rooms: Record<string, Room>,
-  globalFloorAssetId: string | null,
-) {
-  const record = paintedCells[cellKey]
-  const room = record?.roomId ? rooms[record.roomId] : null
-  return room?.floorAssetId ?? globalFloorAssetId
 }
 
 function getWallAssetIdForWallKey(
