@@ -4,22 +4,22 @@ This directory contains the imported runtime model packs used by the app.
 
 The pipeline now does four things as a single workflow:
 
-1. **Import** source models into a pack directory under `src/assets/models/`.
+1. **Import** source models into a pack directory under `editor/src/assets/models/`.
 2. **Optimize** geometry with `gltf-transform`.
 3. **Compress textures to KTX2** for WebGPU-friendly runtime loading.
 4. **Generate thumbnails** by rendering the imported assets through the app's thumbnail renderer.
 
 ## Pack layout
 
-- `src/assets/models/core/` - core pack runtime assets.
-- `src/assets/models/dungeon/` - dungeon pack runtime assets.
-- `src/assets/models/forrest/` - forest runtime assets from the KayKit creator pack, including `.gltf` sidecars and external texture/buffer files.
+- `editor/src/assets/models/core/` - core pack runtime assets.
+- `editor/src/assets/models/dungeon/` - dungeon pack runtime assets.
+- `editor/src/assets/models/forrest/` - forest runtime assets from the KayKit creator pack, including `.gltf` sidecars and external texture/buffer files.
 
 Pack folders are treated as generated runtime content, not raw source-asset staging areas.
 
 ## Runtime loading
 
-Runtime GLTF loading goes through `src/rendering/useGLTF.ts`, not raw `@react-three/drei` `useGLTF(...)` calls.
+Runtime GLTF loading goes through `editor/src/rendering/useGLTF.ts`, not raw `@react-three/drei` `useGLTF(...)` calls.
 
 That wrapper:
 
@@ -28,7 +28,7 @@ That wrapper:
 - waits until a renderer is available before flushing queued preloads
 - keeps thumbnail rendering and main-scene rendering on the same KTX2 path
 
-The Basis transcoder files are copied from `three/examples/jsm/libs/basis/` into `public/three/basis/` by:
+The Basis transcoder files are copied from `three/examples/jsm/libs/basis/` into `editor/public/three/basis/` by:
 
 - `pnpm run sync:ktx2-transcoders`
 
@@ -42,7 +42,7 @@ That sync runs automatically before:
 
 | Command | Purpose |
 | --- | --- |
-| `pnpm run sync:ktx2-transcoders` | Copy Basis transcoder JS/WASM into `public/three/basis/`. |
+| `pnpm run sync:ktx2-transcoders` | Copy Basis transcoder JS/WASM into `editor/public/three/basis/`. |
 | `pnpm run optimize:models -- [pack-or-dir]` | Optimize one pack, one directory, or all packs when no target is provided. |
 | `pnpm run import:models -- <pack-or-dir> --source <source-dir>` | Copy source assets into a runtime pack, optimize them, then generate thumbnails. |
 | `pnpm run generate:content-pack:core` | Rebuild the curated core pack using the configured source directory and allowlist. |
@@ -59,13 +59,13 @@ pnpm run generate:content-pack:core
 The core pack is configured in `scripts/model-packs.config.mjs`:
 
 - source directory: `DUNGEONPLANNER_CORE_SOURCE_DIR`
-- target directory: `src/assets/models/core`
+- target directory: `editor/src/assets/models/core`
 - imported files: only the curated allowlisted core `.glb` assets
 
 The KayKit terrain pack is also configured in `scripts/model-packs.config.mjs`:
 
 - source directory: `forrest-assets-tmp/KayKit_Forest_Nature_Pack_1.0_EXTRA/Assets/gltf`
-- target directory: `src/assets/models/forrest`
+- target directory: `editor/src/assets/models/forrest`
 - imported files: the allowlisted terrain `.gltf` assets for the curated `Color1`..`Color8` stepped terrain styles
 - derived assets: a generated `forest_grass_patch.png` per `ColorN/` folder sampled from the matching style atlas so `OutdoorGround` matches the terrain models at runtime
 
@@ -78,7 +78,7 @@ pnpm run import:models -- dungeon --source /absolute/path/to/source-assets
 You can also target a direct directory:
 
 ```bash
-pnpm run import:models -- src/assets/models/custom-pack --source /absolute/path/to/source-assets
+pnpm run import:models -- editor/src/assets/models/custom-pack --source /absolute/path/to/source-assets
 ```
 
 By default, import will:
@@ -102,7 +102,7 @@ Optional flags:
 ```bash
 pnpm run optimize:models -- core
 pnpm run optimize:models -- dungeon kaykit
-pnpm run optimize:models -- src/assets/models/custom-pack
+pnpm run optimize:models -- editor/src/assets/models/custom-pack
 ```
 
 The optimizer:
@@ -192,4 +192,4 @@ pnpm run sync:ktx2-transcoders
 pnpm run generate:thumbnails -- <pack-or-dir>
 ```
 
-If that still fails, check that the imported pack resolves all referenced sidecar files and that the target assets load in the app through `src/rendering/useGLTF.ts`.
+If that still fails, check that the imported pack resolves all referenced sidecar files and that the target assets load in the app through `editor/src/rendering/useGLTF.ts`.

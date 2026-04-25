@@ -179,19 +179,19 @@ export const corePackAssetNames = [
 export const modelPackConfigs = {
   core: {
     sourceDirEnv: 'DUNGEONPLANNER_CORE_SOURCE_DIR',
-    targetDir: path.join('src', 'assets', 'models', 'core'),
+    targetDir: path.join('editor', 'src', 'assets', 'models', 'core'),
     include: corePackAssetNames.map((name) => `${name}.glb`),
     clean: true,
   },
   dungeon: {
     sourceDirEnv: 'DUNGEONPLANNER_DUNGEON_SOURCE_DIR',
-    targetDir: path.join('src', 'assets', 'models', 'dungeon'),
+    targetDir: path.join('editor', 'src', 'assets', 'models', 'dungeon'),
     convertToGlb: true,
     clean: true,
   },
   kaykit: {
     sourceDir: kaykitForestSourceDir,
-    targetDir: path.join('src', 'assets', 'models', 'forrest'),
+    targetDir: path.join('editor', 'src', 'assets', 'models', 'forrest'),
     include: kaykitForestAssetNames,
     preserveArtifacts: kaykitPreservedArtifacts,
     derivedTextures: kaykitDerivedTextures,

@@ -3,7 +3,7 @@ import { spawn } from 'node:child_process'
 import path from 'node:path'
 import process from 'node:process'
 import { chromium } from '@playwright/test'
-import { listModelFiles, getRelativeModelPath, modelRootDir, resolvePackDir } from './model-pipeline.mjs'
+import { editorDir, listModelFiles, getRelativeModelPath, modelRootDir, resolvePackDir } from './model-pipeline.mjs'
 
 const rootDir = process.cwd()
 const host = '127.0.0.1'
@@ -197,9 +197,9 @@ async function startViteServer() {
   const command = process.platform === 'win32' ? 'npm.cmd' : 'npm'
   const child = spawn(
     command,
-    ['run', 'dev', '--', '--host', host, '--port', String(port), '--strictPort'],
+    ['exec', 'vite', '--host', host, '--port', String(port), '--strictPort'],
     {
-      cwd: rootDir,
+      cwd: editorDir,
       stdio: 'pipe',
       env: { ...process.env },
     },

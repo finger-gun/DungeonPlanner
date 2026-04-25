@@ -10,19 +10,19 @@ describe('debugSourceLinks', () => {
     const sourcePath = getContentPackAssetSourcePath('dungeon.props_chair')
     const sourceLink = getContentPackAssetSourceLink('dungeon.props_chair')
 
-    expect(sourcePath).toContain('/src/content-packs/dungeon/props/chair.tsx')
+    expect(sourcePath).toContain('/editor/src/content-packs/dungeon/props/chair.tsx')
     expect(sourceLink).toBe(`vscode://file/${encodeURI(sourcePath!)}`)
   })
 
   it('resolves nested dungeon asset folders without importing the asset module', () => {
     expect(getContentPackAssetSourcePath('dungeon.props_banners_banner_blue')).toContain(
-      '/src/content-packs/dungeon/props/banners/banner_blue.tsx',
+      '/editor/src/content-packs/dungeon/props/banners/banner_blue.tsx',
     )
     expect(getContentPackAssetSourcePath('dungeon.props_bars_bar_straight_A')).toContain(
-      '/src/content-packs/dungeon/props/bars/bar_straight_A.tsx',
+      '/editor/src/content-packs/dungeon/props/bars/bar_straight_A.tsx',
     )
     expect(getContentPackAssetSourcePath('dungeon.props_banners_stool_round')).toContain(
-      '/src/content-packs/dungeon/props/banners/stool_round.tsx',
+      '/editor/src/content-packs/dungeon/props/banners/stool_round.tsx',
     )
   })
 

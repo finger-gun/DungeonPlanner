@@ -65,16 +65,16 @@ pnpm install
 pnpm run dev
 ```
 
-App runs at **http://localhost:5173**.
+Editor runs at **http://localhost:5173**.
 
 ### Workspace commands
 
 ```bash
-pnpm run dev:full     # app + server (both in watch mode)
-pnpm run build        # app build
+pnpm run dev:full     # editor + server (both in watch mode)
+pnpm run build        # editor build + docs build
 pnpm run build:all    # build all workspace packages
 pnpm run test         # unit tests
-pnpm run lint         # lint app
+pnpm run lint         # lint editor + app
 pnpm run verify       # lint + test + build + e2e
 ```
 
@@ -119,11 +119,13 @@ export const propsWallTorchAsset: ContentPackAsset = {
 ## Project Structure
 
 ```txt
-src/
-  components/canvas/    # R3F scene and 3D systems
-  components/editor/    # UI panels and tools
-  content-packs/        # asset definitions and metadata
-  store/                # Zustand state and serialization
+editor/
+  src/components/canvas/    # R3F scene and 3D systems
+  src/components/editor/    # UI panels and tools
+  src/content-packs/        # asset definitions and metadata
+  src/store/                # Zustand state and serialization
+app/                    # authenticated workspace app
+shared/                 # shared contracts and helpers
 server/                 # multiplayer/backend package
 ```
 

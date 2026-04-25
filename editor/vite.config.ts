@@ -1,4 +1,5 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
+import { fileURLToPath } from 'node:url'
 import { defineConfig } from 'vitest/config'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
@@ -7,13 +8,15 @@ import type { Plugin } from 'vite'
 import {
   GeneratedCharacterRequestError,
   handleGeneratedCharacterImageRequest,
-} from './server/src/generatedCharacterImage'
+} from '../server/src/generatedCharacterImage'
 import {
   deleteGeneratedCharacterAssets,
   GeneratedCharacterStorageError,
   readGeneratedCharacterAsset,
   saveGeneratedCharacterAssets,
-} from './server/src/generatedCharacterStorage'
+} from '../server/src/generatedCharacterStorage'
+
+const editorDir = path.dirname(fileURLToPath(import.meta.url))
 
 /**
  * Three.js r182's three.webgpu.js pre-built file contains a debug-only
@@ -131,7 +134,7 @@ export default defineConfig({
   // When deploying to a subfolder on GitHub Pages, set VITE_BASE_PATH=/dungeonplanner/
   base: process.env.VITE_BASE_PATH ?? '/',
   define: {
-    __PROJECT_ROOT__: JSON.stringify(process.cwd()),
+    __PROJECT_ROOT__: JSON.stringify(editorDir),
   },
   assetsInclude: ['**/*.glb', '**/*.gltf', '**/*.bin'],
   plugins: [generatedCharacterDevFallback(), react(), tailwindcss(), stripThreeDebugImport()],
@@ -144,8 +147,8 @@ export default defineConfig({
       // 'three' stays at its default (three.module.js). Both three.module.js
       // and three.webgpu.js import from three.core.js, so Rollup deduplicates
       // the shared core — AmbientLight etc. are the same class instance in both.
-      'three/webgpu': path.resolve('./node_modules/three/build/three.webgpu.js'),
-      'three/tsl':    path.resolve('./node_modules/three/build/three.tsl.js'),
+      'three/webgpu': path.resolve(editorDir, 'node_modules/three/build/three.webgpu.js'),
+      'three/tsl': path.resolve(editorDir, 'node_modules/three/build/three.tsl.js'),
     },
   },
   server: {
@@ -186,11 +189,7 @@ export default defineConfig({
     },
   },
   test: {
-    include: [
-      'src/**/*.{test,spec}.{ts,tsx}',
-      'app/**/*.{test,spec}.{ts,tsx}',
-      'scripts/**/*.{test,spec}.{js,mjs,ts,tsx}',
-    ],
+    include: ['src/**/*.{test,spec}.{ts,tsx}'],
     environment: 'jsdom',
     setupFiles: './src/test/setup.ts',
     css: true,
@@ -199,7 +198,6 @@ export default defineConfig({
       '**/dist/**',
       '**/.{idea,git,cache,output,temp}/**',
       'tests/e2e/**',
-      'app/convex/_generated/**',
     ],
   },
 })

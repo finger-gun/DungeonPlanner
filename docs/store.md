@@ -1,6 +1,6 @@
 # State & Store
 
-All dungeon data lives in a single Zustand store defined in `src/store/useDungeonStore.ts`. This page walks through the structure, the most important actions, and the subtler systems like undo/redo and floor management.
+All dungeon data lives in a single Zustand store defined in `editor/src/store/useDungeonStore.ts`. This page walks through the structure, the most important actions, and the subtler systems like undo/redo and floor management.
 
 ---
 

@@ -30,7 +30,7 @@ type ContentPack = {
 }
 ```
 
-The registry (`src/content-packs/registry.ts`) collects all packs and exposes flat lookup helpers like `getContentPackAssetById("core.props_wall_torch")`.
+The registry (`editor/src/content-packs/registry.ts`) collects all packs and exposes flat lookup helpers like `getContentPackAssetById("core.props_wall_torch")`.
 
 ---
 
@@ -49,7 +49,7 @@ There's currently only one active `floor` asset and one active `wall` asset at a
 
 ## The core pack
 
-Located in `src/content-packs/core/`, organised into three subdirectories:
+Located in `editor/src/content-packs/core/`, organised into three subdirectories:
 
 ```
 core/
@@ -125,7 +125,7 @@ export const myThingAsset: ContentPackAsset = {
 
 ### 3. Register it
 
-Open `src/content-packs/core/index.ts` and add your asset to the `assets` array:
+Open `editor/src/content-packs/core/index.ts` and add your asset to the `assets` array:
 
 ```ts
 import { myThingAsset } from './props/MyThing'
@@ -216,12 +216,12 @@ To add more variants to a tile or wall, just add more GLB files to the `WALL_VAR
 
 ## Adding a new content pack (future)
 
-The registry in `src/content-packs/registry.ts` simply imports and combines all packs:
+The registry in `editor/src/content-packs/registry.ts` simply imports and combines all packs:
 
 ```ts
 export const contentPacks = [coreContentPack]
 ```
 
-To add a second pack, create a new directory under `src/content-packs/`, define its assets, export a `ContentPack` object, and add it to that array. Asset IDs must be globally unique — use your pack ID as a prefix (`mypack.asset_name`).
+To add a second pack, create a new directory under `editor/src/content-packs/`, define its assets, export a `ContentPack` object, and add it to that array. Asset IDs must be globally unique — use your pack ID as a prefix (`mypack.asset_name`).
 
 The file format stores asset IDs directly, so pack IDs form part of the saved dungeon data. If you rename or remove a pack, existing dungeons that reference its assets will show fallback boxes where the models used to be.
