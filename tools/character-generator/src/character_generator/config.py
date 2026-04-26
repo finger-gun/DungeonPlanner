@@ -10,8 +10,7 @@ def default_cache_dir() -> Path:
 
 @dataclass(slots=True)
 class ModelConfig:
-    flux_model_id: str = "black-forest-labs/FLUX.2-klein-4B"
-    flux_vae_model_id: str | None = None
+    image_model_id: str = "Disty0/Z-Image-Turbo-SDNQ-uint4-svd-r32"
     rmbg_model_id: str = "briaai/RMBG-1.4"
     face_model_id: str = "Fuyucchi/yolov8_animeface"
     face_model_filename: str = "yolov8x6_animeface.pt"
@@ -22,9 +21,10 @@ class ModelConfig:
 class RuntimeConfig:
     base_prompt: str = "Dragonbane TTRPG character illustration."
     output_dir: Path = Path("output")
+    genders: tuple[str, ...] = ("Female", "Male")
     width: int = 1024
     height: int = 1024
-    guidance_scale: float = 1.0
+    guidance_scale: float = 0.0
     num_inference_steps: int = 4
     seed: int | None = None
     device: str = "auto"

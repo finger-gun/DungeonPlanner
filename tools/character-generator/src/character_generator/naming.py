@@ -41,19 +41,22 @@ def allocate_output_pair(
     *,
     output_dir: Path,
     kin: str,
+    gender: str,
     profession: str,
     trait_index: int,
     total_traits: int,
     serial_width: int,
 ) -> OutputPair:
-    output_dir.mkdir(parents=True, exist_ok=True)
-    stem = f"{slugify(kin)}-{slugify(profession)}-{trait_index_token(trait_index, total_traits)}"
-    serial = next_serial(output_dir, stem)
+    kin_slug = slugify(kin)
+    profession_slug = slugify(profession)
+    target_dir = output_dir / kin_slug / profession_slug
+    target_dir.mkdir(parents=True, exist_ok=True)
+    stem = f"{kin_slug}-{slugify(gender)}-{profession_slug}-{trait_index_token(trait_index, total_traits)}"
+    serial = next_serial(target_dir, stem)
     serial_token = f"{serial:0{serial_width}d}"
     return OutputPair(
         stem=stem,
         serial=serial,
-        main_path=output_dir / f"{stem}-main-{serial_token}.png",
-        portrait_path=output_dir / f"{stem}-portrait-{serial_token}.png",
+        main_path=target_dir / f"{stem}-main-{serial_token}.png",
+        portrait_path=target_dir / f"{stem}-portrait-{serial_token}.png",
     )
-

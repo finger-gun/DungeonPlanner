@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "character-generator"
 version = "0.1.0"
-description = "Batch-generate Dragonbane character portraits with FLUX, face detection, and background removal."
+description = "Batch-generate Dragonbane character portraits with Z-Image-Turbo, face detection, and background removal."
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
@@ -15,6 +15,7 @@ dependencies = [
   "numpy>=2.0.0",
   "pillow>=11.0.0",
   "pyyaml>=6.0.2",
+  "sdnq @ git+https://github.com/Disty0/sdnq.git",
   "torch>=2.8.0",
   "torchvision>=0.23.0",
   "transformers>=4.56.0",

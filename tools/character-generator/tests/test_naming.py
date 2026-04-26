@@ -11,6 +11,7 @@ def test_allocate_output_pair_increments_serial(tmp_path: Path) -> None:
     first = allocate_output_pair(
         output_dir=tmp_path,
         kin="Human",
+        gender="Female",
         profession="Mage",
         trait_index=0,
         total_traits=8,
@@ -22,12 +23,15 @@ def test_allocate_output_pair_increments_serial(tmp_path: Path) -> None:
     second = allocate_output_pair(
         output_dir=tmp_path,
         kin="Human",
+        gender="Female",
         profession="Mage",
         trait_index=0,
         total_traits=8,
         serial_width=4,
     )
 
-    assert first.main_path.name == "human-mage-01-main-0001.png"
-    assert second.main_path.name == "human-mage-01-main-0002.png"
-    assert second.portrait_path.name == "human-mage-01-portrait-0002.png"
+    assert first.main_path.parent == tmp_path / "human" / "mage"
+    assert first.portrait_path.parent == tmp_path / "human" / "mage"
+    assert first.main_path.name == "human-female-mage-01-main-0001.png"
+    assert second.main_path.name == "human-female-mage-01-main-0002.png"
+    assert second.portrait_path.name == "human-female-mage-01-portrait-0002.png"

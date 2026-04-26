@@ -5,8 +5,15 @@ from pathlib import Path
 
 
 @dataclass(frozen=True, slots=True)
+class PromptItem:
+    name: str
+    prompt: str
+
+
+@dataclass(frozen=True, slots=True)
 class CharacterPrompt:
     kin: str
+    gender: str
     profession: str
     trait: str
     trait_index: int

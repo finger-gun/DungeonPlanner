@@ -1,28 +1,21 @@
 from __future__ import annotations
 
 import argparse
+import io
 import shutil
 import sys
 from pathlib import Path
 
 from .config import ModelConfig, RuntimeConfig
-from .inference import AnimeFaceDetector, Flux2KleinImageGenerator, RMBGBackgroundRemover
+from .inference import AnimeFaceDetector, RMBGBackgroundRemover, ZImageTurboImageGenerator
 from .inputs import load_input_items, load_yaml_config
 from .model_cache import ModelRegistry
 from .pipeline import CharacterPortraitPipeline
 from .runtime import resolve_device
+from .types import PromptItem
 
 DEFAULT_RUNTIME_CONFIG = RuntimeConfig()
 DEFAULT_MODEL_CONFIG = ModelConfig()
-
-
-def _optional_model_id(value: str | None) -> str | None:
-    if value is None:
-        return None
-    normalized = value.strip()
-    if not normalized or normalized.lower() == "none":
-        return None
-    return normalized
 
 
 def _resolve_base_prompt(value: str) -> str:
@@ -41,6 +34,10 @@ class ConsoleStatusReporter:
     def __init__(self) -> None:
         self._isatty = sys.stdout.isatty()
         self._last_width = 0
+
+    def announce(self, message: str) -> None:
+        self.clear()
+        print(message)
 
     def update(self, message: str) -> None:
         if not self._isatty:
@@ -67,16 +64,19 @@ class ConsoleStatusReporter:
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Generate Dragonbane character portraits in batches.")
 
-    parser.add_argument("--config-file", type=Path, help="Path to a YAML config with base_prompt, kins, professions, and traits.")
+    parser.add_argument("--config-file", type=Path, help="Path to a YAML config with base_prompt, kins, genders, professions, and traits.")
     parser.add_argument("--kins-file", type=Path, help="Path to newline-delimited or JSON-array kin input.")
+    parser.add_argument("--genders-file", type=Path, help="Path to newline-delimited or JSON-array gender input.")
     parser.add_argument("--professions-file", type=Path, help="Path to newline-delimited or JSON-array profession input.")
     parser.add_argument("--traits-file", type=Path, help="Path to newline-delimited or JSON-array trait input.")
 
     parser.add_argument("--kins-json", help="Inline JSON array for kin values.")
+    parser.add_argument("--genders-json", help="Inline JSON array for gender values.")
     parser.add_argument("--professions-json", help="Inline JSON array for profession values.")
     parser.add_argument("--traits-json", help="Inline JSON array for trait values.")
 
     parser.add_argument("--kin", action="append", help="Single kin value. Repeat for multiple entries.")
+    parser.add_argument("--gender", action="append", help="Single gender value. Repeat for multiple entries.")
     parser.add_argument("--profession", action="append", help="Single profession value. Repeat for multiple entries.")
     parser.add_argument("--trait", action="append", help="Single trait value. Repeat for multiple entries.")
 
@@ -85,8 +85,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--model-cache-dir", type=Path, default=DEFAULT_MODEL_CONFIG.cache_dir, help="Local cache directory for Hugging Face downloads.")
     parser.add_argument("--width", type=int, default=DEFAULT_RUNTIME_CONFIG.width, help="Output image width.")
     parser.add_argument("--height", type=int, default=DEFAULT_RUNTIME_CONFIG.height, help="Output image height.")
-    parser.add_argument("--guidance-scale", type=float, default=DEFAULT_RUNTIME_CONFIG.guidance_scale, help="Guidance scale passed to the FLUX pipeline.")
-    parser.add_argument("--num-inference-steps", type=int, default=DEFAULT_RUNTIME_CONFIG.num_inference_steps, help="Inference steps passed to the FLUX pipeline.")
+    parser.add_argument("--guidance-scale", type=float, default=DEFAULT_RUNTIME_CONFIG.guidance_scale, help="Guidance scale passed to the image generation pipeline.")
+    parser.add_argument("--num-inference-steps", type=int, default=DEFAULT_RUNTIME_CONFIG.num_inference_steps, help="Inference steps passed to the image generation pipeline.")
     parser.add_argument("--seed", type=int, help="Optional fixed seed for deterministic runs.")
     parser.add_argument("--device", default=DEFAULT_RUNTIME_CONFIG.device, help="Runtime device: auto, cuda, mps, or cpu.")
     parser.add_argument("--portrait-padding", type=float, default=DEFAULT_RUNTIME_CONFIG.portrait_padding, help="Padding ratio applied around the face crop.")
@@ -96,12 +96,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--random", action="store_true", help="Process the combination matrix in randomized non-repeating order.")
     parser.add_argument("--fail-fast", action="store_true", help="Abort on the first failed combination.")
 
-    parser.add_argument("--flux-model-id", default=DEFAULT_MODEL_CONFIG.flux_model_id, help="Hugging Face model ID for FLUX generation.")
-    parser.add_argument(
-        "--flux-vae-model-id",
-        default=DEFAULT_MODEL_CONFIG.flux_vae_model_id,
-        help="Optional Hugging Face model ID for a FLUX VAE override.",
-    )
+    parser.add_argument("--image-model-id", default=DEFAULT_MODEL_CONFIG.image_model_id, help="Hugging Face model ID for image generation.")
     parser.add_argument("--rmbg-model-id", default=DEFAULT_MODEL_CONFIG.rmbg_model_id, help="Hugging Face model ID for background removal.")
     parser.add_argument("--face-model-id", default=DEFAULT_MODEL_CONFIG.face_model_id, help="Hugging Face model ID for face detection.")
     parser.add_argument("--face-model-filename", default=DEFAULT_MODEL_CONFIG.face_model_filename, help="Filename of the face detector weights in the Hugging Face repo.")
@@ -117,6 +112,15 @@ def build_runtime_config(args: argparse.Namespace) -> RuntimeConfig:
     return RuntimeConfig(
         base_prompt=_resolve_base_prompt(base_prompt_value),
         output_dir=args.output_dir,
+        genders=tuple(item.name for item in load_input_items(
+            config_value=config_data.get("genders"),
+            file_path=args.genders_file,
+            json_text=args.genders_json,
+            inline_values=args.gender,
+            label="genders",
+        )) if any(
+            value is not None for value in [config_data.get("genders"), args.genders_file, args.genders_json, args.gender]
+        ) else DEFAULT_RUNTIME_CONFIG.genders,
         width=args.width,
         height=args.height,
         guidance_scale=args.guidance_scale,
@@ -134,8 +138,7 @@ def build_runtime_config(args: argparse.Namespace) -> RuntimeConfig:
 
 def build_model_config(args: argparse.Namespace) -> ModelConfig:
     return ModelConfig(
-        flux_model_id=args.flux_model_id,
-        flux_vae_model_id=_optional_model_id(args.flux_vae_model_id),
+        image_model_id=args.image_model_id,
         rmbg_model_id=args.rmbg_model_id,
         face_model_id=args.face_model_id,
         face_model_filename=args.face_model_filename,
@@ -147,6 +150,7 @@ def main() -> int:
     parser = build_parser()
     args = parser.parse_args()
     config_data = load_yaml_config(args.config_file) if args.config_file is not None else {}
+    status_reporter = ConsoleStatusReporter()
 
     kins = load_input_items(
         config_value=config_data.get("kins"),
@@ -155,6 +159,17 @@ def main() -> int:
         inline_values=args.kin,
         label="kins",
     )
+    genders = list(
+        load_input_items(
+            config_value=config_data.get("genders"),
+            file_path=args.genders_file,
+            json_text=args.genders_json,
+            inline_values=args.gender,
+            label="genders",
+        )
+    ) if any(
+        value is not None for value in [config_data.get("genders"), args.genders_file, args.genders_json, args.gender]
+    ) else [PromptItem(name=value, prompt=value) for value in DEFAULT_RUNTIME_CONFIG.genders]
     professions = load_input_items(
         config_value=config_data.get("professions"),
         file_path=args.professions_file,
@@ -173,18 +188,20 @@ def main() -> int:
     runtime_config = build_runtime_config(args)
     runtime_config.output_dir.mkdir(parents=True, exist_ok=True)
 
+    status_reporter.announce("Resolving runtime device...")
     device = resolve_device(runtime_config.device)
+    status_reporter.announce(f"Using device: {device}")
     model_registry = ModelRegistry(build_model_config(args))
+    status_reporter.announce("Checking model cache and downloading missing files...")
     downloaded_models = model_registry.ensure_downloaded()
 
-    image_generator = Flux2KleinImageGenerator(
-        model_path=downloaded_models.flux_model_path,
-        vae_model_path=downloaded_models.flux_vae_model_path,
-        device=device,
-    )
+    status_reporter.announce("Loading image model into memory...")
+    image_generator = ZImageTurboImageGenerator(model_path=downloaded_models.image_model_path, device=device)
+    status_reporter.announce("Loading background remover into memory...")
     background_remover = RMBGBackgroundRemover(model_path=downloaded_models.rmbg_model_path, device=device)
+    status_reporter.announce("Loading face detector into memory...")
     face_detector = AnimeFaceDetector(model_path=downloaded_models.face_model_path, confidence=runtime_config.face_confidence)
-    status_reporter = ConsoleStatusReporter()
+    status_reporter.announce("Starting generation...")
 
     pipeline = CharacterPortraitPipeline(
         config=runtime_config,
@@ -197,7 +214,7 @@ def main() -> int:
         ),
     )
     try:
-        result = pipeline.run(kins=kins, professions=professions, traits=traits)
+        result = pipeline.run(kins=kins, genders=genders, professions=professions, traits=traits)
     finally:
         status_reporter.clear()
 

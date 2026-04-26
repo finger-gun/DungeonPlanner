@@ -1,26 +1,12 @@
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 from fnmatch import fnmatch
 from pathlib import Path
 from typing import Iterable
 
 from .config import ModelConfig
-
-FLUX_ALLOW_PATTERNS = [
-    "model_index.json",
-    "*.safetensors",
-    "scheduler/*",
-    "text_encoder/*",
-    "tokenizer/*",
-    "transformer/*",
-    "vae/*",
-]
-
-FLUX_SMALL_DECODER_ALLOW_PATTERNS = [
-    "config.json",
-    "diffusion_pytorch_model.safetensors",
-]
 
 RMBG_ALLOW_PATTERNS = [
     "*.py",
@@ -32,8 +18,7 @@ RMBG_ALLOW_PATTERNS = [
 
 @dataclass(frozen=True, slots=True)
 class DownloadedModels:
-    flux_model_path: Path
-    flux_vae_model_path: Path | None
+    image_model_path: Path
     rmbg_model_path: Path
     face_model_path: Path
 
@@ -85,6 +70,31 @@ def _repo_local_dir(cache_dir: Path, repo_id: str) -> Path:
     return cache_dir / "models" / repo_id
 
 
+def _manifest_path(local_dir: Path) -> Path:
+    return local_dir / ".download-manifest.json"
+
+
+def _load_manifest(local_dir: Path) -> list[str] | None:
+    manifest_path = _manifest_path(local_dir)
+    if not manifest_path.is_file():
+        return None
+    try:
+        raw = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        return None
+    if not isinstance(raw, list) or not all(isinstance(item, str) for item in raw):
+        return None
+    return raw
+
+
+def _write_manifest(local_dir: Path, filenames: list[str]) -> None:
+    _manifest_path(local_dir).write_text(json.dumps(filenames, indent=2) + "\n", encoding="utf-8")
+
+
+def _files_exist(local_dir: Path, filenames: Iterable[str]) -> bool:
+    return all((local_dir / filename).is_file() for filename in filenames)
+
+
 def download_repo(
     repo_id: str,
     cache_dir: Path,
@@ -94,10 +104,14 @@ def download_repo(
 ) -> Path:
     from huggingface_hub import hf_hub_download
 
-    repo_files = select_repo_files(list_repo_files(repo_id), allow_patterns)
-    total_size = sum(repo_file.size for repo_file in repo_files)
     local_dir = _repo_local_dir(cache_dir, repo_id)
     local_dir.mkdir(parents=True, exist_ok=True)
+    cached_filenames = _load_manifest(local_dir)
+    if cached_filenames is not None and _files_exist(local_dir, cached_filenames):
+        return local_dir
+
+    repo_files = select_repo_files(list_repo_files(repo_id), allow_patterns)
+    total_size = sum(repo_file.size for repo_file in repo_files)
 
     print(
         f"{progress_label}: downloading {len(repo_files)} required files "
@@ -117,33 +131,30 @@ def download_repo(
             filename=repo_file.filename,
             cache_dir=str(cache_dir),
             local_dir=str(local_dir),
-            local_dir_use_symlinks="auto",
         )
         downloaded_so_far = running_total
 
+    _write_manifest(local_dir, [repo_file.filename for repo_file in repo_files])
     return local_dir
 
 
 def download_model_file(repo_id: str, filename: str, cache_dir: Path, *, progress_label: str) -> Path:
-    from huggingface_hub import HfApi, hf_hub_download
+    from huggingface_hub import hf_hub_download
 
-    info = HfApi().model_info(repo_id, files_metadata=True)
-    sibling = next((item for item in info.siblings if item.rfilename == filename), None)
-    size = 0
-    if sibling is not None:
-        if sibling.size is not None:
-            size = sibling.size
-        elif sibling.lfs is not None:
-            size = sibling.lfs.size
+    local_dir = _repo_local_dir(cache_dir, repo_id)
+    local_file = local_dir / filename
+    if local_file.is_file():
+        return local_file
 
-    print(f"{progress_label}: downloading {filename} ({format_bytes(size)})")
-    return Path(
-        hf_hub_download(
-            repo_id=repo_id,
-            filename=filename,
-            cache_dir=str(cache_dir),
-        )
+    print(f"{progress_label}: downloading {filename}")
+    local_dir.mkdir(parents=True, exist_ok=True)
+    hf_hub_download(
+        repo_id=repo_id,
+        filename=filename,
+        cache_dir=str(cache_dir),
+        local_dir=str(local_dir),
     )
+    return local_file
 
 
 class ModelRegistry:
@@ -155,21 +166,10 @@ class ModelRegistry:
         hub_cache_dir.mkdir(parents=True, exist_ok=True)
 
         return DownloadedModels(
-            flux_model_path=download_repo(
-                self._config.flux_model_id,
+            image_model_path=download_repo(
+                self._config.image_model_id,
                 hub_cache_dir,
-                allow_patterns=FLUX_ALLOW_PATTERNS,
-                progress_label="FLUX model",
-            ),
-            flux_vae_model_path=(
-                download_repo(
-                    self._config.flux_vae_model_id,
-                    hub_cache_dir,
-                    allow_patterns=FLUX_SMALL_DECODER_ALLOW_PATTERNS,
-                    progress_label="FLUX decoder override",
-                )
-                if self._config.flux_vae_model_id is not None
-                else None
+                progress_label="Image model",
             ),
             rmbg_model_path=download_repo(
                 self._config.rmbg_model_id,

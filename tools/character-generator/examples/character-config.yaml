@@ -1,39 +1,74 @@
 base_prompt: |
   Fantasy tabletop character concept art of a single full-body fantasy character.
-  Art style: Old-school fantasy RPG style, vintage monster manual art, pen and ink with muted but vibrant watercolor wash, bold black outlines, gritty fantasy aesthetic, crosshatching shading.
+  Art style: Old-school fantasy RPG style, vintage monster manual art, pen and ink with muted but vibrant watercolor wash, bold black outlines, colorfull fantasy aesthetic, crosshatching shading.
   Expression: {stern and focused|calm and watchful|wild-eyed and intense|confident and proud|melancholic and distant|suspicious and guarded|cheerful and bold|grim and battle-worn|mysterious and unreadable|arrogant and theatrical|wise and tired|nervous but determined|cold and calculating|warm and heroic|haunted and sorrowful}.
   Extra details: {old scars|mud-stained boots|travel-worn cloak|small trophies|carved charms|patched fabric|metal buckles|leather straps|handmade jewelry|weathered weapons|ancient symbols|ink stains|burn marks|ritual tattoos|braided hair or fur|feathers or beads|small animal bones|coin pouches|maps and scrolls|glowing magical details|family heirloom|profession symbols|battle damage|carefully maintained gear}.
-  Centered character, clearly readable, full body, visible from head to toe, strong silhouette, clean crisp edges, polished fantasy concept art, tabletop RPG book illustration style, detailed materials, even lighting, clear green screen background, no scenery, no environment, no floor, no shadows.
+  Centered character, clearly readable, full body, visible from head to toe, strong silhouette, clean crisp edges, polished fantasy concept art, tabletop RPG book illustration style, detailed materials, even lighting, clear white background, no scenery, no environment, no floor, no shadows.
 kins:
-  - Human
-  - Halfling
-  - Dwarf
-  - Elf
-  - Mallard
-  - Wolfkin
-  - Orc
-  - Ogre
-  - Goblin
-  - Hobgoblin
-  - Frog People
-  - Karkion
-  - Cat People
-  - Lizard People
-  - Satyr
+  - name: Human
+    prompt: a human adventurer
+  - name: Halfling
+    prompt: a small halfling adventurer with human features
+  - name: Dwarf
+    prompt: a sturdy dwarf adventurer with a compact build
+  - name: Elf
+    prompt: a graceful elf adventurer with refined features and pointed ears
+  - name: Mallard
+    prompt: a short anthropomorphic humanoid duck, with beak, arms and duck legs
+  - name: Wolfkin
+    prompt: an anthropomorphic wolf person with fur, muzzle, and human-like body
+  - name: Orc
+    prompt: a muscular orc adventurer with tusks and rugged features
+  - name: Ogre
+    prompt: a fat nordic troll style humanoid with heavy limbs and brutish features
+  - name: Goblin
+    prompt: a small goblin adventurer with sharp features and wiry limbs
+  - name: Hobgoblin
+    prompt: a tough hobgoblin adventurer with goblinoid features
+  - name: Frog People
+    prompt: an anthropomorphic frog person with amphibian skin, wide mouth and frog legs
+  - name: Karkion
+    prompt: an anthropomorphic golden panther person with bat wings, claws and feline face
+  - name: Cat People
+    prompt: an anthropomorphic cat person with feline ears, whiskers, tail and agile limbs
+  - name: Lizard People
+    prompt: an anthropomorphic lizard person with scales, tail, claws and reptilian face
+  - name: Satyr
+    prompt: a humanoid with goat-like horns, furred legs, hooves and satyr features
+genders:
+  - name: Female
+    prompt: female
+  - name: Male
+    prompt: male
 professions:
-  - Artisan
-  - Bard
-  - Fighter
-  - Hunter
-  - Knight
-  - Mage
-  - Mariner
-  - Merchant
-  - Scholar
-  - Thief
+  - name: Artisan
+    prompt: an artisan crafter
+  - name: Bard
+    prompt: a bard with musical instruments, performance flair and traveler gear
+  - name: Fighter
+    prompt: a seasoned fighter with practical armor and battle-ready weapons
+  - name: Hunter
+    prompt: a hunter with wilderness gear, ranged weapons and tracking tools
+  - name: Knight
+    prompt: a knight with noble armor, heraldic details and disciplined posture
+  - name: Mage
+    prompt: a mage with arcane implements, spell components and mystical attire
+  - name: Mariner
+    prompt: a mariner with nautical clothing, rope, hooks and sea-worn gear
+  - name: Merchant
+    prompt: a merchant with travel packs, trade goods and practical valuables
+  - name: Scholar
+    prompt: a scholar with books, scrolls, notes and learned accessories
+  - name: Thief
+    prompt: a thief with stealthy clothing, light gear and nimble posture
 traits:
-  - Battle-scarred stoic guardian
-  - Shadowy outcast
-  - Flamboyant showoff
-  - Mud-stained wilderness survivor
-  - Rune-covered mystic
+  - name: Battle-scarred stoic guardian
+    prompt: battle-scarred, stoic, protective and unshakable
+  - name: Shadowy outcast
+    prompt: shadowy, isolated and hard to read
+  - name: Flamboyant showoff
+    prompt: flamboyant, theatrical, stylish and attention-seeking
+  - name: Mud-stained wilderness survivor
+    prompt: mud-stained, hardened by the wilds and used to rough travel
+  - name: Rune-covered mystic
+    prompt: rune-covered and touched by ancient magic

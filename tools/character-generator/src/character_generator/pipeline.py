@@ -10,7 +10,7 @@ from typing import Callable, Protocol
 from .config import RuntimeConfig
 from .image_ops import crop_portrait
 from .naming import allocate_output_pair
-from .types import CharacterPrompt, FaceBox, GeneratedRecord
+from .types import CharacterPrompt, FaceBox, GeneratedRecord, PromptItem
 
 
 class ImageGenerator(Protocol):
@@ -58,10 +58,17 @@ def _format_eta(seconds: float) -> str:
 
 
 def _describe_combination(combination: CharacterPrompt) -> str:
-    return f"{combination.kin}, {combination.profession}, {combination.trait}"
+    return f"{combination.kin}, {combination.gender}, {combination.profession}, {combination.trait}"
 
 
 _DYNAMIC_PROMPT_PATTERN = re.compile(r"\{([^{}]+)\}")
+
+
+def _as_sentence(text: str) -> str:
+    stripped = text.strip()
+    if stripped.endswith((".", "!", "?")):
+        return stripped
+    return f"{stripped}."
 
 
 def _expand_dynamic_prompt(prompt: str, rng: random.Random) -> str:
@@ -77,9 +84,10 @@ def _expand_dynamic_prompt(prompt: str, rng: random.Random) -> str:
 
 def build_character_prompts(
     *,
-    kins: list[str],
-    professions: list[str],
-    traits: list[str],
+    kins: list[PromptItem],
+    genders: list[PromptItem],
+    professions: list[PromptItem],
+    traits: list[PromptItem],
     base_prompt: str,
     seed: int | None = None,
     max_combinations: int | None = None,
@@ -90,6 +98,7 @@ def build_character_prompts(
     matrix_items = list(
         product(
             kins,
+            genders,
             professions,
             enumerate(traits),
         )
@@ -101,25 +110,27 @@ def build_character_prompts(
     if max_combinations is not None:
         matrix_items = matrix_items[:max_combinations]
 
-    for kin, profession, (trait_index, trait) in matrix_items:
+    for kin, gender, profession, (trait_index, trait) in matrix_items:
         generation_seed = rng.randrange(0, 2**32)
         prompt_rng = random.Random(generation_seed)
         prompt = _expand_dynamic_prompt(
             " ".join(
                 [
                     base_prompt.strip(),
-                    f"Character kin: {kin}.",
-                    f"Profession: {profession}.",
-                    f"Defining trait: {trait}.",
+                    _as_sentence(f"Character kin: {kin.prompt}"),
+                    _as_sentence(f"Gender: {gender.prompt}"),
+                    _as_sentence(f"Profession: {profession.prompt}"),
+                    _as_sentence(f"Defining trait: {trait.prompt}"),
                 ]
             ).strip(),
             prompt_rng,
         )
         combinations.append(
             CharacterPrompt(
-                kin=kin,
-                profession=profession,
-                trait=trait,
+                kin=kin.name,
+                gender=gender.name,
+                profession=profession.name,
+                trait=trait.name,
                 trait_index=trait_index,
                 prompt=prompt,
                 generation_seed=generation_seed,
@@ -150,12 +161,14 @@ class CharacterPortraitPipeline:
     def run(
         self,
         *,
-        kins: list[str],
-        professions: list[str],
-        traits: list[str],
+        kins: list[PromptItem],
+        genders: list[PromptItem],
+        professions: list[PromptItem],
+        traits: list[PromptItem],
     ) -> PipelineRunResult:
         prompts = build_character_prompts(
             kins=kins,
+            genders=genders,
             professions=professions,
             traits=traits,
             base_prompt=self._config.base_prompt,
@@ -216,6 +229,7 @@ class CharacterPortraitPipeline:
         outputs = allocate_output_pair(
             output_dir=self._config.output_dir,
             kin=combination.kin,
+            gender=combination.gender,
             profession=combination.profession,
             trait_index=combination.trait_index,
             total_traits=total_traits,

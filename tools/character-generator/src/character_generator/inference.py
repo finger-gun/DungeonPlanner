@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib.util
+import os
 import sys
 import types
 from pathlib import Path
@@ -8,9 +9,11 @@ from pathlib import Path
 import numpy as np
 from PIL import Image
 
-from .image_ops import apply_alpha_mask, estimate_background_color
+from .image_ops import apply_alpha_mask, estimate_background_color, estimate_head_box
 from .runtime import torch_dtype_for_device
 from .types import FaceBox
+
+os.environ.setdefault("PYTORCH_MPS_FAST_MATH", "1")
 
 
 def _load_bria_rmbg_model_class(model_path: Path):
@@ -66,36 +69,62 @@ def _disable_library_progress_bars() -> None:
         pass
 
 
-class Flux2KleinImageGenerator:
-    def __init__(self, *, model_path: Path, device: str, vae_model_path: Path | None = None) -> None:
+class ZImageTurboImageGenerator:
+    def __init__(self, *, model_path: Path, device: str) -> None:
         import torch
 
         try:
-            from diffusers import AutoencoderKLFlux2, Flux2KleinPipeline
+            import sdnq  # noqa: F401
+            from diffusers import FlowMatchEulerDiscreteScheduler, ZImagePipeline
         except ImportError as exc:
-            raise RuntimeError(
-                "Flux2KleinPipeline is unavailable. Install a recent diffusers build with FLUX.2 support."
-            ) from exc
+            raise RuntimeError("ZImagePipeline is unavailable. Install a recent diffusers build with Z-Image support.") from exc
 
         self._torch = torch
         self._device = device
         dtype = torch_dtype_for_device(device)
         _disable_library_progress_bars()
-        if vae_model_path is not None:
-            vae = AutoencoderKLFlux2.from_pretrained(str(vae_model_path), torch_dtype=dtype)
-        else:
-            vae = AutoencoderKLFlux2.from_pretrained(str(model_path), subfolder="vae", torch_dtype=dtype)
-        self._pipeline = Flux2KleinPipeline.from_pretrained(
+
+        self._pipeline = ZImagePipeline.from_pretrained(
             str(model_path),
-            vae=vae,
             torch_dtype=dtype,
+            low_cpu_mem_usage=True,
+            local_files_only=True,
+        )
+        self._pipeline.scheduler = FlowMatchEulerDiscreteScheduler.from_config(
+            self._pipeline.scheduler.config,
+            use_beta_sigmas=True,
         )
         self._pipeline.set_progress_bar_config(disable=True)
+        if hasattr(self._pipeline, "enable_attention_slicing"):
+            self._pipeline.enable_attention_slicing()
+        if hasattr(self._pipeline, "enable_vae_slicing"):
+            self._pipeline.enable_vae_slicing()
+        if hasattr(getattr(self._pipeline, "vae", None), "enable_tiling"):
+            self._pipeline.vae.enable_tiling()
 
         if device == "cuda":
             self._pipeline.enable_model_cpu_offload()
         else:
             self._pipeline.to(device)
+
+    def _to_rgba_image(self, image_tensor) -> Image.Image:
+        image_tensor = self._torch.nan_to_num(image_tensor.detach().float().cpu(), nan=0.0, posinf=1.0, neginf=0.0)
+        image_tensor = image_tensor.clamp(0.0, 1.0)
+
+        if image_tensor.ndim != 3:
+            raise RuntimeError(f"Unexpected generated image tensor shape: {tuple(image_tensor.shape)}")
+
+        if image_tensor.shape[0] in (1, 3, 4):
+            image_tensor = image_tensor.permute(1, 2, 0)
+        elif image_tensor.shape[-1] not in (1, 3, 4):
+            raise RuntimeError(f"Unexpected generated image tensor shape: {tuple(image_tensor.shape)}")
+
+        image_array = image_tensor.numpy()
+        if image_array.shape[-1] == 1:
+            image_array = np.repeat(image_array, 3, axis=-1)
+
+        image_array = (image_array * 255.0).round().astype(np.uint8)
+        return Image.fromarray(image_array).convert("RGBA")
 
     def generate(
         self,
@@ -109,18 +138,20 @@ class Flux2KleinImageGenerator:
     ) -> Image.Image:
         generator = None
         if seed is not None:
-            generator_device = "cuda" if self._device == "cuda" else "cpu"
+            generator_device = self._device if self._device in {"cuda", "mps"} else "cpu"
             generator = self._torch.Generator(device=generator_device).manual_seed(seed)
 
-        image = self._pipeline(
-            prompt=prompt,
-            width=width,
-            height=height,
-            guidance_scale=guidance_scale,
-            num_inference_steps=num_inference_steps,
-            generator=generator,
-        ).images[0]
-        return image.convert("RGBA")
+        with self._torch.inference_mode():
+            image = self._pipeline(
+                prompt=prompt,
+                width=width,
+                height=height,
+                guidance_scale=guidance_scale,
+                num_inference_steps=num_inference_steps,
+                generator=generator,
+                output_type="pt",
+            ).images[0]
+        return self._to_rgba_image(image)
 
 
 class RMBGBackgroundRemover:
@@ -184,14 +215,14 @@ class AnimeFaceDetector:
         self._confidence = confidence
         self._model = YOLO(str(model_path))
 
-    def detect_primary(self, image: Image.Image) -> FaceBox:
-        results = self._model.predict(np.array(image.convert("RGB")), conf=self._confidence, verbose=False)
+    @staticmethod
+    def _select_best_box(results) -> FaceBox | None:
         if not results:
-            raise RuntimeError("Face detector returned no results.")
+            return None
 
         boxes = results[0].boxes
         if boxes is None or len(boxes) == 0:
-            raise RuntimeError("No face detected in generated image.")
+            return None
 
         best_box = None
         best_score = -1.0
@@ -207,7 +238,23 @@ class AnimeFaceDetector:
                 best_score = score
                 best_box = FaceBox(left=left, top=top, right=right, bottom=bottom, confidence=float(confidence))
 
-        if best_box is None:
-            raise RuntimeError("No usable face box was produced by the face detector.")
-
         return best_box
+
+    def _confidence_attempts(self) -> list[float]:
+        attempts = [self._confidence, 0.15, 0.08]
+        deduplicated: list[float] = []
+        for attempt in attempts:
+            clamped = max(0.01, min(float(attempt), 1.0))
+            if clamped not in deduplicated:
+                deduplicated.append(clamped)
+        return deduplicated
+
+    def detect_primary(self, image: Image.Image) -> FaceBox:
+        rgb = np.array(image.convert("RGB"))
+        for confidence in self._confidence_attempts():
+            results = self._model.predict(rgb, conf=confidence, verbose=False)
+            best_box = self._select_best_box(results)
+            if best_box is not None:
+                return best_box
+
+        return estimate_head_box(image)
