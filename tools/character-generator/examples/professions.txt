@@ -1,0 +1,10 @@
+Artisan
+Bard
+Fighter
+Hunter
+Knight
+Mage
+Mariner
+Merchant
+Scholar
+Thief
