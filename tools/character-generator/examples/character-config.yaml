@@ -4,8 +4,8 @@ base_prompt: |
   Expression: {stern and focused|calm and watchful|wild-eyed and intense|confident and proud|melancholic and distant|suspicious and guarded|cheerful and bold|grim and battle-worn|mysterious and unreadable|arrogant and theatrical|wise and tired|nervous but determined|cold and calculating|warm and heroic|haunted and sorrowful}.
   Extra details: {old scars|mud-stained boots|travel-worn cloak|small trophies|carved charms|patched fabric|metal buckles|leather straps|handmade jewelry|weathered weapons|ancient symbols|ink stains|burn marks|ritual tattoos|braided hair or fur|feathers or beads|small animal bones|coin pouches|maps and scrolls|glowing magical details|family heirloom|profession symbols|battle damage|carefully maintained gear}.
   Centered character, clearly readable, full body, visible from head to toe, strong silhouette, clean crisp edges, polished fantasy concept art, tabletop RPG book illustration style, detailed materials, even lighting, clear white background, no scenery, no environment, no floor, no shadows on ground.
-width: 512
-height: 512
+width: 1024
+height: 1024
 kins:
   - name: Human
     prompt: a human adventurer
