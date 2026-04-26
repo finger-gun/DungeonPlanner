@@ -4,9 +4,11 @@ from PIL import Image, ImageDraw
 from character_generator.image_ops import estimate_head_box
 from character_generator.inference import (
     AnimeFaceDetector,
+    RMBGBackgroundRemover,
     ZImageTurboImageGenerator,
     _SuppressSDNQTritonFallbackFilter,
     _extract_rmbg_primary_mask,
+    _normalize_rmbg_mask,
 )
 
 
@@ -19,6 +21,38 @@ def test_extract_rmbg_primary_mask_from_nested_result() -> None:
     extracted = _extract_rmbg_primary_mask(result)
 
     assert extracted is mask
+
+
+def test_normalize_rmbg_mask_returns_none_for_flat_mask() -> None:
+    normalized = _normalize_rmbg_mask(torch.zeros((1, 2, 2)), torch)
+
+    assert normalized is None
+
+
+def test_rmbg_background_remover_falls_back_to_opaque_image_for_flat_mask() -> None:
+    remover = object.__new__(RMBGBackgroundRemover)
+    remover._torch = torch
+    remover._device = "cpu"
+    remover._model_input_size = (1024, 1024)
+    remover._preprocess = lambda image: torch.zeros((1, 3, 2, 2))
+    remover._functional = type(
+        "FakeFunctional",
+        (),
+        {
+            "interpolate": staticmethod(lambda tensor, size, mode, align_corners: tensor),
+        },
+    )()
+
+    class FakeModel:
+        def __call__(self, input_images):
+            return torch.zeros((1, 1, 2, 2))
+
+    remover._model = FakeModel()
+
+    result = remover.remove(Image.new("RGB", (2, 2), (10, 20, 30)))
+
+    assert result.mode == "RGBA"
+    assert result.getpixel((0, 0)) == (10, 20, 30, 255)
 
 
 def test_z_image_generator_sanitizes_invalid_tensor_values() -> None:

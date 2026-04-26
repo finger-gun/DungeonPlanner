@@ -68,6 +68,16 @@ def _extract_rmbg_primary_mask(result):
     return result
 
 
+def _normalize_rmbg_mask(raw_mask, torch_module):
+    raw_mask = torch_module.nan_to_num(raw_mask.detach().float(), nan=0.0, posinf=0.0, neginf=0.0)
+    max_value = torch_module.max(raw_mask)
+    min_value = torch_module.min(raw_mask)
+    mask_range = float((max_value - min_value).item())
+    if mask_range <= 1e-8:
+        return None
+    return (raw_mask - min_value) / (max_value - min_value)
+
+
 def _disable_library_progress_bars() -> None:
     try:
         from transformers.utils import logging as transformers_logging
@@ -210,10 +220,12 @@ class RMBGBackgroundRemover:
             align_corners=False,
         )
         raw_mask = self._torch.squeeze(raw_mask, 0)
-        max_value = self._torch.max(raw_mask)
-        min_value = self._torch.min(raw_mask)
-        normalized_mask = (raw_mask - min_value) / (max_value - min_value + 1e-8)
-        mask_array = (normalized_mask * 255).permute(1, 2, 0).cpu().numpy().astype(np.uint8).squeeze()
+        normalized_mask = _normalize_rmbg_mask(raw_mask, self._torch)
+        if normalized_mask is None:
+            return rgb.convert("RGBA")
+        mask_array = (normalized_mask.clamp(0.0, 1.0) * 255).permute(1, 2, 0).cpu().numpy().astype(np.uint8).squeeze()
+        if int(mask_array.max(initial=0)) == 0:
+            return rgb.convert("RGBA")
         mask = Image.fromarray(mask_array)
         return apply_alpha_mask(rgb, mask, background_color=background_color)
 
