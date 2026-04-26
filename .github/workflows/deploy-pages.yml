@@ -37,16 +37,20 @@ jobs:
         with:
           filters: |
             demo:
-              - 'src/**'
-              - 'public/**'
-              - 'index.html'
-              - 'vite.config.ts'
-              - 'tsconfig*.json'
+              - 'editor/**'
+              - 'shared/**'
+              - 'server/src/generatedCharacterImage.ts'
+              - 'server/src/generatedCharacterStorage.ts'
+              - 'scripts/sync-ktx2-transcoders.mjs'
+              - 'scripts/run-vite-package.mjs'
               - 'package.json'
               - 'pnpm-lock.yaml'
+              - 'pnpm-workspace.yaml'
+              - 'turbo.json'
               - '.github/workflows/deploy-pages.yml'
             docs:
               - 'docs/**'
+              - 'docs-web/**'
               - 'scripts/build-docs-site.mjs'
               - 'package.json'
               - 'pnpm-lock.yaml'
@@ -87,14 +91,14 @@ jobs:
 
       - name: Deploy demo app files
         run: |
-          aws s3 sync dist/ "s3://${S3_BUCKET}" \
+          aws s3 sync editor/dist/ "s3://${S3_BUCKET}" \
             --delete \
             --exclude "docs" \
             --exclude "docs/*" \
             --exclude "web" \
             --exclude "web/*" \
             --exclude "*.html"
-          aws s3 sync dist/ "s3://${S3_BUCKET}" \
+          aws s3 sync editor/dist/ "s3://${S3_BUCKET}" \
             --exclude "docs" \
             --exclude "docs/*" \
             --exclude "web" \
@@ -107,7 +111,7 @@ jobs:
         run: |
           aws cloudfront create-invalidation \
             --distribution-id "${CLOUDFRONT_DISTRIBUTION_ID}" \
-            --paths "/index.html" "/assets/*" "/favicon.svg" "/icons.svg"
+            --paths "/index.html" "/assets/*" "/favicon.svg" "/icon.png" "/icons.svg" "/textures/*" "/three/*"
 
   deploy-docs:
     runs-on: ubuntu-latest
