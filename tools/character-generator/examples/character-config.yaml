@@ -1,9 +1,11 @@
 base_prompt: |
-  Fantasy tabletop character concept art of a single full-body fantasy character.
-  Art style: Old-school fantasy RPG style, vintage monster manual art, pen and ink with muted but vibrant watercolor wash, bold black outlines, colorfull fantasy aesthetic, crosshatching shading.
+  Fantasy tabletop character artwork of a single full-body fantasy character.
+  Art style:  thick linework, gritty realism, concept art, tabletop RPG book illustration, exaggerated features,
   Expression: {stern and focused|calm and watchful|wild-eyed and intense|confident and proud|melancholic and distant|suspicious and guarded|cheerful and bold|grim and battle-worn|mysterious and unreadable|arrogant and theatrical|wise and tired|nervous but determined|cold and calculating|warm and heroic|haunted and sorrowful}.
   Extra details: {old scars|mud-stained boots|travel-worn cloak|small trophies|carved charms|patched fabric|metal buckles|leather straps|handmade jewelry|weathered weapons|ancient symbols|ink stains|burn marks|ritual tattoos|braided hair or fur|feathers or beads|small animal bones|coin pouches|maps and scrolls|glowing magical details|family heirloom|profession symbols|battle damage|carefully maintained gear}.
-  Centered character, clearly readable, full body, visible from head to toe, strong silhouette, clean crisp edges, polished fantasy concept art, tabletop RPG book illustration style, detailed materials, even lighting, clear white background, no scenery, no environment, no floor, no shadows.
+  Centered character, clearly readable, full body, visible from head to toe, strong silhouette, clean crisp edges, polished fantasy concept art, tabletop RPG book illustration style, detailed materials, even lighting, clear white background, no scenery, no environment, no floor, no shadows on ground.
+width: 512
+height: 512
 kins:
   - name: Human
     prompt: a human adventurer
@@ -18,17 +20,17 @@ kins:
   - name: Wolfkin
     prompt: an anthropomorphic wolf person with fur, muzzle, and human-like body
   - name: Orc
-    prompt: a muscular orc adventurer with tusks and rugged features
+    prompt: a muscular orc with tusks and rugged features and greenish skin
   - name: Ogre
-    prompt: a fat nordic troll style humanoid with heavy limbs and brutish features
+    prompt: a fat nordic troll style humanoid with heavy limbs and brutish features, pale skin and warty growths
   - name: Goblin
-    prompt: a small goblin adventurer with sharp features and wiry limbs
+    prompt: a small goblin with sharp features and thin wiry limbs and green skin
   - name: Hobgoblin
-    prompt: a tough hobgoblin adventurer with goblinoid features
+    prompt: a tough hobgoblin creature, mix between elf and goblin with pale skin and dark eyes
   - name: Frog People
     prompt: an anthropomorphic frog person with amphibian skin, wide mouth and frog legs
   - name: Karkion
-    prompt: an anthropomorphic golden panther person with bat wings, claws and feline face
+    prompt: an anthropomorphic dark cat person with bat wings, claws and feline face
   - name: Cat People
     prompt: an anthropomorphic cat person with feline ears, whiskers, tail and agile limbs
   - name: Lizard People

@@ -2,7 +2,12 @@ import torch
 from PIL import Image, ImageDraw
 
 from character_generator.image_ops import estimate_head_box
-from character_generator.inference import AnimeFaceDetector, ZImageTurboImageGenerator, _extract_rmbg_primary_mask
+from character_generator.inference import (
+    AnimeFaceDetector,
+    ZImageTurboImageGenerator,
+    _SuppressSDNQTritonFallbackFilter,
+    _extract_rmbg_primary_mask,
+)
 
 
 def test_extract_rmbg_primary_mask_from_nested_result() -> None:
@@ -123,3 +128,57 @@ def test_anime_face_detector_falls_back_to_estimated_head_box() -> None:
     assert face_box.confidence == 0.0
     assert face_box.left < face_box.right
     assert face_box.top < face_box.bottom
+
+
+def test_z_image_generator_calls_pipeline_with_expected_kwargs() -> None:
+    class FakePipelineResult:
+        def __init__(self, image):
+            self.images = [image]
+
+    class FakePipeline:
+        def __init__(self):
+            self.calls = []
+
+        def __call__(self, **kwargs):
+            self.calls.append(kwargs)
+            return FakePipelineResult(torch.zeros((3, 1, 1)))
+
+    generator = object.__new__(ZImageTurboImageGenerator)
+    generator._torch = torch
+    generator._device = "cpu"
+    generator._pipeline = FakePipeline()
+
+    generator.generate(
+        prompt="prompt",
+        width=64,
+        height=64,
+        guidance_scale=0.0,
+        num_inference_steps=4,
+        seed=None,
+    )
+
+    assert generator._pipeline.calls[0]["prompt"] == "prompt"
+    assert generator._pipeline.calls[0]["guidance_scale"] == 0.0
+    assert sorted(generator._pipeline.calls[0]) == [
+        "generator",
+        "guidance_scale",
+        "height",
+        "num_inference_steps",
+        "output_type",
+        "prompt",
+        "width",
+    ]
+
+
+def test_sdnq_triton_filter_suppresses_expected_fallback_warning() -> None:
+    warning_filter = _SuppressSDNQTritonFallbackFilter()
+
+    suppressed = warning_filter.filter(
+        type("Record", (), {"getMessage": lambda self: "SDNQ: Triton is not available. Falling back to PyTorch Eager mode."})()
+    )
+    kept = warning_filter.filter(
+        type("Record", (), {"getMessage": lambda self: "SDNQ: Triton test failed! Falling back to PyTorch Eager mode. Error message: boom"})()
+    )
+
+    assert suppressed is False
+    assert kept is True

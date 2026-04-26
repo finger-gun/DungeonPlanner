@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+from contextlib import contextmanager
 import importlib.util
+import logging
 import os
 import sys
 import types
@@ -14,6 +16,23 @@ from .runtime import torch_dtype_for_device
 from .types import FaceBox
 
 os.environ.setdefault("PYTORCH_MPS_FAST_MATH", "1")
+
+
+class _SuppressSDNQTritonFallbackFilter(logging.Filter):
+    def filter(self, record: logging.LogRecord) -> bool:
+        message = record.getMessage()
+        return "SDNQ: Triton is not available. Falling back to PyTorch Eager mode." not in message
+
+
+@contextmanager
+def _suppress_sdnq_triton_fallback_warning():
+    logger = logging.getLogger("sdnq")
+    warning_filter = _SuppressSDNQTritonFallbackFilter()
+    logger.addFilter(warning_filter)
+    try:
+        yield
+    finally:
+        logger.removeFilter(warning_filter)
 
 
 def _load_bria_rmbg_model_class(model_path: Path):
@@ -51,15 +70,6 @@ def _extract_rmbg_primary_mask(result):
 
 def _disable_library_progress_bars() -> None:
     try:
-        from diffusers.utils import logging as diffusers_logging
-
-        disable = getattr(diffusers_logging, "disable_progress_bar", None)
-        if callable(disable):
-            disable()
-    except ImportError:
-        pass
-
-    try:
         from transformers.utils import logging as transformers_logging
 
         disable = getattr(transformers_logging, "disable_progress_bar", None)
@@ -74,7 +84,8 @@ class ZImageTurboImageGenerator:
         import torch
 
         try:
-            import sdnq  # noqa: F401
+            with _suppress_sdnq_triton_fallback_warning():
+                import sdnq  # noqa: F401
             from diffusers import FlowMatchEulerDiscreteScheduler, ZImagePipeline
         except ImportError as exc:
             raise RuntimeError("ZImagePipeline is unavailable. Install a recent diffusers build with Z-Image support.") from exc
@@ -94,7 +105,7 @@ class ZImageTurboImageGenerator:
             self._pipeline.scheduler.config,
             use_beta_sigmas=True,
         )
-        self._pipeline.set_progress_bar_config(disable=True)
+        self._pipeline.set_progress_bar_config(disable=False)
         if hasattr(self._pipeline, "enable_attention_slicing"):
             self._pipeline.enable_attention_slicing()
         if hasattr(self._pipeline, "enable_vae_slicing"):
@@ -141,16 +152,18 @@ class ZImageTurboImageGenerator:
             generator_device = self._device if self._device in {"cuda", "mps"} else "cpu"
             generator = self._torch.Generator(device=generator_device).manual_seed(seed)
 
+        pipeline_kwargs = {
+            "prompt": prompt,
+            "width": width,
+            "height": height,
+            "guidance_scale": guidance_scale,
+            "num_inference_steps": num_inference_steps,
+            "generator": generator,
+            "output_type": "pt",
+        }
+
         with self._torch.inference_mode():
-            image = self._pipeline(
-                prompt=prompt,
-                width=width,
-                height=height,
-                guidance_scale=guidance_scale,
-                num_inference_steps=num_inference_steps,
-                generator=generator,
-                output_type="pt",
-            ).images[0]
+            image = self._pipeline(**pipeline_kwargs).images[0]
         return self._to_rgba_image(image)
 
 

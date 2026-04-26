@@ -5,7 +5,7 @@ from textwrap import dedent
 import pytest
 
 from character_generator.inputs import load_input_items, load_yaml_config
-from character_generator.cli import ConsoleStatusReporter, _resolve_base_prompt
+from character_generator.cli import ConsoleStatusReporter, _resolve_base_prompt, build_parser, build_runtime_config
 from character_generator.types import PromptItem
 
 
@@ -164,3 +164,28 @@ def test_console_status_reporter_announce_prints_for_non_tty(monkeypatch: pytest
     reporter.announce("Loading image model into memory...")
 
     assert fake_stdout.getvalue() == "Loading image model into memory...\n"
+
+
+def test_build_runtime_config_reads_guidance_scale_from_yaml(tmp_path: Path) -> None:
+    config_path = tmp_path / "characters.yaml"
+    config_path.write_text("guidance_scale: 3.0\n", encoding="utf-8")
+
+    parser = build_parser()
+    args = parser.parse_args(["--config-file", str(config_path)])
+
+    runtime_config = build_runtime_config(args)
+
+    assert runtime_config.guidance_scale == 3.0
+
+
+def test_build_runtime_config_reads_dimensions_from_yaml(tmp_path: Path) -> None:
+    config_path = tmp_path / "characters.yaml"
+    config_path.write_text("width: 512\nheight: 512\n", encoding="utf-8")
+
+    parser = build_parser()
+    args = parser.parse_args(["--config-file", str(config_path)])
+
+    runtime_config = build_runtime_config(args)
+
+    assert runtime_config.width == 512
+    assert runtime_config.height == 512

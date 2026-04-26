@@ -22,8 +22,8 @@ class RuntimeConfig:
     base_prompt: str = "Dragonbane TTRPG character illustration."
     output_dir: Path = Path("output")
     genders: tuple[str, ...] = ("Female", "Male")
-    width: int = 1024
-    height: int = 1024
+    width: int = 512
+    height: int = 512
     guidance_scale: float = 0.0
     num_inference_steps: int = 4
     seed: int | None = None

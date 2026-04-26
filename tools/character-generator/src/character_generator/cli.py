@@ -18,7 +18,7 @@ DEFAULT_RUNTIME_CONFIG = RuntimeConfig()
 DEFAULT_MODEL_CONFIG = ModelConfig()
 
 
-def _resolve_base_prompt(value: str) -> str:
+def _resolve_prompt_text(value: str) -> str:
     if "\n" in value or "\r" in value:
         return value
     candidate_path = Path(value).expanduser()
@@ -28,6 +28,10 @@ def _resolve_base_prompt(value: str) -> str:
     except OSError:
         return value
     return value
+
+
+def _resolve_base_prompt(value: str) -> str:
+    return _resolve_prompt_text(value)
 
 
 class ConsoleStatusReporter:
@@ -109,6 +113,18 @@ def build_runtime_config(args: argparse.Namespace) -> RuntimeConfig:
     base_prompt_value = args.base_prompt
     if base_prompt_value is None:
         base_prompt_value = str(config_data.get("base_prompt", DEFAULT_RUNTIME_CONFIG.base_prompt))
+    width_value = args.width
+    configured_width = config_data.get("width")
+    if width_value == DEFAULT_RUNTIME_CONFIG.width and isinstance(configured_width, int):
+        width_value = configured_width
+    height_value = args.height
+    configured_height = config_data.get("height")
+    if height_value == DEFAULT_RUNTIME_CONFIG.height and isinstance(configured_height, int):
+        height_value = configured_height
+    guidance_scale_value = args.guidance_scale
+    configured_guidance_scale = config_data.get("guidance_scale")
+    if guidance_scale_value == DEFAULT_RUNTIME_CONFIG.guidance_scale and isinstance(configured_guidance_scale, (int, float)):
+        guidance_scale_value = float(configured_guidance_scale)
     return RuntimeConfig(
         base_prompt=_resolve_base_prompt(base_prompt_value),
         output_dir=args.output_dir,
@@ -121,9 +137,9 @@ def build_runtime_config(args: argparse.Namespace) -> RuntimeConfig:
         )) if any(
             value is not None for value in [config_data.get("genders"), args.genders_file, args.genders_json, args.gender]
         ) else DEFAULT_RUNTIME_CONFIG.genders,
-        width=args.width,
-        height=args.height,
-        guidance_scale=args.guidance_scale,
+        width=width_value,
+        height=height_value,
+        guidance_scale=guidance_scale_value,
         num_inference_steps=args.num_inference_steps,
         seed=args.seed,
         device=args.device,

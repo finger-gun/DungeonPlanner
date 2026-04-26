@@ -10,6 +10,7 @@ from character_generator.types import FaceBox, PromptItem
 
 class StubGenerator:
     def generate(self, **kwargs):
+        self.last_kwargs = kwargs
         return Image.new("RGBA", (128, 128), (255, 255, 255, 255))
 
 

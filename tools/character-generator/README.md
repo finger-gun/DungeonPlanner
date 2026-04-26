@@ -55,6 +55,8 @@ base_prompt: |
   Expression: {stern and focused|calm and watchful|wild-eyed and intense|confident and proud|melancholic and distant|suspicious and guarded|cheerful and bold|grim and battle-worn|mysterious and unreadable|arrogant and theatrical|wise and tired|nervous but determined|cold and calculating|warm and heroic|haunted and sorrowful}.
   Extra details: {old scars|mud-stained boots|travel-worn cloak|small trophies|carved charms|patched fabric|metal buckles|leather straps|handmade jewelry|weathered weapons|ancient symbols|ink stains|burn marks|ritual tattoos|braided hair or fur|feathers or beads|small animal bones|coin pouches|maps and scrolls|glowing magical details|family heirloom|profession symbols|battle damage|carefully maintained gear}.
   Centered character, clearly readable, full body, visible from head to toe, strong silhouette, clean crisp edges, polished fantasy concept art, tabletop RPG book illustration style, detailed materials, even lighting, clear green screen background, no scenery, no environment, no floor, no shadows.
+width: 512
+height: 512
 kins:
   - name: Human
     prompt: a human adventurer
@@ -125,7 +127,7 @@ traits:
     prompt: rune-covered, haunted by magic and touched by ancient mysteries
 ```
 
-The YAML file can hold `base_prompt`, `kins`, `genders`, `professions`, and `traits`. Each list entry can now be either a plain string or an object with `name` and `prompt`. `name` is used for filenames, status text, and matrix labels; `prompt` is the text sent into image generation. CLI flags still work and are appended on top of the YAML lists, while `--base-prompt` overrides the YAML prompt. If you do not supply genders, the generator defaults to `Female` and `Male`.
+The YAML file can hold `base_prompt`, `guidance_scale`, `width`, `height`, `kins`, `genders`, `professions`, and `traits`. Each list entry can now be either a plain string or an object with `name` and `prompt`. `name` is used for filenames, status text, and matrix labels; `prompt` is the text sent into image generation. The default Z-Image-Turbo profile stays at `guidance_scale: 0.0` and `512x512` for speed. CLI flags still work and are appended on top of the YAML lists, while `--base-prompt` overrides the YAML prompt. If you do not supply genders, the generator defaults to `Female` and `Male`.
 
 Pass `--random` to process the combination matrix in shuffled order without repeats. If you also pass
 `--seed`, the randomized order is reproducible.
