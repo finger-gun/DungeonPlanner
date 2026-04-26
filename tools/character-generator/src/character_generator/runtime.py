@@ -59,7 +59,7 @@ def torch_dtype_for_device(device: str):
     import torch
 
     if device == "cuda":
-        return torch.float16
+        return torch.bfloat16
     if device == "mps":
         # Z-Image-Turbo is less stable on Apple MPS in float16 and can emit NaNs.
         return torch.float32

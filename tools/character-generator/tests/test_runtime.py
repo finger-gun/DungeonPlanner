@@ -1,6 +1,8 @@
 import sys
 from types import ModuleType, SimpleNamespace
 
+import pytest
+
 from character_generator.runtime import describe_device_resolution, resolve_background_removal_device, resolve_device
 
 
@@ -54,3 +56,10 @@ def test_resolve_background_removal_device_keeps_cuda_off_windows(monkeypatch) -
 
     assert device == "cuda"
     assert details is None
+
+
+def test_torch_dtype_for_cuda_uses_bfloat16() -> None:
+    torch = pytest.importorskip("torch")
+    from character_generator.runtime import torch_dtype_for_device
+
+    assert torch_dtype_for_device("cuda") == torch.bfloat16
