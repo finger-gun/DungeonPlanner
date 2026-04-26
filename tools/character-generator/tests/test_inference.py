@@ -79,20 +79,21 @@ def test_anime_face_detector_retries_lower_confidence_before_fallback() -> None:
         def __init__(self):
             self.calls = []
 
-        def predict(self, image, *, conf, verbose):
-            self.calls.append(conf)
+        def predict(self, image, *, conf, verbose, device):
+            self.calls.append((conf, device))
             if conf <= 0.15:
                 return [FakeResult(FakeBoxes([[10, 8, 30, 28]], [0.14]))]
             return [FakeResult(FakeBoxes([], []))]
 
     detector = object.__new__(AnimeFaceDetector)
     detector._confidence = 0.25
+    detector._device = 0
     detector._model = FakeModel()
 
     face_box = detector.detect_primary(Image.new("RGB", (64, 64), (0, 255, 0)))
 
     assert face_box == detector._select_best_box([FakeResult(FakeBoxes([[10, 8, 30, 28]], [0.14]))])
-    assert detector._model.calls == [0.25, 0.15]
+    assert detector._model.calls == [(0.25, 0), (0.15, 0)]
 
 
 def test_anime_face_detector_falls_back_to_estimated_head_box() -> None:
@@ -110,8 +111,8 @@ def test_anime_face_detector_falls_back_to_estimated_head_box() -> None:
         def __init__(self):
             self.calls = []
 
-        def predict(self, image, *, conf, verbose):
-            self.calls.append(conf)
+        def predict(self, image, *, conf, verbose, device):
+            self.calls.append((conf, device))
             return [FakeResult()]
 
     image = Image.new("RGB", (120, 120), (0, 255, 0))
@@ -120,11 +121,12 @@ def test_anime_face_detector_falls_back_to_estimated_head_box() -> None:
 
     detector = object.__new__(AnimeFaceDetector)
     detector._confidence = 0.25
+    detector._device = "cpu"
     detector._model = FakeModel()
 
     face_box = detector.detect_primary(image)
 
-    assert detector._model.calls == [0.25, 0.15, 0.08]
+    assert detector._model.calls == [(0.25, "cpu"), (0.15, "cpu"), (0.08, "cpu")]
     assert face_box.confidence == 0.0
     assert face_box.left < face_box.right
     assert face_box.top < face_box.bottom

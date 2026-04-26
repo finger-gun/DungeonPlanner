@@ -216,7 +216,11 @@ def main() -> int:
     status_reporter.announce("Loading background remover into memory...")
     background_remover = RMBGBackgroundRemover(model_path=downloaded_models.rmbg_model_path, device=device)
     status_reporter.announce("Loading face detector into memory...")
-    face_detector = AnimeFaceDetector(model_path=downloaded_models.face_model_path, confidence=runtime_config.face_confidence)
+    face_detector = AnimeFaceDetector(
+        model_path=downloaded_models.face_model_path,
+        confidence=runtime_config.face_confidence,
+        device=device,
+    )
     status_reporter.announce("Starting generation...")
 
     pipeline = CharacterPortraitPipeline(

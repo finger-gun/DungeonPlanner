@@ -113,10 +113,7 @@ class ZImageTurboImageGenerator:
         if hasattr(getattr(self._pipeline, "vae", None), "enable_tiling"):
             self._pipeline.vae.enable_tiling()
 
-        if device == "cuda":
-            self._pipeline.enable_model_cpu_offload()
-        else:
-            self._pipeline.to(device)
+        self._pipeline.to(device)
 
     def _to_rgba_image(self, image_tensor) -> Image.Image:
         image_tensor = self._torch.nan_to_num(image_tensor.detach().float().cpu(), nan=0.0, posinf=1.0, neginf=0.0)
@@ -222,10 +219,11 @@ class RMBGBackgroundRemover:
 
 
 class AnimeFaceDetector:
-    def __init__(self, *, model_path: Path, confidence: float) -> None:
+    def __init__(self, *, model_path: Path, confidence: float, device: str) -> None:
         from ultralytics import YOLO
 
         self._confidence = confidence
+        self._device = 0 if device == "cuda" else device
         self._model = YOLO(str(model_path))
 
     @staticmethod
@@ -265,7 +263,7 @@ class AnimeFaceDetector:
     def detect_primary(self, image: Image.Image) -> FaceBox:
         rgb = np.array(image.convert("RGB"))
         for confidence in self._confidence_attempts():
-            results = self._model.predict(rgb, conf=confidence, verbose=False)
+            results = self._model.predict(rgb, conf=confidence, verbose=False, device=self._device)
             best_box = self._select_best_box(results)
             if best_box is not None:
                 return best_box
