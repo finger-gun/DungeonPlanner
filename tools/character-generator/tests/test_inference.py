@@ -1,3 +1,4 @@
+import numpy as np
 import torch
 from PIL import Image, ImageDraw
 
@@ -8,6 +9,7 @@ from character_generator.inference import (
     ZImageTurboImageGenerator,
     _SuppressSDNQTritonFallbackFilter,
     _extract_rmbg_primary_mask,
+    _mask_has_visible_foreground,
     _normalize_rmbg_mask,
 )
 
@@ -27,6 +29,20 @@ def test_normalize_rmbg_mask_returns_none_for_flat_mask() -> None:
     normalized = _normalize_rmbg_mask(torch.zeros((1, 2, 2)), torch)
 
     assert normalized is None
+
+
+def test_mask_has_visible_foreground_rejects_nearly_empty_mask() -> None:
+    mask = np.zeros((10, 10), dtype=np.uint8)
+    mask[0, 0] = 255
+
+    assert _mask_has_visible_foreground(mask) is False
+
+
+def test_mask_has_visible_foreground_accepts_substantial_subject_mask() -> None:
+    mask = np.zeros((20, 20), dtype=np.uint8)
+    mask[4:16, 6:14] = 255
+
+    assert _mask_has_visible_foreground(mask) is True
 
 
 def test_rmbg_background_remover_falls_back_to_opaque_image_for_flat_mask() -> None:
@@ -50,6 +66,35 @@ def test_rmbg_background_remover_falls_back_to_opaque_image_for_flat_mask() -> N
     remover._model = FakeModel()
 
     result = remover.remove(Image.new("RGB", (2, 2), (10, 20, 30)))
+
+    assert result.mode == "RGBA"
+    assert result.getpixel((0, 0)) == (10, 20, 30, 255)
+
+
+def test_rmbg_background_remover_falls_back_to_opaque_image_for_nearly_empty_mask() -> None:
+    remover = object.__new__(RMBGBackgroundRemover)
+    remover._torch = torch
+    remover._device = "cpu"
+    remover._model_input_size = (1024, 1024)
+    remover._preprocess = lambda image: torch.zeros((1, 3, 10, 10))
+    remover._functional = type(
+        "FakeFunctional",
+        (),
+        {
+            "interpolate": staticmethod(lambda tensor, size, mode, align_corners: tensor),
+        },
+    )()
+
+    sparse_mask = torch.zeros((1, 1, 10, 10))
+    sparse_mask[0, 0, 0, 0] = 1.0
+
+    class FakeModel:
+        def __call__(self, input_images):
+            return sparse_mask
+
+    remover._model = FakeModel()
+
+    result = remover.remove(Image.new("RGB", (10, 10), (10, 20, 30)))
 
     assert result.mode == "RGBA"
     assert result.getpixel((0, 0)) == (10, 20, 30, 255)

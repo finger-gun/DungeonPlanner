@@ -78,6 +78,18 @@ def _normalize_rmbg_mask(raw_mask, torch_module):
     return (raw_mask - min_value) / (max_value - min_value)
 
 
+def _mask_has_visible_foreground(mask_array: np.ndarray) -> bool:
+    if mask_array.size == 0:
+        return False
+
+    normalized = mask_array.astype(np.float32) / 255.0
+    max_alpha = float(np.max(normalized))
+    mean_alpha = float(np.mean(normalized))
+    visible_coverage = float(np.mean(normalized >= 0.05))
+
+    return max_alpha >= 0.2 and mean_alpha >= 0.01 and visible_coverage >= 0.005
+
+
 def _disable_library_progress_bars() -> None:
     try:
         from transformers.utils import logging as transformers_logging
@@ -224,7 +236,7 @@ class RMBGBackgroundRemover:
         if normalized_mask is None:
             return rgb.convert("RGBA")
         mask_array = (normalized_mask.clamp(0.0, 1.0) * 255).permute(1, 2, 0).cpu().numpy().astype(np.uint8).squeeze()
-        if int(mask_array.max(initial=0)) == 0:
+        if not _mask_has_visible_foreground(mask_array):
             return rgb.convert("RGBA")
         mask = Image.fromarray(mask_array)
         return apply_alpha_mask(rgb, mask, background_color=background_color)
