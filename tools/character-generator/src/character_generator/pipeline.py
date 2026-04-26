@@ -8,7 +8,7 @@ import time
 from typing import Callable, Protocol
 
 from .config import RuntimeConfig
-from .image_ops import crop_portrait
+from .image_ops import crop_portrait, has_visible_alpha_content
 from .naming import allocate_output_pair
 from .types import CharacterPrompt, FaceBox, GeneratedRecord, PromptItem
 
@@ -225,6 +225,8 @@ class CharacterPortraitPipeline:
         face_box = self._face_detector.detect_primary(base_image)
         self._report_status("Removing background", combination, current_index, total_combinations, started_at)
         main_image = self._background_remover.remove(base_image)
+        if not has_visible_alpha_content(main_image):
+            main_image = base_image.convert("RGBA")
         self._report_status("Saving outputs", combination, current_index, total_combinations, started_at)
         outputs = allocate_output_pair(
             output_dir=self._config.output_dir,

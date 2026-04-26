@@ -51,6 +51,18 @@ def apply_alpha_mask(
     return Image.fromarray((rgba * 255.0).round().astype(np.uint8), mode="RGBA")
 
 
+def has_visible_alpha_content(image: Image.Image) -> bool:
+    rgba = np.asarray(image.convert("RGBA"), dtype=np.uint8)
+    alpha = rgba[..., 3].astype(np.float32) / 255.0
+    if alpha.size == 0:
+        return False
+
+    max_alpha = float(np.max(alpha))
+    mean_alpha = float(np.mean(alpha))
+    visible_coverage = float(np.mean(alpha >= 0.05))
+    return max_alpha >= 0.2 and mean_alpha >= 0.01 and visible_coverage >= 0.005
+
+
 def expand_face_box(face_box: FaceBox, image_size: Tuple[int, int], padding_ratio: float) -> tuple[int, int, int, int]:
     image_width, image_height = image_size
     square_size = max(face_box.width, face_box.height) * (1 + (padding_ratio * 2))

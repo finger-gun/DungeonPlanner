@@ -1,6 +1,12 @@
 from PIL import Image
 
-from character_generator.image_ops import apply_alpha_mask, crop_portrait, estimate_background_color, expand_face_box
+from character_generator.image_ops import (
+    apply_alpha_mask,
+    crop_portrait,
+    estimate_background_color,
+    expand_face_box,
+    has_visible_alpha_content,
+)
 from character_generator.types import FaceBox
 
 
@@ -41,3 +47,15 @@ def test_apply_alpha_mask_decontaminates_edge_pixels_against_background() -> Non
     assert green <= 2
     assert blue == 0
     assert alpha == 128
+
+
+def test_has_visible_alpha_content_rejects_empty_alpha_image() -> None:
+    image = Image.new("RGBA", (10, 10), (255, 0, 0, 0))
+
+    assert has_visible_alpha_content(image) is False
+
+
+def test_has_visible_alpha_content_accepts_opaque_image() -> None:
+    image = Image.new("RGBA", (10, 10), (255, 0, 0, 255))
+
+    assert has_visible_alpha_content(image) is True

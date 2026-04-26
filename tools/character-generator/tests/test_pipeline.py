@@ -29,6 +29,11 @@ class FailingFaceDetector:
         raise RuntimeError("no face")
 
 
+class TransparentBackgroundRemover:
+    def remove(self, image):
+        return Image.new("RGBA", image.size, (0, 0, 0, 0))
+
+
 def item(name: str, prompt: str | None = None) -> PromptItem:
     return PromptItem(name=name, prompt=prompt or name)
 
@@ -106,6 +111,21 @@ def test_pipeline_reports_failures_immediately(tmp_path: Path) -> None:
     assert not result.records
     assert len(failures) == 1
     assert failures[0].error == "no face"
+
+
+def test_pipeline_falls_back_to_base_image_when_background_output_is_transparent(tmp_path: Path) -> None:
+    pipeline = CharacterPortraitPipeline(
+        config=RuntimeConfig(output_dir=tmp_path),
+        image_generator=StubGenerator(),
+        background_remover=TransparentBackgroundRemover(),
+        face_detector=StubFaceDetector(),
+    )
+
+    result = pipeline.run(kins=[item("Human")], genders=[item("Female")], professions=[item("Mage")], traits=[item("scarred veteran")])
+
+    assert not result.failures
+    saved_main = Image.open(result.records[0].outputs.main_path).convert("RGBA")
+    assert saved_main.getpixel((0, 0)) == (255, 255, 255, 255)
 
 
 def test_build_character_prompts_expands_dynamic_prompt_choices_deterministically() -> None:
