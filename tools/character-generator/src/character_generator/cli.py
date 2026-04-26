@@ -93,6 +93,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--face-confidence", type=float, default=DEFAULT_RUNTIME_CONFIG.face_confidence, help="Minimum confidence used by the face detector.")
     parser.add_argument("--serial-width", type=int, default=DEFAULT_RUNTIME_CONFIG.serial_width, help="Zero-padding width for serial filename suffixes.")
     parser.add_argument("--max-combinations", type=int, help="Optional cap for generated combinations.")
+    parser.add_argument("--random", action="store_true", help="Process the combination matrix in randomized non-repeating order.")
     parser.add_argument("--fail-fast", action="store_true", help="Abort on the first failed combination.")
 
     parser.add_argument("--flux-model-id", default=DEFAULT_MODEL_CONFIG.flux_model_id, help="Hugging Face model ID for FLUX generation.")
@@ -127,6 +128,7 @@ def build_runtime_config(args: argparse.Namespace) -> RuntimeConfig:
         serial_width=args.serial_width,
         fail_fast=args.fail_fast,
         max_combinations=args.max_combinations,
+        randomize_order=args.random,
     )
 
 

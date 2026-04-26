@@ -147,3 +147,44 @@ def test_build_character_prompts_assigns_unique_generation_seeds_per_combination
     assert prompts[1].prompt == (
         "A blue cloak. Character kin: Human. Profession: Knight. Defining trait: Bold."
     )
+
+
+def test_build_character_prompts_randomizes_without_repeating() -> None:
+    prompts = build_character_prompts(
+        kins=["Human", "Elf"],
+        professions=["Knight", "Mage"],
+        traits=["Stoic", "Bold"],
+        base_prompt="Portrait.",
+        seed=123,
+        randomize_order=True,
+    )
+
+    assert [(prompt.kin, prompt.profession, prompt.trait) for prompt in prompts] == [
+        ("Human", "Knight", "Bold"),
+        ("Elf", "Knight", "Stoic"),
+        ("Elf", "Knight", "Bold"),
+        ("Elf", "Mage", "Stoic"),
+        ("Human", "Mage", "Bold"),
+        ("Elf", "Mage", "Bold"),
+        ("Human", "Mage", "Stoic"),
+        ("Human", "Knight", "Stoic"),
+    ]
+    assert len({(prompt.kin, prompt.profession, prompt.trait) for prompt in prompts}) == len(prompts)
+
+
+def test_build_character_prompts_randomize_respects_max_combinations() -> None:
+    prompts = build_character_prompts(
+        kins=["Human", "Elf"],
+        professions=["Knight", "Mage"],
+        traits=["Stoic", "Bold"],
+        base_prompt="Portrait.",
+        seed=123,
+        randomize_order=True,
+        max_combinations=3,
+    )
+
+    assert [(prompt.kin, prompt.profession, prompt.trait) for prompt in prompts] == [
+        ("Human", "Knight", "Bold"),
+        ("Elf", "Knight", "Stoic"),
+        ("Elf", "Knight", "Bold"),
+    ]

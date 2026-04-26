@@ -83,15 +83,25 @@ def build_character_prompts(
     base_prompt: str,
     seed: int | None = None,
     max_combinations: int | None = None,
+    randomize_order: bool = False,
 ) -> list[CharacterPrompt]:
     combinations: list[CharacterPrompt] = []
     rng = random.Random(seed) if seed is not None else random.SystemRandom()
+    matrix_items = list(
+        product(
+            kins,
+            professions,
+            enumerate(traits),
+        )
+    )
 
-    for kin, profession, (trait_index, trait) in product(
-        kins,
-        professions,
-        enumerate(traits),
-    ):
+    if randomize_order:
+        rng.shuffle(matrix_items)
+
+    if max_combinations is not None:
+        matrix_items = matrix_items[:max_combinations]
+
+    for kin, profession, (trait_index, trait) in matrix_items:
         generation_seed = rng.randrange(0, 2**32)
         prompt_rng = random.Random(generation_seed)
         prompt = _expand_dynamic_prompt(
@@ -115,9 +125,6 @@ def build_character_prompts(
                 generation_seed=generation_seed,
             )
         )
-
-        if max_combinations is not None and len(combinations) >= max_combinations:
-            break
 
     return combinations
 
@@ -154,6 +161,7 @@ class CharacterPortraitPipeline:
             base_prompt=self._config.base_prompt,
             seed=self._config.seed,
             max_combinations=self._config.max_combinations,
+            randomize_order=self._config.randomize_order,
         )
         total_prompts = len(prompts)
         started_at = time.monotonic()

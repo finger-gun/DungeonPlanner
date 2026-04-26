@@ -33,3 +33,4 @@ class RuntimeConfig:
     serial_width: int = 4
     fail_fast: bool = False
     max_combinations: int | None = None
+    randomize_order: bool = False

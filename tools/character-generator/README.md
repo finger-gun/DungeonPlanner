@@ -91,6 +91,9 @@ traits:
 
 The YAML file can hold `base_prompt`, `kins`, `professions`, and `traits`. CLI flags still work and are appended on top of the YAML lists, while `--base-prompt` overrides the YAML prompt.
 
+Pass `--random` to process the combination matrix in shuffled order without repeats. If you also pass
+`--seed`, the randomized order is reproducible.
+
 Using newline-delimited files:
 
 Lines starting with `#` or `//` are ignored, so you can comment out entries quickly.
