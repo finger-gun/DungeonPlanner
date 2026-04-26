@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import sys
+
 
 def describe_device_resolution(requested_device: str) -> tuple[str, str | None]:
     if requested_device != "auto":
@@ -45,6 +47,12 @@ def describe_device_resolution(requested_device: str) -> tuple[str, str | None]:
 
 def resolve_device(requested_device: str) -> str:
     return describe_device_resolution(requested_device)[0]
+
+
+def resolve_background_removal_device(runtime_device: str) -> tuple[str, str | None]:
+    if runtime_device == "cuda" and sys.platform == "win32":
+        return "cpu", "Background removal is running on CPU because BRIA RMBG can produce empty masks on Windows/CUDA."
+    return runtime_device, None
 
 
 def torch_dtype_for_device(device: str):

@@ -11,7 +11,7 @@ from .inference import AnimeFaceDetector, RMBGBackgroundRemover, ZImageTurboImag
 from .inputs import load_input_items, load_yaml_config
 from .model_cache import ModelRegistry
 from .pipeline import CharacterPortraitPipeline
-from .runtime import describe_device_resolution
+from .runtime import describe_device_resolution, resolve_background_removal_device
 from .types import PromptItem
 
 DEFAULT_RUNTIME_CONFIG = RuntimeConfig()
@@ -209,6 +209,9 @@ def main() -> int:
     status_reporter.announce(f"Using device: {device}")
     if device_details is not None:
         status_reporter.announce(device_details)
+    rmbg_device, rmbg_device_details = resolve_background_removal_device(device)
+    if rmbg_device_details is not None:
+        status_reporter.announce(rmbg_device_details)
     model_registry = ModelRegistry(build_model_config(args))
     status_reporter.announce("Checking model cache and downloading missing files...")
     downloaded_models = model_registry.ensure_downloaded()
@@ -216,7 +219,7 @@ def main() -> int:
     status_reporter.announce("Loading image model into memory...")
     image_generator = ZImageTurboImageGenerator(model_path=downloaded_models.image_model_path, device=device)
     status_reporter.announce("Loading background remover into memory...")
-    background_remover = RMBGBackgroundRemover(model_path=downloaded_models.rmbg_model_path, device=device)
+    background_remover = RMBGBackgroundRemover(model_path=downloaded_models.rmbg_model_path, device=rmbg_device)
     status_reporter.announce("Loading face detector into memory...")
     face_detector = AnimeFaceDetector(
         model_path=downloaded_models.face_model_path,

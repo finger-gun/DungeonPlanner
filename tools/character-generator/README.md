@@ -49,6 +49,8 @@ pip install -e ".[test]"
 
 If startup says `Using device: cpu` and also reports `torch.version.cuda=None`, that means the environment has a **CPU-only PyTorch build** installed, so the generator cannot use your NVIDIA GPU until PyTorch is reinstalled with CUDA support.
 
+On **Windows + NVIDIA**, the generator keeps **image generation** on CUDA but runs **BRIA RMBG background removal on CPU**. This avoids a Windows/CUDA failure mode where RMBG can return empty masks and produce fully transparent output images.
+
 ## Run
 
 Using a single YAML config file:

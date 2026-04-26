@@ -1,7 +1,7 @@
 import sys
 from types import ModuleType, SimpleNamespace
 
-from character_generator.runtime import describe_device_resolution, resolve_device
+from character_generator.runtime import describe_device_resolution, resolve_background_removal_device, resolve_device
 
 
 def test_describe_device_resolution_reports_cpu_only_torch_build(monkeypatch) -> None:
@@ -36,3 +36,21 @@ def test_describe_device_resolution_reports_cuda_device(monkeypatch) -> None:
 
     assert device == "cuda"
     assert details == "CUDA is available through PyTorch (CUDA 12.8); using NVIDIA GeForce RTX 4090"
+
+
+def test_resolve_background_removal_device_uses_cpu_on_windows_cuda(monkeypatch) -> None:
+    monkeypatch.setattr(sys, "platform", "win32")
+
+    device, details = resolve_background_removal_device("cuda")
+
+    assert device == "cpu"
+    assert details == "Background removal is running on CPU because BRIA RMBG can produce empty masks on Windows/CUDA."
+
+
+def test_resolve_background_removal_device_keeps_cuda_off_windows(monkeypatch) -> None:
+    monkeypatch.setattr(sys, "platform", "linux")
+
+    device, details = resolve_background_removal_device("cuda")
+
+    assert device == "cuda"
+    assert details is None
