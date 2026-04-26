@@ -36,6 +36,19 @@ source .venv/bin/activate
 pip install -e ".[test]"
 ```
 
+On **Windows with NVIDIA**, install a CUDA-enabled PyTorch build first so auto-device detection can use the GPU:
+
+```powershell
+cd tools/character-generator
+py -3.11 -m venv .venv
+.venv\Scripts\activate
+python -m pip install --upgrade pip
+pip install torch==2.11.0 torchvision==0.26.0 --index-url https://download.pytorch.org/whl/cu128
+pip install -e ".[test]"
+```
+
+If startup says `Using device: cpu` and also reports `torch.version.cuda=None`, that means the environment has a **CPU-only PyTorch build** installed, so the generator cannot use your NVIDIA GPU until PyTorch is reinstalled with CUDA support.
+
 ## Run
 
 Using a single YAML config file:

@@ -11,7 +11,7 @@ from .inference import AnimeFaceDetector, RMBGBackgroundRemover, ZImageTurboImag
 from .inputs import load_input_items, load_yaml_config
 from .model_cache import ModelRegistry
 from .pipeline import CharacterPortraitPipeline
-from .runtime import resolve_device
+from .runtime import describe_device_resolution
 from .types import PromptItem
 
 DEFAULT_RUNTIME_CONFIG = RuntimeConfig()
@@ -205,8 +205,10 @@ def main() -> int:
     runtime_config.output_dir.mkdir(parents=True, exist_ok=True)
 
     status_reporter.announce("Resolving runtime device...")
-    device = resolve_device(runtime_config.device)
+    device, device_details = describe_device_resolution(runtime_config.device)
     status_reporter.announce(f"Using device: {device}")
+    if device_details is not None:
+        status_reporter.announce(device_details)
     model_registry = ModelRegistry(build_model_config(args))
     status_reporter.announce("Checking model cache and downloading missing files...")
     downloaded_models = model_registry.ensure_downloaded()
