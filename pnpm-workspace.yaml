@@ -1,8 +1,7 @@
 packages:
-  - .
   - app
+  - editor
   - server
-  - shared
   - shared
 
 onlyBuiltDependencies:

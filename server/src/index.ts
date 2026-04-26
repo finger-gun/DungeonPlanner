@@ -89,9 +89,9 @@ app.delete('/api/generated-characters/assets/:storageId', async (req, res) => {
 
 app.use(GENERATED_CHARACTER_ASSET_PUBLIC_PATH, express.static(GENERATED_CHARACTER_STORAGE_DIR))
 
-// Serve the built frontend from ../dist (relative to this file at build time,
-// or ../../dist relative to src/ at dev time)
-const distPath = path.resolve(__dirname, '..', '..', 'dist')
+// Serve the built editor frontend from ../../editor/dist in both source and
+// compiled server layouts.
+const distPath = path.resolve(__dirname, '..', '..', 'editor', 'dist')
 app.use(express.static(distPath))
 
 // Fallback: serve index.html for client-side routing

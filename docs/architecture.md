@@ -1,6 +1,6 @@
 # Architecture
 
-This page explains how DungeonPlanner is structured today, with the current backend facade in place, and then drills into the editor internals in `src/`.
+This page explains how DungeonPlanner is structured today, with the current backend facade in place, and then drills into the editor internals in `editor/src/`.
 
 ---
 
@@ -9,7 +9,7 @@ This page explains how DungeonPlanner is structured today, with the current back
 DungeonPlanner is a monorepo with three main runtime surfaces:
 
 - `app/` — the authenticated workspace app. Users manage dungeons, sessions, actor packs, actors, roles, and other library/admin data here.
-- `src/` — the main dungeon editor and player view. This is the 3D R3F/WebGPU experience.
+- `editor/` — the main dungeon editor and player view package. This is the 3D R3F/WebGPU experience.
 - `server/` — the browser-facing backend facade. It owns auth cookies, browser API endpoints, editor/library proxies, actor library proxies, generated-character endpoints, and the Colyseus multiplayer server.
 
 Convex still exists, but it is now an **internal backend dependency**, not something the browser talks to directly.
@@ -39,7 +39,7 @@ Convex still exists, but it is now an **internal backend dependency**, not somet
                        │ server-side Convex access     │ websocket / HTTP
                        │                               │
 ┌──────────────────────▼───────────────────┐   ┌───────▼────────────────┐
-│ Convex                                   │   │ Browser: src/          │
+│ Convex                                   │   │ Browser: editor/src/   │
 │ app domain data + auth state             │   │ React editor / player  │
 │ - users, roles, dungeons                 │   │ Zustand + R3F/WebGPU   │
 │ - sessions, actorPacks, characters       │   │ editor + actor handoff │
@@ -82,13 +82,13 @@ The actor pipeline now lives here too:
 
 - `app/src/components/ActorLibraryPanel.tsx` is the browser UI for actor pack management and actor creation/editing
 - `app/convex/actors.ts` owns the actor domain in Convex: user-owned `actorPacks`, actor records in `characters`, active/inactive toggles, and the editor-facing actor export
-- standee generation/storage still uses the shared `src/generated-characters/*` helpers, but the browser reaches them through `server/`'s `/api/generated-characters/*` facade routes
+- standee generation/storage still uses the shared `editor/src/generated-characters/*` helpers, but the browser reaches them through `server/`'s `/api/generated-characters/*` facade routes
 
 So `app/` still *looks* like it is calling Convex functions from React, but that is now just a naming and contract convenience. The browser is really talking to `server/`.
 
-## `src/` — editor and player runtime
+## `editor/src/` — editor and player runtime
 
-`src/` is the main dungeon editor and play surface:
+`editor/src/` is the main dungeon editor and play surface:
 
 - map editing
 - room painting
@@ -107,7 +107,7 @@ This app is also static. It talks to:
 - `server/` generated-character APIs (`/api/generated-characters/*`)
 - Colyseus on `server/` for live play sessions
 
-`src/` no longer owns actor authoring. It only imports active actors from `app/`, converts them into runtime/generated-character records, and exposes them as selectable placement assets in the editor UI.
+`editor/src/` no longer owns actor authoring. It only imports active actors from `app/`, converts them into runtime/generated-character records, and exposes them as selectable placement assets in the editor UI.
 
 ## `server/` — backend facade
 
@@ -134,7 +134,7 @@ Key files:
 
 ---
 
-## How `app/`, `src/`, and `server/` work together
+## How `app/`, `editor/`, and `server/` work together
 
 ## 1. Authenticated app flow
 
@@ -157,7 +157,7 @@ At runtime:
 
 This gives `app/` a static deployment model with a server-owned API facade.
 
-## 2. Open dungeon from `app/` into `src/`
+## 2. Open dungeon from `app/` into `editor/`
 
 This is the main cross-app handoff:
 
@@ -168,11 +168,11 @@ This is the main cross-app handoff:
    - backend URL
    - short-lived editor access token
    - optional dungeon id
-4. The browser opens `src/`
-5. `src/lib/editorDungeonHandoff.ts` reads those params
-6. `src/` calls `POST /api/editor/dungeons/open` on `server/`
+4. The browser opens `editor/`
+5. `editor/src/lib/editorDungeonHandoff.ts` reads those params
+6. `editor/src/` calls `POST /api/editor/dungeons/open` on `server/`
 7. `server/` proxies that request to Convex HTTP actions
-8. `src/` receives serialized dungeon JSON and loads it into the Zustand store
+8. `editor/src/` receives serialized dungeon JSON and loads it into the Zustand store
 
 The important bit is that the editor now receives the **backend facade URL**, not a raw Convex browser endpoint.
 
@@ -200,16 +200,16 @@ Actors now cross all three runtimes, but each runtime has a narrower responsibil
 
 When the editor starts with backend handoff access:
 
-1. `src/App.tsx` calls `src/lib/editorActors.ts`
+1. `editor/src/App.tsx` calls `editor/src/lib/editorActors.ts`
 2. that posts to `POST /api/editor/actors/list` on `server/`
 3. `server/src/appFacade.ts` proxies the request to the Convex site HTTP endpoint
 4. `app/convex/http.ts` forwards the request to `internal.actors.listEditorActors`
 
-### In `src/`
+### In `editor/src/`
 
 The editor is selection-only for actors:
 
-1. `src/App.tsx` maps each `EditorActorRecord` into the existing `GeneratedCharacterRecord` shape
+1. `editor/src/App.tsx` maps each `EditorActorRecord` into the existing `GeneratedCharacterRecord` shape
 2. `useDungeonStore.ingestGeneratedCharacters()` merges those records into `generatedCharacters`
 3. `syncGeneratedCharacterAssets()` rebuilds the runtime asset registry so those actors behave like generated player assets
 4. `CharacterToolPanel` renders them under **Active Actor Packs** and only lets users select/place ready actors
@@ -226,7 +226,7 @@ Inside the editor, remote library actions such as:
 - copy dungeon
 - delete dungeon
 
-all go through `src/lib/editorDungeonHandoff.ts`, which posts to:
+all go through `editor/src/lib/editorDungeonHandoff.ts`, which posts to:
 
 - `/api/editor/dungeons/list`
 - `/api/editor/dungeons/open`
@@ -252,16 +252,16 @@ This keeps live room auth server-owned instead of relying on direct browser acce
 
 ---
 
-## Editor root in `src/`
+## Editor root in `editor/src/`
 
 The editor has two entry modes:
 
 ```text
-src/main.tsx
+editor/src/main.tsx
   -> <RootApp />
 ```
 
-`src/RootApp.tsx` decides between:
+`editor/src/RootApp.tsx` decides between:
 
 - `App` — the normal editor/player runtime
 - `ThumbnailRendererApp` — a special headless-ish rendering path used for thumbnail generation
@@ -291,7 +291,7 @@ At a high level, the editor still follows this shape:
 </App>
 ```
 
-`src/App.tsx` owns the editor shell state and orchestration:
+`editor/src/App.tsx` owns the editor shell state and orchestration:
 
 - sidebar state
 - toolbar/tool mode switching
@@ -306,7 +306,7 @@ It deliberately does **not** hold dungeon world state itself. That lives in the 
 
 ## Zustand store: the editor's source of truth
 
-`src/store/useDungeonStore.ts` is the editor's single source of truth.
+`editor/src/store/useDungeonStore.ts` is the editor's single source of truth.
 
 It owns:
 
@@ -373,9 +373,9 @@ That remount-by-key approach is a core architectural choice. Switching floors re
 
 ---
 
-## Canvas architecture in `src/components/canvas`
+## Canvas architecture in `editor/src/components/canvas`
 
-`src/components/canvas/Scene.tsx` is the composition root for the 3D world.
+`editor/src/components/canvas/Scene.tsx` is the composition root for the 3D world.
 
 It splits rendering into two layers:
 
@@ -437,7 +437,7 @@ When the editor is idle, almost nothing renders. This is important because the e
 
 ## Floor transitions
 
-`src/components/canvas/FloorTransitionController.tsx` drives floor switches almost entirely inside `useFrame`.
+`editor/src/components/canvas/FloorTransitionController.tsx` drives floor switches almost entirely inside `useFrame`.
 
 The transition system:
 
@@ -453,7 +453,7 @@ This avoids introducing React state churn for what is really an animation proble
 
 ## Object registry
 
-`src/components/canvas/objectRegistry.ts` is a small but important optimization.
+`editor/src/components/canvas/objectRegistry.ts` is a small but important optimization.
 
 It keeps:
 
@@ -496,7 +496,7 @@ The important pattern is that render components derive from store state rather t
 
 ## Serialization and file format
 
-`src/store/serialization.ts` owns dungeon file persistence.
+`editor/src/store/serialization.ts` owns dungeon file persistence.
 
 Responsibilities:
 
@@ -575,7 +575,7 @@ The browser never sends arbitrary Convex function names to this facade. Each bro
 If you are changing code in this repo, the safest high-level model is:
 
 1. `app/` manages accounts, libraries, sessions, and admin tools
-2. `src/` is the editor/runtime for building and playing dungeons
+2. `editor/` is the editor/runtime for building and playing dungeons
 3. `server/` is the only browser-facing backend
 4. Convex is the current internal app-domain data/auth engine
 5. `useDungeonStore` is the editor's single source of truth

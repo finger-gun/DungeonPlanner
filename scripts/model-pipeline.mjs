@@ -5,12 +5,13 @@ import { constants as fsConstants } from 'node:fs'
 import { modelPackConfigs } from './model-packs.config.mjs'
 
 export const rootDir = process.cwd()
-export const modelRootDir = path.join(rootDir, 'src/assets/models')
+export const editorDir = path.join(rootDir, 'editor')
+export const modelRootDir = path.join(editorDir, 'src/assets/models')
 export const defaultKtxTranscoderSourceDir = path.join(
-  rootDir,
+  editorDir,
   'node_modules/three/examples/jsm/libs/basis',
 )
-export const defaultKtxTranscoderTargetDir = path.join(rootDir, 'public/three/basis')
+export const defaultKtxTranscoderTargetDir = path.join(editorDir, 'public/three/basis')
 
 const modelExtensions = new Set(['.glb', '.gltf'])
 const cleanupExtensions = new Set(['.bin', '.jpg', '.jpeg', '.ktx2', '.png', '.webp'])

@@ -21,7 +21,7 @@ function main() {
     )
   }
 
-  console.log(`Synced ${fileNames.length} KTX2 transcoder files to public/three/basis`)
+  console.log(`Synced ${fileNames.length} KTX2 transcoder files to editor/public/three/basis`)
 }
 
 main()

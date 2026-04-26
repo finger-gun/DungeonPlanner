@@ -7,8 +7,8 @@ import {
   resolvePackDir,
   resolvePackSourceDir,
   isThumbnailForModel,
-} from '../../scripts/model-pipeline.mjs'
-import { createTiledStripTexture, makeTextureTileable } from '../../scripts/import-models.mjs'
+} from '../../../scripts/model-pipeline.mjs'
+import { createTiledStripTexture, makeTextureTileable } from '../../../scripts/import-models.mjs'
 
 describe('model pipeline utilities', () => {
   it('collects local gltf sidecar artifacts and ignores external URIs', () => {
@@ -56,7 +56,7 @@ describe('model pipeline utilities', () => {
       'forrest-assets-tmp/KayKit_Forest_Nature_Pack_1.0_EXTRA/Assets/gltf',
     )
 
-    expect(resolvePackDir('kaykit')).toContain('/src/assets/models/forrest')
+    expect(resolvePackDir('kaykit')).toContain('/editor/src/assets/models/forrest')
 
     expect(
       resolvePackSourceDir('core', null, {
@@ -68,8 +68,8 @@ describe('model pipeline utilities', () => {
   it('preserves generated KayKit grass patch artifacts', () => {
     expect([...getPreservedArtifactPaths('/packs/kaykit')]).toEqual([])
     expect(
-      [...getPreservedArtifactPaths('src/assets/models/forrest')].some((filePath) =>
-        filePath.endsWith('/src/assets/models/forrest/Color1/forest_grass_patch.png'),
+      [...getPreservedArtifactPaths('editor/src/assets/models/forrest')].some((filePath) =>
+        filePath.endsWith('/editor/src/assets/models/forrest/Color1/forest_grass_patch.png'),
       ),
     ).toBe(true)
   })
