@@ -21,6 +21,10 @@ const TEST_CHARACTER: GeneratedCharacterRecord = {
   thumbnailUrl: '/generated-character-assets/legacy-storage/thumbnail.png',
   width: 256,
   height: 512,
+  packId: null,
+  packName: null,
+  packDescription: null,
+  packScope: null,
   createdAt: '2026-04-17T00:00:00.000Z',
   updatedAt: '2026-04-17T00:00:00.000Z',
 }

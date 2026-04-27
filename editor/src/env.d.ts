@@ -19,4 +19,6 @@ declare module 'react/jsx-dev-runtime' {
   }
 }
 
-declare const __PROJECT_ROOT__: string
+declare global {
+  const __PROJECT_ROOT__: string
+}
