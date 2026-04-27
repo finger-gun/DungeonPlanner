@@ -117,7 +117,7 @@ def build_character_prompts(
             " ".join(
                 [
                     base_prompt.strip(),
-                    _as_sentence(f"Character kin: {kin.prompt}"),
+                    _as_sentence(f"Character: {kin.prompt}"),
                     _as_sentence(f"Gender: {gender.prompt}"),
                     _as_sentence(f"Profession: {profession.prompt}"),
                     _as_sentence(f"Defining trait: {trait.prompt}"),
@@ -149,6 +149,7 @@ class CharacterPortraitPipeline:
         background_remover: BackgroundRemover,
         face_detector: FaceDetector,
         status_callback: Callable[[str], None] | None = None,
+        preview_callback: Callable[[GeneratedRecord], None] | None = None,
         failure_callback: Callable[[PipelineFailure], None] | None = None,
     ) -> None:
         self._config = config
@@ -156,6 +157,7 @@ class CharacterPortraitPipeline:
         self._background_remover = background_remover
         self._face_detector = face_detector
         self._status_callback = status_callback
+        self._preview_callback = preview_callback
         self._failure_callback = failure_callback
 
     def run(
@@ -240,7 +242,10 @@ class CharacterPortraitPipeline:
         main_image.save(outputs.main_path)
         portrait = crop_portrait(main_image, face_box, self._config.portrait_padding)
         portrait.save(outputs.portrait_path)
-        return GeneratedRecord(combination=combination, face_box=face_box, outputs=outputs)
+        record = GeneratedRecord(combination=combination, face_box=face_box, outputs=outputs)
+        if self._preview_callback is not None:
+            self._preview_callback(record)
+        return record
 
     def _report_status(
         self,

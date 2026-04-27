@@ -12,7 +12,7 @@ The generator:
 
 ## Default models
 
-- **Image generation:** `Disty0/Z-Image-Turbo-SDNQ-uint4-svd-r32` loaded directly through Diffusers with Mac-oriented MPS runtime tweaks
+- **Image generation:** `Disty0/Z-Image-Turbo-SDNQ-uint4-svd-r32` loaded directly through Diffusers
 - **Background removal:** `briaai/RMBG-1.4`
 - **Illustrated face detection:** `Fuyucchi/yolov8_animeface`
 
@@ -25,7 +25,7 @@ If face detection misses anthropomorphic characters, the generator now retries w
 - A Hugging Face account with access to any gated models you want to use
 - Enough local GPU memory for your chosen model
 
-The default image generator now uses the direct quantized `Disty0/Z-Image-Turbo-SDNQ-uint4-svd-r32` Diffusers repo, with `PYTORCH_MPS_FAST_MATH=1`, beta-sigma scheduling, attention slicing, VAE slicing, and VAE tiling enabled when available.
+The default image generator uses the direct quantized `Disty0/Z-Image-Turbo-SDNQ-uint4-svd-r32` Diffusers repo, with `PYTORCH_MPS_FAST_MATH=1`, beta-sigma scheduling, attention slicing, VAE slicing, and VAE tiling enabled when available.
 
 ## Install
 
@@ -58,7 +58,8 @@ Using a single YAML config file:
 ```bash
 python -m character_generator \
   --config-file ./examples/character-config.yaml \
-  --output-dir ./output
+  --output-dir ./output \
+  --preview-kitten
 ```
 
 Example YAML:
@@ -144,6 +145,8 @@ traits:
 
 The YAML file can hold `base_prompt`, `guidance_scale`, `width`, `height`, `kins`, `genders`, `professions`, and `traits`. Each list entry can now be either a plain string or an object with `name` and `prompt`. `name` is used for filenames, status text, and matrix labels; `prompt` is the text sent into image generation. The default Z-Image-Turbo profile stays at `guidance_scale: 0.0` and `1024x1024`. CLI flags still work and are appended on top of the YAML lists, while `--base-prompt` overrides the YAML prompt. If you do not supply genders, the generator defaults to `Female` and `Male`.
 
+Pass `--preview-kitten` to preview each saved main image in terminals that support `kitten icat`.
+
 Pass `--random` to process the combination matrix in shuffled order without repeats. If you also pass
 `--seed`, the randomized order is reproducible.
 
@@ -214,7 +217,7 @@ Example:
 
 ## Important licenses
 
-- `Disty0/Z-Image-Turbo-SDNQ-uint4-svd-r32` and `Tongyi-MAI/Z-Image-Turbo` have their own upstream model licenses and usage terms.
+- `Disty0/Z-Image-Turbo-SDNQ-uint4-svd-r32` has its own upstream model license and usage terms.
 - `briaai/RMBG-1.4` is source-available for non-commercial use.
 
 Check each model card before production use.

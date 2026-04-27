@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import io
+import subprocess
 import shutil
 import sys
 from pathlib import Path
@@ -65,6 +66,17 @@ class ConsoleStatusReporter:
         print(message)
 
 
+def _preview_with_kitten(image_path: Path) -> None:
+    kitten_path = shutil.which("kitten")
+    if kitten_path is None:
+        raise RuntimeError("The --preview-kitten flag requires the 'kitten' command to be installed and available on PATH.")
+
+    try:
+        subprocess.run([kitten_path, "icat", str(image_path)], check=True)
+    except subprocess.CalledProcessError as exc:
+        raise RuntimeError(f"Kitten preview failed for {image_path}.") from exc
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Generate Dragonbane character portraits in batches.")
 
@@ -91,6 +103,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--height", type=int, default=DEFAULT_RUNTIME_CONFIG.height, help="Output image height.")
     parser.add_argument("--guidance-scale", type=float, default=DEFAULT_RUNTIME_CONFIG.guidance_scale, help="Guidance scale passed to the image generation pipeline.")
     parser.add_argument("--num-inference-steps", type=int, default=DEFAULT_RUNTIME_CONFIG.num_inference_steps, help="Inference steps passed to the image generation pipeline.")
+    parser.add_argument("--preview-kitten", action="store_true", help="Preview each saved main image in the terminal using `kitten icat`.")
     parser.add_argument("--seed", type=int, help="Optional fixed seed for deterministic runs.")
     parser.add_argument("--device", default=DEFAULT_RUNTIME_CONFIG.device, help="Runtime device: auto, cuda, mps, or cpu.")
     parser.add_argument("--portrait-padding", type=float, default=DEFAULT_RUNTIME_CONFIG.portrait_padding, help="Padding ratio applied around the face crop.")
@@ -104,7 +117,6 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--rmbg-model-id", default=DEFAULT_MODEL_CONFIG.rmbg_model_id, help="Hugging Face model ID for background removal.")
     parser.add_argument("--face-model-id", default=DEFAULT_MODEL_CONFIG.face_model_id, help="Hugging Face model ID for face detection.")
     parser.add_argument("--face-model-filename", default=DEFAULT_MODEL_CONFIG.face_model_filename, help="Filename of the face detector weights in the Hugging Face repo.")
-
     return parser
 
 
@@ -141,6 +153,7 @@ def build_runtime_config(args: argparse.Namespace) -> RuntimeConfig:
         height=height_value,
         guidance_scale=guidance_scale_value,
         num_inference_steps=args.num_inference_steps,
+        preview_kitten=args.preview_kitten,
         seed=args.seed,
         device=args.device,
         portrait_padding=args.portrait_padding,
@@ -217,7 +230,10 @@ def main() -> int:
     downloaded_models = model_registry.ensure_downloaded()
 
     status_reporter.announce("Loading image model into memory...")
-    image_generator = ZImageTurboImageGenerator(model_path=downloaded_models.image_model_path, device=device)
+    image_generator = ZImageTurboImageGenerator(
+        model_path=downloaded_models.image_model_path,
+        device=device,
+    )
     status_reporter.announce("Loading background remover into memory...")
     background_remover = RMBGBackgroundRemover(model_path=downloaded_models.rmbg_model_path, device=rmbg_device)
     status_reporter.announce("Loading face detector into memory...")
@@ -234,6 +250,7 @@ def main() -> int:
         background_remover=background_remover,
         face_detector=face_detector,
         status_callback=status_reporter.update,
+        preview_callback=(lambda record: (status_reporter.clear(), _preview_with_kitten(record.outputs.main_path))) if runtime_config.preview_kitten else None,
         failure_callback=lambda failure: status_reporter.failure(
             f"failed {failure.combination.kin} / {failure.combination.profession} / {failure.combination.trait}: {failure.error}"
         ),

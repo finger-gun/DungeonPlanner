@@ -113,6 +113,23 @@ def test_pipeline_reports_failures_immediately(tmp_path: Path) -> None:
     assert failures[0].error == "no face"
 
 
+def test_pipeline_invokes_preview_callback_after_save(tmp_path: Path) -> None:
+    previews = []
+    pipeline = CharacterPortraitPipeline(
+        config=RuntimeConfig(output_dir=tmp_path),
+        image_generator=StubGenerator(),
+        background_remover=StubBackgroundRemover(),
+        face_detector=StubFaceDetector(),
+        preview_callback=previews.append,
+    )
+
+    result = pipeline.run(kins=[item("Human")], genders=[item("Female")], professions=[item("Mage")], traits=[item("scarred veteran")])
+
+    assert not result.failures
+    assert len(previews) == 1
+    assert previews[0].outputs.main_path.exists()
+
+
 def test_pipeline_falls_back_to_base_image_when_background_output_is_transparent(tmp_path: Path) -> None:
     pipeline = CharacterPortraitPipeline(
         config=RuntimeConfig(output_dir=tmp_path),
@@ -140,7 +157,7 @@ def test_build_character_prompts_expands_dynamic_prompt_choices_deterministicall
 
     assert len(prompts) == 1
     assert prompts[0].prompt == (
-        "A blue cloak and silver trim. Character kin: Human. Gender: Female. Profession: Knight. Defining trait: Stoic."
+        "A blue cloak and silver trim. Character: Human. Gender: Female. Profession: Knight. Defining trait: Stoic."
     )
     assert prompts[0].generation_seed == 224899942
 
@@ -156,7 +173,7 @@ def test_build_character_prompts_leaves_non_choice_braces_unchanged() -> None:
     )
 
     assert prompts[0].prompt == (
-        "Keep literal braces {no-choice}. Character kin: Human. Gender: Female. Profession: Knight. Defining trait: Stoic."
+        "Keep literal braces {no-choice}. Character: Human. Gender: Female. Profession: Knight. Defining trait: Stoic."
     )
 
 
@@ -172,10 +189,10 @@ def test_build_character_prompts_assigns_unique_generation_seeds_per_combination
 
     assert [prompt.generation_seed for prompt in prompts] == [224899942, 1749090055]
     assert prompts[0].prompt == (
-        "A blue cloak. Character kin: Human. Gender: Female. Profession: Knight. Defining trait: Stoic."
+        "A blue cloak. Character: Human. Gender: Female. Profession: Knight. Defining trait: Stoic."
     )
     assert prompts[1].prompt == (
-        "A blue cloak. Character kin: Human. Gender: Female. Profession: Knight. Defining trait: Bold."
+        "A blue cloak. Character: Human. Gender: Female. Profession: Knight. Defining trait: Bold."
     )
 
 
@@ -253,7 +270,7 @@ def test_build_character_prompts_uses_prompt_text_but_keeps_names() -> None:
     assert prompts[0].profession == "Mage"
     assert prompts[0].trait == "Rune-covered haunted mystic"
     assert prompts[0].prompt == (
-        "Portrait. Character kin: A short anthropomorphic humanoid duck, with beak, arms and duck legs. "
+        "Portrait. Character: A short anthropomorphic humanoid duck, with beak, arms and duck legs. "
         "Gender: female. Profession: a robed spellcaster with arcane focus. "
         "Defining trait: rune-covered and haunted by ancient magic."
     )

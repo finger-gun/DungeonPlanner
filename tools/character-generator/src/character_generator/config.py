@@ -26,6 +26,7 @@ class RuntimeConfig:
     height: int = 1024
     guidance_scale: float = 0.0
     num_inference_steps: int = 4
+    preview_kitten: bool = False
     seed: int | None = None
     device: str = "auto"
     portrait_padding: float = 0.75

@@ -1,14 +1,15 @@
 base_prompt: |
-  Fantasy tabletop character artwork of a single full-body fantasy character.
-  Art style:  thick linework, gritty realism, concept art, tabletop RPG book illustration, exaggerated features,
-  Expression: {stern and focused|calm and watchful|wild-eyed and intense|confident and proud|melancholic and distant|suspicious and guarded|cheerful and bold|grim and battle-worn|mysterious and unreadable|arrogant and theatrical|wise and tired|nervous but determined|cold and calculating|warm and heroic|haunted and sorrowful}.
-  Extra details: {old scars|mud-stained boots|travel-worn cloak|small trophies|carved charms|patched fabric|metal buckles|leather straps|handmade jewelry|weathered weapons|ancient symbols|ink stains|burn marks|ritual tattoos|braided hair or fur|feathers or beads|small animal bones|coin pouches|maps and scrolls|glowing magical details|family heirloom|profession symbols|battle damage|carefully maintained gear}.
+  Fantasy tabletop character of a single full-body fantasy character.
+  Style: pen and ink with muted earthy watercolor wash, bold black outlines, gritty dark fantasy aesthetic, crosshatching shading.
+  Expression: {furrowed brows and tightly pressed lips|relaxed face with neutral mouth and steady gaze|eyes wide open with flared nostrils and bared teeth|chin tilted slightly up with a smirk|downcast eyes with an unfocused gaze and slight frown|squinting eyes with head tilted down and tense jaw|wide smile showing teeth with raised eyebrows|gritted teeth and intensely furrowed brows|completely blank face with unblinking stare|one eyebrow raised with an asymmetrical smirk|heavy eyelids and relaxed jaw with a slight smile|biting lower lip with wide eyes and wrinkled forehead|narrowed eyes and perfectly straight mouth|gentle open smile with relaxed forehead|watery eyes looking down with downturned mouth corners}.
+  Pose: {standing with legs wide apart and arms crossed|crouching low with one hand touching the ground|leaping forward with weapon raised|kneeling on one knee with head bowed|standing straight with hands resting on hips|leaning back with one foot raised|walking forward with weapons drawn|sitting cross-legged|lunging sideways with an outstretched arm|standing sideways looking over the shoulder|holding weapon with both hands ready to strike|standing tall with arms raised above head|lying prone aiming forward|weight shifted to one leg with hand on weapon hilt|mid-run with arms pumping}.
+  Extra details: {jagged pale scars on face and arms|thick brown mud splattered on boots|frayed and tattered edges on a long cloak|a necklace of jagged animal teeth|small wooden carvings tied to the belt|mismatched square fabric patches sewn onto clothing|tarnished brass buckles securing straps|thick crisscrossing leather belts over the chest|copper wire wrapped around rough stones|chipped blade with a scuffed hilt|glowing geometric runes painted on the skin|dark black ink smudges on fingertips|charred and blackened edges on clothing|intricate black lines tattooed across the forehead|long tight braids tied with leather cord|brightly colored bird feathers woven into hair|white bird skulls hanging from a shoulder strap|a bulging leather pouch hanging from the waist belt|tightly rolled parchment tubes sticking out of a satchel|softly glowing blue light emitting from an amulet|an ornate silver ring with a large red gemstone|a heavy steel hammer hanging from the belt|deep gouges and dents in the armor plates|highly polished metal and freshly oiled leather}.
   Centered character, clearly readable, full body, visible from head to toe, strong silhouette, clean crisp edges, polished fantasy concept art, tabletop RPG book illustration style, detailed materials, even lighting, clear white background, no scenery, no environment, no floor, no shadows on ground.
 width: 1024
 height: 1024
 kins:
   - name: Human
-    prompt: a human adventurer
+    prompt: a human
   - name: Halfling
     prompt: a small halfling adventurer with human features
   - name: Dwarf
@@ -16,15 +17,15 @@ kins:
   - name: Elf
     prompt: a graceful elf adventurer with refined features and pointed ears
   - name: Mallard
-    prompt: a short anthropomorphic humanoid duck, with beak, arms and duck legs
+    prompt: a realistic human with duck beak and {white|brown|black|green} feathers, big butt and thin limbs and human fingers. Full clothing.
   - name: Wolfkin
     prompt: an anthropomorphic wolf person with fur, muzzle, and human-like body
   - name: Orc
     prompt: a muscular orc with tusks and rugged features and greenish skin
   - name: Ogre
-    prompt: a fat nordic troll style humanoid with heavy limbs and brutish features, pale skin and warty growths
+    prompt: a obese female nordic troll with {pale|gray|greenish} skin and warty growths, wearing tattered {tunic|cloak|leather cap}
   - name: Goblin
-    prompt: a small goblin with sharp features and thin wiry limbs and green skin
+    prompt: a small goblin with sharp features and thin wiry limbs and {green|lime|dark green|olive} skin
   - name: Hobgoblin
     prompt: a tough hobgoblin creature, mix between elf and goblin with pale skin and dark eyes
   - name: Frog People
@@ -39,24 +40,24 @@ kins:
     prompt: a humanoid with goat-like horns, furred legs, hooves and satyr features
 genders:
   - name: Female
-    prompt: female
+    prompt: a female with feminine features, body shape and clothing
   - name: Male
     prompt: male
 professions:
   - name: Artisan
     prompt: an artisan crafter
   - name: Bard
-    prompt: a bard with musical instruments, performance flair and traveler gear
+    prompt: a bard, playing on a {flute|sitar|lute|musical horn}, with performance attire and accessories
   - name: Fighter
     prompt: a seasoned fighter with practical armor and battle-ready weapons
   - name: Hunter
-    prompt: a hunter with wilderness gear, ranged weapons and tracking tools
+    prompt: a hunter with wilderness gear, ranged weapons
   - name: Knight
     prompt: a knight with noble armor, heraldic details and disciplined posture
   - name: Mage
-    prompt: a mage with arcane implements, spell components and mystical attire
+    prompt: a mage with arcane implements, and mystical cloak
   - name: Mariner
-    prompt: a mariner with nautical clothing, rope, hooks and sea-worn gear
+    prompt: a mariner, {sailor|navigator|sea captain|pirate}, with nautical clothing, rope, hooks and sea-worn gear
   - name: Merchant
     prompt: a merchant with travel packs, trade goods and practical valuables
   - name: Scholar
