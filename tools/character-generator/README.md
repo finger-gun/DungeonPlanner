@@ -73,6 +73,7 @@ base_prompt: |
   Centered character, clearly readable, full body, visible from head to toe, strong silhouette, clean crisp edges, polished fantasy concept art, tabletop RPG book illustration style, detailed materials, even lighting, clear green screen background, no scenery, no environment, no floor, no shadows.
 width: 1024
 height: 1024
+num_inference_steps: 4
 kins:
   - name: Human
     prompt: a human adventurer
@@ -143,7 +144,7 @@ traits:
     prompt: rune-covered, haunted by magic and touched by ancient mysteries
 ```
 
-The YAML file can hold `base_prompt`, `guidance_scale`, `width`, `height`, `kins`, `genders`, `professions`, and `traits`. Each list entry can now be either a plain string or an object with `name` and `prompt`. `name` is used for filenames, status text, and matrix labels; `prompt` is the text sent into image generation. The default Z-Image-Turbo profile stays at `guidance_scale: 0.0` and `1024x1024`. CLI flags still work and are appended on top of the YAML lists, while `--base-prompt` overrides the YAML prompt. If you do not supply genders, the generator defaults to `Female` and `Male`.
+The YAML file can hold `base_prompt`, `guidance_scale`, `num_inference_steps`, `width`, `height`, `kins`, `genders`, `professions`, and `traits`. Each list entry can now be either a plain string or an object with `name` and `prompt`. `name` is used for filenames, status text, and matrix labels; `prompt` is the text sent into image generation. The default Z-Image-Turbo profile stays at `guidance_scale: 0.0`, `num_inference_steps: 4`, and `1024x1024`. CLI flags still work and are appended on top of the YAML lists, while `--base-prompt` overrides the YAML prompt. If you do not supply genders, the generator defaults to `Female` and `Male`.
 
 Pass `--preview-kitten` to preview each saved main image in terminals that support `kitten icat`.
 

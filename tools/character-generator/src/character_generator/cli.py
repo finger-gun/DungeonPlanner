@@ -137,6 +137,10 @@ def build_runtime_config(args: argparse.Namespace) -> RuntimeConfig:
     configured_guidance_scale = config_data.get("guidance_scale")
     if guidance_scale_value == DEFAULT_RUNTIME_CONFIG.guidance_scale and isinstance(configured_guidance_scale, (int, float)):
         guidance_scale_value = float(configured_guidance_scale)
+    num_inference_steps_value = args.num_inference_steps
+    configured_num_inference_steps = config_data.get("num_inference_steps")
+    if num_inference_steps_value == DEFAULT_RUNTIME_CONFIG.num_inference_steps and isinstance(configured_num_inference_steps, int):
+        num_inference_steps_value = configured_num_inference_steps
     return RuntimeConfig(
         base_prompt=_resolve_base_prompt(base_prompt_value),
         output_dir=args.output_dir,
@@ -152,7 +156,7 @@ def build_runtime_config(args: argparse.Namespace) -> RuntimeConfig:
         width=width_value,
         height=height_value,
         guidance_scale=guidance_scale_value,
-        num_inference_steps=args.num_inference_steps,
+        num_inference_steps=num_inference_steps_value,
         preview_kitten=args.preview_kitten,
         seed=args.seed,
         device=args.device,

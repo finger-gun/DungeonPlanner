@@ -7,6 +7,7 @@ base_prompt: |
   Centered character, clearly readable, full body, visible from head to toe, strong silhouette, clean crisp edges, polished fantasy concept art, tabletop RPG book illustration style, detailed materials, even lighting, clear white background, no scenery, no environment, no floor, no shadows on ground.
 width: 1024
 height: 1024
+num_inference_steps: 4
 kins:
   - name: Human
     prompt: a human

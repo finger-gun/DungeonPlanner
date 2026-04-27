@@ -184,6 +184,18 @@ def test_build_runtime_config_reads_guidance_scale_from_yaml(tmp_path: Path) -> 
     assert runtime_config.guidance_scale == 3.0
 
 
+def test_build_runtime_config_reads_num_inference_steps_from_yaml(tmp_path: Path) -> None:
+    config_path = tmp_path / "characters.yaml"
+    config_path.write_text("num_inference_steps: 8\n", encoding="utf-8")
+
+    parser = build_parser()
+    args = parser.parse_args(["--config-file", str(config_path)])
+
+    runtime_config = build_runtime_config(args)
+
+    assert runtime_config.num_inference_steps == 8
+
+
 def test_build_runtime_config_reads_dimensions_from_yaml(tmp_path: Path) -> None:
     config_path = tmp_path / "characters.yaml"
     config_path.write_text("width: 512\nheight: 512\n", encoding="utf-8")
