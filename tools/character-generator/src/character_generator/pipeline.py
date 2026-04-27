@@ -8,7 +8,13 @@ import time
 from typing import Callable, Protocol
 
 from .config import RuntimeConfig
-from .image_ops import crop_portrait, has_visible_alpha_content
+from .image_ops import (
+    create_alpha_mask_image,
+    create_thumbnail_image,
+    crop_portrait,
+    crop_to_visible_bounds,
+    has_visible_alpha_content,
+)
 from .naming import allocate_output_pair
 from .types import CharacterPrompt, FaceBox, GeneratedRecord, PromptItem
 
@@ -240,7 +246,19 @@ class CharacterPortraitPipeline:
         main_image.save(outputs.main_path)
         portrait = crop_portrait(main_image, face_box, self._config.portrait_padding)
         portrait.save(outputs.portrait_path)
-        return GeneratedRecord(combination=combination, face_box=face_box, outputs=outputs)
+        processed = crop_to_visible_bounds(main_image)
+        processed.save(outputs.processed_path)
+        alpha_mask = create_alpha_mask_image(processed)
+        alpha_mask.save(outputs.alpha_mask_path)
+        thumbnail = create_thumbnail_image(processed)
+        thumbnail.save(outputs.thumbnail_path)
+        return GeneratedRecord(
+            combination=combination,
+            face_box=face_box,
+            outputs=outputs,
+            processed_width=processed.width,
+            processed_height=processed.height,
+        )
 
     def _report_status(
         self,

@@ -52,6 +52,9 @@ class OutputPair:
     serial: int
     main_path: Path
     portrait_path: Path
+    processed_path: Path
+    alpha_mask_path: Path
+    thumbnail_path: Path
 
 
 @dataclass(frozen=True, slots=True)
@@ -59,3 +62,5 @@ class GeneratedRecord:
     combination: CharacterPrompt
     face_box: FaceBox
     outputs: OutputPair
+    processed_width: int
+    processed_height: int

@@ -27,13 +27,39 @@ If face detection misses anthropomorphic characters, the generator now retries w
 
 The default image generator now uses the direct quantized `Disty0/Z-Image-Turbo-SDNQ-uint4-svd-r32` Diffusers repo, with `PYTORCH_MPS_FAST_MATH=1`, beta-sigma scheduling, attention slicing, VAE slicing, and VAE tiling enabled when available.
 
+## Quick start from the repo root
+
+The repository includes an automated entrypoint that creates `tools/character-generator/.venv`,
+installs or refreshes runtime dependencies when `pyproject.toml` changes, and then runs the CLI.
+
+```bash
+pnpm run character-generator -- --config-file ./examples/character-config.yaml --output-dir ./output
+```
+
+Alias:
+
+```bash
+pnpm run generate:characters -- --config-file ./examples/character-config.yaml --output-dir ./output
+```
+
+To generate a drop-in runtime pack for the editor, point `--output-dir` at a pack folder inside
+`editor/public/generated-character-packs/` and include a `pack:` block in the YAML config:
+
+```bash
+pnpm run character-generator -- \
+  --config-file ./examples/zombie-character-config.yaml \
+  --output-dir ./editor/public/generated-character-packs/zombie-monsters
+```
+
 ## Install
+
+If you want to manage the Python environment manually instead of using the pnpm wrapper:
 
 ```bash
 cd tools/character-generator
 python3 -m venv .venv
 source .venv/bin/activate
-pip install -e ".[test]"
+pip install -e .
 ```
 
 On **Windows with NVIDIA**, install a CUDA-enabled PyTorch build first so auto-device detection can use the GPU:
@@ -44,7 +70,7 @@ py -3.11 -m venv .venv
 .venv\Scripts\activate
 python -m pip install --upgrade pip
 pip install torch==2.11.0 torchvision==0.26.0 --index-url https://download.pytorch.org/whl/cu128
-pip install -e ".[test]"
+pip install -e .
 ```
 
 If startup says `Using device: cpu` and also reports `torch.version.cuda=None`, that means the environment has a **CPU-only PyTorch build** installed, so the generator cannot use your NVIDIA GPU until PyTorch is reinstalled with CUDA support.
@@ -52,6 +78,12 @@ If startup says `Using device: cpu` and also reports `torch.version.cuda=None`, 
 On **Windows + NVIDIA**, the generator keeps **image generation** on CUDA but runs **BRIA RMBG background removal on CPU**. This avoids a Windows/CUDA failure mode where RMBG can return empty masks and produce fully transparent output images.
 
 ## Run
+
+Using the automated pnpm entrypoint from the repository root:
+
+```bash
+pnpm run character-generator -- --config-file ./examples/character-config.yaml --output-dir ./output
+```
 
 Using a single YAML config file:
 
@@ -72,6 +104,16 @@ base_prompt: |
   Centered character, clearly readable, full body, visible from head to toe, strong silhouette, clean crisp edges, polished fantasy concept art, tabletop RPG book illustration style, detailed materials, even lighting, clear green screen background, no scenery, no environment, no floor, no shadows.
 width: 1024
 height: 1024
+pack:
+  id: zombie-monsters
+  name: Zombie Monsters
+  description: Five shambling undead NPCs generated as a drop-in content pack test.
+  scope: workspace
+  tags:
+    - undead
+    - zombies
+  kind: npc
+  size: XL
 kins:
   - name: Human
     prompt: a human adventurer
@@ -142,7 +184,18 @@ traits:
     prompt: rune-covered, haunted by magic and touched by ancient mysteries
 ```
 
-The YAML file can hold `base_prompt`, `guidance_scale`, `width`, `height`, `kins`, `genders`, `professions`, and `traits`. Each list entry can now be either a plain string or an object with `name` and `prompt`. `name` is used for filenames, status text, and matrix labels; `prompt` is the text sent into image generation. The default Z-Image-Turbo profile stays at `guidance_scale: 0.0` and `1024x1024`. CLI flags still work and are appended on top of the YAML lists, while `--base-prompt` overrides the YAML prompt. If you do not supply genders, the generator defaults to `Female` and `Male`.
+The YAML file can hold `base_prompt`, `guidance_scale`, `width`, `height`, `output_dir`, `max_combinations`, `pack`, `kins`, `genders`, `professions`, and `traits`. Each list entry can now be either a plain string or an object with `name` and `prompt`. `name` is used for filenames, status text, and matrix labels; `prompt` is the text sent into image generation. The default Z-Image-Turbo profile stays at `guidance_scale: 0.0` and `1024x1024`. CLI flags still work and are appended on top of the YAML lists, while `--base-prompt` overrides the YAML prompt. If you do not supply genders, the generator defaults to `Female` and `Male`.
+
+When `pack:` is present, the generator also writes a `manifest.json` file and updates a sibling
+`index.json` so the editor can discover the pack at runtime. Supported pack fields are:
+
+- `id`
+- `name`
+- `description`
+- `scope` (`global` or `workspace`)
+- `tags`
+- `kind` (`player` or `npc`)
+- `size` (`S`, `M`, `XL`, or `XXL`)
 
 Pass `--random` to process the combination matrix in shuffled order without repeats. If you also pass
 `--seed`, the randomized order is reproducible.
@@ -195,13 +248,26 @@ For each combination, the generator writes:
 
 - `{output-dir}/{kin-slug}/{profession-slug}/{kin-slug}-{gender-slug}-{profession-slug}-{trait-index}-main-{serial}.png`
 - `{output-dir}/{kin-slug}/{profession-slug}/{kin-slug}-{gender-slug}-{profession-slug}-{trait-index}-portrait-{serial}.png`
+- `{output-dir}/{kin-slug}/{profession-slug}/{kin-slug}-{gender-slug}-{profession-slug}-{trait-index}-processed-{serial}.png`
+- `{output-dir}/{kin-slug}/{profession-slug}/{kin-slug}-{gender-slug}-{profession-slug}-{trait-index}-alpha-mask-{serial}.png`
+- `{output-dir}/{kin-slug}/{profession-slug}/{kin-slug}-{gender-slug}-{profession-slug}-{trait-index}-thumbnail-{serial}.png`
 
 Example:
 
 - `human/mage/human-female-mage-01-main-0001.png`
 - `human/mage/human-female-mage-01-portrait-0001.png`
+- `human/mage/human-female-mage-01-processed-0001.png`
+- `human/mage/human-female-mage-01-alpha-mask-0001.png`
+- `human/mage/human-female-mage-01-thumbnail-0001.png`
 
 `trait-index` is derived from the position of the trait in the input list, and `serial` increments to avoid overwriting earlier runs.
+
+When `pack:` is configured, the output root also gets:
+
+- `manifest.json`
+- `../index.json`
+
+That makes the generated pack folder directly usable under `editor/public/generated-character-packs/`.
 
 ## Notes
 

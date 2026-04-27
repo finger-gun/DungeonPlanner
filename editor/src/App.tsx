@@ -18,6 +18,7 @@ import { getSelectedWallAssetId } from './components/editor/SelectedWallInspecto
 import { ScenePanel } from './components/editor/ScenePanel'
 import { getDebugCameraPose, projectDebugWorldPoint } from './components/canvas/debugCameraBridge'
 import { migrateLegacyGeneratedCharacters } from './generated-characters/migration'
+import { loadGeneratedCharacterPackRecords } from './generated-characters/packLoader'
 import type { GeneratedCharacterRecord } from './generated-characters/types'
 import { useDungeonStore } from './store/useDungeonStore'
 import { shouldRotateSelectionFromShortcut } from './rotationShortcuts'
@@ -460,6 +461,26 @@ function App() {
         }
       }
     })()
+
+    return () => {
+      cancelled = true
+    }
+  }, [ingestGeneratedCharacters])
+
+  useEffect(() => {
+    let cancelled = false
+
+    void loadGeneratedCharacterPackRecords()
+      .then((records) => {
+        if (cancelled || records.length === 0) {
+          return
+        }
+
+        ingestGeneratedCharacters(records)
+      })
+      .catch((error) => {
+        console.error(error)
+      })
 
     return () => {
       cancelled = true
@@ -927,6 +948,10 @@ function mapEditorActorToGeneratedCharacter(actor: EditorActorRecord): Generated
     thumbnailUrl: actor.thumbnailUrl,
     width: actor.width,
     height: actor.height,
+    packId: null,
+    packName: null,
+    packDescription: null,
+    packScope: null,
     createdAt: actor.createdAt,
     updatedAt: actor.updatedAt,
   }

@@ -1,5 +1,6 @@
 export type GeneratedCharacterKind = 'player' | 'npc'
 export type GeneratedCharacterSize = 'S' | 'M' | 'XL' | 'XXL'
+export type GeneratedCharacterPackScope = 'global' | 'workspace'
 
 export type GeneratedCharacterRecord = {
   assetId: string
@@ -15,8 +16,47 @@ export type GeneratedCharacterRecord = {
   thumbnailUrl: string | null
   width: number | null
   height: number | null
+  packId: string | null
+  packName: string | null
+  packDescription: string | null
+  packScope: GeneratedCharacterPackScope | null
   createdAt: string
   updatedAt: string
+}
+
+export type GeneratedCharacterPackEntry = {
+  id: string
+  name: string
+  prompt: string
+  kind: GeneratedCharacterKind
+  size: GeneratedCharacterSize
+  model: string | null
+  originalImagePath: string | null
+  portraitImagePath: string | null
+  processedImagePath: string
+  alphaMaskPath: string | null
+  thumbnailPath: string
+  width: number
+  height: number
+  createdAt: string
+  updatedAt: string
+}
+
+export type GeneratedCharacterPackManifest = {
+  schemaVersion: 1
+  type: 'generated-character-pack'
+  packId: string
+  name: string
+  description: string
+  scope: GeneratedCharacterPackScope
+  tags: string[]
+  generatedAt: string
+  characters: GeneratedCharacterPackEntry[]
+}
+
+export type GeneratedCharacterPackIndex = {
+  schemaVersion: 1
+  manifests: string[]
 }
 
 export type CreateGeneratedCharacterInput = Partial<
@@ -43,6 +83,10 @@ export function createDefaultGeneratedCharacterInput(): CreateGeneratedCharacter
     thumbnailUrl: null,
     width: null,
     height: null,
+    packId: null,
+    packName: null,
+    packDescription: null,
+    packScope: null,
   }
 }
 
@@ -95,6 +139,12 @@ export function normalizeGeneratedCharacterRecord(
       : null,
     width: typeof input.width === 'number' && input.width > 0 ? input.width : null,
     height: typeof input.height === 'number' && input.height > 0 ? input.height : null,
+    packId: typeof input.packId === 'string' && input.packId.trim() ? input.packId : null,
+    packName: typeof input.packName === 'string' && input.packName.trim() ? input.packName : null,
+    packDescription: typeof input.packDescription === 'string' && input.packDescription.trim()
+      ? input.packDescription
+      : null,
+    packScope: isGeneratedCharacterPackScope(input.packScope) ? input.packScope : null,
     createdAt,
     updatedAt,
   }
@@ -102,4 +152,8 @@ export function normalizeGeneratedCharacterRecord(
 
 function isGeneratedCharacterSize(value: unknown): value is GeneratedCharacterSize {
   return value === 'S' || value === 'M' || value === 'XL' || value === 'XXL'
+}
+
+function isGeneratedCharacterPackScope(value: unknown): value is GeneratedCharacterPackScope {
+  return value === 'global' || value === 'workspace'
 }

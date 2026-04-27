@@ -225,3 +225,37 @@ export const contentPacks = [coreContentPack]
 To add a second pack, create a new directory under `editor/src/content-packs/`, define its assets, export a `ContentPack` object, and add it to that array. Asset IDs must be globally unique — use your pack ID as a prefix (`mypack.asset_name`).
 
 The file format stores asset IDs directly, so pack IDs form part of the saved dungeon data. If you rename or remove a pack, existing dungeons that reference its assets will show fallback boxes where the models used to be.
+
+---
+
+## Generated character packs
+
+Generated NPC/player packs follow a separate runtime path. Instead of writing TSX assets into
+`editor/src/content-packs/*`, the character generator can emit a data-backed pack folder with:
+
+```text
+editor/public/generated-character-packs/
+  index.json
+  zombie-monsters/
+    manifest.json
+    zombie/
+      shambler/
+        zombie-undead-shambler-01-main-0001.png
+        zombie-undead-shambler-01-portrait-0001.png
+        zombie-undead-shambler-01-processed-0001.png
+        zombie-undead-shambler-01-alpha-mask-0001.png
+        zombie-undead-shambler-01-thumbnail-0001.png
+```
+
+The editor loads `editor/public/generated-character-packs/index.json` at startup, fetches each
+listed manifest, and converts the manifest entries into runtime-generated character assets through
+the existing generated-character registry.
+
+Pack manifests currently carry:
+
+- `packId`
+- `name`
+- `description`
+- `scope` (`global` means enabled-for-all by default, `workspace` means discoverable but intended for later DM/Admin enablement)
+- `tags`
+- character records with processed image, alpha mask, thumbnail, size, kind, and prompt metadata

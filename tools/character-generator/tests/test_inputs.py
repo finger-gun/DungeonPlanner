@@ -189,3 +189,35 @@ def test_build_runtime_config_reads_dimensions_from_yaml(tmp_path: Path) -> None
 
     assert runtime_config.width == 512
     assert runtime_config.height == 512
+
+
+def test_build_runtime_config_reads_max_combinations_and_pack_metadata_from_yaml(tmp_path: Path) -> None:
+    config_path = tmp_path / "characters.yaml"
+    config_path.write_text(dedent("""
+        max_combinations: 5
+        pack:
+          id: zombie-monsters
+          name: Zombie Monsters
+          description: Small undead NPC test pack.
+          scope: workspace
+          tags:
+            - undead
+            - zombies
+          kind: npc
+          size: XL
+        """).strip() + "\n", encoding="utf-8")
+
+    parser = build_parser()
+    args = parser.parse_args(["--config-file", str(config_path)])
+
+    runtime_config = build_runtime_config(args)
+
+    assert runtime_config.max_combinations == 5
+    assert runtime_config.pack is not None
+    assert runtime_config.pack.pack_id == "zombie-monsters"
+    assert runtime_config.pack.name == "Zombie Monsters"
+    assert runtime_config.pack.description == "Small undead NPC test pack."
+    assert runtime_config.pack.scope == "workspace"
+    assert runtime_config.pack.tags == ("undead", "zombies")
+    assert runtime_config.pack.kind == "npc"
+    assert runtime_config.pack.size == "XL"

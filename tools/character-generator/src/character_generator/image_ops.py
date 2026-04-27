@@ -81,6 +81,54 @@ def crop_portrait(image: Image.Image, face_box: FaceBox, padding_ratio: float) -
     return image.crop(crop_box)
 
 
+def crop_to_visible_bounds(
+    image: Image.Image,
+    *,
+    alpha_threshold: int = 18,
+    padding: int = 8,
+) -> Image.Image:
+    rgba = image.convert("RGBA")
+    alpha = rgba.getchannel("A").point(lambda value: 255 if value > alpha_threshold else 0)
+    bounds = alpha.getbbox()
+    if bounds is None:
+        return rgba
+
+    left, top, right, bottom = bounds
+    return rgba.crop((
+        max(0, left - padding),
+        max(0, top - padding),
+        min(rgba.width, right + padding),
+        min(rgba.height, bottom + padding),
+    ))
+
+
+def create_alpha_mask_image(image: Image.Image) -> Image.Image:
+    alpha = image.convert("RGBA").getchannel("A")
+    opaque = Image.new("L", alpha.size, 255)
+    return Image.merge("RGBA", (alpha, alpha, alpha, opaque))
+
+
+def create_thumbnail_image(
+    image: Image.Image,
+    *,
+    size: int = 256,
+    contain_ratio: float = 0.84,
+) -> Image.Image:
+    rgba = image.convert("RGBA")
+    thumbnail = Image.new("RGBA", (size, size), (0, 0, 0, 0))
+    scale = min((size * contain_ratio) / max(rgba.width, 1), (size * contain_ratio) / max(rgba.height, 1))
+    resized = rgba.resize(
+        (
+            max(1, int(round(rgba.width * scale))),
+            max(1, int(round(rgba.height * scale))),
+        ),
+        Image.Resampling.LANCZOS,
+    )
+    offset = ((size - resized.width) // 2, (size - resized.height) // 2)
+    thumbnail.paste(resized, offset, resized)
+    return thumbnail
+
+
 def estimate_head_box(
     image: Image.Image,
     *,

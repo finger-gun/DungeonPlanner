@@ -1,0 +1,6 @@
+{
+  "schemaVersion": 1,
+  "manifests": [
+    "zombie-monsters/manifest.json"
+  ]
+}

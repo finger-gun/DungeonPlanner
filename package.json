@@ -4,7 +4,7 @@
   "version": "0.0.0",
   "license": "PolyForm-Noncommercial-1.0.0",
   "type": "module",
-  "packageManager": "pnpm@10.33.0",
+  "packageManager": "pnpm@10.33.2",
   "scripts": {
     "app": "node scripts/run-vite-package.mjs app dev",
     "app:start": "pnpm run app:dev:full",
@@ -32,7 +32,9 @@
     "lint": "pnpm --filter dungeonplanner-editor lint && pnpm --filter dungeonplanner-app lint",
     "lint:all": "turbo run lint",
     "preview": "node scripts/run-vite-package.mjs editor preview",
+    "character-generator": "node scripts/run-character-generator.mjs",
     "generate:content-pack:core": "node scripts/generate-core-pack.mjs",
+    "generate:characters": "node scripts/run-character-generator.mjs",
     "generate:thumbnails": "node scripts/generate-thumbnails.mjs",
     "sync:ktx2-transcoders": "node scripts/sync-ktx2-transcoders.mjs",
     "optimize:models": "node scripts/optimize-models.mjs",
@@ -49,7 +51,6 @@
     "turbo": "turbo",
     "video-to-gif": "bash scripts/video-to-gif.sh"
   },
-  "dependencies": {},
   "devDependencies": {
     "@gltf-transform/cli": "^4.3.0",
     "@playwright/test": "^1.59.1",

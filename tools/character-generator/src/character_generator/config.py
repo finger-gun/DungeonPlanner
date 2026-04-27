@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Literal
 
 
 def default_cache_dir() -> Path:
@@ -34,3 +35,15 @@ class RuntimeConfig:
     fail_fast: bool = False
     max_combinations: int | None = None
     randomize_order: bool = False
+    pack: "PackConfig | None" = None
+
+
+@dataclass(slots=True)
+class PackConfig:
+    pack_id: str
+    name: str
+    description: str = ""
+    scope: Literal["global", "workspace"] = "global"
+    tags: tuple[str, ...] = ()
+    kind: Literal["player", "npc"] = "npc"
+    size: Literal["S", "M", "XL", "XXL"] = "M"
