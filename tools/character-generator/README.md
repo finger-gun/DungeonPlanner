@@ -211,7 +211,7 @@ Example:
 
 - The default Z-Image model now downloads from its native Diffusers repo instead of the earlier custom assembled Comfy split-weight path.
 - Download output now shows a selected-files total and then each file name with its individual size as it downloads.
-- Background removal uses the open `briaai/RMBG-1.4` Hugging Face weights, estimates the flat backdrop color from the image corners, and decontaminates edge pixels before writing transparency. This helps reduce green-screen style fringe on the cutout.
+- Background removal uses the open `briaai/RMBG-1.4` Hugging Face weights directly for masking. Sampled background-color decontamination is currently disabled because it was removing interior character detail too aggressively.
 - The image generator uses an MPS-native random generator on Apple Silicon when a seed is provided, instead of always falling back to a CPU generator.
 - Portrait crops are square, centered on the detected face box, expanded by configurable padding, and clamped to image bounds.
 - If a single combination fails and `--fail-fast` is not set, the generator continues and reports the failed combinations at the end.

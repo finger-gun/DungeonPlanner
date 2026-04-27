@@ -33,19 +33,9 @@ def estimate_background_color(
 def apply_alpha_mask(
     image: Image.Image,
     mask: Image.Image,
-    *,
-    background_color: tuple[int, int, int] | None = None,
 ) -> Image.Image:
     alpha = np.asarray(mask.convert("L"), dtype=np.float32) / 255.0
     rgb = np.asarray(image.convert("RGB"), dtype=np.float32) / 255.0
-
-    if background_color is not None:
-        background = np.asarray(background_color, dtype=np.float32) / 255.0
-        alpha_channel = alpha[..., None]
-        safe_alpha = np.clip(alpha_channel, 1e-3, 1.0)
-        decontaminated = (rgb - (background * (1.0 - alpha_channel))) / safe_alpha
-        edge_pixels = (alpha_channel > 0.0) & (alpha_channel < 1.0)
-        rgb = np.where(edge_pixels, np.clip(decontaminated, 0.0, 1.0), rgb)
 
     rgba = np.dstack((np.clip(rgb, 0.0, 1.0), alpha[..., None]))
     return Image.fromarray((rgba * 255.0).round().astype(np.uint8), mode="RGBA")

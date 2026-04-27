@@ -11,7 +11,7 @@ from pathlib import Path
 import numpy as np
 from PIL import Image
 
-from .image_ops import apply_alpha_mask, estimate_background_color, estimate_head_box
+from .image_ops import apply_alpha_mask, estimate_head_box
 from .runtime import torch_dtype_for_device
 from .types import FaceBox
 
@@ -219,7 +219,6 @@ class RMBGBackgroundRemover:
 
     def remove(self, image: Image.Image) -> Image.Image:
         rgb = image.convert("RGB")
-        background_color = estimate_background_color(rgb)
         input_images = self._preprocess(rgb)
         with self._torch.no_grad():
             result = self._model(input_images)
@@ -239,7 +238,7 @@ class RMBGBackgroundRemover:
         if not _mask_has_visible_foreground(mask_array):
             return rgb.convert("RGBA")
         mask = Image.fromarray(mask_array)
-        return apply_alpha_mask(rgb, mask, background_color=background_color)
+        return apply_alpha_mask(rgb, mask)
 
 
 class AnimeFaceDetector:

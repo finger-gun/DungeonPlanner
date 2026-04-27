@@ -36,15 +36,15 @@ def test_estimate_background_color_samples_corners() -> None:
     assert background == (0, 255, 0)
 
 
-def test_apply_alpha_mask_decontaminates_edge_pixels_against_background() -> None:
+def test_apply_alpha_mask_preserves_rgb_values_under_partial_alpha() -> None:
     image = Image.new("RGB", (1, 1), (128, 128, 0))
     mask = Image.new("L", (1, 1), 128)
 
-    result = apply_alpha_mask(image, mask, background_color=(0, 255, 0))
+    result = apply_alpha_mask(image, mask)
 
     red, green, blue, alpha = result.getpixel((0, 0))
-    assert red >= 250
-    assert green <= 2
+    assert red == 128
+    assert green == 128
     assert blue == 0
     assert alpha == 128
 

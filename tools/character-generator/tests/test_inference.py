@@ -100,6 +100,37 @@ def test_rmbg_background_remover_falls_back_to_opaque_image_for_nearly_empty_mas
     assert result.getpixel((0, 0)) == (10, 20, 30, 255)
 
 
+def test_rmbg_background_remover_does_not_use_background_color_sampling(monkeypatch) -> None:
+    remover = object.__new__(RMBGBackgroundRemover)
+    remover._torch = torch
+    remover._device = "cpu"
+    remover._model_input_size = (1024, 1024)
+    remover._preprocess = lambda image: torch.zeros((1, 3, 2, 2))
+    remover._functional = type(
+        "FakeFunctional",
+        (),
+        {
+            "interpolate": staticmethod(lambda tensor, size, mode, align_corners: tensor),
+        },
+    )()
+
+    class FakeModel:
+        def __call__(self, input_images):
+            return torch.ones((1, 1, 2, 2))
+
+    remover._model = FakeModel()
+    monkeypatch.setattr(
+        "character_generator.inference.estimate_background_color",
+        lambda image: (_ for _ in ()).throw(AssertionError("background color sampling should be disabled")),
+        raising=False,
+    )
+
+    result = remover.remove(Image.new("RGB", (2, 2), (10, 20, 30)))
+
+    assert result.mode == "RGBA"
+    assert result.getpixel((0, 0)) == (10, 20, 30, 255)
+
+
 def test_z_image_generator_sanitizes_invalid_tensor_values() -> None:
     generator = object.__new__(ZImageTurboImageGenerator)
     generator._torch = torch
