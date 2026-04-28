@@ -20,7 +20,7 @@ import {
   type Room,
 } from '../../store/useDungeonStore'
 import { getOpeningSegments } from '../../store/openingSegments'
-import { getBuildYOffset, isAnimationActive } from '../../store/buildAnimations'
+import { getBuildYOffset, isAnimationActive, useBuildAnimationVersion } from '../../store/buildAnimations'
 import {
   collectBoundaryWallSegments,
   getInheritedWallAssetIdForWallKey,
@@ -46,6 +46,7 @@ import { useGLTF } from '../../rendering/useGLTF'
 import { shouldActivateFloorReceiver } from './floorReceiverMode'
 import type { ContentPackModelTransform } from '../../content-packs/types'
 import { resolveProjectionReceiverAsset } from './tileAssetResolution'
+import { getCornerInteriorLightDirections, getWallSpanInteriorLightDirections } from './wallLighting'
 import {
   getBakedLightSampleForCell,
   getOrBuildBakedFloorLightField,
@@ -62,6 +63,8 @@ type RoomWallInstance = {
   segmentKeys: string[]
   position: [number, number, number]
   rotation: [number, number, number]
+  bakedLightDirection?: [number, number, number]
+  bakedLightDirectionSecondary?: [number, number, number]
   objectProps?: Record<string, unknown>
 }
 
@@ -126,6 +129,7 @@ export function DungeonRoom({
   const liveWallSurfaceProps = useDungeonStore((state) => state.wallSurfaceProps)
   const liveGlobalFloorAssetId = useDungeonStore((state) => state.selectedAssetIds.floor)
   const liveGlobalWallAssetId = useDungeonStore((state) => state.selectedAssetIds.wall)
+  const buildAnimationVersion = useBuildAnimationVersion()
   const resolvedData = data ?? {
     paintedCells: livePaintedCells,
     floorId: liveActiveFloorId,
@@ -212,13 +216,26 @@ export function DungeonRoom({
       ),
     [layers, placedObjects],
   )
+  const visiblePaintedCellRecords = useMemo(
+    () =>
+      Object.fromEntries(
+        Object.entries(visiblePaintedCells).filter(([, record]) => layers[record.layerId]?.visible !== false),
+      ) as PaintedCells,
+    [layers, visiblePaintedCells],
+  )
   const bakedFloorLightField = useMemo(
     () => getOrBuildBakedFloorLightField({
       floorId: floorId ?? 'active-floor',
-      floorCells: Object.values(visiblePaintedCells).map((record) => record.cell),
+      floorCells: Object.values(visiblePaintedCellRecords).map((record) => record.cell),
       staticLightSources: visibleLightSources,
+      occlusionInput: {
+        paintedCells: visiblePaintedCellRecords,
+        wallOpenings,
+        innerWalls,
+        wallSurfaceProps,
+      },
     }),
-    [floorId, visibleLightSources, visiblePaintedCells],
+    [floorId, innerWalls, visibleLightSources, visiblePaintedCellRecords, wallOpenings, wallSurfaceProps],
   )
   const floorRenderPlan = useMemo(
     () => buildFloorRenderPlan(visiblePaintedCells, rooms, globalFloorAssetId, floorTileAssetIds),
@@ -273,27 +290,26 @@ export function DungeonRoom({
           visibility: getWallSpanVisibilityState(visibility, wall.segmentKeys),
           bakedLightField: bakedFloorLightField,
           bakedLight: getBakedLightSampleForCell(bakedFloorLightField, floorKey),
-          bakedLightDirection: wall.segmentKeys[0]
-            ? getWallInteriorLightDirection(wall.segmentKeys[0])
-          : undefined,
+          bakedLightDirection: wall.bakedLightDirection,
+          bakedLightDirectionSecondary: wall.bakedLightDirectionSecondary,
         objectProps: wall.objectProps,
       }]
     }),
-    [bakedFloorLightField, enableBuildAnimation, visibility, walls],
+    [bakedFloorLightField, buildAnimationVersion, enableBuildAnimation, visibility, visiblePaintedCells, walls],
   )
   const staticInteractiveWalls = useMemo(
     () => walls.filter((wall) => {
       const floorKey = wall.segmentKeys[0]?.split(':').slice(0, 2).join(':') ?? wall.key
       return !(enableBuildAnimation && isAnimationActive(floorKey)) && isInteractiveWallAsset(wall.assetId)
     }),
-    [enableBuildAnimation, walls],
+    [buildAnimationVersion, enableBuildAnimation, walls],
   )
   const animatedWalls = useMemo(
     () => walls.filter((wall) => {
       const floorKey = wall.segmentKeys[0]?.split(':').slice(0, 2).join(':') ?? wall.key
       return enableBuildAnimation && isAnimationActive(floorKey)
     }),
-    [enableBuildAnimation, walls],
+    [buildAnimationVersion, enableBuildAnimation, walls],
   )
   const staticCornerEntries = useMemo<StaticTileEntry[]>(
     () => corners.flatMap((corner) => {
@@ -318,14 +334,14 @@ export function DungeonRoom({
         objectProps: corner.objectProps,
       }]
     }),
-    [bakedFloorLightField, corners, enableBuildAnimation, visibility],
+    [bakedFloorLightField, buildAnimationVersion, corners, enableBuildAnimation, visibility],
   )
   const animatedCorners = useMemo(
     () => corners.filter((corner) => {
       const cellKey = corner.key.split(':').slice(0, 2).join(':')
       return enableBuildAnimation && isAnimationActive(cellKey)
     }),
-    [corners, enableBuildAnimation],
+    [buildAnimationVersion, corners, enableBuildAnimation],
   )
 
   return (
@@ -345,6 +361,7 @@ export function DungeonRoom({
             blockedFloorCellKeys={blockedFloorCellKeys}
             visibility={visibility}
             enableBuildAnimation={enableBuildAnimation}
+            buildAnimationVersion={buildAnimationVersion}
           />
         ))}
       <FloorSurfaceRenderer
@@ -353,6 +370,7 @@ export function DungeonRoom({
         blockedFloorCellKeys={blockedFloorCellKeys}
         visibility={visibility}
         enableBuildAnimation={enableBuildAnimation}
+        buildAnimationVersion={buildAnimationVersion}
       />
       <BatchedTileEntries
         entries={staticWallEntries}
@@ -362,6 +380,7 @@ export function DungeonRoom({
         <WallInstanceRenderer
           key={wall.key}
           wall={wall}
+          bakedLightField={bakedFloorLightField}
           visibility={visibility}
           useLineOfSightPostMask={useLineOfSightPostMask}
         />
@@ -377,6 +396,7 @@ export function DungeonRoom({
           >
             <WallInstanceRenderer
               wall={wall}
+              bakedLightField={bakedFloorLightField}
               visibility={visibility}
               useLineOfSightPostMask={useLineOfSightPostMask}
             />
@@ -402,6 +422,9 @@ export function DungeonRoom({
             variantKey={corner.key}
             visibility={getWallSpanVisibilityState(visibility, corner.wallKeys)}
             useLineOfSightPostMask={useLineOfSightPostMask}
+            bakedLightField={bakedFloorLightField}
+            bakedLightDirection={getCornerInteriorLightDirections(corner.wallKeys).primary}
+            bakedLightDirectionSecondary={getCornerInteriorLightDirections(corner.wallKeys).secondary}
             objectProps={corner.objectProps}
           />
         </AnimatedTileGroup>
@@ -410,6 +433,8 @@ export function DungeonRoom({
         <OpeningRenderer
           key={opening.id}
           opening={opening}
+          bakedLightField={bakedFloorLightField}
+          paintedCells={visiblePaintedCells}
           visibility={visibility}
           enableBuildAnimation={enableBuildAnimation}
           layerVisible={layers[opening.layerId]?.visible !== false}
@@ -425,12 +450,14 @@ function CellGroupRenderer({
   blockedFloorCellKeys,
   visibility,
   enableBuildAnimation,
+  buildAnimationVersion,
 }: {
   group: FloorRenderGroup
   bakedFloorLightField: BakedFloorLightField
   blockedFloorCellKeys: Set<string>
   visibility: PlayVisibility
   enableBuildAnimation: boolean
+  buildAnimationVersion: number
 }) {
   const useLineOfSightPostMask = visibility.active
   const staticEntries = useMemo<StaticTileEntry[]>(
@@ -453,14 +480,14 @@ function CellGroupRenderer({
           fogCell: cell,
         }]
       }),
-    [bakedFloorLightField, blockedFloorCellKeys, enableBuildAnimation, group.cells, group.floorAssetId],
+    [bakedFloorLightField, blockedFloorCellKeys, buildAnimationVersion, enableBuildAnimation, group.cells, group.floorAssetId],
   )
   const animatedCells = useMemo(
     () => group.cells.filter((cell) => {
       const key = getCellKey(cell)
       return !blockedFloorCellKeys.has(key) && enableBuildAnimation && isAnimationActive(key)
     }),
-    [blockedFloorCellKeys, enableBuildAnimation, group.cells],
+    [blockedFloorCellKeys, buildAnimationVersion, enableBuildAnimation, group.cells],
   )
 
   return (
@@ -480,6 +507,7 @@ function CellGroupRenderer({
               variantKey={key}
               visibility="visible"
               useLineOfSightPostMask={useLineOfSightPostMask}
+              bakedLightField={bakedFloorLightField}
             />
           </AnimatedTileGroup>
         )
@@ -494,12 +522,14 @@ function FloorSurfaceRenderer({
   blockedFloorCellKeys,
   visibility,
   enableBuildAnimation,
+  buildAnimationVersion,
 }: {
   placements: FloorSurfacePlacement[]
   bakedFloorLightField: BakedFloorLightField
   blockedFloorCellKeys: Set<string>
   visibility: PlayVisibility
   enableBuildAnimation: boolean
+  buildAnimationVersion: number
 }) {
   const useLineOfSightPostMask = visibility.active
   const staticEntries = useMemo<StaticTileEntry[]>(
@@ -524,13 +554,13 @@ function FloorSurfaceRenderer({
         fogCell: placement.anchorCell,
       }]
     }),
-    [bakedFloorLightField, blockedFloorCellKeys, enableBuildAnimation, placements],
+    [bakedFloorLightField, blockedFloorCellKeys, buildAnimationVersion, enableBuildAnimation, placements],
   )
   const animatedPlacements = useMemo(
     () => placements.filter((placement) =>
       !placement.coveredCellKeys.some((cellKey) => blockedFloorCellKeys.has(cellKey))
       && placement.coveredCellKeys.some((cellKey) => enableBuildAnimation && isAnimationActive(cellKey))),
-    [blockedFloorCellKeys, enableBuildAnimation, placements],
+    [blockedFloorCellKeys, buildAnimationVersion, enableBuildAnimation, placements],
   )
 
   return (
@@ -552,6 +582,7 @@ function FloorSurfaceRenderer({
             variantKey={placement.anchorCellKey}
             visibility="visible"
             useLineOfSightPostMask={useLineOfSightPostMask}
+            bakedLightField={bakedFloorLightField}
           />
         </AnimatedTileGroup>
       ))}
@@ -844,6 +875,7 @@ function deriveWallInstances(
         const segmentKeys = run.slice(offset, offset + span).map((segment) => segment.key)
         const transform = getWallSpanWorldTransform(segmentKeys)
         if (transform) {
+          const interiorDirections = getWallSpanInteriorLightDirections(segmentKeys, paintedCells)
           const persistedProps = segmentKeys[0] ? wallSurfaceProps[segmentKeys[0]] : undefined
           const objectProps =
             wallSpan > 1
@@ -855,6 +887,8 @@ function deriveWallInstances(
             segmentKeys,
             position: transform.position,
             rotation: transform.rotation,
+            bakedLightDirection: interiorDirections.primary,
+            bakedLightDirectionSecondary: interiorDirections.secondary,
             ...(objectProps ? { objectProps } : {}),
           })
         }
@@ -945,10 +979,12 @@ function isInteractiveWallAsset(assetId: string | null) {
 
 function WallInstanceRenderer({
   wall,
+  bakedLightField,
   visibility,
   useLineOfSightPostMask,
 }: {
   wall: RoomWallInstance
+  bakedLightField: BakedFloorLightField
   visibility: PlayVisibility
   useLineOfSightPostMask: boolean
 }) {
@@ -1010,6 +1046,9 @@ function WallInstanceRenderer({
         variantKey={wall.key}
         visibility={wallVisibility}
         useLineOfSightPostMask={useLineOfSightPostMask}
+        bakedLightField={bakedLightField}
+        bakedLightDirection={wall.bakedLightDirection}
+        bakedLightDirectionSecondary={wall.bakedLightDirectionSecondary}
         objectProps={wall.objectProps}
         onClick={handleClick}
         onPointerDown={handlePointerDown}
@@ -1020,11 +1059,15 @@ function WallInstanceRenderer({
 
 function OpeningRenderer({
   opening,
+  bakedLightField,
+  paintedCells,
   visibility,
   enableBuildAnimation,
   layerVisible,
 }: {
   opening: OpeningRecord
+  bakedLightField: BakedFloorLightField
+  paintedCells: PaintedCells
   visibility: PlayVisibility
   enableBuildAnimation: boolean
   layerVisible: boolean
@@ -1035,6 +1078,7 @@ function OpeningRenderer({
   const useLineOfSightPostMask = visibility.active
   const openingSegmentKeys = getOpeningSegments(opening.wallKey, opening.width)
   const wallVisibility = getWallSpanVisibilityState(visibility, openingSegmentKeys)
+  const interiorDirections = getWallSpanInteriorLightDirections(openingSegmentKeys, paintedCells)
 
   const groupRef = useRef<THREE.Group>(null)
   useLayoutEffect(() => {
@@ -1084,6 +1128,9 @@ function OpeningRenderer({
           variant="wall"
           visibility={wallVisibility}
           useLineOfSightPostMask={useLineOfSightPostMask}
+          bakedLightField={bakedLightField}
+          bakedLightDirection={interiorDirections.primary}
+          bakedLightDirectionSecondary={interiorDirections.secondary}
         />
       ) : (
         <>
@@ -1160,46 +1207,5 @@ function getWallSpanWorldTransform(
       position[2] / transforms.length,
     ],
     rotation: transforms[0].rotation,
-  }
-}
-
-function getWallInteriorLightDirection(
-  wallKey: string,
-): [number, number, number] | undefined {
-  const direction = wallKey.split(':')[2]
-  switch (direction) {
-    case 'north':
-      return [0, 0, -1]
-    case 'south':
-      return [0, 0, 1]
-    case 'east':
-      return [-1, 0, 0]
-    case 'west':
-      return [1, 0, 0]
-    default:
-      return undefined
-  }
-}
-
-function getCornerInteriorLightDirections(wallKeys: string[]) {
-  const uniqueDirections: Array<[number, number, number]> = []
-
-  wallKeys.forEach((wallKey) => {
-    const direction = getWallInteriorLightDirection(wallKey)
-    if (!direction) {
-      return
-    }
-
-    if (!uniqueDirections.some((candidate) =>
-      candidate[0] === direction[0]
-      && candidate[1] === direction[1]
-      && candidate[2] === direction[2])) {
-      uniqueDirections.push(direction)
-    }
-  })
-
-  return {
-    primary: uniqueDirections[0],
-    secondary: uniqueDirections[1],
   }
 }

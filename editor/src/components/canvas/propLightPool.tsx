@@ -6,6 +6,7 @@ import { FORWARD_PLUS_LOCAL_LIGHT_SHADOWS } from '../../rendering/forwardPlusCon
 import {
   classifyDynamicLightSources,
   DEFAULT_DYNAMIC_LIGHT_POOL_SIZE,
+  getStableLightPhase,
   getPropLightWorldPosition as getResolvedPropLightWorldPosition,
   resolveObjectLightSources,
   resolveRegisteredLightSources,
@@ -384,16 +385,6 @@ function getPooledLightIntensity(
     Math.sin(t * 23.7) * 0.05
 
   return assignment.light.intensity * (1 + noise)
-}
-
-function getStableLightPhase(key: string) {
-  let hash = 2166136261
-  for (let index = 0; index < key.length; index += 1) {
-    hash ^= key.charCodeAt(index)
-    hash = Math.imul(hash, 16777619)
-  }
-
-  return (hash >>> 0) / 4294967296 * Math.PI * 2
 }
 
 export function getCameraFrustum(camera: THREE.Camera) {

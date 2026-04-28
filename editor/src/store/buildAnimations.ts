@@ -1,3 +1,4 @@
+import { useSyncExternalStore } from 'react'
 import { getCellKey, type GridCell } from '../hooks/useSnapToGrid'
 
 const BUILD_DEPTH        = 3.0   // world units tiles emerge from below ground
@@ -8,6 +9,13 @@ const CLEANUP_BUFFER_MS  = 200   // extra time after full animation before map c
 type AnimEntry = { delay: number; startedAt: number }
 
 const registry = new Map<string, AnimEntry>()
+const listeners = new Set<() => void>()
+let version = 0
+
+function notifyBuildAnimationsChanged() {
+  version += 1
+  listeners.forEach((listener) => listener())
+}
 
 /**
  * Schedule a build animation for a set of newly painted cells.
@@ -32,6 +40,7 @@ export function triggerBuild(cells: GridCell[], originCell: GridCell): void {
     const delay = (d / maxDist) * MAX_STAGGER_MS
     registry.set(getCellKey(cell), { delay, startedAt: now })
   })
+  notifyBuildAnimationsChanged()
 }
 
 /**
@@ -52,6 +61,7 @@ export function getBuildYOffset(cellKey: string, now: number, extraDelay = 0): n
   if (elapsed >= RISE_DURATION_MS) {
     if (elapsed >= RISE_DURATION_MS + MAX_STAGGER_MS + CLEANUP_BUFFER_MS) {
       registry.delete(cellKey)
+      notifyBuildAnimationsChanged()
     }
     return 0
   }
@@ -69,4 +79,26 @@ export function hasActiveBuildAnimations(): boolean {
 /** True when the given cell still has an active (not yet completed) animation entry. */
 export function isAnimationActive(cellKey: string): boolean {
   return registry.has(cellKey)
+}
+
+export function useBuildAnimationVersion() {
+  return useSyncExternalStore(subscribeToBuildAnimations, getBuildAnimationVersion)
+}
+
+export function resetBuildAnimations() {
+  if (registry.size === 0) {
+    return
+  }
+
+  registry.clear()
+  notifyBuildAnimationsChanged()
+}
+
+function subscribeToBuildAnimations(listener: () => void) {
+  listeners.add(listener)
+  return () => listeners.delete(listener)
+}
+
+function getBuildAnimationVersion() {
+  return version
 }

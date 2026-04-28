@@ -111,6 +111,7 @@ export function GeneratedStandeeCardSurfaceMesh({
     }),
     [surfaceAlphaTexture, surfaceTexture],
   )
+  surfaceMaterial.userData.bakedLightMode = 'billboard'
 
   useLayoutEffect(() => {
     const mesh = meshRef.current
