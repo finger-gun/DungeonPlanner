@@ -54,6 +54,20 @@ describe('MoveToolPanel', () => {
     expect(toggle).toHaveAttribute('aria-pressed', 'false')
   })
 
+  it('lets users toggle light flicker independently from light effects', async () => {
+    const user = userEvent.setup()
+    render(<MoveToolPanel />)
+
+    const toggle = screen.getByLabelText('Light Flicker')
+    expect(toggle).toHaveAttribute('aria-pressed', 'true')
+
+    await user.click(toggle)
+
+    expect(useDungeonStore.getState().lightFlickerEnabled).toBe(false)
+    expect(useDungeonStore.getState().lightEffectsEnabled).toBe(true)
+    expect(toggle).toHaveAttribute('aria-pressed', 'false')
+  })
+
   it('lets users change pixel size from the settings panel', async () => {
     const user = userEvent.setup()
     render(<MoveToolPanel />)

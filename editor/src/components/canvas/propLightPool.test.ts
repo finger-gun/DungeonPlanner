@@ -176,6 +176,19 @@ describe('propLightPool', () => {
     expect(pooledLight.color.getHexString()).toBe('000000')
   })
 
+  it('keeps flickering light intensity stable when flicker is disabled globally', () => {
+    const pooledLight = new THREE.PointLight('#ffffff', 1, 5, 1)
+    const assignment = {
+      key: 'torch',
+      position: [0, 0, 0] as [number, number, number],
+      light: { ...CANDLE_LIGHT, intensity: 2, flicker: true },
+    }
+
+    applyPropLightPoolAssignment(pooledLight, assignment, 1.25, false)
+
+    expect(pooledLight.intensity).toBe(2)
+  })
+
   it('distributes the renderer light budget across multiple light groups', () => {
     expect(distributeForwardPlusLightBudget([40, 128], 256)).toEqual([40, 128])
     expect(distributeForwardPlusLightBudget([200, 128], 256)).toEqual([200, 56])

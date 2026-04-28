@@ -77,17 +77,29 @@ function baseState(): SerializableState {
 describe('serializeDungeon / deserializeDungeon roundtrip', () => {
   it('preserves name and scene settings', () => {
     const state = baseState()
+    state.lightFlickerEnabled = false
     const result = deserializeDungeon(serializeDungeon(state))
     expect(result).not.toBeNull()
     expect(result!.name).toBe('Test Dungeon')
     expect(result!.floors?.['floor-1']?.snapshot.tool).toBe('select')
     expect(result!.sceneLighting.intensity).toBe(1.5)
+    expect(result!.lightFlickerEnabled).toBe(false)
     expect(result!.postProcessing.enabled).toBe(true)
     expect(result!.postProcessing.pixelateEnabled).toBe(false)
     expect(result!.postProcessing.pixelSize).toBe(6)
     expect(result!.postProcessing.focalLength).toBe(9)
     expect(result!.postProcessing.backgroundFocalLength).toBe(9)
     expect(result!.postProcessing.bokehScale).toBe(0.5)
+  })
+
+  it('defaults older dungeon files to light flicker enabled', () => {
+    const file = JSON.parse(serializeDungeon(baseState())) as Record<string, unknown>
+    file.version = 16
+    delete file.lightFlickerEnabled
+
+    const result = deserializeDungeon(JSON.stringify(file))
+
+    expect(result?.lightFlickerEnabled).toBe(true)
   })
 
   it('preserves map mode and outdoor time of day', () => {

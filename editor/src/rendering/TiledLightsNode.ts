@@ -29,6 +29,7 @@ import {
   uniform,
   vec2,
 } from 'three/tsl'
+import { getTiledLightGridDimension, getTiledLightWorkgroupCount } from './tiledLightMath'
 
 export const circleIntersectsAABB = Fn(([circleCenter, radius, minBounds, maxBounds]) => {
   const closestX = minBounds.x.max(circleCenter.x.min(maxBounds.x))
@@ -236,8 +237,8 @@ class DungeonPlannerTiledLightsNode extends LightsNode {
     const { tileSize, maxLights } = this
 
     const bufferSize = new Vector2(width, height)
-    const lineSize = Math.floor(bufferSize.width / tileSize)
-    const count = Math.floor((bufferSize.width * bufferSize.height) / tileSize)
+    const lineSize = getTiledLightGridDimension(bufferSize.width, tileSize)
+    const count = getTiledLightWorkgroupCount(bufferSize.width, bufferSize.height, tileSize)
 
     const lightsData = new Float32Array(maxLights * 4 * 2)
     const lightsTexture = new DataTexture(lightsData, lightsData.length / 8, 2, RGBAFormat, FloatType)

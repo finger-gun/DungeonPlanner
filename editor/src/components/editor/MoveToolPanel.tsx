@@ -20,6 +20,8 @@ export function MoveToolPanel() {
   const setFpsLimit = useDungeonStore((state) => state.setFpsLimit)
   const lightEffectsEnabled = useDungeonStore((state) => state.lightEffectsEnabled)
   const setLightEffectsEnabled = useDungeonStore((state) => state.setLightEffectsEnabled)
+  const lightFlickerEnabled = useDungeonStore((state) => state.lightFlickerEnabled)
+  const setLightFlickerEnabled = useDungeonStore((state) => state.setLightFlickerEnabled)
   const particleEffectsEnabled = useDungeonStore((state) => state.particleEffectsEnabled)
   const setParticleEffectsEnabled = useDungeonStore((state) => state.setParticleEffectsEnabled)
 
@@ -90,6 +92,25 @@ export function MoveToolPanel() {
               className={`relative h-4 w-7 rounded-full transition ${particleEffectsEnabled ? 'bg-amber-500' : 'bg-stone-700'}`}
             >
               <span className={`absolute top-0.5 h-3 w-3 rounded-full bg-white shadow transition-all ${particleEffectsEnabled ? 'left-[14px]' : 'left-0.5'}`} />
+            </button>
+          </div>
+        </div>
+        <div className="mt-3 rounded-2xl border border-stone-800 bg-stone-950/60 px-4 py-3">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-xs uppercase tracking-[0.22em] text-stone-400">Light Flicker</p>
+              <p className="mt-1 text-xs text-stone-500">
+                Animated intensity variation for flame lights.
+              </p>
+            </div>
+            <button
+              type="button"
+              aria-label="Light Flicker"
+              aria-pressed={lightFlickerEnabled}
+              onClick={() => setLightFlickerEnabled(!lightFlickerEnabled)}
+              className={`relative h-4 w-7 rounded-full transition ${lightFlickerEnabled ? 'bg-amber-500' : 'bg-stone-700'}`}
+            >
+              <span className={`absolute top-0.5 h-3 w-3 rounded-full bg-white shadow transition-all ${lightFlickerEnabled ? 'left-[14px]' : 'left-0.5'}`} />
             </button>
           </div>
         </div>

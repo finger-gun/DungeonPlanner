@@ -37,7 +37,7 @@ import {
   OUTDOOR_TERRAIN_STYLES,
 } from './outdoorTerrainStyles'
 
-const CURRENT_VERSION = 16
+const CURRENT_VERSION = 17
 
 // ── Serialized shapes (compact, no redundant keys) ────────────────────────────
 
@@ -115,6 +115,7 @@ export type DungeonFile = {
   outdoorTerrainType?: OutdoorTerrainType
   outdoorOverpaintRegenerate?: boolean
   sceneLighting: { intensity: number }
+  lightFlickerEnabled: boolean
   postProcessing: {
     enabled: boolean
     pixelateEnabled: boolean
@@ -141,6 +142,7 @@ export type SerializableState = {
   outdoorTerrainType?: OutdoorTerrainType
   outdoorOverpaintRegenerate?: boolean
   sceneLighting: { intensity: number }
+  lightFlickerEnabled?: boolean
   postProcessing: {
     enabled: boolean
     pixelateEnabled: boolean
@@ -284,6 +286,7 @@ export function serializeDungeon(state: SerializableState): string {
     outdoorTerrainType: state.outdoorTerrainType ?? 'mixed',
     outdoorOverpaintRegenerate: state.outdoorOverpaintRegenerate ?? false,
     sceneLighting: { intensity: state.sceneLighting.intensity },
+    lightFlickerEnabled: state.lightFlickerEnabled ?? true,
     postProcessing: { ...state.postProcessing },
     activeFloorId,
     floorOrder,
@@ -498,6 +501,14 @@ export function deserializeDungeon(json: string): SerializableState | null {
           ? { ...floor, wallSurfaceProps: {} }
           : floor,
       ),
+    }
+  }
+
+  if (version < 17) {
+    const r = raw as Record<string, unknown>
+    raw = {
+      ...r,
+      lightFlickerEnabled: typeof r.lightFlickerEnabled === 'boolean' ? r.lightFlickerEnabled : true,
     }
   }
 
@@ -800,6 +811,7 @@ function parseFile(raw: Record<string, unknown>): SerializableState | null {
       sceneLighting: {
         intensity: typeof sceneLightingRaw.intensity === 'number' ? sceneLightingRaw.intensity : 1,
       },
+      lightFlickerEnabled: raw.lightFlickerEnabled !== false,
       postProcessing: normalizePostProcessingSettings(ppRaw),
       // Active floor working state (spread into top-level for the store)
       ...activeFloorData,

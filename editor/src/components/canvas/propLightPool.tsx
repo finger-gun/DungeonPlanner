@@ -97,6 +97,7 @@ export function applyPropLightPoolAssignment(
   pooledLight: THREE.PointLight,
   assignment: PropLightPoolAssignment | undefined,
   elapsedTime: number,
+  flickerEnabled = true,
 ) {
   if (!assignment) {
     pooledLight.position.set(...DORMANT_LIGHT_POSITION)
@@ -112,7 +113,7 @@ export function applyPropLightPoolAssignment(
   pooledLight.color.set(assignment.light.color)
   pooledLight.distance = assignment.light.distance
   pooledLight.decay = assignment.light.decay ?? 2
-  pooledLight.intensity = getPooledLightIntensity(assignment, elapsedTime)
+  pooledLight.intensity = getPooledLightIntensity(assignment, elapsedTime, flickerEnabled)
   pooledLight.visible = true
 }
 
@@ -127,6 +128,7 @@ export function PropLightPool({
 }) {
   const { camera, invalidate, scene } = useThree()
   const refs = useRef<Array<THREE.PointLight | null>>([])
+  const lightFlickerEnabled = useDungeonStore((state) => state.lightFlickerEnabled)
   const objectLightPreviewOverrides = useDungeonStore((state) => state.objectLightPreviewOverrides)
   const registeredLightSources = useRegisteredLightSources(scopeKey)
   const lightSources = useMemo(
@@ -149,8 +151,8 @@ export function PropLightPool({
     [lightSources, visibility],
   )
   const hasFlicker = useMemo(
-    () => visibleAssignments.some((assignment) => assignment.light.flicker),
-    [visibleAssignments],
+    () => lightFlickerEnabled && visibleAssignments.some((assignment) => assignment.light.flicker),
+    [lightFlickerEnabled, visibleAssignments],
   )
   const renderCapacity = useMemo(() => getPropLightRenderCapacity(maxLights), [maxLights])
   const lastCameraMatrixElementsRef = useRef<Float32Array | null>(null)
@@ -173,9 +175,9 @@ export function PropLightPool({
         continue
       }
 
-      applyPropLightPoolAssignment(pooledLight, cameraAwareAssignments[index], elapsedTime)
+      applyPropLightPoolAssignment(pooledLight, cameraAwareAssignments[index], elapsedTime, lightFlickerEnabled)
     }
-  }, [camera, maxLights, renderCapacity, visibleAssignments])
+  }, [camera, lightFlickerEnabled, maxLights, renderCapacity, visibleAssignments])
 
   useLayoutEffect(() => {
     while (refs.current.length < renderCapacity) {
@@ -388,8 +390,12 @@ function getPropLightViewPriority(
   return null
 }
 
-function getPooledLightIntensity(assignment: PropLightPoolAssignment, elapsedTime: number) {
-  if (!assignment.light.flicker) {
+function getPooledLightIntensity(
+  assignment: PropLightPoolAssignment,
+  elapsedTime: number,
+  flickerEnabled: boolean,
+) {
+  if (!flickerEnabled || !assignment.light.flicker) {
     return assignment.light.intensity
   }
 
