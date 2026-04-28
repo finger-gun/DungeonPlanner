@@ -8,6 +8,9 @@ export type BatchedTilePlacement = {
   key: string
   position: readonly [number, number, number]
   rotation: readonly [number, number, number]
+  bakedLight?: readonly [number, number, number]
+  bakedLightDirection?: readonly [number, number, number]
+  bakedLightDirectionSecondary?: readonly [number, number, number]
   fogCell?: readonly [number, number]
 }
 
@@ -42,6 +45,27 @@ export function buildMergedTileGeometryMeshes({
         sourceMesh.geometry,
         getPlacementMatrix(placement).multiply(transformMatrix).multiply(sourceMesh.matrixWorld),
       )
+      if (placement.bakedLight) {
+        geometry.setAttribute(
+          'bakedLight',
+          createRepeatedVector3Attribute(geometry.getAttribute('position').count, placement.bakedLight),
+        )
+      }
+      if (placement.bakedLightDirection) {
+        geometry.setAttribute(
+          'bakedLightDirection',
+          createRepeatedVector3Attribute(geometry.getAttribute('position').count, placement.bakedLightDirection),
+        )
+      }
+      if (placement.bakedLightDirectionSecondary) {
+        geometry.setAttribute(
+          'bakedLightDirectionSecondary',
+          createRepeatedVector3Attribute(
+            geometry.getAttribute('position').count,
+            placement.bakedLightDirectionSecondary,
+          ),
+        )
+      }
       if (placement.fogCell) {
         geometry.setAttribute(
           'fogCell',
@@ -75,6 +99,17 @@ function createRepeatedVector2Attribute(count: number, value: readonly [number, 
   }
 
   return new THREE.Float32BufferAttribute(array, 2)
+}
+
+function createRepeatedVector3Attribute(count: number, value: readonly [number, number, number]) {
+  const array = new Float32Array(count * 3)
+  for (let index = 0; index < count; index += 1) {
+    array[index * 3] = value[0]
+    array[index * 3 + 1] = value[1]
+    array[index * 3 + 2] = value[2]
+  }
+
+  return new THREE.Float32BufferAttribute(array, 3)
 }
 
 function * iterateBatchableMeshes(root: THREE.Object3D) {

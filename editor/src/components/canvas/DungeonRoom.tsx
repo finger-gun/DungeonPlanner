@@ -46,6 +46,12 @@ import { useGLTF } from '../../rendering/useGLTF'
 import { shouldActivateFloorReceiver } from './floorReceiverMode'
 import type { ContentPackModelTransform } from '../../content-packs/types'
 import { resolveProjectionReceiverAsset } from './tileAssetResolution'
+import {
+  getBakedLightSampleForCell,
+  getOrBuildBakedFloorLightField,
+  resolveObjectLightSources,
+  type BakedFloorLightField,
+} from '../../rendering/dungeonLightField'
 
 const WALL_EXTRA_DELAY_MS = 70
 const ZERO_ROTATION = [0, 0, 0] as const
@@ -85,6 +91,7 @@ function isWallDirection(value: string): value is 'north' | 'south' | 'east' | '
 }
 
 export type DungeonRoomData = {
+  floorId?: string
   paintedCells: PaintedCells
   layers: Record<string, Layer>
   rooms: Record<string, Room>
@@ -108,6 +115,7 @@ export function DungeonRoom({
   enableBuildAnimation?: boolean
 }) {
   const livePaintedCells = useDungeonStore((state) => state.paintedCells)
+  const liveActiveFloorId = useDungeonStore((state) => state.activeFloorId)
   const liveLayers = useDungeonStore((state) => state.layers)
   const liveRooms = useDungeonStore((state) => state.rooms)
   const liveWallOpenings = useDungeonStore((state) => state.wallOpenings)
@@ -120,6 +128,7 @@ export function DungeonRoom({
   const liveGlobalWallAssetId = useDungeonStore((state) => state.selectedAssetIds.wall)
   const resolvedData = data ?? {
     paintedCells: livePaintedCells,
+    floorId: liveActiveFloorId,
     layers: liveLayers,
     rooms: liveRooms,
     wallOpenings: liveWallOpenings,
@@ -133,6 +142,7 @@ export function DungeonRoom({
   }
   const {
     paintedCells,
+    floorId,
     layers,
     rooms,
     wallOpenings,
@@ -195,6 +205,21 @@ export function DungeonRoom({
       ) as PaintedCells,
     [layers, paintedCells],
   )
+  const visibleLightSources = useMemo(
+    () =>
+      resolveObjectLightSources(
+        Object.values(placedObjects).filter((object) => layers[object.layerId]?.visible !== false),
+      ),
+    [layers, placedObjects],
+  )
+  const bakedFloorLightField = useMemo(
+    () => getOrBuildBakedFloorLightField({
+      floorId: floorId ?? 'active-floor',
+      floorCells: Object.values(visiblePaintedCells).map((record) => record.cell),
+      staticLightSources: visibleLightSources,
+    }),
+    [floorId, visibleLightSources, visiblePaintedCells],
+  )
   const floorRenderPlan = useMemo(
     () => buildFloorRenderPlan(visiblePaintedCells, rooms, globalFloorAssetId, floorTileAssetIds),
     [floorTileAssetIds, globalFloorAssetId, rooms, visiblePaintedCells],
@@ -238,18 +263,23 @@ export function DungeonRoom({
         return []
       }
 
-      return [{
-        key: wall.key,
-        assetId: wall.assetId,
-        position: wall.position,
-        rotation: wall.rotation,
-        variant: 'wall',
-        variantKey: wall.key,
-        visibility: getWallSpanVisibilityState(visibility, wall.segmentKeys),
+        return [{
+          key: wall.key,
+          assetId: wall.assetId,
+          position: wall.position,
+          rotation: wall.rotation,
+          variant: 'wall',
+          variantKey: wall.key,
+          visibility: getWallSpanVisibilityState(visibility, wall.segmentKeys),
+          bakedLightField: bakedFloorLightField,
+          bakedLight: getBakedLightSampleForCell(bakedFloorLightField, floorKey),
+          bakedLightDirection: wall.segmentKeys[0]
+            ? getWallInteriorLightDirection(wall.segmentKeys[0])
+          : undefined,
         objectProps: wall.objectProps,
       }]
     }),
-    [enableBuildAnimation, visibility, walls],
+    [bakedFloorLightField, enableBuildAnimation, visibility, walls],
   )
   const staticInteractiveWalls = useMemo(
     () => walls.filter((wall) => {
@@ -272,6 +302,8 @@ export function DungeonRoom({
         return []
       }
 
+      const interiorDirections = getCornerInteriorLightDirections(corner.wallKeys)
+
       return [{
         key: corner.key,
         assetId: corner.assetId,
@@ -280,10 +312,13 @@ export function DungeonRoom({
         variant: 'wall',
         variantKey: corner.key,
         visibility: getWallSpanVisibilityState(visibility, corner.wallKeys),
+        bakedLightField: bakedFloorLightField,
+        bakedLightDirection: interiorDirections.primary,
+        bakedLightDirectionSecondary: interiorDirections.secondary,
         objectProps: corner.objectProps,
       }]
     }),
-    [corners, enableBuildAnimation, visibility],
+    [bakedFloorLightField, corners, enableBuildAnimation, visibility],
   )
   const animatedCorners = useMemo(
     () => corners.filter((corner) => {
@@ -306,6 +341,7 @@ export function DungeonRoom({
           <CellGroupRenderer
             key={group.floorAssetId ?? 'none'}
             group={group}
+            bakedFloorLightField={bakedFloorLightField}
             blockedFloorCellKeys={blockedFloorCellKeys}
             visibility={visibility}
             enableBuildAnimation={enableBuildAnimation}
@@ -313,6 +349,7 @@ export function DungeonRoom({
         ))}
       <FloorSurfaceRenderer
         placements={floorSurfaceEntries}
+        bakedFloorLightField={bakedFloorLightField}
         blockedFloorCellKeys={blockedFloorCellKeys}
         visibility={visibility}
         enableBuildAnimation={enableBuildAnimation}
@@ -384,11 +421,13 @@ export function DungeonRoom({
 
 function CellGroupRenderer({
   group,
+  bakedFloorLightField,
   blockedFloorCellKeys,
   visibility,
   enableBuildAnimation,
 }: {
   group: FloorRenderGroup
+  bakedFloorLightField: BakedFloorLightField
   blockedFloorCellKeys: Set<string>
   visibility: PlayVisibility
   enableBuildAnimation: boolean
@@ -401,18 +440,20 @@ function CellGroupRenderer({
         return []
       }
 
-       return [{
-         key: `floor:${key}`,
-         assetId: group.floorAssetId,
-         position: cellToWorldPosition(cell),
-         rotation: ZERO_ROTATION,
-         variant: 'floor',
-         variantKey: key,
-         visibility: 'visible',
-         fogCell: cell,
-       }]
-     }),
-    [blockedFloorCellKeys, enableBuildAnimation, group.cells, group.floorAssetId],
+        return [{
+          key: `floor:${key}`,
+          assetId: group.floorAssetId,
+          position: cellToWorldPosition(cell),
+          rotation: ZERO_ROTATION,
+          variant: 'floor',
+          variantKey: key,
+          visibility: 'visible',
+          bakedLightField: bakedFloorLightField,
+          bakedLight: getBakedLightSampleForCell(bakedFloorLightField, key),
+          fogCell: cell,
+        }]
+      }),
+    [bakedFloorLightField, blockedFloorCellKeys, enableBuildAnimation, group.cells, group.floorAssetId],
   )
   const animatedCells = useMemo(
     () => group.cells.filter((cell) => {
@@ -449,11 +490,13 @@ function CellGroupRenderer({
 
 function FloorSurfaceRenderer({
   placements,
+  bakedFloorLightField,
   blockedFloorCellKeys,
   visibility,
   enableBuildAnimation,
 }: {
   placements: FloorSurfacePlacement[]
+  bakedFloorLightField: BakedFloorLightField
   blockedFloorCellKeys: Set<string>
   visibility: PlayVisibility
   enableBuildAnimation: boolean
@@ -476,10 +519,12 @@ function FloorSurfaceRenderer({
         variant: 'floor',
         variantKey: placement.anchorCellKey,
         visibility: 'visible',
+        bakedLightField: bakedFloorLightField,
+        bakedLight: getBakedLightSampleForCell(bakedFloorLightField, placement.anchorCellKey),
         fogCell: placement.anchorCell,
       }]
     }),
-    [blockedFloorCellKeys, enableBuildAnimation, placements],
+    [bakedFloorLightField, blockedFloorCellKeys, enableBuildAnimation, placements],
   )
   const animatedPlacements = useMemo(
     () => placements.filter((placement) =>
@@ -1115,5 +1160,46 @@ function getWallSpanWorldTransform(
       position[2] / transforms.length,
     ],
     rotation: transforms[0].rotation,
+  }
+}
+
+function getWallInteriorLightDirection(
+  wallKey: string,
+): [number, number, number] | undefined {
+  const direction = wallKey.split(':')[2]
+  switch (direction) {
+    case 'north':
+      return [0, 0, -1]
+    case 'south':
+      return [0, 0, 1]
+    case 'east':
+      return [-1, 0, 0]
+    case 'west':
+      return [1, 0, 0]
+    default:
+      return undefined
+  }
+}
+
+function getCornerInteriorLightDirections(wallKeys: string[]) {
+  const uniqueDirections: Array<[number, number, number]> = []
+
+  wallKeys.forEach((wallKey) => {
+    const direction = getWallInteriorLightDirection(wallKey)
+    if (!direction) {
+      return
+    }
+
+    if (!uniqueDirections.some((candidate) =>
+      candidate[0] === direction[0]
+      && candidate[1] === direction[1]
+      && candidate[2] === direction[2])) {
+      uniqueDirections.push(direction)
+    }
+  })
+
+  return {
+    primary: uniqueDirections[0],
+    secondary: uniqueDirections[1],
   }
 }

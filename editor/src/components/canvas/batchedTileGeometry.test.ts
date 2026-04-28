@@ -171,4 +171,62 @@ describe('buildMergedTileGeometryMeshes', () => {
 
     merged[0]!.geometry.dispose()
   })
+
+  it('stamps per-placement baked light colors into merged geometry attributes', () => {
+    const sourceGeometry = new THREE.PlaneGeometry(1, 1)
+    const sourceMaterial = new THREE.MeshStandardMaterial()
+    resources.push(sourceGeometry, sourceMaterial)
+
+    const scene = new THREE.Group()
+    scene.add(new THREE.Mesh(sourceGeometry, sourceMaterial))
+
+    const merged = buildMergedTileGeometryMeshes({
+      sourceScene: scene,
+      placements: [
+        {
+          key: 'a',
+          position: [0, 0, 0],
+          rotation: [0, 0, 0],
+          bakedLight: [0.2, 0.3, 0.4],
+          bakedLightDirection: [0, 0, 1],
+          bakedLightDirectionSecondary: [1, 0, 0],
+        },
+        {
+          key: 'b',
+          position: [2, 0, 0],
+          rotation: [0, 0, 0],
+          bakedLight: [0.6, 0.7, 0.8],
+          bakedLightDirection: [1, 0, 0],
+          bakedLightDirectionSecondary: [0, 0, -1],
+        },
+      ],
+    })
+
+    expect(merged).toHaveLength(1)
+
+    const bakedLight = merged[0]!.geometry.getAttribute('bakedLight')
+    expect(bakedLight).toBeInstanceOf(THREE.BufferAttribute)
+    expect(bakedLight.itemSize).toBe(3)
+
+    const stampedTriples = new Set<string>()
+    for (let index = 0; index < bakedLight.count; index += 1) {
+      stampedTriples.add([
+        bakedLight.getX(index).toFixed(1),
+        bakedLight.getY(index).toFixed(1),
+        bakedLight.getZ(index).toFixed(1),
+      ].join(':'))
+    }
+
+    expect(stampedTriples).toEqual(new Set(['0.2:0.3:0.4', '0.6:0.7:0.8']))
+
+    const bakedLightDirection = merged[0]!.geometry.getAttribute('bakedLightDirection')
+    expect(bakedLightDirection).toBeInstanceOf(THREE.BufferAttribute)
+    expect(bakedLightDirection.itemSize).toBe(3)
+
+    const bakedLightDirectionSecondary = merged[0]!.geometry.getAttribute('bakedLightDirectionSecondary')
+    expect(bakedLightDirectionSecondary).toBeInstanceOf(THREE.BufferAttribute)
+    expect(bakedLightDirectionSecondary.itemSize).toBe(3)
+
+    merged[0]!.geometry.dispose()
+  })
 })

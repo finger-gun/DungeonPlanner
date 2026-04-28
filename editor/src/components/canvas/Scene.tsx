@@ -11,6 +11,7 @@ import { PlayerSelectionRing } from './DungeonObject'
 import { DungeonRoom } from './DungeonRoom'
 import {
   distributeForwardPlusLightBudget,
+  MAX_DYNAMIC_PROP_LIGHTS,
   PropLightPool,
 } from './propLightPool'
 import { useDungeonStore, type DungeonObjectRecord } from '../../store/useDungeonStore'
@@ -303,13 +304,14 @@ function SceneOverviewContent() {
         const visibleObjects = Object.values(placedObjects).filter(
           (object) => layers[object.layerId]?.visible !== false,
         )
-        return [{
-          id: floorId,
-          level: floor.level,
-          data: {
-            paintedCells,
-            layers,
-            rooms,
+          return [{
+            id: floorId,
+            level: floor.level,
+            data: {
+              floorId,
+              paintedCells,
+              layers,
+              rooms,
             wallOpenings,
             innerWalls,
             placedObjects,
@@ -329,12 +331,13 @@ function SceneOverviewContent() {
       const visibleObjects = Object.values(snapshot.placedObjects).filter(
         (object) => snapshot.layers[object.layerId]?.visible !== false,
       )
-      return [{
-        id: floorId,
-        level: floor.level,
-        data: {
-          paintedCells: snapshot.paintedCells,
-            layers: snapshot.layers,
+        return [{
+          id: floorId,
+          level: floor.level,
+          data: {
+            floorId,
+            paintedCells: snapshot.paintedCells,
+              layers: snapshot.layers,
              rooms: snapshot.rooms,
              wallOpenings: snapshot.wallOpenings,
              innerWalls: snapshot.innerWalls,
@@ -371,7 +374,7 @@ function SceneOverviewContent() {
       void objectSourceRegistryVersion
       return distributeForwardPlusLightBudget(
         floorEntries.map((entry) => (lightEffectsEnabled ? getRegisteredLightSourceCount(entry.id) : 0)),
-        MAX_FORWARD_PLUS_POINT_LIGHTS,
+        Math.min(MAX_DYNAMIC_PROP_LIGHTS, MAX_FORWARD_PLUS_POINT_LIGHTS),
       )
     },
     [floorEntries, lightEffectsEnabled, objectSourceRegistryVersion],
@@ -448,7 +451,7 @@ function FloorContent({ startY = 0 }: { startY?: number }) {
       void objectSourceRegistryVersion
       return distributeForwardPlusLightBudget(
         [lightEffectsEnabled ? getRegisteredLightSourceCount(activeFloorId) : 0],
-        MAX_FORWARD_PLUS_POINT_LIGHTS,
+        Math.min(MAX_DYNAMIC_PROP_LIGHTS, MAX_FORWARD_PLUS_POINT_LIGHTS),
       )
     },
     [activeFloorId, lightEffectsEnabled, objectSourceRegistryVersion],

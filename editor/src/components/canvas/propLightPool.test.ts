@@ -10,6 +10,7 @@ import {
   getDesiredPropLightPoolSize,
   getPropLightRenderCapacity,
   getPropLightWorldPosition,
+  MAX_DYNAMIC_PROP_LIGHTS,
   precomputeLightSources,
   type PropLightSource,
 } from './propLightPool'
@@ -154,11 +155,11 @@ describe('propLightPool', () => {
     expect(getDesiredPropLightPoolSize(0)).toBe(0)
   })
 
-  it('preallocates the full pooled light capacity for any active light count', () => {
+  it('allocates one pooled light per active dynamic light slot', () => {
     expect(getPropLightRenderCapacity(0)).toBe(0)
-    expect(getPropLightRenderCapacity(1)).toBe(256)
-    expect(getPropLightRenderCapacity(32)).toBe(256)
-    expect(getPropLightRenderCapacity(33)).toBe(256)
+    expect(getPropLightRenderCapacity(1)).toBe(1)
+    expect(getPropLightRenderCapacity(32)).toBe(32)
+    expect(getPropLightRenderCapacity(MAX_DYNAMIC_PROP_LIGHTS)).toBe(MAX_DYNAMIC_PROP_LIGHTS)
   })
 
   it('parks dormant pooled lights outside the scene and marks them invisible', () => {
@@ -193,6 +194,8 @@ describe('propLightPool', () => {
     expect(distributeForwardPlusLightBudget([40, 128], 256)).toEqual([40, 128])
     expect(distributeForwardPlusLightBudget([200, 128], 256)).toEqual([200, 56])
     expect(distributeForwardPlusLightBudget([128, 128, 128], 256)).toEqual([128, 128, 0])
+    expect(distributeForwardPlusLightBudget([100], MAX_DYNAMIC_PROP_LIGHTS)).toEqual([MAX_DYNAMIC_PROP_LIGHTS])
+    expect(distributeForwardPlusLightBudget([40, 40], MAX_DYNAMIC_PROP_LIGHTS)).toEqual([32, 0])
   })
 
   it('builds a stable visible light list without camera input', () => {
@@ -236,10 +239,13 @@ function createLightSource(
   position: [number, number, number],
   light: PropLight = CANDLE_LIGHT,
 ): PropLightSource {
+  const color = new THREE.Color(light.color)
   return {
     key: id,
     object: createObject(id, position, null),
     light,
+    position,
+    linearColor: [color.r, color.g, color.b],
   }
 }
 

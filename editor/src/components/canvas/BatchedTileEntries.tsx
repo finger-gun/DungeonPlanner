@@ -7,6 +7,8 @@ import { buildMergedTileGeometryMeshes, type BatchedTilePlacement } from './batc
 import { resolveBatchedTileAsset, type ResolvedBatchedTileAsset } from './tileAssetResolution'
 import { useGLTF } from '../../rendering/useGLTF'
 import { applyFogOfWarToMaterial, useFogOfWarRuntime } from './fogOfWar'
+import { applyBakedLightToMaterial } from './bakedLightMaterial'
+import type { BakedFloorLightField } from '../../rendering/dungeonLightField'
 
 export type StaticTileEntry = BatchedTilePlacement & {
   assetId: string | null
@@ -14,6 +16,7 @@ export type StaticTileEntry = BatchedTilePlacement & {
   variantKey?: string
   objectProps?: Record<string, unknown>
   visibility: PlayVisibilityState
+  bakedLightField?: BakedFloorLightField
   fogCell?: readonly [number, number]
 }
 
@@ -185,6 +188,9 @@ function MergedTileBucket({
 
   const shouldRenderBase = usesGpuFog || shouldRenderLineOfSightGeometry(visibility, useLineOfSightPostMask)
   const overlayOpacity = visibility === 'explored' ? 0.6 : 0
+  const useBakedLight = entries.some((entry) => entry.bakedLight || entry.bakedLightField)
+  const bakedLightField = entries[0]!.bakedLightField ?? null
+  const useSecondaryDirectionAttribute = entries.some((entry) => Boolean(entry.bakedLightDirectionSecondary))
 
   return (
     <>
@@ -196,9 +202,12 @@ function MergedTileBucket({
           receiveShadow={receiveShadow}
           visibility={visibility}
           variant={entries[0]!.variant}
+          bakedLightField={bakedLightField}
+          useBakedLight={useBakedLight}
+          useSecondaryDirectionAttribute={useSecondaryDirectionAttribute}
           useGpuFog={usesGpuFog}
-        />
-      ))}
+          />
+        ))}
       {!usesGpuFog && visibility === 'explored' && meshes.map((mesh) => (
         <MergedTintMesh
           key={`overlay:${mesh.key}`}
@@ -216,6 +225,9 @@ function MergedTileMesh({
   receiveShadow,
   visibility,
   variant,
+  bakedLightField,
+  useBakedLight,
+  useSecondaryDirectionAttribute,
   useGpuFog,
 }: {
   geometry: THREE.BufferGeometry
@@ -223,6 +235,9 @@ function MergedTileMesh({
   receiveShadow: boolean
   visibility: PlayVisibilityState
   variant: 'floor' | 'wall'
+  bakedLightField: BakedFloorLightField | null
+  useBakedLight: boolean
+  useSecondaryDirectionAttribute: boolean
   useGpuFog: boolean
 }) {
   const ref = useRef<THREE.Mesh>(null)
@@ -243,6 +258,18 @@ function MergedTileMesh({
   }, [visibility, depthMaterial])
 
   useLayoutEffect(() => {
+    applyBakedLightToMaterial(
+      material,
+      useBakedLight
+        ? {
+          useLightAttribute: true,
+          useDirectionAttribute: variant === 'wall',
+          useSecondaryDirectionAttribute: variant === 'wall' && useSecondaryDirectionAttribute,
+          useTopSurfaceMask: variant === 'floor',
+          lightField: bakedLightField,
+        }
+        : null,
+    )
     applyFogOfWarToMaterial(
       material,
       useGpuFog ? fogOfWar : null,
@@ -251,7 +278,7 @@ function MergedTileMesh({
         useCellAttribute: useGpuFog && variant === 'floor',
       },
     )
-  }, [fogOfWar, material, useGpuFog, variant])
+  }, [bakedLightField, fogOfWar, material, useBakedLight, useGpuFog, useSecondaryDirectionAttribute, variant])
 
   return (
     <mesh
