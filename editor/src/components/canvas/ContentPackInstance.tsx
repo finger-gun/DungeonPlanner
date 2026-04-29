@@ -22,7 +22,13 @@ import {
   applyPropBakedLightToObject,
 } from './bakedLightMaterial'
 import type { BakedFloorLightField } from '../../rendering/dungeonLightField'
-import { buildRuntimePropBakedLightProbe } from '../../rendering/runtimePropProbe'
+import {
+  getCachedObjectLocalBounds,
+} from '../../rendering/runtimePropProbe'
+import {
+  getCachedRuntimePropBakedLightProbe,
+  releaseCachedRuntimePropLightingProbe,
+} from '../../rendering/propLightingCache'
 
 function shouldUseGpuFog(variant: ContentPackInstanceVariant, fogOfWar: ReturnType<typeof useFogOfWarRuntime>) {
   return fogOfWar !== null && variant === 'floor'
@@ -84,6 +90,7 @@ type ContentPackInstanceProps = ThreeElements['group'] & {
   variant: ContentPackInstanceVariant
   variantKey?: string
   objectProps?: Record<string, unknown>
+  propInstanceKey?: string
   bakedLightField?: BakedFloorLightField | null
   bakedLightDirection?: SurfaceBakedLightDirection
   bakedLightDirectionSecondary?: SurfaceBakedLightDirection
@@ -103,6 +110,7 @@ export function ContentPackInstance({
   variant,
   variantKey,
   objectProps,
+  propInstanceKey,
   bakedLightField = null,
   bakedLightDirection,
   bakedLightDirectionSecondary,
@@ -114,6 +122,25 @@ export function ContentPackInstance({
   const AssetComponent = asset?.Component ?? null
   const castShadow = asset?.metadata?.castShadow !== false
   const receiveShadow = asset?.metadata?.receiveShadow !== false
+  const propDescriptorKey = useMemo(
+    () => buildPropDescriptorKey({
+      assetId,
+      assetPath,
+      hasComponent: Boolean(AssetComponent),
+      objectProps,
+      variant,
+      variantKey,
+    }),
+    [AssetComponent, assetId, assetPath, objectProps, variant, variantKey],
+  )
+
+  useEffect(() => {
+    return () => {
+      if (variant === 'prop' && propInstanceKey) {
+        releaseCachedRuntimePropLightingProbe(bakedLightField?.floorId ?? null, propInstanceKey)
+      }
+    }
+  }, [bakedLightField?.floorId, propInstanceKey, variant])
 
   useEffect(() => {
     if (assetPath && !AssetComponent) {
@@ -138,6 +165,7 @@ export function ContentPackInstance({
           bakedLightDirection={bakedLightDirection}
           bakedLightDirectionSecondary={bakedLightDirectionSecondary}
           disableBakedLight={disableBakedLight}
+          propInstanceKey={propInstanceKey}
         />
       </group>
     )
@@ -161,6 +189,7 @@ export function ContentPackInstance({
             bakedLightDirection={bakedLightDirection}
             bakedLightDirectionSecondary={bakedLightDirectionSecondary}
             disableBakedLight={disableBakedLight}
+            propInstanceKey={propInstanceKey}
           />
         </group>
       }
@@ -187,6 +216,8 @@ export function ContentPackInstance({
           bakedLightDirection={bakedLightDirection}
           bakedLightDirectionSecondary={bakedLightDirectionSecondary}
           disableBakedLight={disableBakedLight}
+          propDescriptorKey={propDescriptorKey}
+          propInstanceKey={propInstanceKey}
           {...groupProps}
         />
       ) : (
@@ -206,6 +237,8 @@ export function ContentPackInstance({
           bakedLightDirection={bakedLightDirection}
           bakedLightDirectionSecondary={bakedLightDirectionSecondary}
           disableBakedLight={disableBakedLight}
+          propDescriptorKey={propDescriptorKey}
+          propInstanceKey={propInstanceKey}
           {...groupProps}
         />
       )}
@@ -225,6 +258,45 @@ function getComponentProps(
     ...(poseSelected ? { poseSelected } : {}),
     ...(playerAnimationState ? { playerAnimationState } : {}),
   }
+}
+
+function buildPropDescriptorKey({
+  assetId,
+  assetPath,
+  hasComponent,
+  objectProps,
+  variant,
+  variantKey,
+}: {
+  assetId: string | null
+  assetPath?: string
+  hasComponent: boolean
+  objectProps?: Record<string, unknown>
+  variant: ContentPackInstanceVariant
+  variantKey?: string
+}) {
+  if (variant !== 'prop') {
+    return null
+  }
+
+  if (hasComponent) {
+    return [
+      'component',
+      assetId ?? 'unknown',
+      variantKey ?? 'default',
+      JSON.stringify(objectProps ?? null),
+    ].join(':')
+  }
+
+  if (assetPath) {
+    return `gltf:${assetPath}`
+  }
+
+  return [
+    'fallback',
+    assetId ?? 'unknown',
+    variantKey ?? 'default',
+  ].join(':')
 }
 
 function getSurfaceBakedLightOptions(
@@ -267,6 +339,8 @@ function GLTFModel({
   bakedLightDirection,
   bakedLightDirectionSecondary,
   disableBakedLight = false,
+  propDescriptorKey,
+  propInstanceKey,
   ...groupProps
 }: ThreeElements['group'] & {
   assetPath: string
@@ -284,11 +358,12 @@ function GLTFModel({
   bakedLightDirection?: SurfaceBakedLightDirection
   bakedLightDirectionSecondary?: SurfaceBakedLightDirection
   disableBakedLight?: boolean
+  propDescriptorKey?: string | null
+  propInstanceKey?: string
 }) {
   const gltf = useGLTF(assetPath)
   const fogOfWar = useFogOfWarRuntime()
   const usesGpuFog = shouldUseGpuFog(variant, fogOfWar)
-  const contentRef = useRef<THREE.Group>(null)
   const fogCell = useMemo(
     () => (variant === 'floor' ? parseFogCellKey(variantKey) : null),
     [variant, variantKey],
@@ -315,6 +390,10 @@ function GLTFModel({
     })
     return clone
   }, [castShadow, gltf.scene, receiveShadow])
+  const propLocalBounds = useMemo(
+    () => (variant === 'prop' ? getCachedObjectLocalBounds(propDescriptorKey, scene) : null),
+    [propDescriptorKey, scene, variant],
+  )
 
   useLayoutEffect(() => {
     if (!shouldRenderBase || disableBakedLight) {
@@ -324,7 +403,12 @@ function GLTFModel({
     }
 
     if (variant === 'prop') {
-      const probe = buildRuntimePropBakedLightProbe(bakedLightField, contentRef.current)
+      const probe = getCachedRuntimePropBakedLightProbe({
+        lightField: bakedLightField,
+        instanceKey: propInstanceKey,
+        object: scene,
+        localBounds: propLocalBounds,
+      })
       applyPropBakedLightToObject(scene, {
         lightField: bakedLightField,
         probe,
@@ -348,6 +432,8 @@ function GLTFModel({
     groupProps.position,
     groupProps.rotation,
     groupProps.scale,
+    propLocalBounds,
+    propInstanceKey,
   ])
 
   useLayoutEffect(() => {
@@ -363,12 +449,12 @@ function GLTFModel({
     variant,
   ])
 
-    return (
-      <group {...groupProps}>
-        {shouldRenderBase && <group ref={contentRef}><primitive object={scene} /></group>}
-        {tint && shouldRenderBase && canShowOverlay && (
-          <TintOverlay
-            source={scene}
+  return (
+    <group {...groupProps}>
+      {shouldRenderBase && <primitive object={scene} />}
+      {tint && shouldRenderBase && canShowOverlay && (
+        <TintOverlay
+          source={scene}
           color={tint}
           opacity={tintOpacity}
           refreshKey={variantKey ?? assetPath}
@@ -401,6 +487,8 @@ function ComponentAsset({
   bakedLightDirection,
   bakedLightDirectionSecondary,
   disableBakedLight = false,
+  propDescriptorKey,
+  propInstanceKey,
   ...groupProps
 }: ThreeElements['group'] & {
   Component: ComponentType<ContentPackComponentProps>
@@ -418,9 +506,12 @@ function ComponentAsset({
   bakedLightDirection?: SurfaceBakedLightDirection
   bakedLightDirectionSecondary?: SurfaceBakedLightDirection
   disableBakedLight?: boolean
+  propDescriptorKey?: string | null
+  propInstanceKey?: string
 }) {
   const contentRef = useRef<THREE.Group>(null)
   const [overlaySource, setOverlaySource] = useState<THREE.Group | null>(null)
+  const [propLocalBounds, setPropLocalBounds] = useState<THREE.Box3 | null>(null)
   const fogOfWar = useFogOfWarRuntime()
   const usesGpuFog = shouldUseGpuFog(variant, fogOfWar)
   const fogCell = useMemo(
@@ -457,6 +548,15 @@ function ComponentAsset({
   }, [castShadow, receiveShadow])
 
   useLayoutEffect(() => {
+    if (variant !== 'prop' || !contentRef.current) {
+      setPropLocalBounds(null)
+      return
+    }
+
+    setPropLocalBounds(getCachedObjectLocalBounds(propDescriptorKey, contentRef.current))
+  }, [Component, componentProps.variantKey, propDescriptorKey, variant])
+
+  useLayoutEffect(() => {
     if (!contentRef.current) {
       return
     }
@@ -468,7 +568,12 @@ function ComponentAsset({
     }
 
     if (variant === 'prop') {
-      const probe = buildRuntimePropBakedLightProbe(bakedLightField, contentRef.current)
+      const probe = getCachedRuntimePropBakedLightProbe({
+        lightField: bakedLightField,
+        instanceKey: propInstanceKey,
+        object: contentRef.current,
+        localBounds: propLocalBounds,
+      })
       applyPropBakedLightToObject(contentRef.current, {
         lightField: bakedLightField,
         probe,
@@ -488,6 +593,8 @@ function ComponentAsset({
     groupProps.position,
     groupProps.rotation,
     groupProps.scale,
+    propLocalBounds,
+    propInstanceKey,
     shouldRenderBase,
     surfaceBakedLightOptions,
     variant,
@@ -562,6 +669,7 @@ function FallbackMesh({
   bakedLightDirection,
   bakedLightDirectionSecondary,
   disableBakedLight = false,
+  propInstanceKey,
 }: {
   selected: boolean
   tint?: string
@@ -577,6 +685,7 @@ function FallbackMesh({
   bakedLightDirection?: SurfaceBakedLightDirection
   bakedLightDirectionSecondary?: SurfaceBakedLightDirection
   disableBakedLight?: boolean
+  propInstanceKey?: string
 }) {
   const baseColor =
     variant === 'floor' ? '#34d399' : variant === 'wall' ? '#fbbf24' : '#7dd3fc'
@@ -589,6 +698,9 @@ function FallbackMesh({
       : variant === 'wall'
         ? ([GRID_SIZE * 0.96, 3, GRID_SIZE * 0.12] as const)
         : ([0.5, 0.9, 0.5] as const)
+  const geometryWidth = geometry[0]
+  const geometryHeight = geometry[1]
+  const geometryDepth = geometry[2]
   const yOffset = variant === 'floor' ? 0.03 : variant === 'wall' ? 1.5 : 0
   const meshRef = useRef<THREE.Mesh>(null)
   const fogOfWar = useFogOfWarRuntime()
@@ -625,6 +737,19 @@ function FallbackMesh({
     }),
     [color, emissive, opacity, selected],
   )
+  const propLocalBounds = useMemo(
+    () => {
+      if (variant !== 'prop') {
+        return null
+      }
+
+      return new THREE.Box3(
+        new THREE.Vector3(-geometryWidth * 0.5, -geometryHeight * 0.5, -geometryDepth * 0.5),
+        new THREE.Vector3(geometryWidth * 0.5, geometryHeight * 0.5, geometryDepth * 0.5),
+      )
+    },
+    [geometryDepth, geometryHeight, geometryWidth, variant],
+  )
 
   useLayoutEffect(() => {
     if (variant !== 'prop') {
@@ -639,7 +764,12 @@ function FallbackMesh({
       return
     }
 
-    const probe = buildRuntimePropBakedLightProbe(bakedLightField, meshRef.current)
+    const probe = getCachedRuntimePropBakedLightProbe({
+      lightField: bakedLightField,
+      instanceKey: propInstanceKey,
+      object: meshRef.current,
+      localBounds: propLocalBounds,
+    })
     applyPropBakedLightToMaterial(material, {
       lightField: bakedLightField,
       probe,
@@ -651,6 +781,8 @@ function FallbackMesh({
     bakedLightField,
     disableBakedLight,
     material,
+    propLocalBounds,
+    propInstanceKey,
     surfaceBakedLightOptions,
     variant,
     variantKey,

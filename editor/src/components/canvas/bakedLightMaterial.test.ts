@@ -9,6 +9,7 @@ type TestNodeMaterial = THREE.Material & {
   isNodeMaterial?: boolean
   colorNode?: unknown
   emissiveNode?: unknown
+  needsUpdate?: boolean
   userData: Record<string, unknown>
 }
 
@@ -115,7 +116,7 @@ describe('bakedLightMaterial', () => {
     expect(material.emissiveNode).toBe(material.userData.propBakedLightBaseEmissiveNode ?? null)
   })
 
-  it('includes runtime prop probe data in the prop baked lighting signature', () => {
+  it('stores runtime prop probe data in uniforms without recompiling the material on probe-only updates', () => {
     const material = createStandardCompatibleMaterial({
       color: '#ffffff',
       roughness: 0.4,
@@ -139,9 +140,38 @@ describe('bakedLightMaterial', () => {
     })
 
     expect(material.userData.propBakedLightSignature).toContain(lightField.lightFieldTexture!.uuid)
-    expect(material.userData.propBakedLightSignature).toContain('0.16,0.08,0.04')
-    expect(material.userData.propBakedLightSignature).toContain('0.580')
+    expect(material.userData.propBakedLightSignature).toContain('probe-uniforms-v1')
+    expect(material.userData.propBakedLightSignature).not.toContain('0.16,0.08,0.04')
+    const uniformState = material.userData.propBakedLightUniformState as {
+      baseLight: { value: THREE.Vector3 }
+      topLight: { value: THREE.Vector3 }
+      directionalStrength: { value: number }
+      probeEnabled: { value: number }
+    }
+    expect(uniformState.baseLight.value.toArray()).toEqual([0.16, 0.08, 0.04])
+    expect(uniformState.topLight.value.toArray()).toEqual([0.22, 0.12, 0.06])
+    expect(uniformState.directionalStrength.value).toBeCloseTo(0.58)
+    expect(uniformState.probeEnabled.value).toBe(1)
     expect(material.colorNode).toBeDefined()
     expect(material.emissiveNode).toBeDefined()
+
+    const previousSignature = material.userData.propBakedLightSignature
+    const previousColorNode = material.colorNode
+    const previousEmissiveNode = material.emissiveNode
+
+    applyPropBakedLightToMaterial(material, {
+      lightField,
+      probe: {
+        ...probe,
+        baseLight: [0.09, 0.04, 0.02],
+        directionalStrength: 0.22,
+      },
+    })
+
+    expect(material.userData.propBakedLightSignature).toBe(previousSignature)
+    expect(material.colorNode).toBe(previousColorNode)
+    expect(material.emissiveNode).toBe(previousEmissiveNode)
+    expect(uniformState.baseLight.value.toArray()).toEqual([0.09, 0.04, 0.02])
+    expect(uniformState.directionalStrength.value).toBeCloseTo(0.22)
   })
 })

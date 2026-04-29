@@ -144,6 +144,19 @@ describe('App sidebar drawer', () => {
     expect(debugPanel).toHaveStyle({ right: '16px' })
   })
 
+  it('toggles prop probe visualization from the debug panel', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+
+    fireEvent.keyDown(window, { key: 'F12', ctrlKey: true, shiftKey: true })
+
+    expect(useDungeonStore.getState().showPropProbeDebug).toBe(false)
+
+    await user.click(screen.getByRole('button', { name: /visualize prop probes/i }))
+
+    expect(useDungeonStore.getState().showPropProbeDebug).toBe(true)
+  })
+
   it('keeps the sidebar off-canvas in play mode without rendering the drawer tab', () => {
     useDungeonStore.getState().setTool('play')
     render(<App />)

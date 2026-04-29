@@ -4,6 +4,8 @@ import {
   getBakedLightLuminance,
   getDirectionalFaceWeight,
   getPropDirectionalLightFactor,
+  PROP_DIRECTIONAL_FACE_MINIMUM,
+  PROP_DIRECTIONAL_LIGHT_BASELINE,
   PROP_BAKED_LIGHT_RESPONSE,
   shapeBakedLightSample,
   SURFACE_BAKED_LIGHT_RESPONSE,
@@ -58,7 +60,9 @@ describe('bakedLightResponse', () => {
   it('strongly attenuates grazing surfaces while keeping some prop wrap', () => {
     expect(getDirectionalFaceWeight(0.15, 0.18, 0)).toBe(0)
     expect(getDirectionalFaceWeight(0.75, 0.18, 0)).toBeGreaterThan(0.45)
-    expect(getPropDirectionalLightFactor(0, 1)).toBeCloseTo(0.7, 5)
+    expect(getPropDirectionalLightFactor(0, 0)).toBeCloseTo(PROP_DIRECTIONAL_LIGHT_BASELINE, 5)
+    expect(getPropDirectionalLightFactor(0, 1)).toBeCloseTo(PROP_DIRECTIONAL_FACE_MINIMUM, 5)
+    expect(getPropDirectionalLightFactor(0.1, 1)).toBeLessThan(0.08)
     expect(getPropDirectionalLightFactor(1, 1)).toBeCloseTo(1, 5)
   })
 })

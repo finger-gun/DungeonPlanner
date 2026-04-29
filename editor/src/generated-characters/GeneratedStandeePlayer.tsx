@@ -83,6 +83,7 @@ export function GeneratedStandeePlayer({
           cardHeight={cardHeight}
           texture={portraitTexture}
           alphaTexture={alphaTexture}
+          bakedLightMode="prop"
           excludeFromSelectionOutline
           position={[0, 0, GENERATED_CHARACTER_CARD_SURFACE_OFFSET]}
           castShadow={false}
@@ -92,6 +93,8 @@ export function GeneratedStandeePlayer({
           cardHeight={cardHeight}
           texture={portraitTexture}
           alphaTexture={alphaTexture}
+          bakedLightMode="prop"
+          mirrorX
           excludeFromSelectionOutline
           position={[0, 0, -GENERATED_CHARACTER_CARD_SURFACE_OFFSET]}
           rotation={[0, Math.PI, 0]}

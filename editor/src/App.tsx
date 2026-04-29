@@ -287,10 +287,12 @@ function App() {
   const showLosDebugRays = useDungeonStore((state) => state.showLosDebugRays)
   const showLensFocusDebugPoint = useDungeonStore((state) => state.showLensFocusDebugPoint)
   const showProjectionDebugMesh = useDungeonStore((state) => state.showProjectionDebugMesh)
+  const showPropProbeDebug = useDungeonStore((state) => state.showPropProbeDebug)
   const setShowLosDebugMask = useDungeonStore((state) => state.setShowLosDebugMask)
   const setShowLosDebugRays = useDungeonStore((state) => state.setShowLosDebugRays)
   const setShowLensFocusDebugPoint = useDungeonStore((state) => state.setShowLensFocusDebugPoint)
   const setShowProjectionDebugMesh = useDungeonStore((state) => state.setShowProjectionDebugMesh)
+  const setShowPropProbeDebug = useDungeonStore((state) => state.setShowPropProbeDebug)
   const debugAssetId = getDebugPanelAssetId({
     tool,
     selectedAssetIds,
@@ -805,16 +807,18 @@ function App() {
               exploredCellCount={exploredCellCount}
               clearExploredCells={clearExploredCells}
               showLosDebugMask={showLosDebugMask}
-              showLosDebugRays={showLosDebugRays}
-              showLensFocusDebugPoint={showLensFocusDebugPoint}
-              showProjectionDebugMesh={showProjectionDebugMesh}
-              setShowLosDebugMask={setShowLosDebugMask}
-              setShowLosDebugRays={setShowLosDebugRays}
-              setShowLensFocusDebugPoint={setShowLensFocusDebugPoint}
-              setShowProjectionDebugMesh={setShowProjectionDebugMesh}
-              debugAssetName={debugAsset?.name ?? null}
-              debugAssetSourcePath={debugAssetSourcePath}
-              debugAssetSourceLink={debugAssetSourceLink}
+            showLosDebugRays={showLosDebugRays}
+            showLensFocusDebugPoint={showLensFocusDebugPoint}
+            showProjectionDebugMesh={showProjectionDebugMesh}
+            showPropProbeDebug={showPropProbeDebug}
+            setShowLosDebugMask={setShowLosDebugMask}
+            setShowLosDebugRays={setShowLosDebugRays}
+            setShowLensFocusDebugPoint={setShowLensFocusDebugPoint}
+            setShowProjectionDebugMesh={setShowProjectionDebugMesh}
+            setShowPropProbeDebug={setShowPropProbeDebug}
+            debugAssetName={debugAsset?.name ?? null}
+            debugAssetSourcePath={debugAssetSourcePath}
+            debugAssetSourceLink={debugAssetSourceLink}
             />
           )}
 
@@ -971,10 +975,12 @@ function DebugVisibilityPanel({
   showLosDebugRays,
   showLensFocusDebugPoint,
   showProjectionDebugMesh,
+  showPropProbeDebug,
   setShowLosDebugMask,
   setShowLosDebugRays,
   setShowLensFocusDebugPoint,
   setShowProjectionDebugMesh,
+  setShowPropProbeDebug,
   debugAssetName,
   debugAssetSourcePath,
   debugAssetSourceLink,
@@ -987,10 +993,12 @@ function DebugVisibilityPanel({
   showLosDebugRays: boolean
   showLensFocusDebugPoint: boolean
   showProjectionDebugMesh: boolean
+  showPropProbeDebug: boolean
   setShowLosDebugMask: (show: boolean) => void
   setShowLosDebugRays: (show: boolean) => void
   setShowLensFocusDebugPoint: (show: boolean) => void
   setShowProjectionDebugMesh: (show: boolean) => void
+  setShowPropProbeDebug: (show: boolean) => void
   debugAssetName: string | null
   debugAssetSourcePath: string | null
   debugAssetSourceLink: string | null
@@ -1039,6 +1047,11 @@ function DebugVisibilityPanel({
           label="Show projection mesh"
           pressed={showProjectionDebugMesh}
           onClick={() => setShowProjectionDebugMesh(!showProjectionDebugMesh)}
+        />
+        <DebugToggleButton
+          label="Visualize prop probes"
+          pressed={showPropProbeDebug}
+          onClick={() => setShowPropProbeDebug(!showPropProbeDebug)}
         />
       </div>
 

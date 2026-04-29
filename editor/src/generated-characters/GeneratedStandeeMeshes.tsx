@@ -65,6 +65,8 @@ export function GeneratedStandeeCardSurfaceMesh({
   cardHeight,
   texture,
   alphaTexture,
+  bakedLightMode = 'prop',
+  mirrorX = false,
   excludeFromSelectionOutline = false,
   position,
   rotation,
@@ -75,6 +77,8 @@ export function GeneratedStandeeCardSurfaceMesh({
   cardHeight: number
   texture: THREE.Texture
   alphaTexture?: THREE.Texture | null
+  bakedLightMode?: 'prop' | 'billboard'
+  mirrorX?: boolean
   excludeFromSelectionOutline?: boolean
   position: [number, number, number]
   rotation?: [number, number, number]
@@ -91,6 +95,10 @@ export function GeneratedStandeeCardSurfaceMesh({
     material.alphaTest = 0.03
     return material
   }, [surfaceAlphaTexture, surfaceTexture])
+  const geometry = useMemo(
+    () => createGeneratedStandeeCardSurfaceGeometry(cardWidth, cardHeight, mirrorX),
+    [cardHeight, cardWidth, mirrorX],
+  )
   const surfaceMaterial = useMemo(
     () => createStandardCompatibleMaterial({
       map: surfaceTexture,
@@ -106,7 +114,7 @@ export function GeneratedStandeeCardSurfaceMesh({
     }),
     [surfaceAlphaTexture, surfaceTexture],
   )
-  surfaceMaterial.userData.bakedLightMode = 'billboard'
+  surfaceMaterial.userData.bakedLightMode = bakedLightMode
 
   useLayoutEffect(() => {
     const mesh = meshRef.current
@@ -121,6 +129,7 @@ export function GeneratedStandeeCardSurfaceMesh({
     }
   }, [depthMaterial])
 
+  useLayoutEffect(() => () => geometry.dispose(), [geometry])
   useLayoutEffect(() => () => depthMaterial.dispose(), [depthMaterial])
   useLayoutEffect(() => () => surfaceMaterial.dispose(), [surfaceMaterial])
 
@@ -133,10 +142,28 @@ export function GeneratedStandeeCardSurfaceMesh({
       receiveShadow={receiveShadow}
       userData={excludeFromSelectionOutline ? { [SELECTION_OUTLINE_IGNORE_USER_DATA]: true } : undefined}
     >
-      <planeGeometry args={[cardWidth, cardHeight]} />
+      <primitive object={geometry} attach="geometry" />
       <primitive object={surfaceMaterial} attach="material" />
     </mesh>
   )
+}
+
+export function createGeneratedStandeeCardSurfaceGeometry(
+  cardWidth: number,
+  cardHeight: number,
+  mirrorX = false,
+) {
+  const geometry = new THREE.PlaneGeometry(cardWidth, cardHeight)
+  if (!mirrorX) {
+    return geometry
+  }
+
+  const uv = geometry.getAttribute('uv') as THREE.BufferAttribute
+  for (let index = 0; index < uv.count; index += 1) {
+    uv.setX(index, 1 - uv.getX(index))
+  }
+  uv.needsUpdate = true
+  return geometry
 }
 
 export function GeneratedStandeeSilhouetteMesh({

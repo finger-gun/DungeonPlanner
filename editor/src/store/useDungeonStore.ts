@@ -271,6 +271,7 @@ type DungeonState = DungeonSnapshot & {
   showLosDebugRays: boolean
   showLensFocusDebugPoint: boolean
   showProjectionDebugMesh: boolean
+  showPropProbeDebug: boolean
   floorViewMode: FloorViewMode
   generatedCharacters: Record<string, GeneratedCharacterRecord>
   characterSheet: CharacterSheetState
@@ -334,6 +335,7 @@ type DungeonState = DungeonSnapshot & {
   setShowLosDebugRays: (show: boolean) => void
   setShowLensFocusDebugPoint: (show: boolean) => void
   setShowProjectionDebugMesh: (show: boolean) => void
+  setShowPropProbeDebug: (show: boolean) => void
   lightEffectsEnabled: boolean
   setLightEffectsEnabled: (enabled: boolean) => void
   lightFlickerEnabled: boolean
@@ -1602,6 +1604,7 @@ export const useDungeonStore = create<DungeonState>()(
   showLosDebugRays: false,
   showLensFocusDebugPoint: false,
   showProjectionDebugMesh: false,
+  showPropProbeDebug: false,
   lightEffectsEnabled: true,
   lightFlickerEnabled: true,
   particleEffectsEnabled: true,
@@ -2870,6 +2873,9 @@ export const useDungeonStore = create<DungeonState>()(
   setShowProjectionDebugMesh: (show) => {
     set((state) => ({ ...state, showProjectionDebugMesh: show }))
   },
+  setShowPropProbeDebug: (show) => {
+    set((state) => ({ ...state, showPropProbeDebug: show }))
+  },
   setLightEffectsEnabled: (enabled) => {
     set((state) => ({ ...state, lightEffectsEnabled: enabled }))
   },
@@ -3157,6 +3163,7 @@ export const useDungeonStore = create<DungeonState>()(
         showLosDebugRays: false,
         showLensFocusDebugPoint: false,
         showProjectionDebugMesh: false,
+        showPropProbeDebug: false,
         lightEffectsEnabled: true,
         lightFlickerEnabled: true,
         particleEffectsEnabled: true,

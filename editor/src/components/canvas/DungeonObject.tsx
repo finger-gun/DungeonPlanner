@@ -181,6 +181,7 @@ export const DungeonObject = memo(function DungeonObject({
         playerAnimationState={playerAnimationState ?? 'default'}
         variantKey={object.cellKey}
         objectProps={object.props}
+        propInstanceKey={object.id}
         visibility={visibilityState}
         useLineOfSightPostMask={useLineOfSightPostMask}
         userData={{ objectId: object.id }}

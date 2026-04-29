@@ -38,6 +38,7 @@ import { registerDebugCameraPoseReader, registerDebugWorldProjector } from './de
 import { getOrBuildBakedFloorLightField, resolveObjectLightSources, type BakedFloorLightField } from '../../rendering/dungeonLightField'
 import { setBakedLightFlickerTime } from './bakedLightMaterial'
 import { useBakedFloorLightField } from '../../rendering/useBakedFloorLightField'
+import { PropProbeDebugOverlay } from './PropProbeDebugOverlay'
 
 const WebGPUPostProcessing = lazy(() =>
   import('./WebGPUPostProcessing').then((module) => ({
@@ -477,6 +478,7 @@ function FloorContent({ startY = 0 }: { startY?: number }) {
   const wallSurfaceProps = useDungeonStore((state) => state.wallSurfaceProps)
   const innerWalls = useDungeonStore((state) => state.innerWalls)
   const showLensFocusDebugPoint = useDungeonStore((state) => state.showLensFocusDebugPoint)
+  const showPropProbeDebug = useDungeonStore((state) => state.showPropProbeDebug)
   const moveObject = useDungeonStore((state) => state.moveObject)
   const selectObject = useDungeonStore((state) => state.selectObject)
   const setObjectDragActive = useDungeonStore((state) => state.setObjectDragActive)
@@ -824,6 +826,9 @@ function FloorContent({ startY = 0 }: { startY?: number }) {
         <RoomResizeOverlay />
         {propLightBudget > 0 && (
           <PropLightPool scopeKey={activeFloorId} visibility={visibility} maxLights={propLightBudget} />
+        )}
+        {showPropProbeDebug && (
+          <PropProbeDebugOverlay floorId={activeFloorId} />
         )}
         {topLevelObjects.map((object) => (
           dragState?.objectId === object.id ? null : (

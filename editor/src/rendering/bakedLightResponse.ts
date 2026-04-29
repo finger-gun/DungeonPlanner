@@ -36,6 +36,10 @@ export const BILLBOARD_BAKED_LIGHT_RESPONSE: BakedLightResponseProfile = {
   emissiveBoost: 0.24,
 }
 
+export const PROP_DIRECTIONAL_FACE_THRESHOLD = 0.18
+export const PROP_DIRECTIONAL_FACE_MINIMUM = 0.03
+export const PROP_DIRECTIONAL_LIGHT_BASELINE = 0.18
+
 export function getBakedLightLuminance(sample: BakedLightSample) {
   return sample[0] * 0.2126 + sample[1] * 0.7152 + sample[2] * 0.0722
 }
@@ -67,8 +71,12 @@ export function getDirectionalFaceWeight(alignment: number, threshold: number, m
 }
 
 export function getPropDirectionalLightFactor(alignment: number, directionalStrength: number) {
-  const faceWeight = getDirectionalFaceWeight(alignment, 0.04, 0.7)
-  return lerp(0.8, faceWeight, clamp01(directionalStrength))
+  const faceWeight = getDirectionalFaceWeight(
+    alignment,
+    PROP_DIRECTIONAL_FACE_THRESHOLD,
+    PROP_DIRECTIONAL_FACE_MINIMUM,
+  )
+  return lerp(PROP_DIRECTIONAL_LIGHT_BASELINE, faceWeight, clamp01(directionalStrength))
 }
 
 function clamp01(value: number) {

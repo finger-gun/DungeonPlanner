@@ -400,8 +400,29 @@ describe('dungeonLightField', () => {
 
     expect(probe).not.toBeNull()
     expect(probe!.topY).toBeGreaterThan(probe!.baseY)
-    expect(probe!.lightDirection[0]).toBeGreaterThan(0)
-    expect(probe!.directionalStrength).toBeGreaterThan(0)
+    expect(probe!.lightDirection[0]).toBeGreaterThan(0.9)
+    expect(probe!.directionalStrength).toBeGreaterThan(0.9)
+  })
+
+  it('uses the dominant static light vector for backlit prop directionality', () => {
+    clearBakedFloorLightFieldCache()
+
+    const field = getOrBuildBakedFloorLightField({
+      floorId: 'floor-prop-backlight',
+      floorCells: [[0, 0], [0, 1], [0, 2], [0, 3]],
+      staticLightSources: [createResolvedLightSource('torch', [1, 1.8, 3.5], {
+        ...TORCH_LIGHT,
+        intensity: 1.1,
+      })],
+    })
+    const probe = buildPropBakedLightProbe(
+      field,
+      new THREE.Box3(new THREE.Vector3(0.75, 0, 0.75), new THREE.Vector3(1.25, 2, 1.25)),
+    )
+
+    expect(probe).not.toBeNull()
+    expect(probe!.lightDirection[2]).toBeGreaterThan(0.9)
+    expect(probe!.directionalStrength).toBeGreaterThan(0.9)
   })
 
   it('keeps prop probes lit inside a closed room after wall-edge corner blocking', () => {

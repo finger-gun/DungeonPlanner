@@ -25,6 +25,9 @@ import { GRID_SIZE } from '../../hooks/useSnapToGrid'
 import {
   BILLBOARD_BAKED_LIGHT_RESPONSE,
   type BakedLightResponseProfile,
+  PROP_DIRECTIONAL_FACE_MINIMUM,
+  PROP_DIRECTIONAL_FACE_THRESHOLD,
+  PROP_DIRECTIONAL_LIGHT_BASELINE,
   PROP_BAKED_LIGHT_RESPONSE,
   SURFACE_BAKED_LIGHT_RESPONSE,
 } from '../../rendering/bakedLightResponse'
@@ -56,8 +59,23 @@ type PropBakedLightOptions = {
   probe?: PropBakedLightProbe | null
 }
 
+// TSL node wrappers use a shared fluent API that is wider than the public TypeScript surface.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type ShaderNodeLike = any
+
+type PropBakedLightUniformState = {
+  baseLight: ShaderNodeLike
+  topLight: ShaderNodeLike
+  baseY: ShaderNodeLike
+  topY: ShaderNodeLike
+  lightDirection: ShaderNodeLike
+  directionalStrength: ShaderNodeLike
+  probeEnabled: ShaderNodeLike
+}
+
 const bakedLightFlickerTimeUniform = uniform(0)
 const BAKED_FLICKER_SIGNATURE_VERSION = 'multi-basis-v2'
+const PROP_BAKED_UNIFORM_SIGNATURE_VERSION = 'probe-uniforms-v1'
 const SURFACE_BAKED_ALBEDO_EMISSIVE_SCALE = 0.9
 const PROP_BAKED_ALBEDO_EMISSIVE_SCALE = 1.15
 const BILLBOARD_BAKED_ALBEDO_EMISSIVE_SCALE = 1.8
@@ -242,12 +260,7 @@ export function applyPropBakedLightToMaterial(
   const nextSignature = hasPropLighting
     ? [
       hasFieldLighting ? lightField?.lightFieldTexture?.uuid ?? 'field' : 'no-field',
-      probe ? probe.baseLight.join(',') : 'no-probe-base',
-      probe ? probe.topLight.join(',') : 'no-probe-top',
-      probe ? probe.baseY.toFixed(3) : 'no-probe-base-y',
-      probe ? probe.topY.toFixed(3) : 'no-probe-top-y',
-      probe ? probe.lightDirection.join(',') : 'no-probe-direction',
-      probe ? probe.directionalStrength.toFixed(3) : 'no-probe-strength',
+      PROP_BAKED_UNIFORM_SIGNATURE_VERSION,
       isBillboardSurface ? BILLBOARD_BAKED_SIGNATURE_VERSION : PROP_BAKED_SIGNATURE_VERSION,
     ].join(':')
     : 'off'
@@ -259,74 +272,75 @@ export function applyPropBakedLightToMaterial(
       bakedMaterial.userData.propBakedLightBaseEmissiveNode = bakedMaterial.emissiveNode ?? null
     }
 
-    const baseColor = isBillboardSurface
-      ? buildBillboardBaseColorNode(bakedMaterial)
-      : vec3((bakedMaterial.userData.propBakedLightBaseColorNode ?? materialColor) as never)
-    const baseEmissive = vec3(
-      (bakedMaterial.userData.propBakedLightBaseEmissiveNode
-        ?? vec3(
-          bakedMaterial.emissive?.r ?? 0,
-          bakedMaterial.emissive?.g ?? 0,
-          bakedMaterial.emissive?.b ?? 0,
-        )) as never,
-    )
-    const responseProfile = isBillboardSurface ? BILLBOARD_BAKED_LIGHT_RESPONSE : PROP_BAKED_LIGHT_RESPONSE
-    const probeSpan = probe ? Math.max(probe.topY - probe.baseY, 0.001) : 1
-    const probeBlend = probe
-      ? saturate(positionWorld.y.sub(float(probe.baseY)).div(float(probeSpan)))
-      : float(0)
-    const probeHeightLight = probe
-      ? buildShapedBakedLightNode(mix(
-        vec3(probe.baseLight[0], probe.baseLight[1], probe.baseLight[2]),
-        vec3(probe.topLight[0], probe.topLight[1], probe.topLight[2]),
+    const probeUniformState = getOrCreatePropBakedLightUniformState(bakedMaterial)
+    updatePropBakedLightUniformState(probeUniformState, probe)
+
+    if (previousSignature !== nextSignature) {
+      const baseColor = isBillboardSurface
+        ? buildBillboardBaseColorNode(bakedMaterial)
+        : vec3((bakedMaterial.userData.propBakedLightBaseColorNode ?? materialColor) as never)
+      const baseEmissive = vec3(
+        (bakedMaterial.userData.propBakedLightBaseEmissiveNode
+          ?? vec3(
+            bakedMaterial.emissive?.r ?? 0,
+            bakedMaterial.emissive?.g ?? 0,
+            bakedMaterial.emissive?.b ?? 0,
+          )) as never,
+      )
+      const responseProfile = isBillboardSurface ? BILLBOARD_BAKED_LIGHT_RESPONSE : PROP_BAKED_LIGHT_RESPONSE
+      const probeSpan = max(probeUniformState.topY.sub(probeUniformState.baseY), float(0.001))
+      const probeBlend = saturate(positionWorld.y.sub(probeUniformState.baseY).div(probeSpan))
+      const probeHeightLight = buildShapedBakedLightNode(mix(
+        vec3(probeUniformState.baseLight as never),
+        vec3(probeUniformState.topLight as never),
         probeBlend,
       ), responseProfile)
-      : vec3(0, 0, 0)
-    const sampledFieldLight = hasFieldLighting
-      ? buildShapedBakedLightNode(
-        buildSmoothedBakedLightNode(lightField as BakedFloorLightField),
-        responseProfile,
-      )
-      : probeHeightLight
-    const directionalFaceAlignment = probe
-      ? saturate(dot(
-        normalWorld,
-        vec3(probe.lightDirection[0], probe.lightDirection[1], probe.lightDirection[2]),
-      ))
-      : float(1)
-    const propLightFactor = isBillboardSurface
-      ? float(1)
-      : probe
-        ? buildPropDirectionalLightFactorNode(
-          directionalFaceAlignment,
-          probe.directionalStrength,
+      const sampledFieldLight = hasFieldLighting
+        ? buildShapedBakedLightNode(
+          buildSmoothedBakedLightNode(lightField as BakedFloorLightField),
+          responseProfile,
         )
-        : float(1)
-    const propLight = sampledFieldLight.mul(propLightFactor as never)
-    const albedoBoost = vec3(1, 1, 1).add(
-      propLight.mul(float(
-        isBillboardSurface
-          ? BILLBOARD_BAKED_LIGHT_RESPONSE.albedoBoost
-          : PROP_BAKED_LIGHT_RESPONSE.albedoBoost,
-      )) as never,
-    )
-    const litAlbedoEmissiveScale = isBillboardSurface
-      ? BILLBOARD_BAKED_ALBEDO_EMISSIVE_SCALE
-      : PROP_BAKED_ALBEDO_EMISSIVE_SCALE
-    const litAlbedoEmissive = baseColor.mul(
-      propLight.mul(float(litAlbedoEmissiveScale)) as never,
-    )
-
-    bakedMaterial.colorNode = baseColor.mul(albedoBoost as never)
-    bakedMaterial.emissiveNode = baseEmissive.add(
-      litAlbedoEmissive.add(
+        : probeHeightLight
+      const directionalFaceAlignment = saturate(dot(
+        normalWorld,
+        vec3(probeUniformState.lightDirection as never),
+      ))
+      const propLightFactor = isBillboardSurface
+        ? float(1)
+        : mix(
+          float(1),
+          buildPropDirectionalLightFactorNode(
+            directionalFaceAlignment,
+            probeUniformState.directionalStrength,
+          ),
+          float(probeUniformState.probeEnabled),
+        )
+      const propLight = sampledFieldLight.mul(propLightFactor as never)
+      const albedoBoost = vec3(1, 1, 1).add(
         propLight.mul(float(
           isBillboardSurface
-            ? BILLBOARD_BAKED_LIGHT_RESPONSE.emissiveBoost
-            : PROP_BAKED_LIGHT_RESPONSE.emissiveBoost,
+            ? BILLBOARD_BAKED_LIGHT_RESPONSE.albedoBoost
+            : PROP_BAKED_LIGHT_RESPONSE.albedoBoost,
         )) as never,
-      ) as never,
-    )
+      )
+      const litAlbedoEmissiveScale = isBillboardSurface
+        ? BILLBOARD_BAKED_ALBEDO_EMISSIVE_SCALE
+        : PROP_BAKED_ALBEDO_EMISSIVE_SCALE
+      const litAlbedoEmissive = baseColor.mul(
+        propLight.mul(float(litAlbedoEmissiveScale)) as never,
+      )
+
+      bakedMaterial.colorNode = baseColor.mul(albedoBoost as never)
+      bakedMaterial.emissiveNode = baseEmissive.add(
+        litAlbedoEmissive.add(
+          propLight.mul(float(
+            isBillboardSurface
+              ? BILLBOARD_BAKED_LIGHT_RESPONSE.emissiveBoost
+              : PROP_BAKED_LIGHT_RESPONSE.emissiveBoost,
+          )) as never,
+        ) as never,
+      )
+    }
   } else if (Object.prototype.hasOwnProperty.call(bakedMaterial.userData, 'propBakedLightBaseColorNode')) {
     bakedMaterial.colorNode = bakedMaterial.userData.propBakedLightBaseColorNode
     bakedMaterial.emissiveNode = bakedMaterial.userData.propBakedLightBaseEmissiveNode ?? null
@@ -360,14 +374,14 @@ export function applyPropBakedLightToObject(
 
 function buildSmoothedBakedLightNode(
   lightField: BakedFloorLightField,
-  sampleOffsetWorldXZ: any = null,
+  sampleOffsetWorldXZ: ShaderNodeLike | null = null,
 ) {
   return vec3(buildSmoothedBakedTextureSampleNode(lightField.lightFieldTexture, lightField, sampleOffsetWorldXZ).rgb as never)
 }
 
 function buildSmoothedBakedFlickerNode(
   lightField: BakedFloorLightField,
-  sampleOffsetWorldXZ: any = null,
+  sampleOffsetWorldXZ: ShaderNodeLike | null = null,
 ) {
   const flickerTextures = lightField.flickerLightFieldTextures
   if (!flickerTextures[0] || !flickerTextures[1] || !flickerTextures[2]) {
@@ -397,7 +411,7 @@ function buildSmoothedBakedFlickerNode(
 function buildSmoothedBakedTextureSampleNode(
   lightTexture: THREE.DataTexture | null,
   lightField: BakedFloorLightField,
-  sampleOffsetWorldXZ: any = null,
+  sampleOffsetWorldXZ: ShaderNodeLike | null = null,
 ) {
   if (!lightTexture || !lightField.bounds) {
     return vec4(0, 0, 0, 0)
@@ -478,7 +492,7 @@ function buildBakedLightLuminanceNode(lightNode: ReturnType<typeof vec3>) {
 }
 
 function buildShapedBakedLightNode(
-  lightNode: any,
+  lightNode: ShaderNodeLike,
   profile: BakedLightResponseProfile,
 ) {
   const luminance = buildBakedLightLuminanceNode(lightNode)
@@ -494,7 +508,7 @@ function buildShapedBakedLightNode(
 }
 
 function buildDirectionalFaceWeightNode(
-  alignmentNode: any,
+  alignmentNode: ShaderNodeLike,
   threshold: number,
   minimum: number,
 ) {
@@ -505,11 +519,60 @@ function buildDirectionalFaceWeightNode(
 }
 
 function buildPropDirectionalLightFactorNode(
-  alignmentNode: any,
-  directionalStrength: number,
+  alignmentNode: ShaderNodeLike,
+  directionalStrengthNode: ShaderNodeLike,
 ) {
-  const faceWeight = buildDirectionalFaceWeightNode(alignmentNode, 0.04, 0.7)
-  return mix(float(0.8), faceWeight, float(Math.max(0, Math.min(1, directionalStrength))))
+  const faceWeight = buildDirectionalFaceWeightNode(
+    alignmentNode,
+    PROP_DIRECTIONAL_FACE_THRESHOLD,
+    PROP_DIRECTIONAL_FACE_MINIMUM,
+  )
+  return mix(float(PROP_DIRECTIONAL_LIGHT_BASELINE), faceWeight, saturate(directionalStrengthNode))
+}
+
+function getOrCreatePropBakedLightUniformState(
+  material: BakedLightAwareMaterial,
+): PropBakedLightUniformState {
+  const existing = material.userData.propBakedLightUniformState as PropBakedLightUniformState | undefined
+  if (existing) {
+    return existing
+  }
+
+  const uniformState: PropBakedLightUniformState = {
+    baseLight: uniform(new THREE.Vector3(0, 0, 0)),
+    topLight: uniform(new THREE.Vector3(0, 0, 0)),
+    baseY: uniform(0),
+    topY: uniform(1),
+    lightDirection: uniform(new THREE.Vector3(0, 1, 0)),
+    directionalStrength: uniform(0),
+    probeEnabled: uniform(0),
+  }
+  material.userData.propBakedLightUniformState = uniformState
+  return uniformState
+}
+
+function updatePropBakedLightUniformState(
+  uniformState: PropBakedLightUniformState,
+  probe: PropBakedLightProbe | null,
+) {
+  if (!probe) {
+    uniformState.baseLight.value.set(0, 0, 0)
+    uniformState.topLight.value.set(0, 0, 0)
+    uniformState.baseY.value = 0
+    uniformState.topY.value = 1
+    uniformState.lightDirection.value.set(0, 1, 0)
+    uniformState.directionalStrength.value = 0
+    uniformState.probeEnabled.value = 0
+    return
+  }
+
+  uniformState.baseLight.value.set(...probe.baseLight)
+  uniformState.topLight.value.set(...probe.topLight)
+  uniformState.baseY.value = probe.baseY
+  uniformState.topY.value = probe.topY
+  uniformState.lightDirection.value.set(...probe.lightDirection)
+  uniformState.directionalStrength.value = probe.directionalStrength
+  uniformState.probeEnabled.value = 1
 }
 
 function buildBillboardBaseColorNode(material: BakedLightAwareMaterial) {

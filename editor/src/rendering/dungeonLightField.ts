@@ -37,6 +37,8 @@ const offsetScratch = new THREE.Vector3()
 const rotationScratch = new THREE.Euler()
 const sphereScratch = new THREE.Sphere()
 const colorScratch = new THREE.Color()
+const directionalLightVectorScratch = new THREE.Vector3()
+const directionalLightContributionScratch = new THREE.Vector3()
 const floorLightFieldCache = new Map<string, BakedFloorLightField>()
 
 export type BakedLightSample = readonly [number, number, number]
@@ -553,18 +555,23 @@ export function buildPropBakedLightProbe(
 
   const baseLight = scaleBakedLightSample(centerLight, PROP_BAKED_LIGHT_MULTIPLIER)
   const topLight = scaleBakedLightSample(centerLight, PROP_BAKED_TOP_LIGHT_MULTIPLIER)
-  const directionalVector = new THREE.Vector3(
+  const staticLightDirection = buildPropDirectionalLightFromStaticSources(lightField, bounds, [probeX, (baseY + topY) * 0.5, probeZ])
+  const fallbackDirectionalVector = new THREE.Vector3(
     getBakedLightLuminance(eastLight) - getBakedLightLuminance(westLight),
     averageLuminance * 0.18,
     getBakedLightLuminance(southLight) - getBakedLightLuminance(northLight),
   )
-  const directionalStrength = Math.min(
-    directionalVector.length() / Math.max(averageLuminance * 1.35, 0.08),
-    1,
-  )
-  const lightDirection = directionalVector.lengthSq() > 1e-6
-    ? directionalVector.normalize().toArray() as [number, number, number]
-    : [0, 1, 0] as const
+  const directionalStrength = staticLightDirection
+    ? staticLightDirection.directionalStrength
+    : Math.min(
+      fallbackDirectionalVector.length() / Math.max(averageLuminance * 1.35, 0.08),
+      1,
+    )
+  const lightDirection = staticLightDirection
+    ? staticLightDirection.lightDirection
+    : fallbackDirectionalVector.lengthSq() > 1e-6
+      ? fallbackDirectionalVector.normalize().toArray() as [number, number, number]
+      : [0, 1, 0] as const
 
   return {
     baseLight,
@@ -573,6 +580,58 @@ export function buildPropBakedLightProbe(
     topY,
     lightDirection,
     directionalStrength,
+  }
+}
+
+function buildPropDirectionalLightFromStaticSources(
+  lightField: BakedFloorLightField,
+  bounds: THREE.Box3,
+  worldPosition: readonly [number, number, number],
+) {
+  const relevantLightSources = getStaticLightSourcesForBounds(lightField, bounds)
+  if (relevantLightSources.length === 0) {
+    return null
+  }
+
+  let totalWeight = 0
+  directionalLightVectorScratch.set(0, 0, 0)
+  relevantLightSources.forEach((lightSource) => {
+    const dx = lightSource.position[0] - worldPosition[0]
+    const dy = lightSource.position[1] - worldPosition[1]
+    const dz = lightSource.position[2] - worldPosition[2]
+    const distance = Math.sqrt(dx * dx + dy * dy + dz * dz)
+    const falloff = getBakedLightDistanceFalloff(lightSource.light, distance)
+    if (falloff <= 0) {
+      return
+    }
+    if (lightField.occlusion && !hasBakedLightLineOfSight(lightSource.position, worldPosition, lightField.occlusion)) {
+      return
+    }
+
+    const lightLuminance = getLinearColorLuminance(lightSource.linearColor)
+    const weight = lightSource.light.intensity * falloff * Math.max(lightLuminance, 0.001)
+    if (weight <= 1e-5) {
+      return
+    }
+
+    directionalLightContributionScratch.set(dx, dy, dz)
+    if (directionalLightContributionScratch.lengthSq() <= 1e-8) {
+      return
+    }
+
+    directionalLightVectorScratch.add(
+      directionalLightContributionScratch.normalize().multiplyScalar(weight),
+    )
+    totalWeight += weight
+  })
+
+  if (totalWeight <= 1e-5 || directionalLightVectorScratch.lengthSq() <= 1e-8) {
+    return null
+  }
+
+  return {
+    lightDirection: directionalLightVectorScratch.clone().normalize().toArray() as [number, number, number],
+    directionalStrength: clamp01(directionalLightVectorScratch.length() / totalWeight),
   }
 }
 
@@ -593,6 +652,10 @@ function samplePropProbeBaseLightAtWorldPosition(
 
 function getBakedLightLuminance(sample: BakedLightSample) {
   return sample[0] * 0.2126 + sample[1] * 0.7152 + sample[2] * 0.0722
+}
+
+function getLinearColorLuminance(color: readonly [number, number, number]) {
+  return color[0] * 0.2126 + color[1] * 0.7152 + color[2] * 0.0722
 }
 
 function getCornerSample(
