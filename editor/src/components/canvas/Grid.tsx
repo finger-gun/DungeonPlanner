@@ -49,6 +49,7 @@ import { extendOpenPassageBrush } from './openPassageBrush'
 import { getOpeningToolMode } from './openingToolMode'
 import { calculatePropSnapPosition } from './propPlacement'
 import { supportsPlacementRotationShortcut } from '../../rotationShortcuts'
+import { getObjectInstanceScale, getObjectTintColor } from '../../store/objectAppearance'
 import {
   getRoomWallBrushAnchor,
   getRoomWallBrushTargets,
@@ -60,6 +61,8 @@ type GridProps = {
   size?: number
   playMode?: boolean
 }
+
+const POINTER_MOVE_PLANE = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0)
 
 export function Grid({ size = 120, playMode = false }: GridProps) {
   const { snap } = useSnapToGrid()
@@ -85,8 +88,10 @@ export function Grid({ size = 120, playMode = false }: GridProps) {
   const setFloorTileAsset = useDungeonStore((state) => state.setFloorTileAsset)
   const setWallSurfaceAsset = useDungeonStore((state) => state.setWallSurfaceAsset)
   const placeObject = useDungeonStore((state) => state.placeObject)
+  const repositionObject = useDungeonStore((state) => state.repositionObject)
   const removeObjectAtCell = useDungeonStore((state) => state.removeObjectAtCell)
   const removeObject = useDungeonStore((state) => state.removeObject)
+  const cancelPickedUpObject = useDungeonStore((state) => state.cancelPickedUpObject)
   const placeOpening = useDungeonStore((state) => state.placeOpening)
   const placeOpenPassages = useDungeonStore((state) => state.placeOpenPassages)
   const restoreOpenPassages = useDungeonStore((state) => state.restoreOpenPassages)
@@ -104,10 +109,15 @@ export function Grid({ size = 120, playMode = false }: GridProps) {
   const setPaintingStrokeActive = useDungeonStore(
     (state) => state.setPaintingStrokeActive,
   )
+  const setObjectDragActive = useDungeonStore((state) => state.setObjectDragActive)
+  const setObjectMoveDragPointer = useDungeonStore((state) => state.setObjectMoveDragPointer)
   const isRoomResizeHandleActive = useDungeonStore((state) => state.isRoomResizeHandleActive)
   const selectRoom = useDungeonStore((state) => state.selectRoom)
   const tool = useDungeonStore((state) => state.tool)
   const showGrid = useDungeonStore((state) => state.showGrid)
+  const isObjectDragActive = useDungeonStore((state) => state.isObjectDragActive)
+  const pickedUpObject = useDungeonStore((state) => state.pickedUpObject)
+  const objectMoveDragPointer = useDungeonStore((state) => state.objectMoveDragPointer)
   const selectedPropAssetId = useDungeonStore((state) => state.selectedAssetIds.prop)
   const selectedCharacterAssetId = useDungeonStore((state) => state.selectedAssetIds.player)
   const selectedOpeningAssetId = useDungeonStore((state) => state.selectedAssetIds.opening)
@@ -125,6 +135,11 @@ export function Grid({ size = 120, playMode = false }: GridProps) {
   const selectedOpeningAsset = selectedOpeningAssetId
     ? getContentPackAssetById(selectedOpeningAssetId)
     : null
+  const pickedUpAssetId = pickedUpObject?.assetId ?? null
+  const pickedUpAsset = pickedUpAssetId
+    ? getContentPackAssetById(pickedUpAssetId)
+    : null
+  const isPickedUpPlacementMode = Boolean(pickedUpObject && pickedUpAsset)
   const openingToolMode = getOpeningToolMode(
     wallConnectionMode,
     selectedOpeningAsset?.metadata,
@@ -166,7 +181,10 @@ export function Grid({ size = 120, playMode = false }: GridProps) {
   const roomWallBrushModeRef = useRef<'paint' | 'erase' | null>(null)
   const roomWallBrushTargetsRef = useRef<RoomWallEditTarget[]>([])
   const roomWallBrushAnchorRef = useRef<RoomWallBrushAnchor | null>(null)
-  const placementOrientationKey = `${selectedPropAssetId ?? ''}:${selectedCharacterAssetId ?? ''}:${selectedOpeningAssetId ?? ''}:${wallConnectionMode}`
+  const placementOrientationKey = pickedUpObject
+    ? `pickup:${pickedUpObject.objectId}:${pickedUpObject.assetId}:${wallConnectionMode}`
+    : `${selectedPropAssetId ?? ''}:${selectedCharacterAssetId ?? ''}:${selectedOpeningAssetId ?? ''}:${wallConnectionMode}`
+  const defaultFloorRotationIndex = pickedUpObject?.floorRotationIndex ?? 0
   const [placementOrientation, setPlacementOrientation] = useState({
     key: placementOrientationKey,
     floorRotationIndex: 0,
@@ -175,7 +193,7 @@ export function Grid({ size = 120, playMode = false }: GridProps) {
   const floorRotationIndex =
     placementOrientation.key === placementOrientationKey
       ? placementOrientation.floorRotationIndex
-      : 0
+      : defaultFloorRotationIndex
   const wallFlipped =
     placementOrientation.key === placementOrientationKey
       ? placementOrientation.wallFlipped
@@ -201,6 +219,164 @@ export function Grid({ size = 120, playMode = false }: GridProps) {
     )
   }, [camera, gl.domElement, mapMode, paintedCells, placedObjects, scene.children])
 
+  const getSnappedHoverCell = useCallback((
+    point: { x: number; y: number; z: number },
+    terrainCell: GridCell | null,
+  ): SnappedGridPosition => {
+    if (!terrainCell) {
+      return snap(point)
+    }
+
+    return {
+      cell: terrainCell,
+      key: getCellKey(terrainCell),
+      position: cellToWorldPosition(terrainCell),
+    }
+  }, [snap])
+
+  const resolvePointerPlacementState = useCallback((clientX: number, clientY: number) => {
+    const rect = gl.domElement.getBoundingClientRect()
+    if (rect.width === 0 || rect.height === 0) {
+      return null
+    }
+
+    if (
+      clientX < rect.left ||
+      clientX > rect.right ||
+      clientY < rect.top ||
+      clientY > rect.bottom
+    ) {
+      return null
+    }
+
+    const pointerRaycaster = new THREE.Raycaster()
+    const ndc = new THREE.Vector2(
+      ((clientX - rect.left) / rect.width) * 2 - 1,
+      -((clientY - rect.top) / rect.height) * 2 + 1,
+    )
+    pointerRaycaster.setFromCamera(ndc, camera)
+    const intersections = pointerRaycaster.intersectObjects(scene.children, true)
+    const terrainHit = mapMode === 'outdoor'
+      ? findOutdoorTerrainHit(intersections)
+      : null
+    const point = terrainHit?.point
+      ?? pointerRaycaster.ray.intersectPlane(POINTER_MOVE_PLANE, new THREE.Vector3())
+
+    if (!point) {
+      return null
+    }
+
+    const snapped = getSnappedHoverCell(point, terrainHit?.cell ?? null)
+
+    return {
+      point,
+      snapped,
+      terrainCell: terrainHit?.cell ?? null,
+      ray: {
+        origin: [
+          pointerRaycaster.ray.origin.x,
+          pointerRaycaster.ray.origin.y,
+          pointerRaycaster.ray.origin.z,
+        ] as [number, number, number],
+        direction: [
+          pointerRaycaster.ray.direction.x,
+          pointerRaycaster.ray.direction.y,
+          pointerRaycaster.ray.direction.z,
+        ] as [number, number, number],
+      },
+      surfaceHit: findPlacementSurfaceHit(intersections, paintedCells, placedObjects, mapMode),
+    }
+  }, [camera, gl.domElement, getSnappedHoverCell, mapMode, paintedCells, placedObjects, scene.children])
+
+  const applyResolvedHoverState = useCallback((resolved: ReturnType<typeof resolvePointerPlacementState>) => {
+    setHoveredCell(resolved?.snapped ?? null)
+    setHoveredPoint(resolved ? resolved.point : null)
+    setHoveredRay(resolved?.ray ?? null)
+    setHoveredTerrainCell(resolved?.terrainCell ?? null)
+    setHoveredSurfaceHit(resolved?.surfaceHit ?? null)
+  }, [
+    setHoveredCell,
+    setHoveredPoint,
+    setHoveredRay,
+    setHoveredSurfaceHit,
+    setHoveredTerrainCell,
+  ])
+
+  const resolvePickedUpObjectPlacement = useCallback(
+    (resolved: ReturnType<typeof resolvePointerPlacementState>) => {
+      if (!resolved || !pickedUpAsset) {
+        return null
+      }
+
+      return applyFloorRotation(
+        getPropPlacement(
+          pickedUpAsset,
+          resolved.point,
+          paintedCells,
+          resolved.surfaceHit,
+          mapMode,
+          outdoorTerrainHeights,
+          resolved.ray,
+          resolved.terrainCell,
+        ),
+        floorRotationIndex * (Math.PI / 2),
+      )
+    },
+    [floorRotationIndex, mapMode, outdoorTerrainHeights, paintedCells, pickedUpAsset],
+  )
+
+  const finishHeldMoveDrag = useCallback((commit: boolean, clientX?: number, clientY?: number) => {
+    const resolved =
+      commit && typeof clientX === 'number' && typeof clientY === 'number'
+        ? resolvePointerPlacementState(clientX, clientY)
+        : null
+    const propPlacement = commit ? resolvePickedUpObjectPlacement(resolved) : null
+
+    if (resolved || !commit) {
+      applyResolvedHoverState(resolved)
+    }
+
+    if (pickedUpObject && propPlacement) {
+      const localTransform = getNestedLocalTransform(propPlacement, placedObjects)
+      const moved = repositionObject(pickedUpObject.objectId, {
+        position: propPlacement.position,
+        rotation: propPlacement.rotation,
+        cell: propPlacement.cell,
+        cellKey: propPlacement.anchorKey ?? propPlacement.supportCellKey,
+        props: {
+          ...pickedUpObject.props,
+          connector: propPlacement.connector,
+          direction: propPlacement.direction,
+        },
+        parentObjectId: propPlacement.parentObjectId,
+        localPosition: localTransform.localPosition,
+        localRotation: localTransform.localRotation,
+        supportCellKey: propPlacement.supportCellKey,
+      })
+
+      if (!moved) {
+        cancelPickedUpObject()
+      }
+    } else if (pickedUpObject) {
+      cancelPickedUpObject()
+    }
+
+    setObjectMoveDragPointer(null)
+    setObjectDragActive(false)
+    invalidate()
+  }, [
+    applyResolvedHoverState,
+    cancelPickedUpObject,
+    invalidate,
+    pickedUpObject,
+    placedObjects,
+    repositionObject,
+    resolvePickedUpObjectPlacement,
+    resolvePointerPlacementState,
+    setObjectDragActive,
+    setObjectMoveDragPointer,
+  ])
+
   const roomBrushCells = useMemo<Record<string, PaintedCellRecord>>(() => {
     if (mapMode !== 'outdoor') {
       return paintedCells
@@ -222,13 +398,15 @@ export function Grid({ size = 120, playMode = false }: GridProps) {
 
   // R key: rotates floor-connected assets; flips wall-connected openings 180°
   useEffect(() => {
-    const supportsRotation = supportsPlacementRotationShortcut({
-      tool,
-      isUnifiedSurfaceMode,
-      isUnifiedOpeningMode,
-      isFloorOpeningMode,
-      isWallOpeningMode,
-    })
+    const supportsRotation =
+      isPickedUpPlacementMode ||
+      supportsPlacementRotationShortcut({
+        tool,
+        isUnifiedSurfaceMode,
+        isUnifiedOpeningMode,
+        isFloorOpeningMode,
+        isWallOpeningMode,
+      })
     if (!supportsRotation) return
     function onKeyDown(e: KeyboardEvent) {
       const active = document.activeElement
@@ -243,7 +421,11 @@ export function Grid({ size = 120, playMode = false }: GridProps) {
           const base =
             current.key === placementOrientationKey
               ? current
-              : { key: placementOrientationKey, floorRotationIndex: 0, wallFlipped: false }
+              : {
+                  key: placementOrientationKey,
+                  floorRotationIndex: defaultFloorRotationIndex,
+                  wallFlipped: false,
+                }
 
           return isWallOpeningMode
             ? { ...base, wallFlipped: !base.wallFlipped }
@@ -256,7 +438,16 @@ export function Grid({ size = 120, playMode = false }: GridProps) {
     }
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [isFloorOpeningMode, isUnifiedOpeningMode, isUnifiedSurfaceMode, isWallOpeningMode, placementOrientationKey, tool])
+  }, [
+    defaultFloorRotationIndex,
+    isFloorOpeningMode,
+    isPickedUpPlacementMode,
+    isUnifiedOpeningMode,
+    isUnifiedSurfaceMode,
+    isWallOpeningMode,
+    placementOrientationKey,
+    tool,
+  ])
 
   // Register non-passive handlers on the canvas so preventDefault() works for
   // context menu suppression and drag-selection prevention
@@ -273,6 +464,76 @@ export function Grid({ size = 120, playMode = false }: GridProps) {
       canvas.removeEventListener('pointerdown', blockSelectOnDrag)
     }
   }, [gl])
+
+  useEffect(() => {
+    if (!pickedUpObject) {
+      return
+    }
+
+    if (tool !== 'select' || !placedObjects[pickedUpObject.objectId] || !pickedUpAsset) {
+      cancelPickedUpObject()
+      setObjectMoveDragPointer(null)
+      setObjectDragActive(false)
+    }
+  }, [
+    cancelPickedUpObject,
+    pickedUpAsset,
+    pickedUpObject,
+    placedObjects,
+    setObjectDragActive,
+    setObjectMoveDragPointer,
+    tool,
+  ])
+
+  useEffect(() => {
+    if (!pickedUpObject || !pickedUpAsset || !isObjectDragActive || !objectMoveDragPointer) {
+      return
+    }
+
+    const resolved = resolvePointerPlacementState(
+      objectMoveDragPointer.clientX,
+      objectMoveDragPointer.clientY,
+    )
+    applyResolvedHoverState(resolved)
+    invalidate()
+  }, [
+    applyResolvedHoverState,
+    invalidate,
+    isObjectDragActive,
+    objectMoveDragPointer,
+    pickedUpAsset,
+    pickedUpObject,
+    resolvePointerPlacementState,
+  ])
+
+  useEffect(() => {
+    if (!pickedUpObject || !pickedUpAsset || !isObjectDragActive) {
+      return
+    }
+
+    const handlePointerUp = (event: PointerEvent) => {
+      finishHeldMoveDrag(true, event.clientX, event.clientY)
+    }
+
+    const handlePointerCancel = () => {
+      finishHeldMoveDrag(false)
+    }
+
+    window.addEventListener('pointerup', handlePointerUp, { once: true })
+    window.addEventListener('pointercancel', handlePointerCancel, { once: true })
+    window.addEventListener('blur', handlePointerCancel, { once: true })
+
+    return () => {
+      window.removeEventListener('pointerup', handlePointerUp)
+      window.removeEventListener('pointercancel', handlePointerCancel)
+      window.removeEventListener('blur', handlePointerCancel)
+    }
+  }, [
+    finishHeldMoveDrag,
+    isObjectDragActive,
+    pickedUpAsset,
+    pickedUpObject,
+  ])
 
   function updateStrokeState(
     mode: 'paint' | 'erase' | null,
@@ -490,43 +751,7 @@ export function Grid({ size = 120, playMode = false }: GridProps) {
       return null
     }
 
-    for (const intersection of event.intersections) {
-      let current: THREE.Object3D | null = intersection.object
-      while (current) {
-        if (current.userData.outdoorTerrainSurface === true) {
-          const terrainCell = current.userData.outdoorTerrainCell
-          const cell =
-            Array.isArray(terrainCell) &&
-            terrainCell.length === 2 &&
-            typeof terrainCell[0] === 'number' &&
-            typeof terrainCell[1] === 'number'
-              ? [terrainCell[0], terrainCell[1]] as GridCell
-              : null
-          return {
-            point: intersection.point.clone(),
-            cell,
-          }
-        }
-        current = current.parent
-      }
-    }
-
-    return null
-  }
-
-  function getSnappedHoverCell(
-    point: { x: number; y: number; z: number },
-    terrainCell: GridCell | null,
-  ): SnappedGridPosition {
-    if (!terrainCell) {
-      return snap(point)
-    }
-
-    return {
-      cell: terrainCell,
-      key: getCellKey(terrainCell),
-      position: cellToWorldPosition(terrainCell),
-    }
+    return findOutdoorTerrainHit(event.intersections)
   }
 
   function updateHoveredCell(event: ThreeEvent<PointerEvent>) {
@@ -746,9 +971,20 @@ export function Grid({ size = 120, playMode = false }: GridProps) {
       return
     }
 
-    if ((tool === 'prop' && !isUnifiedOpeningMode && !isUnifiedSurfaceMode) || tool === 'character') {
-      const activeAsset = tool === 'character' ? selectedCharacterAsset : selectedPropAsset
-      const activeAssetId = tool === 'character' ? selectedCharacterAssetId : selectedPropAssetId
+    if (
+      isPickedUpPlacementMode ||
+      ((tool === 'prop' && !isUnifiedOpeningMode && !isUnifiedSurfaceMode) || tool === 'character')
+    ) {
+      const activeAsset = pickedUpObject
+        ? pickedUpAsset
+        : tool === 'character'
+          ? selectedCharacterAsset
+          : selectedPropAsset
+      const activeAssetId = pickedUpObject
+        ? pickedUpAssetId
+        : tool === 'character'
+          ? selectedCharacterAssetId
+          : selectedPropAssetId
       const rawPlacement = activeAsset
         ? getPropPlacement(
             activeAsset,
@@ -767,6 +1003,11 @@ export function Grid({ size = 120, playMode = false }: GridProps) {
       const propPlacement = applyFloorRotation(rawPlacement, floorRotationIndex * (Math.PI / 2))
 
       if (event.button === 2) {
+        if (pickedUpObject) {
+          cancelPickedUpObject()
+          return
+        }
+
         const hoveredObjectId = raycaster.objectIdFromEvent(event)
         if (hoveredObjectId) {
           removeObject(hoveredObjectId)
@@ -788,6 +1029,28 @@ export function Grid({ size = 120, playMode = false }: GridProps) {
       const normalizedObjectType = tool === 'character' || activeAsset?.category === 'player'
         ? 'player'
         : 'prop'
+
+      if (pickedUpObject) {
+        const moved = repositionObject(pickedUpObject.objectId, {
+          position: propPlacement.position,
+          rotation: propPlacement.rotation,
+          cell: propPlacement.cell,
+          cellKey: propPlacement.anchorKey ?? propPlacement.supportCellKey,
+          props: {
+            ...pickedUpObject.props,
+            connector: propPlacement.connector,
+            direction: propPlacement.direction,
+          },
+          parentObjectId: propPlacement.parentObjectId,
+          localPosition: localTransform.localPosition,
+          localRotation: localTransform.localRotation,
+          supportCellKey: propPlacement.supportCellKey,
+        })
+        if (moved) {
+          cancelPickedUpObject()
+        }
+        return
+      }
 
       placeObject({
         type: normalizedObjectType,
@@ -899,7 +1162,7 @@ export function Grid({ size = 120, playMode = false }: GridProps) {
     // preventDefault is handled by the non-passive canvas listener
   }
 
-  const isNavigationTool = isPassiveGridMode(tool, playMode)
+  const isNavigationTool = isPassiveGridMode(tool, playMode) && !isPickedUpPlacementMode
   const renderGridOverlay = shouldRenderGridOverlay(showGrid, playMode)
   const wallConnectionPlacement = (tool === 'opening' || isUnifiedOpeningMode) && hoveredPoint
     ? getWallConnectionPlacement(
@@ -995,6 +1258,20 @@ export function Grid({ size = 120, playMode = false }: GridProps) {
           previewCells={previewCells}
           strokeMode={strokeMode}
           propPlacement={(() => {
+            if (pickedUpAsset && hoveredPoint)
+              return applyFloorRotation(
+                getPropPlacement(
+                  pickedUpAsset,
+                  hoveredPoint,
+                  paintedCells,
+                  hoveredSurfaceHit,
+                  mapMode,
+                  outdoorTerrainHeights,
+                  hoveredRay,
+                  hoveredTerrainCell,
+                ),
+                floorRotationIndex * (Math.PI / 2),
+              )
             if (tool === 'prop' && !isUnifiedOpeningMode && !isUnifiedSurfaceMode && selectedPropAsset && hoveredPoint)
               return applyFloorRotation(
                 getPropPlacement(
@@ -1045,7 +1322,9 @@ export function Grid({ size = 120, playMode = false }: GridProps) {
             return null
           })()}
           propAssetId={
-            tool === 'prop' && !isUnifiedSurfaceMode && !isUnifiedOpeningMode
+            pickedUpAssetId
+              ? pickedUpAssetId
+            : tool === 'prop' && !isUnifiedSurfaceMode && !isUnifiedOpeningMode
               ? selectedPropAssetId
             : tool === 'character'
                 ? selectedCharacterAssetId
@@ -1054,6 +1333,7 @@ export function Grid({ size = 120, playMode = false }: GridProps) {
                 ? selectedOpeningAssetId
                 : null
           }
+          propObjectProps={pickedUpObject?.props ?? null}
           openingPlacement={
             (tool === 'opening' || isUnifiedOpeningMode) ? wallConnectionPlacement : null
           }
@@ -1098,6 +1378,7 @@ function HoverPreview({
   strokeMode,
   propPlacement,
   propAssetId,
+  propObjectProps,
   openingPlacement,
   floorVariantAssetId,
   wallVariantAssetId,
@@ -1128,6 +1409,7 @@ function HoverPreview({
   strokeMode: 'paint' | 'erase' | null
   propPlacement: PropPlacement | null
   propAssetId: string | null
+  propObjectProps: Record<string, unknown> | null
   openingPlacement: OpeningPlacement | null
   floorVariantAssetId: string | null
   wallVariantAssetId: string | null
@@ -1168,12 +1450,16 @@ function HoverPreview({
       hoveredCell.position[2],
     ]
     const rotation = propPlacement?.rotation ?? [0, 0, 0]
+    const previewScale = propObjectProps ? getObjectInstanceScale(propObjectProps) : 1
+    const previewTint = propObjectProps ? getObjectTintColor(propObjectProps) : null
 
     return (
-      <group position={position} rotation={rotation}>
+      <group position={position} rotation={rotation} scale={previewScale}>
         <ContentPackInstance
           assetId={propAssetId}
           variant="prop"
+          objectProps={propObjectProps ?? undefined}
+          tint={previewTint ?? undefined}
         />
       </group>
     )
@@ -1518,6 +1804,31 @@ function getNestedLocalTransform(
     localPosition: localPosition.toArray() as PropPlacement['localPosition'],
     localRotation: [localEuler.x, localEuler.y, localEuler.z] as PropPlacement['localRotation'],
   }
+}
+
+function findOutdoorTerrainHit(intersections: THREE.Intersection[]) {
+  for (const intersection of intersections) {
+    let current: THREE.Object3D | null = intersection.object
+    while (current) {
+      if (current.userData.outdoorTerrainSurface === true) {
+        const terrainCell = current.userData.outdoorTerrainCell
+        const cell =
+          Array.isArray(terrainCell) &&
+          terrainCell.length === 2 &&
+          typeof terrainCell[0] === 'number' &&
+          typeof terrainCell[1] === 'number'
+            ? [terrainCell[0], terrainCell[1]] as GridCell
+            : null
+        return {
+          point: intersection.point.clone(),
+          cell,
+        }
+      }
+      current = current.parent
+    }
+  }
+
+  return null
 }
 
 function raycastObjectId(object: THREE.Object3D | null) {

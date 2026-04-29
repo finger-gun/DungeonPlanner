@@ -9,6 +9,7 @@ import { registerObjectSources, unregisterObjectSources } from './objectSourceRe
 import { shouldAllowObjectContextDelete } from './openPassageInteraction'
 import type { PlayVisibility } from './playVisibility'
 import { ProjectedGroundDecal } from './ProjectedGroundDecal'
+import { getObjectInstanceScale, getObjectTintColor } from '../../store/objectAppearance'
 import { DEFAULT_GENERATED_CHARACTER_SIZE } from '../../generated-characters/types'
 import {
   getGeneratedCharacterIndicatorSize,
@@ -43,6 +44,9 @@ export const DungeonObject = memo(function DungeonObject({
   const removeObject = useDungeonStore((state) => state.removeObject)
   const setObjectProps = useDungeonStore((state) => state.setObjectProps)
   const tool = useDungeonStore((state) => state.tool)
+  const pickedUpObjectId = useDungeonStore((state) => state.pickedUpObject?.objectId ?? null)
+  const objectScalePreview = useDungeonStore((state) => state.objectScalePreviewOverrides[object.id] ?? null)
+  const objectRotationPreview = useDungeonStore((state) => state.objectRotationPreviewOverrides[object.id] ?? null)
   const assetBrowserCategory = useDungeonStore((state) => state.assetBrowser.category)
   const characterSize = useDungeonStore(
     (state) => object.assetId
@@ -52,20 +56,34 @@ export const DungeonObject = memo(function DungeonObject({
   const selected = selection === object.id
   const visibilityState = visibility.getObjectVisibility(object)
   const useLineOfSightPostMask = visibility.active
+  const isPickedUp = pickedUpObjectId === object.id
+  const objectScale = objectScalePreview ?? getObjectInstanceScale(object.props)
+  const objectTint = getObjectTintColor(object.props)
   const [suspendBakedLight, setSuspendBakedLight] = useState(false)
   const hasSeenInitialPropsRef = useRef(false)
   const suspendTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const groupRef = useRef<Group>(null)
   useLayoutEffect(() => {
+    if (isPickedUp || !groupRef.current) {
+      unregisterObject(object.id)
+      return
+    }
+
     if (groupRef.current) registerObject(object.id, groupRef.current)
     return () => unregisterObject(object.id)
-  }, [object.id])
+  }, [isPickedUp, object.id])
 
   useLayoutEffect(() => {
+    if (isPickedUp) {
+      unregisterObjectSources(sourceScopeKey, object.id)
+      return
+    }
+
     registerObjectSources(sourceScopeKey, object)
     return () => unregisterObjectSources(sourceScopeKey, object.id)
   }, [
+    isPickedUp,
     object,
     object.assetId,
     object.cellKey,
@@ -110,6 +128,10 @@ export const DungeonObject = memo(function DungeonObject({
   const disableBakedLight = suspendBakedLight || (playerAnimationState != null && playerAnimationState !== 'default')
 
   function handleClick(event: ThreeEvent<MouseEvent>) {
+    if (pickedUpObjectId !== null) {
+      return
+    }
+
     if (tool === 'play') {
       const nextProps = asset?.getPlayModeNextProps?.(object.props) ?? null
       if (nextProps) {
@@ -142,6 +164,10 @@ export const DungeonObject = memo(function DungeonObject({
   }
 
   function handleContextMenu(event: ThreeEvent<PointerEvent>) {
+    if (pickedUpObjectId !== null) {
+      return
+    }
+
     if (
       tool === 'play'
       || !shouldAllowObjectContextDelete(tool, assetBrowserCategory)
@@ -156,13 +182,18 @@ export const DungeonObject = memo(function DungeonObject({
   const showPlayerSelectionRing = selected && object.type === 'player'
   const childObjects = childrenByParent?.[object.id] ?? []
   const position = object.parentObjectId ? (object.localPosition ?? object.position) : object.position
-  const rotation = object.parentObjectId ? (object.localRotation ?? object.rotation) : object.rotation
+  const baseRotation = object.parentObjectId ? (object.localRotation ?? object.rotation) : object.rotation
+  const rotation = objectRotationPreview ?? baseRotation
   const showPlayDragHitArea = tool === 'play' && object.type === 'player'
-  const playerHitRadius = getGeneratedCharacterIndicatorSize(characterSize) * 0.42
-  const playerHitHeight = 2.4 * getGeneratedCharacterScale(characterSize)
+  const playerHitRadius = getGeneratedCharacterIndicatorSize(characterSize) * 0.42 * objectScale
+  const playerHitHeight = 2.4 * getGeneratedCharacterScale(characterSize) * objectScale
+
+  if (isPickedUp) {
+    return null
+  }
 
   return (
-    <group ref={groupRef} position={position} rotation={rotation}>
+    <group ref={groupRef} position={position} rotation={rotation} scale={objectScale}>
       {showPlayDragHitArea && (
         <mesh
           position={[0, playerHitHeight * 0.5, 0]}
@@ -181,6 +212,7 @@ export const DungeonObject = memo(function DungeonObject({
         playerAnimationState={playerAnimationState ?? 'default'}
         variantKey={object.cellKey}
         objectProps={object.props}
+        tint={objectTint ?? undefined}
         propInstanceKey={object.id}
         visibility={visibilityState}
         useLineOfSightPostMask={useLineOfSightPostMask}
@@ -192,7 +224,7 @@ export const DungeonObject = memo(function DungeonObject({
         bakedLightField={bakedLightField}
         disableBakedLight={disableBakedLight}
       />
-      {showPlayerSelectionRing && <PlayerSelectionRing assetId={object.assetId} />}
+      {showPlayerSelectionRing && <PlayerSelectionRing assetId={object.assetId} scale={objectScale} />}
       {childObjects.map((childObject) => (
         <DungeonObject
           key={childObject.id}
@@ -211,9 +243,11 @@ export const DungeonObject = memo(function DungeonObject({
 export function PlayerSelectionRing({
   assetId = null,
   color = '#d4a72c',
+  scale = 1,
 }: {
   assetId?: string | null
   color?: string
+  scale?: number
 }) {
   const characterSize = useDungeonStore(
     (state) => assetId
@@ -223,7 +257,7 @@ export function PlayerSelectionRing({
   return (
     <ProjectedGroundDecal
       color={color}
-      size={getGeneratedCharacterIndicatorSize(characterSize)}
+      size={getGeneratedCharacterIndicatorSize(characterSize) * scale}
     />
   )
 }

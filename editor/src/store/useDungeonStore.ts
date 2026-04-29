@@ -225,6 +225,27 @@ type MutableObjectMaps = {
 
 type MoveObjectInput = Pick<DungeonObjectRecord, 'position' | 'cell' | 'cellKey'>
 
+type RepositionObjectInput = Pick<DungeonObjectRecord, 'position' | 'rotation' | 'cell' | 'cellKey'> & {
+  props?: Record<string, unknown>
+  localPosition?: DungeonObjectRecord['localPosition']
+  localRotation?: DungeonObjectRecord['localRotation']
+  parentObjectId?: DungeonObjectRecord['parentObjectId']
+  supportCellKey?: DungeonObjectRecord['supportCellKey']
+}
+
+export type PickedUpObjectState = {
+  objectId: string
+  type: DungeonObjectType
+  assetId: string
+  props: Record<string, unknown>
+  floorRotationIndex: number
+}
+
+export type ObjectMoveDragPointer = {
+  clientX: number
+  clientY: number
+}
+
 export type SceneLighting = {
   intensity: number // multiplier applied to all scene lights, 0–2
 }
@@ -280,6 +301,10 @@ type DungeonState = DungeonSnapshot & {
   cameraPreset: CameraPreset | null
   previousCameraPreset: CameraPreset | null
   objectLightPreviewOverrides: Record<string, ObjectLightOverrides>
+  objectScalePreviewOverrides: Record<string, number>
+  objectRotationPreviewOverrides: Record<string, DungeonObjectRecord['rotation']>
+  pickedUpObject: PickedUpObjectState | null
+  objectMoveDragPointer: ObjectMoveDragPointer | null
   history: HistoryEntry[]
   future: HistoryEntry[]
   paintCells: (cells: GridCell[]) => number
@@ -291,8 +316,14 @@ type DungeonState = DungeonSnapshot & {
   eraseOutdoorTerrainStyleCells: (cells: GridCell[]) => number
   placeObject: (input: PlaceObjectInput) => string | null
   moveObject: (id: string, input: MoveObjectInput) => boolean
+  repositionObject: (id: string, input: RepositionObjectInput) => boolean
   setObjectProps: (id: string, props: Record<string, unknown>) => boolean
+  setObjectScalePreview: (id: string, scale: number | null) => void
+  setObjectRotationPreview: (id: string, rotation: DungeonObjectRecord['rotation'] | null) => void
   setObjectLightPreview: (id: string, overrides: ObjectLightOverrides | null) => void
+  pickUpObject: (id: string) => boolean
+  cancelPickedUpObject: () => void
+  setObjectMoveDragPointer: (pointer: ObjectMoveDragPointer | null) => void
   mergeExploredCells: (cellKeys: string[]) => void
   clearExploredCells: () => void
   removeObject: (id: string) => void
@@ -784,6 +815,11 @@ function objectConsumesOccupancy(assetId: string | null, connector: unknown) {
   }
 
   return connector !== 'FREE'
+}
+
+function getFloorRotationIndexFromRotation(rotationY: number) {
+  const quarterTurns = Math.round(rotationY / (Math.PI / 2))
+  return ((quarterTurns % 4) + 4) % 4
 }
 
 function createEmptySnapshot(): DungeonSnapshot {
@@ -1620,6 +1656,10 @@ export const useDungeonStore = create<DungeonState>()(
   cameraPreset: null,
   previousCameraPreset: null,
   objectLightPreviewOverrides: {},
+  objectScalePreviewOverrides: {},
+  objectRotationPreviewOverrides: {},
+  pickedUpObject: null,
+  objectMoveDragPointer: null,
   history: [],
   future: [],
   floors: {
@@ -2066,7 +2106,6 @@ export const useDungeonStore = create<DungeonState>()(
     }
 
     const consumesOccupancy = objectConsumesOccupancy(object.assetId, object.props.connector)
-
     const isOutdoorPlayerMove = state.mapMode === 'outdoor' && object.type === 'player'
 
     if (state.mapMode !== 'outdoor' && !state.paintedCells[getCellKey(input.cell)]) {
@@ -2083,9 +2122,7 @@ export const useDungeonStore = create<DungeonState>()(
       occupant !== null &&
       isSurroundingGeneratedObject(occupant)
     if (occupantId && occupantId !== id) {
-      if (ignoresOccupant) {
-        // Let players move across generated outdoor surroundings without deleting the scenery.
-      } else {
+      if (!ignoresOccupant) {
         return false
       }
     }
@@ -2149,6 +2186,147 @@ export const useDungeonStore = create<DungeonState>()(
 
     return true
   },
+  repositionObject: (id, input) => {
+    const state = get()
+    const object = state.placedObjects[id]
+
+    if (!object) {
+      return false
+    }
+
+    const movingIds = collectDescendantIds(state.placedObjects, id)
+    const nextParentObjectId = input.parentObjectId ?? null
+    if (nextParentObjectId) {
+      if (!state.placedObjects[nextParentObjectId] || movingIds.has(nextParentObjectId)) {
+        return false
+      }
+    }
+
+    const nextProps = input.props ? { ...input.props } : object.props
+    const supportCellKey = input.supportCellKey ?? getCellKey(input.cell)
+    if (state.mapMode !== 'outdoor' && !state.paintedCells[supportCellKey]) {
+      return false
+    }
+    if (
+      state.mapMode === 'outdoor' &&
+      !nextParentObjectId &&
+      object.type !== 'player' &&
+      state.blockedCells[getCellKey(input.cell)]
+    ) {
+      return false
+    }
+
+    const previousConsumesOccupancy = objectConsumesOccupancy(object.assetId, object.props.connector)
+    const consumesOccupancy = objectConsumesOccupancy(object.assetId, nextProps.connector)
+    const occupantId = consumesOccupancy ? state.occupancy[input.cellKey] : null
+    if (occupantId && occupantId !== id && movingIds.has(occupantId)) {
+      return false
+    }
+
+    const groundedOutdoorObject =
+      state.mapMode === 'outdoor' &&
+      !nextParentObjectId &&
+      (object.type === 'player' || nextProps.connector === 'FLOOR' || nextProps.connector === 'FREE')
+    const nextPositionY = groundedOutdoorObject
+      ? getOutdoorTerrainCellHeight(state.outdoorTerrainHeights, input.cell)
+      : input.position[1]
+
+    const unchanged =
+      object.cellKey === input.cellKey &&
+      object.cell[0] === input.cell[0] &&
+      object.cell[1] === input.cell[1] &&
+      object.position[0] === input.position[0] &&
+      object.position[1] === nextPositionY &&
+      object.position[2] === input.position[2] &&
+      object.rotation[0] === input.rotation[0] &&
+      object.rotation[1] === input.rotation[1] &&
+      object.rotation[2] === input.rotation[2] &&
+      JSON.stringify(object.props) === JSON.stringify(nextProps) &&
+      (object.parentObjectId ?? null) === nextParentObjectId &&
+      (object.supportCellKey ?? getCellKey(object.cell)) === supportCellKey &&
+      JSON.stringify(object.localPosition ?? null) === JSON.stringify(input.localPosition ?? null) &&
+      JSON.stringify(object.localRotation ?? null) === JSON.stringify(input.localRotation ?? null)
+
+    if (unchanged) {
+      return true
+    }
+
+    const placedObjects = { ...state.placedObjects }
+    const occupancy = { ...state.occupancy }
+    const changedObjectIds = new Set<string>(movingIds)
+    const occupant = occupantId ? state.placedObjects[occupantId] : null
+    const ignoresOccupant =
+      state.mapMode === 'outdoor' &&
+      object.type === 'player' &&
+      occupant !== null &&
+      isSurroundingGeneratedObject(occupant)
+
+    if (occupantId && occupantId !== id && !ignoresOccupant) {
+      collectDescendantIds(state.placedObjects, occupantId).forEach((objectId) => {
+        changedObjectIds.add(objectId)
+      })
+      removeObjectHierarchy({ placedObjects, occupancy }, occupantId)
+    }
+
+    placedObjects[id] = {
+      ...object,
+      position: [input.position[0], nextPositionY, input.position[2]] as DungeonObjectRecord['position'],
+      rotation: [...input.rotation] as DungeonObjectRecord['rotation'],
+      props: nextProps,
+      localPosition: input.localPosition
+        ? [...input.localPosition] as DungeonObjectRecord['localPosition']
+        : input.localPosition ?? null,
+      localRotation: input.localRotation
+        ? [...input.localRotation] as DungeonObjectRecord['localRotation']
+        : input.localRotation ?? null,
+      parentObjectId: nextParentObjectId,
+      supportCellKey,
+      cell: [...input.cell] as GridCell,
+      cellKey: input.cellKey,
+    }
+
+    if (previousConsumesOccupancy && occupancy[object.cellKey] === id) {
+      delete occupancy[object.cellKey]
+    }
+    if (consumesOccupancy) {
+      occupancy[input.cellKey] = id
+    }
+
+    updateDescendantWorldTransforms(placedObjects, id)
+
+    const historyEntry = buildObjectHistoryEntry({
+      beforePlacedObjects: state.placedObjects,
+      afterPlacedObjects: placedObjects,
+      beforeOccupancy: state.occupancy,
+      afterOccupancy: occupancy,
+      changedObjectIds,
+      selectionBefore: state.selection,
+      selectionAfter: id,
+    })
+
+    set((current) => ({
+      ...current,
+      placedObjects,
+      occupancy,
+      selection: id,
+      isObjectDragActive:
+        current.pickedUpObject?.objectId === id
+          ? false
+          : current.isObjectDragActive,
+      objectRotationPreviewOverrides: Object.fromEntries(
+        Object.entries(current.objectRotationPreviewOverrides).filter(([key]) => key !== id),
+      ),
+      pickedUpObject: current.pickedUpObject?.objectId === id ? null : current.pickedUpObject,
+      objectMoveDragPointer:
+        current.pickedUpObject?.objectId === id
+          ? null
+          : current.objectMoveDragPointer,
+      history: [...current.history, historyEntry],
+      future: [],
+    }))
+
+    return true
+  },
   setObjectProps: (id, props) => {
     const state = get()
     const object = state.placedObjects[id]
@@ -2180,6 +2358,12 @@ export const useDungeonStore = create<DungeonState>()(
     set((current) => ({
       ...current,
       placedObjects,
+      objectScalePreviewOverrides: Object.fromEntries(
+        Object.entries(current.objectScalePreviewOverrides).filter(([key]) => key !== id),
+      ),
+      objectRotationPreviewOverrides: Object.fromEntries(
+        Object.entries(current.objectRotationPreviewOverrides).filter(([key]) => key !== id),
+      ),
       objectLightPreviewOverrides: Object.fromEntries(
         Object.entries(current.objectLightPreviewOverrides).filter(([key]) => key !== id),
       ),
@@ -2188,6 +2372,68 @@ export const useDungeonStore = create<DungeonState>()(
     }))
 
     return true
+  },
+  setObjectScalePreview: (id, scale) => {
+    set((current) => {
+      if (scale === null) {
+        if (current.objectScalePreviewOverrides[id] === undefined) {
+          return current
+        }
+
+        return {
+          ...current,
+          objectScalePreviewOverrides: Object.fromEntries(
+            Object.entries(current.objectScalePreviewOverrides).filter(([key]) => key !== id),
+          ),
+        }
+      }
+
+      if (current.objectScalePreviewOverrides[id] === scale) {
+        return current
+      }
+
+      return {
+        ...current,
+        objectScalePreviewOverrides: {
+          ...current.objectScalePreviewOverrides,
+          [id]: scale,
+        },
+      }
+    })
+  },
+  setObjectRotationPreview: (id, rotation) => {
+    set((current) => {
+      if (rotation === null) {
+        if (current.objectRotationPreviewOverrides[id] === undefined) {
+          return current
+        }
+
+        return {
+          ...current,
+          objectRotationPreviewOverrides: Object.fromEntries(
+            Object.entries(current.objectRotationPreviewOverrides).filter(([key]) => key !== id),
+          ),
+        }
+      }
+
+      const existing = current.objectRotationPreviewOverrides[id]
+      if (
+        existing &&
+        existing[0] === rotation[0] &&
+        existing[1] === rotation[1] &&
+        existing[2] === rotation[2]
+      ) {
+        return current
+      }
+
+      return {
+        ...current,
+        objectRotationPreviewOverrides: {
+          ...current.objectRotationPreviewOverrides,
+          [id]: [...rotation] as DungeonObjectRecord['rotation'],
+        },
+      }
+    })
   },
   setObjectLightPreview: (id, overrides) => {
     set((current) => {
@@ -2210,6 +2456,64 @@ export const useDungeonStore = create<DungeonState>()(
           ...current.objectLightPreviewOverrides,
           [id]: overrides,
         },
+      }
+    })
+  },
+  pickUpObject: (id) => {
+    const state = get()
+    const object = state.placedObjects[id]
+    if (!object?.assetId) {
+      return false
+    }
+
+    const nextPickedUpObject: PickedUpObjectState = {
+      objectId: id,
+      type: object.type,
+      assetId: object.assetId,
+      props: { ...object.props },
+      floorRotationIndex: getFloorRotationIndexFromRotation(object.rotation[1]),
+    }
+
+    set((current) => ({
+      ...current,
+      pickedUpObject: nextPickedUpObject,
+      objectMoveDragPointer: null,
+      objectScalePreviewOverrides: Object.fromEntries(
+        Object.entries(current.objectScalePreviewOverrides).filter(([key]) => key !== id),
+      ),
+      objectRotationPreviewOverrides: Object.fromEntries(
+        Object.entries(current.objectRotationPreviewOverrides).filter(([key]) => key !== id),
+      ),
+    }))
+
+    return true
+  },
+  cancelPickedUpObject: () => {
+    set((current) => (
+      current.pickedUpObject === null
+        ? current
+        : {
+            ...current,
+            isObjectDragActive: false,
+            pickedUpObject: null,
+            objectMoveDragPointer: null,
+          }
+    ))
+  },
+  setObjectMoveDragPointer: (pointer) => {
+    set((current) => {
+      if (
+        current.objectMoveDragPointer?.clientX === pointer?.clientX &&
+        current.objectMoveDragPointer?.clientY === pointer?.clientY
+      ) {
+        return current
+      }
+
+      return {
+        ...current,
+        objectMoveDragPointer: pointer
+          ? { clientX: pointer.clientX, clientY: pointer.clientY }
+          : null,
       }
     })
   },
@@ -2277,6 +2581,24 @@ export const useDungeonStore = create<DungeonState>()(
       placedObjects,
       occupancy,
       selection: nextSelection,
+      isObjectDragActive:
+        current.pickedUpObject && removedIds.has(current.pickedUpObject.objectId)
+          ? false
+          : current.isObjectDragActive,
+      pickedUpObject:
+        current.pickedUpObject && removedIds.has(current.pickedUpObject.objectId)
+          ? null
+          : current.pickedUpObject,
+      objectMoveDragPointer:
+        current.pickedUpObject && removedIds.has(current.pickedUpObject.objectId)
+          ? null
+          : current.objectMoveDragPointer,
+      objectScalePreviewOverrides: Object.fromEntries(
+        Object.entries(current.objectScalePreviewOverrides).filter(([key]) => !removedIds.has(key)),
+      ),
+      objectRotationPreviewOverrides: Object.fromEntries(
+        Object.entries(current.objectRotationPreviewOverrides).filter(([key]) => !removedIds.has(key)),
+      ),
       history: [...current.history, historyEntry],
       future: [],
     }))
@@ -2383,12 +2705,23 @@ export const useDungeonStore = create<DungeonState>()(
   },
   clearSelection: () => {
     set((state) => (
-      state.selection === null && state.selectedRoomId === null
+      state.selection === null &&
+      state.selectedRoomId === null &&
+      state.pickedUpObject === null &&
+      state.objectMoveDragPointer === null &&
+      !state.isObjectDragActive &&
+      Object.keys(state.objectScalePreviewOverrides).length === 0 &&
+      Object.keys(state.objectRotationPreviewOverrides).length === 0
         ? state
         : {
             ...state,
             selection: null,
             selectedRoomId: null,
+            isObjectDragActive: false,
+            pickedUpObject: null,
+            objectMoveDragPointer: null,
+            objectScalePreviewOverrides: {},
+            objectRotationPreviewOverrides: {},
           }
     ))
   },
@@ -3112,6 +3445,10 @@ export const useDungeonStore = create<DungeonState>()(
         activeCameraMode: 'perspective',
         cameraPreset: null,
         objectLightPreviewOverrides: {},
+        objectScalePreviewOverrides: {},
+        objectRotationPreviewOverrides: {},
+        pickedUpObject: null,
+        objectMoveDragPointer: null,
         lightEffectsEnabled: true,
         lightFlickerEnabled: true,
         particleEffectsEnabled: true,
@@ -3152,11 +3489,15 @@ export const useDungeonStore = create<DungeonState>()(
        floorViewMode: 'active',
       characterSheet: { open: false, assetId: null },
       assetBrowser: createDefaultAssetBrowserState(),
-      activeCameraMode: 'perspective',
-      cameraPreset: 'perspective', // triggers camera to home position
-      objectLightPreviewOverrides: {},
-       // Settings reset to defaults
-       sceneLighting: { intensity: 1 },
+       activeCameraMode: 'perspective',
+       cameraPreset: 'perspective', // triggers camera to home position
+        objectLightPreviewOverrides: {},
+        objectScalePreviewOverrides: {},
+        objectRotationPreviewOverrides: {},
+        pickedUpObject: null,
+        objectMoveDragPointer: null,
+         // Settings reset to defaults
+        sceneLighting: { intensity: 1 },
          postProcessing: { ...DEFAULT_POST_PROCESSING_SETTINGS },
         showGrid: true,
         showLosDebugMask: false,
@@ -4009,6 +4350,10 @@ export const useDungeonStore = create<DungeonState>()(
         activeCameraMode: 'perspective',
         cameraPreset: null,
         objectLightPreviewOverrides: {},
+        objectScalePreviewOverrides: {},
+        objectRotationPreviewOverrides: {},
+        pickedUpObject: null,
+        objectMoveDragPointer: null,
       history: [],
       future: [],
       floors,

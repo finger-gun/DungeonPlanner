@@ -11,6 +11,7 @@ const DRAG_LIFT_Y = 0.24
 export type PlayDragState = {
   objectId: string
   assetId: string | null
+  objectProps: Record<string, unknown>
   rotation: [number, number, number]
   originCell: GridCell
   positionY: number
@@ -25,6 +26,7 @@ export type PlayDragState = {
 type DragObjectSnapshot = {
   id: string
   assetId: string | null
+  props: Record<string, unknown>
   rotation: [number, number, number]
   position: [number, number, number]
   cell: GridCell
@@ -46,6 +48,7 @@ export function createPlayDragState(
   return {
     objectId: object.id,
     assetId: object.assetId,
+    objectProps: { ...object.props },
     rotation: object.rotation,
     originCell: object.cell,
     positionY,

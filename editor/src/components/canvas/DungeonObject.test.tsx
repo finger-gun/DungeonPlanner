@@ -1,15 +1,17 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { act, cleanup, render, screen } from '@testing-library/react'
-import type { DungeonObjectRecord } from '../../store/useDungeonStore'
+import { useDungeonStore, type DungeonObjectRecord } from '../../store/useDungeonStore'
 import type { PlayVisibility } from './playVisibility'
-import { DungeonObject } from './DungeonObject'
+import { DungeonObject, PlayerSelectionRing } from './DungeonObject'
 
-const contentPackInstanceMock = vi.fn((props: { disableBakedLight?: boolean }) => (
+const contentPackInstanceMock = vi.fn((props: { disableBakedLight?: boolean; tint?: string }) => (
   <div
     data-testid="content-pack-instance"
     data-disable-baked-light={props.disableBakedLight ? 'true' : 'false'}
+    data-tint={props.tint ?? ''}
   />
 ))
+const projectedGroundDecalMock = vi.fn((_props: { size: number }) => null)
 
 vi.mock('./ContentPackInstance', () => ({
   ContentPackInstance: (props: { disableBakedLight?: boolean }) => contentPackInstanceMock(props),
@@ -33,12 +35,18 @@ vi.mock('../../store/useDungeonStore', () => {
     removeObject: vi.fn(),
     setObjectProps: vi.fn(),
     tool: 'select',
+    pickedUpObject: null as { objectId: string } | null,
+    objectScalePreviewOverrides: {} as Record<string, number>,
+    objectRotationPreviewOverrides: {} as Record<string, [number, number, number]>,
     assetBrowser: { category: 'props' },
     generatedCharacters: {},
   }
+  const store = ((selector: (state: typeof storeState) => unknown) => selector(storeState)) as
+    ((selector: (state: typeof storeState) => unknown) => unknown) & { getState: () => typeof storeState }
+  store.getState = () => storeState
 
   return {
-    useDungeonStore: (selector: (state: typeof storeState) => unknown) => selector(storeState),
+    useDungeonStore: store,
   }
 })
 
@@ -57,7 +65,7 @@ vi.mock('./openPassageInteraction', () => ({
 }))
 
 vi.mock('./ProjectedGroundDecal', () => ({
-  ProjectedGroundDecal: () => null,
+  ProjectedGroundDecal: (props: { size: number }) => projectedGroundDecalMock(props),
 }))
 
 vi.mock('../../generated-characters/rendering', () => ({
@@ -91,6 +99,11 @@ describe('DungeonObject baked light suspension', () => {
   beforeEach(() => {
     vi.useFakeTimers()
     contentPackInstanceMock.mockClear()
+    projectedGroundDecalMock.mockClear()
+    const state = useDungeonStore.getState()
+    state.pickedUpObject = null
+    state.objectScalePreviewOverrides = {}
+    state.objectRotationPreviewOverrides = {}
   })
 
   afterEach(() => {
@@ -144,5 +157,47 @@ describe('DungeonObject baked light suspension', () => {
     )
 
     expect(screen.getByTestId('content-pack-instance')).toHaveAttribute('data-disable-baked-light', 'false')
+  })
+
+  it('passes tint overrides through to the rendered content pack instance', () => {
+    render(
+      <DungeonObject
+        object={createObject({ props: { tintColor: '#22cc88' } })}
+        visibility={visibility}
+        sourceScopeKey="floor-1"
+      />,
+    )
+
+    expect(screen.getByTestId('content-pack-instance')).toHaveAttribute('data-tint', '#22cc88')
+  })
+
+  it('hides the object while it is picked up for repositioning', () => {
+    useDungeonStore.getState().pickedUpObject = {
+      objectId: 'prop-1',
+      type: 'prop',
+      assetId: 'stateful-prop',
+      props: {},
+      floorRotationIndex: 0,
+    }
+
+    render(
+      <DungeonObject
+        object={createObject()}
+        visibility={visibility}
+        sourceScopeKey="floor-1"
+      />,
+    )
+
+    expect(screen.queryByTestId('content-pack-instance')).toBeNull()
+  })
+})
+
+describe('PlayerSelectionRing', () => {
+  it('scales the selection decal for resized players', () => {
+    render(<PlayerSelectionRing assetId={null} scale={1.5} />)
+
+    expect(projectedGroundDecalMock).toHaveBeenCalledWith(
+      expect.objectContaining({ size: 1.5 }),
+    )
   })
 })
