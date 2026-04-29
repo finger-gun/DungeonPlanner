@@ -12,7 +12,7 @@ import {
 export function useBakedFloorLightField(input: BakedFloorLightFieldBuildInput) {
   const prepared = useMemo(
     () => prepareBakedFloorLightFieldBuild(input),
-    [input.chunkSize, input.floorCells, input.floorId, input.occlusionInput, input.staticLightSources],
+    [input],
   )
   const [field, setField] = useState<BakedFloorLightField>(() => getOrBuildBakedFloorLightField(input))
   const workerRef = useRef<Worker | null>(null)
