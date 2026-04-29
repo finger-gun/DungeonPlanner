@@ -938,6 +938,94 @@ describe('useDungeonStore history', () => {
     expect(useDungeonStore.getState().objectLightPreviewOverrides['torch-1']).toBeUndefined()
   })
 
+  it('tracks transient scale previews and picked-up objects outside persisted object props', () => {
+    useDungeonStore.getState().setObjectScalePreview('prop-1', 1.4)
+    expect(useDungeonStore.getState().objectScalePreviewOverrides['prop-1']).toBe(1.4)
+
+    useDungeonStore.getState().setObjectScalePreview('prop-1', null)
+    expect(useDungeonStore.getState().objectScalePreviewOverrides['prop-1']).toBeUndefined()
+
+    useDungeonStore.getState().setObjectRotationPreview('prop-1', [0, Math.PI / 3, 0])
+    expect(useDungeonStore.getState().objectRotationPreviewOverrides['prop-1']).toEqual([0, Math.PI / 3, 0])
+
+    useDungeonStore.getState().setObjectRotationPreview('prop-1', null)
+    expect(useDungeonStore.getState().objectRotationPreviewOverrides['prop-1']).toBeUndefined()
+
+    useDungeonStore.getState().setObjectMoveDragPointer({ clientX: 120, clientY: 160 })
+    expect(useDungeonStore.getState().objectMoveDragPointer).toEqual({ clientX: 120, clientY: 160 })
+
+    useDungeonStore.getState().paintCells([[0, 0]])
+    const assetId = useDungeonStore.getState().selectedAssetIds.prop
+    const placedId = useDungeonStore.getState().placeObject({
+      type: 'prop',
+      assetId,
+      position: [1, 0, 1],
+      rotation: [0, Math.PI / 2, 0],
+      props: { connector: 'FLOOR', direction: null, instanceScale: 1.4 },
+      cell: [0, 0],
+      cellKey: '0:0:floor',
+      supportCellKey: '0:0',
+    })
+
+    expect(placedId).toBeTruthy()
+    expect(useDungeonStore.getState().pickUpObject(placedId!)).toBe(true)
+    expect(useDungeonStore.getState().pickedUpObject).toMatchObject({
+      objectId: placedId,
+      assetId,
+      floorRotationIndex: 1,
+      props: { connector: 'FLOOR', direction: null, instanceScale: 1.4 },
+    })
+
+    useDungeonStore.getState().setObjectDragActive(true)
+    useDungeonStore.getState().cancelPickedUpObject()
+    expect(useDungeonStore.getState().pickedUpObject).toBeNull()
+    expect(useDungeonStore.getState().objectMoveDragPointer).toBeNull()
+    expect(useDungeonStore.getState().isObjectDragActive).toBe(false)
+  })
+
+  it('repositions picked-up props without losing their existing props', () => {
+    useDungeonStore.getState().paintCells([[0, 0], [1, 0]])
+    const assetId = useDungeonStore.getState().selectedAssetIds.prop
+    const placedId = useDungeonStore.getState().placeObject({
+      type: 'prop',
+      assetId,
+      position: [1, 0, 1],
+      rotation: [0, 0, 0],
+      props: { connector: 'FLOOR', direction: null, instanceScale: 1.35 },
+      cell: [0, 0],
+      cellKey: '0:0:floor',
+      supportCellKey: '0:0',
+    })
+
+    expect(placedId).toBeTruthy()
+    expect(useDungeonStore.getState().pickUpObject(placedId!)).toBe(true)
+
+    const moved = useDungeonStore.getState().repositionObject(placedId!, {
+      position: [3, 0, 1],
+      rotation: [0, Math.PI / 2, 0],
+      cell: [1, 0],
+      cellKey: '1:0:floor',
+      props: { connector: 'FLOOR', direction: null, instanceScale: 1.35, tintColor: '#ffaa33' },
+      supportCellKey: '1:0',
+      parentObjectId: null,
+      localPosition: null,
+      localRotation: null,
+    })
+
+    expect(moved).toBe(true)
+    const movedObject = useDungeonStore.getState().placedObjects[placedId!]
+    expect(movedObject?.position).toEqual([3, 0, 1])
+    expect(movedObject?.rotation[1]).toBe(Math.PI / 2)
+    expect(movedObject?.cellKey).toBe('1:0:floor')
+    expect(movedObject?.props).toMatchObject({
+      connector: 'FLOOR',
+      direction: null,
+      instanceScale: 1.35,
+      tintColor: '#ffaa33',
+    })
+    expect(useDungeonStore.getState().pickedUpObject).toBeNull()
+  })
+
   it('switches to top-down view when entering room mode', () => {
     useDungeonStore.getState().setTool('room')
 

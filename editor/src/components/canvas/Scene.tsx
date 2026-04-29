@@ -35,6 +35,8 @@ import { setBakedLightFlickerTime } from './bakedLightMaterial'
 import { useBakedFloorLightField } from '../../rendering/useBakedFloorLightField'
 import { PropProbeDebugOverlay } from './PropProbeDebugOverlay'
 import { pruneRuntimePropLightingCache } from '../../rendering/propLightingCache'
+import { getObjectInstanceScale, getObjectTintColor } from '../../store/objectAppearance'
+import { SelectionContextualUi } from './SelectionContextualUi'
 
 const WebGPUPostProcessing = lazy(() =>
   import('./WebGPUPostProcessing').then((module) => ({
@@ -519,6 +521,8 @@ function FloorContent({ startY = 0 }: { startY?: number }) {
   const dragCleanupRef = useRef<(() => void) | null>(null)
   const { camera, gl, invalidate, controls } = useThree()
   const [dragState, setDragState] = useState<PlayDragState | null>(null)
+  const dragPreviewScale = dragState ? getObjectInstanceScale(dragState.objectProps) : 1
+  const dragPreviewTint = dragState ? getObjectTintColor(dragState.objectProps) : null
 
   useFrame((_, delta) => {
     if (Math.abs(animYRef.current) < 0.002) {
@@ -812,15 +816,22 @@ function FloorContent({ startY = 0 }: { startY?: number }) {
             />
           )
         ))}
+        <SelectionContextualUi />
         {dragState && (
-          <group position={dragState.displayPosition} rotation={dragState.rotation}>
+          <group position={dragState.displayPosition} rotation={dragState.rotation} scale={dragPreviewScale}>
             <ContentPackInstance
               assetId={dragState.assetId}
               playerAnimationState={dragState.animationState}
+              objectProps={dragState.objectProps}
+              tint={dragPreviewTint ?? undefined}
               variant="prop"
               visibility="visible"
             />
-            <PlayerSelectionRing assetId={dragState.assetId} color={dragState.valid ? '#d4a72c' : '#ef4444'} />
+            <PlayerSelectionRing
+              assetId={dragState.assetId}
+              scale={dragPreviewScale}
+              color={dragState.valid ? '#d4a72c' : '#ef4444'}
+            />
           </group>
         )}
         <Suspense fallback={null}>

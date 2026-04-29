@@ -22,7 +22,10 @@ import { pixelate } from '../../postprocessing/pixelate'
 import { tiltShift } from '../../postprocessing/tiltShift'
 import { DEFAULT_AUTOFOCUS_SMOOTH_TIME } from '../../postprocessing/tiltShiftMath'
 import { selectionOutline, alphaOver } from '../../postprocessing/selectionOutline'
-import { createSelectionOutlineProxy } from '../../postprocessing/selectionOutlineConfig'
+import {
+  createSelectionOutlineProxy,
+  syncSelectionOutlineProxy,
+} from '../../postprocessing/selectionOutlineConfig'
 import { useDungeonStore } from '../../store/useDungeonStore'
 import { getRegisteredObject, useObjectRegistryVersion } from './objectRegistry'
 import { getAutofocusDistance, resolveAutofocusTarget } from './autofocusTarget'
@@ -38,6 +41,7 @@ export function WebGPUPostProcessing() {
   const outlineCameraRef  = useRef<THREE.Camera | null>(null)
   const outlineSceneRef = useRef(new THREE.Scene())
   const outlineProxyRef = useRef<THREE.Object3D | null>(null)
+  const outlineSourceRef = useRef<THREE.Object3D | null>(null)
   const outlineProxyDisposeRef = useRef<(() => void) | null>(null)
   const visibleLosCameraRef = useRef<THREE.Camera | null>(null)
   const exploredLosCameraRef = useRef<THREE.Camera | null>(null)
@@ -68,6 +72,7 @@ export function WebGPUPostProcessing() {
         outlineSceneRef.current.remove(outlineProxyRef.current)
         outlineProxyRef.current = null
       }
+      outlineSourceRef.current = null
       outlineProxyDisposeRef.current?.()
       outlineProxyDisposeRef.current = null
     }
@@ -86,6 +91,7 @@ export function WebGPUPostProcessing() {
 
     outlineSceneRef.current.add(outlineProxy.object)
     outlineProxyRef.current = outlineProxy.object
+    outlineSourceRef.current = selectedObject ?? null
     outlineProxyDisposeRef.current = outlineProxy.dispose
     invalidate()
 
@@ -214,6 +220,8 @@ export function WebGPUPostProcessing() {
       oc.projectionMatrix.copy(src.projectionMatrix)
       oc.projectionMatrixInverse.copy(src.projectionMatrixInverse)
     }
+
+    syncSelectionOutlineProxy(outlineProxyRef.current, outlineSourceRef.current)
 
     const visibleCamera = visibleLosCameraRef.current as any
     if (visibleCamera) {

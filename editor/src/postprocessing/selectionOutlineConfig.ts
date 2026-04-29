@@ -5,6 +5,24 @@ const selectionOutlineProxyPosition = new THREE.Vector3()
 const selectionOutlineProxyQuaternion = new THREE.Quaternion()
 const selectionOutlineProxyScale = new THREE.Vector3()
 
+export function syncSelectionOutlineProxy(
+  proxyRoot: THREE.Object3D | null | undefined,
+  root: THREE.Object3D | null | undefined,
+) {
+  if (!proxyRoot || !root) {
+    return
+  }
+
+  root.updateWorldMatrix(true, true)
+  root.getWorldPosition(selectionOutlineProxyPosition)
+  root.getWorldQuaternion(selectionOutlineProxyQuaternion)
+  root.getWorldScale(selectionOutlineProxyScale)
+  proxyRoot.position.copy(selectionOutlineProxyPosition)
+  proxyRoot.quaternion.copy(selectionOutlineProxyQuaternion)
+  proxyRoot.scale.copy(selectionOutlineProxyScale)
+  proxyRoot.updateMatrixWorld(true)
+}
+
 export function createSelectionOutlineProxy(root: THREE.Object3D | null | undefined) {
   if (!root) {
     return null
@@ -18,13 +36,7 @@ export function createSelectionOutlineProxy(root: THREE.Object3D | null | undefi
     toneMapped: false,
   })
   const proxyRoot = root.clone(true)
-  root.updateWorldMatrix(true, true)
-  root.getWorldPosition(selectionOutlineProxyPosition)
-  root.getWorldQuaternion(selectionOutlineProxyQuaternion)
-  root.getWorldScale(selectionOutlineProxyScale)
-  proxyRoot.position.copy(selectionOutlineProxyPosition)
-  proxyRoot.quaternion.copy(selectionOutlineProxyQuaternion)
-  proxyRoot.scale.copy(selectionOutlineProxyScale)
+  syncSelectionOutlineProxy(proxyRoot, root)
 
   let hasRenderableMesh = false
   proxyRoot.traverse((object) => {
@@ -46,8 +58,6 @@ export function createSelectionOutlineProxy(root: THREE.Object3D | null | undefi
       object.visible = false
     }
   })
-
-  proxyRoot.updateMatrixWorld(true)
 
   if (!hasRenderableMesh) {
     proxyMaterial.dispose()
