@@ -32,6 +32,7 @@ import {
   clearRuntimePropLightingCache,
   getRuntimePropLightingDebugEntries,
   getCachedRuntimePropBakedLightProbe,
+  pruneRuntimePropLightingCache,
   releaseCachedRuntimePropLightingProbe,
 } from './propLightingCache'
 
@@ -215,5 +216,40 @@ describe('propLightingCache', () => {
     expect(entries[0]?.instanceKey).toBe('object-1')
     expect(entries[0]?.worldBounds.min.toArray()).toEqual([0, 0, 0])
     expect(entries[0]?.probe.baseLight).toEqual([0.2, 0.1, 0.05])
+  })
+
+  it('prunes cached probe entries for floors that no longer exist', () => {
+    const object = new THREE.Object3D()
+    const localBounds = createBounds([-0.5, 0, -0.5], [0.5, 2, 0.5])
+    const worldBounds = createBounds([0, 0, 0], [1, 2, 1])
+    const activeFloor = createLightField({ floorId: 'floor-1' })
+    const removedFloor = createLightField({ floorId: 'floor-2' })
+    measureObjectWorldBoundsMock.mockReturnValue(worldBounds)
+    buildPropBakedLightProbeMock.mockReturnValue({
+      baseLight: [0.2, 0.1, 0.05],
+      topLight: [0.3, 0.2, 0.1],
+      baseY: 0.4,
+      topY: 1.6,
+      lightDirection: [1, 0, 0],
+      directionalStrength: 0.5,
+    })
+
+    getCachedRuntimePropBakedLightProbe({
+      lightField: activeFloor,
+      instanceKey: 'object-1',
+      object,
+      localBounds,
+    })
+    getCachedRuntimePropBakedLightProbe({
+      lightField: removedFloor,
+      instanceKey: 'object-2',
+      object,
+      localBounds,
+    })
+
+    pruneRuntimePropLightingCache(['floor-1'])
+
+    expect(getRuntimePropLightingDebugEntries('floor-1')).toHaveLength(1)
+    expect(getRuntimePropLightingDebugEntries('floor-2')).toHaveLength(0)
   })
 })

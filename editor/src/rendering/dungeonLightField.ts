@@ -195,11 +195,20 @@ export type BakedFloorLightFieldWorkerResult = {
 }
 
 export function clearBakedFloorLightFieldCache() {
-  floorLightFieldCache.forEach((field) => {
-    field.lightFieldTexture?.dispose()
-    field.flickerLightFieldTextures.forEach((texture) => texture?.dispose())
-  })
+  floorLightFieldCache.forEach((field) => disposeBakedFloorLightField(field))
   floorLightFieldCache.clear()
+}
+
+export function pruneBakedFloorLightFieldCache(retainedFloorIds: Iterable<string>) {
+  const retainedFloorIdSet = new Set(retainedFloorIds)
+  for (const [floorId, field] of floorLightFieldCache.entries()) {
+    if (retainedFloorIdSet.has(floorId)) {
+      continue
+    }
+
+    disposeBakedFloorLightField(field)
+    floorLightFieldCache.delete(floorId)
+  }
 }
 
 export function getPropLightWorldPosition(
@@ -216,6 +225,11 @@ export function getPropLightWorldPosition(
   offsetScratch.applyEuler(rotationScratch)
   positionScratch.add(offsetScratch)
   return positionScratch.toArray() as [number, number, number]
+}
+
+function disposeBakedFloorLightField(field: BakedFloorLightField) {
+  field.lightFieldTexture?.dispose()
+  field.flickerLightFieldTextures.forEach((texture) => texture?.dispose())
 }
 
 export function resolveObjectLightSources(

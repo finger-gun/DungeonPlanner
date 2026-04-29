@@ -133,14 +133,17 @@ export function ContentPackInstance({
     }),
     [AssetComponent, assetId, assetPath, objectProps, variant, variantKey],
   )
+  const propLightingFloorId = variant === 'prop' ? (bakedLightField?.floorId ?? null) : null
 
   useEffect(() => {
-    return () => {
-      if (variant === 'prop' && propInstanceKey) {
-        releaseCachedRuntimePropLightingProbe(bakedLightField?.floorId ?? null, propInstanceKey)
-      }
+    if (!propLightingFloorId || !propInstanceKey) {
+      return
     }
-  }, [bakedLightField?.floorId, propInstanceKey, variant])
+
+    return () => {
+      releaseCachedRuntimePropLightingProbe(propLightingFloorId, propInstanceKey)
+    }
+  }, [propInstanceKey, propLightingFloorId])
 
   useEffect(() => {
     if (assetPath && !AssetComponent) {
@@ -260,7 +263,7 @@ function getComponentProps(
   }
 }
 
-function buildPropDescriptorKey({
+export function buildPropDescriptorKey({
   assetId,
   assetPath,
   hasComponent,
@@ -284,7 +287,7 @@ function buildPropDescriptorKey({
       'component',
       assetId ?? 'unknown',
       variantKey ?? 'default',
-      JSON.stringify(objectProps ?? null),
+      stableSerializeDescriptorProps(objectProps),
     ].join(':')
   }
 
@@ -297,6 +300,19 @@ function buildPropDescriptorKey({
     assetId ?? 'unknown',
     variantKey ?? 'default',
   ].join(':')
+}
+
+function stableSerializeDescriptorProps(objectProps?: Record<string, unknown>) {
+  return JSON.stringify(objectProps ?? null, (_key, value) => {
+    if (!value || Array.isArray(value) || typeof value !== 'object') {
+      return value
+    }
+
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>)
+        .sort(([leftKey], [rightKey]) => leftKey.localeCompare(rightKey)),
+    )
+  })
 }
 
 function getSurfaceBakedLightOptions(

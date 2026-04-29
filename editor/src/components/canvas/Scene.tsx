@@ -35,10 +35,16 @@ import {
   useObjectSourceRegistryVersion,
 } from './objectSourceRegistry'
 import { registerDebugCameraPoseReader, registerDebugWorldProjector } from './debugCameraBridge'
-import { getOrBuildBakedFloorLightField, resolveObjectLightSources, type BakedFloorLightField } from '../../rendering/dungeonLightField'
+import {
+  getOrBuildBakedFloorLightField,
+  pruneBakedFloorLightFieldCache,
+  resolveObjectLightSources,
+  type BakedFloorLightField,
+} from '../../rendering/dungeonLightField'
 import { setBakedLightFlickerTime } from './bakedLightMaterial'
 import { useBakedFloorLightField } from '../../rendering/useBakedFloorLightField'
 import { PropProbeDebugOverlay } from './PropProbeDebugOverlay'
+import { pruneRuntimePropLightingCache } from '../../rendering/propLightingCache'
 
 const WebGPUPostProcessing = lazy(() =>
   import('./WebGPUPostProcessing').then((module) => ({
@@ -70,6 +76,7 @@ const ALWAYS_VISIBLE: ReturnType<typeof usePlayVisibility> = {
 
 export function Scene() {
   const activeFloorId = useDungeonStore((state) => state.activeFloorId)
+  const floorOrder    = useDungeonStore((state) => state.floorOrder)
   const floors        = useDungeonStore((state) => state.floors)
   const floorViewMode = useDungeonStore((state) => state.floorViewMode)
   const tool          = useDungeonStore((state) => state.tool)
@@ -92,6 +99,11 @@ export function Scene() {
       0
     prevFloorIdRef.current = activeFloorId
   }
+
+  useEffect(() => {
+    pruneBakedFloorLightFieldCache(floorOrder)
+    pruneRuntimePropLightingCache(floorOrder)
+  }, [floorOrder])
 
   return (
     <Canvas

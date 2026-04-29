@@ -1,4 +1,4 @@
-import { useRef, useMemo, useLayoutEffect } from 'react'
+import { useCallback, useRef, useMemo, useLayoutEffect } from 'react'
 import type { ReactNode } from 'react'
 import { useFrame } from '@react-three/fiber'
 import type { ThreeEvent } from '@react-three/fiber'
@@ -56,6 +56,13 @@ import {
 
 const WALL_EXTRA_DELAY_MS = 70
 const ZERO_ROTATION = [0, 0, 0] as const
+
+function useIsBuildAnimationActive(buildAnimationVersion: number) {
+  return useCallback((cellKey: string) => {
+    void buildAnimationVersion
+    return isAnimationActive(cellKey)
+  }, [buildAnimationVersion])
+}
 
 type RoomWallInstance = {
   key: string
@@ -132,6 +139,7 @@ export function DungeonRoom({
   const liveGlobalFloorAssetId = useDungeonStore((state) => state.selectedAssetIds.floor)
   const liveGlobalWallAssetId = useDungeonStore((state) => state.selectedAssetIds.wall)
   const buildAnimationVersion = useBuildAnimationVersion()
+  const isBuildAnimationCurrentlyActive = useIsBuildAnimationActive(buildAnimationVersion)
   const resolvedData = data ?? {
     paintedCells: livePaintedCells,
     floorId: liveActiveFloorId,
@@ -225,8 +233,12 @@ export function DungeonRoom({
       ) as PaintedCells,
     [layers, visiblePaintedCells],
   )
-  const bakedFloorLightField = bakedLightField ?? useMemo(
-    () => getOrBuildBakedFloorLightField({
+  const bakedFloorLightField = useMemo(() => {
+    if (bakedLightField) {
+      return bakedLightField
+    }
+
+    return getOrBuildBakedFloorLightField({
       floorId: floorId ?? 'active-floor',
       floorCells: Object.values(visiblePaintedCellRecords).map((record) => record.cell),
       staticLightSources: visibleLightSources,
@@ -236,9 +248,16 @@ export function DungeonRoom({
         innerWalls,
         wallSurfaceProps,
       },
-    }),
-    [floorId, innerWalls, visibleLightSources, visiblePaintedCellRecords, wallOpenings, wallSurfaceProps],
-  )
+    })
+  }, [
+    bakedLightField,
+    floorId,
+    innerWalls,
+    visibleLightSources,
+    visiblePaintedCellRecords,
+    wallOpenings,
+    wallSurfaceProps,
+  ])
   const floorRenderPlan = useMemo(
     () => buildFloorRenderPlan(visiblePaintedCells, rooms, globalFloorAssetId, floorTileAssetIds),
     [floorTileAssetIds, globalFloorAssetId, rooms, visiblePaintedCells],
@@ -278,7 +297,7 @@ export function DungeonRoom({
   const staticWallEntries = useMemo<StaticTileEntry[]>(
     () => walls.flatMap((wall) => {
       const floorKey = wall.segmentKeys[0]?.split(':').slice(0, 2).join(':') ?? wall.key
-      if ((enableBuildAnimation && isAnimationActive(floorKey)) || isInteractiveWallAsset(wall.assetId)) {
+      if ((enableBuildAnimation && isBuildAnimationCurrentlyActive(floorKey)) || isInteractiveWallAsset(wall.assetId)) {
         return []
       }
 
@@ -297,26 +316,26 @@ export function DungeonRoom({
         objectProps: wall.objectProps,
       }]
     }),
-    [bakedFloorLightField, buildAnimationVersion, enableBuildAnimation, visibility, visiblePaintedCells, walls],
+    [bakedFloorLightField, enableBuildAnimation, isBuildAnimationCurrentlyActive, visibility, walls],
   )
   const staticInteractiveWalls = useMemo(
     () => walls.filter((wall) => {
       const floorKey = wall.segmentKeys[0]?.split(':').slice(0, 2).join(':') ?? wall.key
-      return !(enableBuildAnimation && isAnimationActive(floorKey)) && isInteractiveWallAsset(wall.assetId)
+      return !(enableBuildAnimation && isBuildAnimationCurrentlyActive(floorKey)) && isInteractiveWallAsset(wall.assetId)
     }),
-    [buildAnimationVersion, enableBuildAnimation, walls],
+    [enableBuildAnimation, isBuildAnimationCurrentlyActive, walls],
   )
   const animatedWalls = useMemo(
     () => walls.filter((wall) => {
       const floorKey = wall.segmentKeys[0]?.split(':').slice(0, 2).join(':') ?? wall.key
-      return enableBuildAnimation && isAnimationActive(floorKey)
+      return enableBuildAnimation && isBuildAnimationCurrentlyActive(floorKey)
     }),
-    [buildAnimationVersion, enableBuildAnimation, walls],
+    [enableBuildAnimation, isBuildAnimationCurrentlyActive, walls],
   )
   const staticCornerEntries = useMemo<StaticTileEntry[]>(
     () => corners.flatMap((corner) => {
       const cellKey = corner.key.split(':').slice(0, 2).join(':')
-      if (enableBuildAnimation && isAnimationActive(cellKey)) {
+      if (enableBuildAnimation && isBuildAnimationCurrentlyActive(cellKey)) {
         return []
       }
 
@@ -336,14 +355,14 @@ export function DungeonRoom({
         objectProps: corner.objectProps,
       }]
     }),
-    [bakedFloorLightField, buildAnimationVersion, corners, enableBuildAnimation, visibility],
+    [bakedFloorLightField, corners, enableBuildAnimation, isBuildAnimationCurrentlyActive, visibility],
   )
   const animatedCorners = useMemo(
     () => corners.filter((corner) => {
       const cellKey = corner.key.split(':').slice(0, 2).join(':')
-      return enableBuildAnimation && isAnimationActive(cellKey)
+      return enableBuildAnimation && isBuildAnimationCurrentlyActive(cellKey)
     }),
-    [buildAnimationVersion, corners, enableBuildAnimation],
+    [corners, enableBuildAnimation, isBuildAnimationCurrentlyActive],
   )
 
   return (
@@ -462,10 +481,11 @@ function CellGroupRenderer({
   buildAnimationVersion: number
 }) {
   const useLineOfSightPostMask = visibility.active
+  const isBuildAnimationCurrentlyActive = useIsBuildAnimationActive(buildAnimationVersion)
   const staticEntries = useMemo<StaticTileEntry[]>(
     () => group.cells.flatMap((cell) => {
       const key = getCellKey(cell)
-      if (blockedFloorCellKeys.has(key) || (enableBuildAnimation && isAnimationActive(key))) {
+      if (blockedFloorCellKeys.has(key) || (enableBuildAnimation && isBuildAnimationCurrentlyActive(key))) {
         return []
       }
 
@@ -479,17 +499,17 @@ function CellGroupRenderer({
           visibility: 'visible',
           bakedLightField: bakedFloorLightField,
           bakedLight: getBakedLightSampleForCell(bakedFloorLightField, key),
-          fogCell: cell,
-        }]
+        fogCell: cell,
+      }]
       }),
-    [bakedFloorLightField, blockedFloorCellKeys, buildAnimationVersion, enableBuildAnimation, group.cells, group.floorAssetId],
+    [bakedFloorLightField, blockedFloorCellKeys, enableBuildAnimation, group.cells, group.floorAssetId, isBuildAnimationCurrentlyActive],
   )
   const animatedCells = useMemo(
     () => group.cells.filter((cell) => {
       const key = getCellKey(cell)
-      return !blockedFloorCellKeys.has(key) && enableBuildAnimation && isAnimationActive(key)
+      return !blockedFloorCellKeys.has(key) && enableBuildAnimation && isBuildAnimationCurrentlyActive(key)
     }),
-    [blockedFloorCellKeys, buildAnimationVersion, enableBuildAnimation, group.cells],
+    [blockedFloorCellKeys, enableBuildAnimation, group.cells, isBuildAnimationCurrentlyActive],
   )
 
   return (
@@ -534,11 +554,12 @@ function FloorSurfaceRenderer({
   buildAnimationVersion: number
 }) {
   const useLineOfSightPostMask = visibility.active
+  const isBuildAnimationCurrentlyActive = useIsBuildAnimationActive(buildAnimationVersion)
   const staticEntries = useMemo<StaticTileEntry[]>(
     () => placements.flatMap((placement) => {
       const shouldSkip =
         placement.coveredCellKeys.some((cellKey) => blockedFloorCellKeys.has(cellKey))
-        || placement.coveredCellKeys.some((cellKey) => enableBuildAnimation && isAnimationActive(cellKey))
+        || placement.coveredCellKeys.some((cellKey) => enableBuildAnimation && isBuildAnimationCurrentlyActive(cellKey))
       if (shouldSkip) {
         return []
       }
@@ -556,13 +577,13 @@ function FloorSurfaceRenderer({
         fogCell: placement.anchorCell,
       }]
     }),
-    [bakedFloorLightField, blockedFloorCellKeys, buildAnimationVersion, enableBuildAnimation, placements],
+    [bakedFloorLightField, blockedFloorCellKeys, enableBuildAnimation, isBuildAnimationCurrentlyActive, placements],
   )
   const animatedPlacements = useMemo(
     () => placements.filter((placement) =>
       !placement.coveredCellKeys.some((cellKey) => blockedFloorCellKeys.has(cellKey))
-      && placement.coveredCellKeys.some((cellKey) => enableBuildAnimation && isAnimationActive(cellKey))),
-    [blockedFloorCellKeys, buildAnimationVersion, enableBuildAnimation, placements],
+      && placement.coveredCellKeys.some((cellKey) => enableBuildAnimation && isBuildAnimationCurrentlyActive(cellKey))),
+    [blockedFloorCellKeys, enableBuildAnimation, isBuildAnimationCurrentlyActive, placements],
   )
 
   return (

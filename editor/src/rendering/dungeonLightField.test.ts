@@ -18,6 +18,7 @@ import {
   getOrBuildBakedFloorLightField,
   prepareBakedFloorLightFieldBuild,
   prepareBakedFloorLightFieldWorkerBuild,
+  pruneBakedFloorLightFieldCache,
   getStaticLightSourcesForBounds,
   sampleStaticLightAtWorldPosition,
   sampleBakedLightFieldAtWorldPosition,
@@ -145,6 +146,58 @@ describe('dungeonLightField', () => {
     expect(rebuilt.chunks.filter((chunk) => chunk.dirty).map((chunk) => chunk.key)).toEqual(['0:0'])
     expect(getBakedLightSampleForCell(first, '1:0')[0]).toBeGreaterThan(0)
     expect(getBakedLightSampleForCell(rebuilt, '1:0')).toEqual([0, 0, 0])
+  })
+
+  it('prunes cached light fields for floors that are no longer present', () => {
+    clearBakedFloorLightFieldCache()
+
+    const activeField = getOrBuildBakedFloorLightField({
+      floorId: 'floor-active',
+      floorCells: [[0, 0]],
+      staticLightSources: [createResolvedLightSource('torch-active', [1, 1.5, 1])],
+      occlusionInput: {
+        paintedCells: createPaintedCells(),
+        wallOpenings: {},
+        innerWalls: {},
+      },
+    })
+    const removedField = getOrBuildBakedFloorLightField({
+      floorId: 'floor-removed',
+      floorCells: [[0, 0]],
+      staticLightSources: [createResolvedLightSource('torch-removed', [1, 1.5, 1])],
+      occlusionInput: {
+        paintedCells: createPaintedCells(),
+        wallOpenings: {},
+        innerWalls: {},
+      },
+    })
+
+    pruneBakedFloorLightFieldCache(['floor-active'])
+
+    const rebuiltActiveField = getOrBuildBakedFloorLightField({
+      floorId: 'floor-active',
+      floorCells: [[0, 0]],
+      staticLightSources: [createResolvedLightSource('torch-active', [1, 1.5, 1])],
+      occlusionInput: {
+        paintedCells: createPaintedCells(),
+        wallOpenings: {},
+        innerWalls: {},
+      },
+    })
+    const rebuiltRemovedField = getOrBuildBakedFloorLightField({
+      floorId: 'floor-removed',
+      floorCells: [[0, 0]],
+      staticLightSources: [createResolvedLightSource('torch-removed', [1, 1.5, 1])],
+      occlusionInput: {
+        paintedCells: createPaintedCells(),
+        wallOpenings: {},
+        innerWalls: {},
+      },
+    })
+
+    expect(rebuiltActiveField).toBe(activeField)
+    expect(rebuiltRemovedField).not.toBe(removedField)
+    expect(rebuiltRemovedField.lightFieldTexture).not.toBe(removedField.lightFieldTexture)
   })
 
   it('does not bleed smoothed floor light across a fully closed shared wall', () => {

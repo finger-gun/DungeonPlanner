@@ -31,6 +31,24 @@ export function clearRuntimePropLightingCache() {
   notifyCacheChanged()
 }
 
+export function pruneRuntimePropLightingCache(retainedFloorIds: Iterable<string>) {
+  const retainedFloorIdSet = new Set(retainedFloorIds)
+  let didPrune = false
+
+  for (const floorId of floorPropLightingCache.keys()) {
+    if (retainedFloorIdSet.has(floorId)) {
+      continue
+    }
+
+    floorPropLightingCache.delete(floorId)
+    didPrune = true
+  }
+
+  if (didPrune) {
+    notifyCacheChanged()
+  }
+}
+
 export function releaseCachedRuntimePropLightingProbe(
   floorId: string | null | undefined,
   instanceKey: string | null | undefined,
