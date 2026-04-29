@@ -40,21 +40,7 @@ describe('MoveToolPanel', () => {
     expect(toggle).toHaveAttribute('aria-pressed', 'true')
   })
 
-  it('lets users toggle light effects independently from particles', async () => {
-    const user = userEvent.setup()
-    render(<MoveToolPanel />)
-
-    const toggle = screen.getByLabelText('Light Effects')
-    expect(toggle).toHaveAttribute('aria-pressed', 'true')
-
-    await user.click(toggle)
-
-    expect(useDungeonStore.getState().lightEffectsEnabled).toBe(false)
-    expect(useDungeonStore.getState().particleEffectsEnabled).toBe(true)
-    expect(toggle).toHaveAttribute('aria-pressed', 'false')
-  })
-
-  it('lets users toggle light flicker independently from light effects', async () => {
+  it('lets users toggle light flicker independently from particles', async () => {
     const user = userEvent.setup()
     render(<MoveToolPanel />)
 
@@ -64,8 +50,14 @@ describe('MoveToolPanel', () => {
     await user.click(toggle)
 
     expect(useDungeonStore.getState().lightFlickerEnabled).toBe(false)
-    expect(useDungeonStore.getState().lightEffectsEnabled).toBe(true)
+    expect(useDungeonStore.getState().particleEffectsEnabled).toBe(true)
     expect(toggle).toHaveAttribute('aria-pressed', 'false')
+  })
+
+  it('does not show a light effects toggle once prop lights are fully baked', () => {
+    render(<MoveToolPanel />)
+
+    expect(screen.queryByLabelText('Light Effects')).not.toBeInTheDocument()
   })
 
   it('lets users change pixel size from the settings panel', async () => {

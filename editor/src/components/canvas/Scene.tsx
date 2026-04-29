@@ -9,11 +9,6 @@ import { CameraPresetManager } from './CameraPresetManager'
 import { DungeonObject } from './DungeonObject'
 import { PlayerSelectionRing } from './DungeonObject'
 import { DungeonRoom } from './DungeonRoom'
-import {
-  distributeForwardPlusLightBudget,
-  MAX_DYNAMIC_PROP_LIGHTS,
-  PropLightPool,
-} from './propLightPool'
 import { useDungeonStore, type DungeonObjectRecord } from '../../store/useDungeonStore'
 import { usePlayVisibility } from './playVisibility'
 import { ContentPackInstance } from './ContentPackInstance'
@@ -28,12 +23,7 @@ import { isDownStairAssetId } from '../../store/stairAssets'
 import { OutdoorGround } from './OutdoorGround'
 import { getEnvironmentLightingState } from './environmentLighting'
 import { createWebGpuRenderer } from '../../rendering/createWebGpuRenderer'
-import { MAX_FORWARD_PLUS_POINT_LIGHTS } from '../../rendering/forwardPlusConfig'
 import { FogOfWarProvider } from './fogOfWar'
-import {
-  getRegisteredLightSourceCount,
-  useObjectSourceRegistryVersion,
-} from './objectSourceRegistry'
 import { registerDebugCameraPoseReader, registerDebugWorldProjector } from './debugCameraBridge'
 import {
   getOrBuildBakedFloorLightField,
@@ -304,7 +294,6 @@ function SceneOverviewContent() {
   const floors = useDungeonStore((state) => state.floors)
   const floorOrder = useDungeonStore((state) => state.floorOrder)
   const activeFloorId = useDungeonStore((state) => state.activeFloorId)
-  const lightEffectsEnabled = useDungeonStore((state) => state.lightEffectsEnabled)
   const postProcessingEnabled = useDungeonStore((state) =>
     state.postProcessing.enabled || state.postProcessing.pixelateEnabled,
   )
@@ -319,7 +308,6 @@ function SceneOverviewContent() {
   const wallSurfaceAssetIds = useDungeonStore((state) => state.wallSurfaceAssetIds)
   const globalFloorAssetId = useDungeonStore((state) => state.selectedAssetIds.floor)
   const globalWallAssetId = useDungeonStore((state) => state.selectedAssetIds.wall)
-  const objectSourceRegistryVersion = useObjectSourceRegistryVersion()
   const floorEntries = useMemo<FloorRenderEntry[]>(() => {
     const sortedFloorIds = [...floorOrder].sort(
       (left, right) => (floors[right]?.level ?? 0) - (floors[left]?.level ?? 0),
@@ -428,16 +416,6 @@ function SceneOverviewContent() {
     wallSurfaceAssetIds,
     wallSurfaceProps,
   ])
-  const floorLightBudgets = useMemo(
-    () => {
-      void objectSourceRegistryVersion
-      return distributeForwardPlusLightBudget(
-        floorEntries.map((entry) => (lightEffectsEnabled ? getRegisteredLightSourceCount(entry.id) : 0)),
-        Math.min(MAX_DYNAMIC_PROP_LIGHTS, MAX_FORWARD_PLUS_POINT_LIGHTS),
-      )
-    },
-    [floorEntries, lightEffectsEnabled, objectSourceRegistryVersion],
-  )
 
   return (
     <>
@@ -446,16 +424,9 @@ function SceneOverviewContent() {
           <WebGPUPostProcessing />
         </Suspense>
       )}
-      {floorEntries.map((entry, index) => (
+      {floorEntries.map((entry) => (
         <group key={entry.id} position={[0, entry.level * SCENE_OVERVIEW_FLOOR_HEIGHT_UNIT, 0]}>
           <DungeonRoom data={entry.data} visibility={ALWAYS_VISIBLE} enableBuildAnimation={false} />
-          {floorLightBudgets[index] > 0 && (
-            <PropLightPool
-              scopeKey={entry.id}
-              visibility={ALWAYS_VISIBLE}
-              maxLights={floorLightBudgets[index]}
-            />
-          )}
           {entry.topLevelObjects
             .filter((object) => !isDownStairAssetId(object.assetId))
             .map((object) => (
@@ -497,8 +468,6 @@ function FloorContent({ startY = 0 }: { startY?: number }) {
   const lensEnabled = useDungeonStore((state) => state.postProcessing.enabled)
   const pixelateEnabled = useDungeonStore((state) => state.postProcessing.pixelateEnabled)
   const visibility = usePlayVisibility()
-  const lightEffectsEnabled = useDungeonStore((state) => state.lightEffectsEnabled)
-  const objectSourceRegistryVersion = useObjectSourceRegistryVersion()
   const [releaseAnimationIds, setReleaseAnimationIds] = useState<Record<string, true>>({})
 
   const objects = useMemo(
@@ -540,16 +509,6 @@ function FloorContent({ startY = 0 }: { startY?: number }) {
   const bakedFloorLightField = useBakedFloorLightField(bakedLightBuildInput)
   const topLevelObjects = useMemo(() => getTopLevelObjects(objects), [objects])
   const childrenByParent = useMemo(() => buildObjectChildrenIndex(objects), [objects])
-  const [propLightBudget] = useMemo(
-    () => {
-      void objectSourceRegistryVersion
-      return distributeForwardPlusLightBudget(
-        [lightEffectsEnabled ? getRegisteredLightSourceCount(activeFloorId) : 0],
-        Math.min(MAX_DYNAMIC_PROP_LIGHTS, MAX_FORWARD_PLUS_POINT_LIGHTS),
-      )
-    },
-    [activeFloorId, lightEffectsEnabled, objectSourceRegistryVersion],
-  )
   const showPostProcessing = true
   const postProcessingKey = `${lensEnabled ? 'lens' : 'nolens'}:${pixelateEnabled ? 'pixel' : 'clean'}:${showLensFocusDebugPoint ? 'focus' : 'nofocus'}`
 
@@ -836,9 +795,6 @@ function FloorContent({ startY = 0 }: { startY?: number }) {
         )}
         <DungeonRoom visibility={visibility} bakedLightField={bakedFloorLightField} />
         <RoomResizeOverlay />
-        {propLightBudget > 0 && (
-          <PropLightPool scopeKey={activeFloorId} visibility={visibility} maxLights={propLightBudget} />
-        )}
         {showPropProbeDebug && (
           <PropProbeDebugOverlay floorId={activeFloorId} />
         )}
