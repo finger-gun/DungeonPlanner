@@ -57,8 +57,9 @@ type PropBakedLightOptions = {
 }
 
 const bakedLightFlickerTimeUniform = uniform(0)
+const BAKED_FLICKER_SIGNATURE_VERSION = 'multi-basis-v2'
 const SURFACE_BAKED_ALBEDO_EMISSIVE_SCALE = 0.9
-const PROP_BAKED_ALBEDO_EMISSIVE_SCALE = 1.55
+const PROP_BAKED_ALBEDO_EMISSIVE_SCALE = 1.15
 const BILLBOARD_BAKED_ALBEDO_EMISSIVE_SCALE = 1.8
 const SURFACE_BAKED_SIGNATURE_VERSION = [
   SURFACE_BAKED_LIGHT_RESPONSE.contrastFloor,
@@ -68,6 +69,7 @@ const SURFACE_BAKED_SIGNATURE_VERSION = [
   SURFACE_BAKED_LIGHT_RESPONSE.albedoBoost,
   SURFACE_BAKED_LIGHT_RESPONSE.emissiveBoost,
   SURFACE_BAKED_ALBEDO_EMISSIVE_SCALE,
+  BAKED_FLICKER_SIGNATURE_VERSION,
 ].join(',')
 const PROP_BAKED_SIGNATURE_VERSION = [
   PROP_BAKED_LIGHT_RESPONSE.contrastFloor,
@@ -368,37 +370,27 @@ function buildSmoothedBakedFlickerNode(
   sampleOffsetWorldXZ: any = null,
 ) {
   const flickerTextures = lightField.flickerLightFieldTextures
-  if (!flickerTextures.some((texture) => texture)) {
+  if (!flickerTextures[0] || !flickerTextures[1] || !flickerTextures[2]) {
     return vec3(0, 0, 0)
   }
 
-  const band0Time = bakedLightFlickerTimeUniform
-  const band1Time = bakedLightFlickerTimeUniform.add(float(2.1))
-  const band2Time = bakedLightFlickerTimeUniform.add(float(4.2))
-  const band0Noise = sin(band0Time.mul(float(11.3))).mul(float(0.10))
-    .add(sin(band0Time.mul(float(7.1))).mul(float(0.08)))
-    .add(sin(band0Time.mul(float(23.7))).mul(float(0.05)))
-  const band1Noise = sin(band1Time.mul(float(11.3))).mul(float(0.10))
-    .add(sin(band1Time.mul(float(7.1))).mul(float(0.08)))
-    .add(sin(band1Time.mul(float(23.7))).mul(float(0.05)))
-  const band2Noise = sin(band2Time.mul(float(11.3))).mul(float(0.10))
-    .add(sin(band2Time.mul(float(7.1))).mul(float(0.08)))
-    .add(sin(band2Time.mul(float(23.7))).mul(float(0.05)))
+  const band0Signal = sin(bakedLightFlickerTimeUniform.mul(float(8.9)).add(float(0.4))).mul(float(0.38))
+    .add(sin(bakedLightFlickerTimeUniform.mul(float(13.7)).add(float(2.1))).mul(float(0.24)))
+    .add(sin(bakedLightFlickerTimeUniform.mul(float(21.4)).add(float(4.7))).mul(float(0.14)))
+  const band1Signal = sin(bakedLightFlickerTimeUniform.mul(float(9.8)).add(float(1.7))).mul(float(0.34))
+    .add(sin(bakedLightFlickerTimeUniform.mul(float(15.9)).add(float(0.6))).mul(float(0.22)))
+    .add(sin(bakedLightFlickerTimeUniform.mul(float(24.5)).add(float(3.0))).mul(float(0.12)))
+  const band2Signal = sin(bakedLightFlickerTimeUniform.mul(float(7.7)).add(float(2.8))).mul(float(0.32))
+    .add(sin(bakedLightFlickerTimeUniform.mul(float(18.4)).add(float(1.2))).mul(float(0.2)))
+    .add(sin(bakedLightFlickerTimeUniform.mul(float(29.1)).add(float(5.3))).mul(float(0.1)))
+  const band0Sample = buildSmoothedBakedTextureSampleNode(flickerTextures[0], lightField, sampleOffsetWorldXZ).rgb
+  const band1Sample = buildSmoothedBakedTextureSampleNode(flickerTextures[1], lightField, sampleOffsetWorldXZ).rgb
+  const band2Sample = buildSmoothedBakedTextureSampleNode(flickerTextures[2], lightField, sampleOffsetWorldXZ).rgb
 
   return vec3(
-    buildSmoothedBakedTextureSampleNode(flickerTextures[0], lightField, sampleOffsetWorldXZ).rgb.mul(
-      band0Noise,
-    )
-      .add(
-        buildSmoothedBakedTextureSampleNode(flickerTextures[1], lightField, sampleOffsetWorldXZ).rgb.mul(
-          band1Noise,
-        ),
-      )
-      .add(
-        buildSmoothedBakedTextureSampleNode(flickerTextures[2], lightField, sampleOffsetWorldXZ).rgb.mul(
-          band2Noise,
-        ),
-      ) as never,
+    band0Sample.mul(band0Signal)
+      .add(band1Sample.mul(band1Signal))
+      .add(band2Sample.mul(band2Signal)) as never,
   )
 }
 

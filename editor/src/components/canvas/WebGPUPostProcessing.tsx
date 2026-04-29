@@ -21,13 +21,12 @@ import { orthographicDepthToViewZ, pass, uniform } from 'three/tsl'
 import { pixelate } from '../../postprocessing/pixelate'
 import { tiltShift } from '../../postprocessing/tiltShift'
 import { DEFAULT_AUTOFOCUS_SMOOTH_TIME } from '../../postprocessing/tiltShiftMath'
-import { selectionOutline, alphaOver, SELECTION_OUTLINE_LAYER } from '../../postprocessing/selectionOutline'
+import { selectionOutline, alphaOver } from '../../postprocessing/selectionOutline'
+import { createSelectionOutlineProxy } from '../../postprocessing/selectionOutlineConfig'
 import { useDungeonStore } from '../../store/useDungeonStore'
-import { getRegisteredObject } from './objectRegistry'
+import { getRegisteredObject, useObjectRegistryVersion } from './objectRegistry'
 import { getAutofocusDistance, resolveAutofocusTarget } from './autofocusTarget'
 import { getWebGpuPostProcessingPipeline } from './webgpuPostProcessingMode'
-
-export { SELECTION_OUTLINE_LAYER }
 
 export function WebGPUPostProcessing() {
   const { gl: renderer, scene, camera, invalidate } = useThree()
@@ -37,6 +36,9 @@ export function WebGPUPostProcessing() {
   // frame without touching the GPU directly (no compileAsync).
   const pipelineReadyRef = useRef(false)
   const outlineCameraRef  = useRef<THREE.Camera | null>(null)
+  const outlineSceneRef = useRef(new THREE.Scene())
+  const outlineProxyRef = useRef<THREE.Object3D | null>(null)
+  const outlineProxyDisposeRef = useRef<(() => void) | null>(null)
   const visibleLosCameraRef = useRef<THREE.Camera | null>(null)
   const exploredLosCameraRef = useRef<THREE.Camera | null>(null)
 
@@ -48,7 +50,9 @@ export function WebGPUPostProcessing() {
   const settings  = useDungeonStore((state) => state.postProcessing)
   const activeCameraMode = useDungeonStore((state) => state.activeCameraMode)
   const selection = useDungeonStore((state) => state.selection)
+  const tool = useDungeonStore((state) => state.tool)
   const showLensFocusDebugPoint = useDungeonStore((state) => state.showLensFocusDebugPoint)
+  const objectRegistryVersion = useObjectRegistryVersion()
   const focusMarkerRef = useRef<THREE.Group | null>(null)
   const focusRaycasterRef = useRef(new THREE.Raycaster())
   const focusNdcRef = useRef(new THREE.Vector2(0, 0))
@@ -56,26 +60,37 @@ export function WebGPUPostProcessing() {
   const focusTargetPointRef = useRef(new THREE.Vector3())
   const focusPointInitializedRef = useRef(false)
 
-  // Track previous selection so we can disable layer 31 on it without a full scene.traverse()
-  const prevSelectionRef = useRef<string | null>(null)
+  const showSelectionOutline = tool === 'select' && Boolean(selection)
 
-  // Keep layer-31 membership in sync with the current selection.
   useEffect(() => {
-    const prev = prevSelectionRef.current
-    if (prev !== selection) {
-      if (prev) {
-        getRegisteredObject(prev)?.traverse((obj) => {
-          if ((obj as THREE.Mesh).isMesh) (obj as any).layers.disable(SELECTION_OUTLINE_LAYER)
-        })
+    const clearOutlineProxy = () => {
+      if (outlineProxyRef.current) {
+        outlineSceneRef.current.remove(outlineProxyRef.current)
+        outlineProxyRef.current = null
       }
-      if (selection) {
-        getRegisteredObject(selection)?.traverse((obj) => {
-          if ((obj as THREE.Mesh).isMesh) (obj as any).layers.enable(SELECTION_OUTLINE_LAYER)
-        })
-      }
-      prevSelectionRef.current = selection
+      outlineProxyDisposeRef.current?.()
+      outlineProxyDisposeRef.current = null
     }
-  }, [selection])
+
+    clearOutlineProxy()
+
+    if (!showSelectionOutline || !selection) {
+      return clearOutlineProxy
+    }
+
+    const selectedObject = getRegisteredObject(selection)
+    const outlineProxy = createSelectionOutlineProxy(selectedObject)
+    if (!outlineProxy) {
+      return clearOutlineProxy
+    }
+
+    outlineSceneRef.current.add(outlineProxy.object)
+    outlineProxyRef.current = outlineProxy.object
+    outlineProxyDisposeRef.current = outlineProxy.dispose
+    invalidate()
+
+    return clearOutlineProxy
+  }, [invalidate, objectRegistryVersion, selection, showSelectionOutline])
 
   // Build / rebuild the TSL pipeline when renderer / scene / camera / settings change.
   // NOTE: `size` is intentionally omitted — DepthOfFieldNode.updateBefore() calls setSize()
@@ -116,12 +131,12 @@ export function WebGPUPostProcessing() {
       outputNode = pixelate(outputNode, baseSceneDepth, { pixelSize: settings.pixelSize })
     }
 
-    const outlineCamera = (camera as any).clone() as THREE.Camera
-    ;(outlineCamera as any).layers.disableAll()
-    ;(outlineCamera as any).layers.enable(SELECTION_OUTLINE_LAYER)
-    outlineCameraRef.current = outlineCamera
+     const outlineCamera = (camera as any).clone() as THREE.Camera
+     outlineCameraRef.current = outlineCamera
 
-    outputNode = alphaOver(outputNode, selectionOutline(scene, outlineCamera))
+     if (showSelectionOutline) {
+       outputNode = alphaOver(outputNode, selectionOutline(outlineSceneRef.current, outlineCamera))
+     }
 
     visibleLosCameraRef.current = null
     exploredLosCameraRef.current = null
@@ -141,7 +156,7 @@ export function WebGPUPostProcessing() {
       visibleLosCameraRef.current = null
       exploredLosCameraRef.current = null
     }
-  }, [camera, renderer, scene, settings.enabled, settings.pixelateEnabled, settings.pixelSize, activeCameraMode])
+  }, [camera, renderer, scene, settings.enabled, settings.pixelateEnabled, settings.pixelSize, activeCameraMode, showSelectionOutline])
 
   // Multi-frame delay after each pipeline rebuild — lets Three.js begin WebGPU
   // shader compilation (especially for complex scenes with many lights) before
@@ -165,7 +180,7 @@ export function WebGPUPostProcessing() {
       cancelAnimationFrame(rafId)
       pipelineReadyRef.current = false
     }
-  }, [camera, renderer, scene, settings.enabled, settings.pixelateEnabled, settings.pixelSize, activeCameraMode, invalidate])
+  }, [camera, renderer, scene, settings.enabled, settings.pixelateEnabled, settings.pixelSize, activeCameraMode, showSelectionOutline, invalidate])
 
   // Update shader uniforms only when settings actually change — not every frame.
   useEffect(() => {

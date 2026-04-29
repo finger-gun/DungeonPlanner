@@ -16,11 +16,15 @@ import {
   getBakedLightSampleForCell,
   getLightDistanceFalloff,
   getOrBuildBakedFloorLightField,
+  prepareBakedFloorLightFieldBuild,
+  prepareBakedFloorLightFieldWorkerBuild,
   getStaticLightSourcesForBounds,
   sampleStaticLightAtWorldPosition,
   sampleBakedLightFieldAtWorldPosition,
   type ResolvedDungeonLightSource,
 } from './dungeonLightField'
+import { doesLineIntersectClosedWall, getWallWorldSegment } from './dungeonLightFieldOcclusion'
+import { getStableLightFlickerCoefficients } from './lightFlickerMath'
 
 const TORCH_LIGHT: PropLight = {
   color: '#ff9944',
@@ -172,6 +176,45 @@ describe('dungeonLightField', () => {
     expect(blockedSideSample[2]).toBeLessThan(1e-4)
   })
 
+  it('does not create an artificial dark fade band along outer perimeter walls', () => {
+    clearBakedFloorLightFieldCache()
+
+    const field = getOrBuildBakedFloorLightField({
+      floorId: 'floor-perimeter-fade',
+      floorCells: [[0, 0], [1, 0], [0, 1], [1, 1]],
+      staticLightSources: [createResolvedLightSource('torch', [2, 1.5, 2])],
+      occlusionInput: {
+        paintedCells: {
+          '0:0': { cell: [0, 0], layerId: 'default', roomId: 'room' },
+          '1:0': { cell: [1, 0], layerId: 'default', roomId: 'room' },
+          '0:1': { cell: [0, 1], layerId: 'default', roomId: 'room' },
+          '1:1': { cell: [1, 1], layerId: 'default', roomId: 'room' },
+        },
+        wallOpenings: {},
+        innerWalls: {},
+      },
+    })
+
+    const nearNorthWall = sampleBakedLightFieldAtWorldPosition(field, [2, 0, 3.6])
+    expect(nearNorthWall[0]).toBeGreaterThan(0.35)
+    expect(nearNorthWall[1]).toBeGreaterThan(0.18)
+  })
+
+  it('maps wall directions to the correct world-space segments for occlusion', () => {
+    expect(getWallWorldSegment('0:0:north')).toEqual([0, 2, 2, 2])
+    expect(getWallWorldSegment('0:0:south')).toEqual([0, 0, 2, 0])
+    expect(getWallWorldSegment('0:0:east')).toEqual([2, 0, 2, 2])
+    expect(getWallWorldSegment('0:0:west')).toEqual([0, 0, 0, 2])
+  })
+
+  it('treats wall endpoint hits as blocked to prevent corner leaks', () => {
+    expect(doesLineIntersectClosedWall(
+      [1, 0, 1],
+      [3, 0, 3],
+      new Set(['0:0:east']),
+    )).toBe(true)
+  })
+
   it('caps overlapping baked light intensity at the configured ceiling', () => {
     const brightWarmLight: PropLight = {
       color: '#ffffff',
@@ -282,6 +325,46 @@ describe('dungeonLightField', () => {
     expect(rebuilt.dirtyChunkKeys).toEqual(expect.arrayContaining(['0:0', '1:0']))
     expect(rebuilt.chunks.filter((chunk) => chunk.dirty).map((chunk) => chunk.key)).toEqual(['0:0', '1:0'])
     expect(rebuilt.lightFieldTexture).toBe(first.lightFieldTexture)
+  })
+
+  it('expands dirty chunk rebuilds with a one-chunk halo to protect interpolation seams', () => {
+    clearBakedFloorLightFieldCache()
+
+    getOrBuildBakedFloorLightField({
+      floorId: 'floor-seam-halo',
+      floorCells: [[0, 0], [8, 0], [16, 0]],
+      staticLightSources: [createResolvedLightSource('torch', [1, 1.5, 1])],
+    })
+
+    const rebuilt = getOrBuildBakedFloorLightField({
+      floorId: 'floor-seam-halo',
+      floorCells: [[0, 0], [8, 0], [16, 0]],
+      staticLightSources: [createResolvedLightSource('torch', [2, 1.5, 1])],
+    })
+
+    expect(rebuilt.dirtyChunkKeys).toEqual(['0:0', '1:0'])
+    expect(rebuilt.chunks.filter((chunk) => chunk.dirty).map((chunk) => chunk.key)).toEqual(['0:0', '1:0'])
+  })
+
+  it('prepares worker-friendly rebuild payloads for reusable baked layouts', () => {
+    clearBakedFloorLightFieldCache()
+
+    getOrBuildBakedFloorLightField({
+      floorId: 'floor-worker-rebuild',
+      floorCells: [[0, 0], [8, 0], [16, 0]],
+      staticLightSources: [createResolvedLightSource('torch', [1, 1.5, 1])],
+    })
+
+    const prepared = prepareBakedFloorLightFieldBuild({
+      floorId: 'floor-worker-rebuild',
+      floorCells: [[0, 0], [8, 0], [16, 0]],
+      staticLightSources: [createResolvedLightSource('torch', [2, 1.5, 1])],
+    })
+    const workerBuild = prepareBakedFloorLightFieldWorkerBuild(prepared)
+
+    expect(workerBuild).not.toBeNull()
+    expect(workerBuild!.workerInput.chunks.map((chunk) => chunk.key)).toEqual(['0:0', '1:0'])
+    expect(workerBuild!.workerInput.sourceHash).toBe(prepared.sourceHash)
   })
 
   it('builds corner-sampled light textures for shader interpolation', () => {
@@ -437,7 +520,21 @@ describe('dungeonLightField', () => {
     })
 
     expect(field.flickerLightFieldTextures.some((texture) => texture !== null)).toBe(true)
+    expect(field.flickerLightFieldTextures[0]).not.toBeNull()
+    expect(field.flickerLightFieldTextures[1]).not.toBeNull()
+    expect(field.flickerLightFieldTextures[2]).not.toBeNull()
     expect(field.lightFieldTextureSize).toEqual({ width: 3, height: 2 })
+  })
+
+  it('assigns stable zero-mean flicker coefficients per light', () => {
+    const coefficients = getStableLightFlickerCoefficients('torch-a')
+    const otherCoefficients = getStableLightFlickerCoefficients('torch-b')
+
+    expect(coefficients[0] + coefficients[1] + coefficients[2]).toBeCloseTo(0, 6)
+    expect(Math.hypot(coefficients[0], coefficients[1], coefficients[2])).toBeCloseTo(1, 6)
+    expect(Math.max(...coefficients)).toBeGreaterThan(0)
+    expect(Math.min(...coefficients)).toBeLessThan(0)
+    expect(otherCoefficients).not.toEqual(coefficients)
   })
 
   it('rebuilds the baked field when flicker state changes', () => {

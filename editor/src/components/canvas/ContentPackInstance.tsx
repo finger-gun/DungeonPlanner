@@ -22,6 +22,7 @@ import {
   applyPropBakedLightToObject,
 } from './bakedLightMaterial'
 import type { BakedFloorLightField } from '../../rendering/dungeonLightField'
+import { buildRuntimePropBakedLightProbe } from '../../rendering/runtimePropProbe'
 
 function shouldUseGpuFog(variant: ContentPackInstanceVariant, fogOfWar: ReturnType<typeof useFogOfWarRuntime>) {
   return fogOfWar !== null && variant === 'floor'
@@ -323,8 +324,10 @@ function GLTFModel({
     }
 
     if (variant === 'prop') {
+      const probe = buildRuntimePropBakedLightProbe(bakedLightField, contentRef.current)
       applyPropBakedLightToObject(scene, {
         lightField: bakedLightField,
+        probe,
       })
       applyBakedLightToObject(scene, null)
       return
@@ -341,6 +344,10 @@ function GLTFModel({
     shouldRenderBase,
     surfaceBakedLightOptions,
     variant,
+    variantKey,
+    groupProps.position,
+    groupProps.rotation,
+    groupProps.scale,
   ])
 
   useLayoutEffect(() => {
@@ -461,8 +468,10 @@ function ComponentAsset({
     }
 
     if (variant === 'prop') {
+      const probe = buildRuntimePropBakedLightProbe(bakedLightField, contentRef.current)
       applyPropBakedLightToObject(contentRef.current, {
         lightField: bakedLightField,
+        probe,
       })
       applyBakedLightToObject(contentRef.current, null)
       return
@@ -475,6 +484,10 @@ function ComponentAsset({
     bakedLightDirectionSecondary,
     bakedLightField,
     disableBakedLight,
+    componentProps,
+    groupProps.position,
+    groupProps.rotation,
+    groupProps.scale,
     shouldRenderBase,
     surfaceBakedLightOptions,
     variant,
@@ -626,8 +639,10 @@ function FallbackMesh({
       return
     }
 
+    const probe = buildRuntimePropBakedLightProbe(bakedLightField, meshRef.current)
     applyPropBakedLightToMaterial(material, {
       lightField: bakedLightField,
+      probe,
     })
     applyBakedLightToMaterial(material, null)
   }, [
@@ -638,6 +653,7 @@ function FallbackMesh({
     material,
     surfaceBakedLightOptions,
     variant,
+    variantKey,
   ])
 
   useLayoutEffect(() => {

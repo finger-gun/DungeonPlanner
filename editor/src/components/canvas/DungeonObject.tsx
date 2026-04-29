@@ -15,6 +15,7 @@ import {
   getGeneratedCharacterScale,
 } from '../../generated-characters/rendering'
 import type { BakedFloorLightField } from '../../rendering/dungeonLightField'
+import { SELECTION_OUTLINE_IGNORE_USER_DATA } from '../../postprocessing/selectionOutlineConfig'
 
 const PROP_STATE_BAKED_LIGHT_SUSPEND_MS = 450
 
@@ -167,6 +168,7 @@ export const DungeonObject = memo(function DungeonObject({
           position={[0, playerHitHeight * 0.5, 0]}
           onPointerDown={handlePointerDown}
           onClick={handleClick}
+          userData={{ [SELECTION_OUTLINE_IGNORE_USER_DATA]: true }}
         >
           <cylinderGeometry args={[playerHitRadius, playerHitRadius, playerHitHeight, 24]} />
           <meshBasicMaterial transparent opacity={0} depthWrite={false} />

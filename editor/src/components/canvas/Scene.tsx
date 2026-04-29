@@ -36,6 +36,8 @@ import {
 } from './objectSourceRegistry'
 import { registerDebugCameraPoseReader, registerDebugWorldProjector } from './debugCameraBridge'
 import { getOrBuildBakedFloorLightField, resolveObjectLightSources, type BakedFloorLightField } from '../../rendering/dungeonLightField'
+import { setBakedLightFlickerTime } from './bakedLightMaterial'
+import { useBakedFloorLightField } from '../../rendering/useBakedFloorLightField'
 
 const WebGPUPostProcessing = lazy(() =>
   import('./WebGPUPostProcessing').then((module) => ({
@@ -185,6 +187,7 @@ function GlobalContent() {
         </>
       )}
 
+      <BakedLightFlickerClock />
       <DebugCameraBridgeBinder />
       {effectiveFloorViewMode === 'active' && <Grid playMode={tool === 'play'} />}
       <pointLight
@@ -201,6 +204,14 @@ function GlobalContent() {
       <FrameDriver />
     </>
   )
+}
+
+function BakedLightFlickerClock() {
+  useFrame(({ clock }) => {
+    setBakedLightFlickerTime(clock.elapsedTime)
+  })
+
+  return null
 }
 
 function DebugCameraBridgeBinder() {
@@ -494,11 +505,15 @@ function FloorContent({ startY = 0 }: { startY?: number }) {
       ),
     [layers, paintedCells],
   )
-  const bakedFloorLightField = useMemo(
-    () => getOrBuildBakedFloorLightField({
+  const staticLightSources = useMemo(
+    () => resolveObjectLightSources(objects),
+    [objects],
+  )
+  const bakedLightBuildInput = useMemo(
+    () => ({
       floorId: activeFloorId,
       floorCells: visiblePaintedCells,
-      staticLightSources: resolveObjectLightSources(objects),
+      staticLightSources,
       occlusionInput: {
         paintedCells: visiblePaintedCellRecords,
         wallOpenings,
@@ -506,8 +521,9 @@ function FloorContent({ startY = 0 }: { startY?: number }) {
         innerWalls,
       },
     }),
-    [activeFloorId, innerWalls, objects, visiblePaintedCellRecords, visiblePaintedCells, wallOpenings, wallSurfaceProps],
+    [activeFloorId, innerWalls, staticLightSources, visiblePaintedCellRecords, visiblePaintedCells, wallOpenings, wallSurfaceProps],
   )
+  const bakedFloorLightField = useBakedFloorLightField(bakedLightBuildInput)
   const topLevelObjects = useMemo(() => getTopLevelObjects(objects), [objects])
   const childrenByParent = useMemo(() => buildObjectChildrenIndex(objects), [objects])
   const [propLightBudget] = useMemo(
@@ -804,7 +820,7 @@ function FloorContent({ startY = 0 }: { startY?: number }) {
         {movementRange && (
           <MovementRangeOverlay cells={movementRange.reachableCells} />
         )}
-        <DungeonRoom visibility={visibility} />
+        <DungeonRoom visibility={visibility} bakedLightField={bakedFloorLightField} />
         <RoomResizeOverlay />
         {propLightBudget > 0 && (
           <PropLightPool scopeKey={activeFloorId} visibility={visibility} maxLights={propLightBudget} />

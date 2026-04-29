@@ -37,6 +37,15 @@ describe('bakedLightResponse', () => {
     expect(getBakedLightLuminance(prop)).toBeGreaterThan(getBakedLightLuminance(surface))
   })
 
+  it('keeps solid props closer to surfaces than billboards under dim baked light', () => {
+    const sample: readonly [number, number, number] = [0.18, 0.08, 0.03]
+    const surfaceLuminance = getBakedLightLuminance(shapeBakedLightSample(sample, SURFACE_BAKED_LIGHT_RESPONSE))
+    const propLuminance = getBakedLightLuminance(shapeBakedLightSample(sample, PROP_BAKED_LIGHT_RESPONSE))
+    const billboardLuminance = getBakedLightLuminance(shapeBakedLightSample(sample, BILLBOARD_BAKED_LIGHT_RESPONSE))
+
+    expect(propLuminance - surfaceLuminance).toBeLessThan(billboardLuminance - propLuminance)
+  })
+
   it('keeps billboard sprites brighter than solid props at the same baked sample', () => {
     const sample: readonly [number, number, number] = [0.14, 0.08, 0.05]
     const prop = shapeBakedLightSample(sample, PROP_BAKED_LIGHT_RESPONSE)

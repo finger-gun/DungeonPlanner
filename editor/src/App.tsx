@@ -20,6 +20,7 @@ import { getDebugCameraPose, projectDebugWorldPoint } from './components/canvas/
 import { migrateLegacyGeneratedCharacters } from './generated-characters/migration'
 import type { GeneratedCharacterRecord } from './generated-characters/types'
 import { useDungeonStore } from './store/useDungeonStore'
+import { useBlurPointerRangeInputOnRelease } from './hooks/useBlurPointerRangeInputOnRelease'
 import { shouldRotateSelectionFromShortcut } from './rotationShortcuts'
 import {
   cellToWorldPosition,
@@ -236,6 +237,8 @@ function RemoteDungeonLibraryModal({
 }
 
 function App() {
+  useBlurPointerRangeInputOnRelease()
+
   const tool = useDungeonStore((state) => state.tool)
   const mapMode = useDungeonStore((state) => state.mapMode)
   const roomEditMode = useDungeonStore((state) => state.roomEditMode)

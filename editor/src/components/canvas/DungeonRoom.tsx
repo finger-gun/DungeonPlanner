@@ -111,10 +111,12 @@ export type DungeonRoomData = {
 export function DungeonRoom({
   visibility,
   data,
+  bakedLightField,
   enableBuildAnimation = true,
 }: {
   visibility: PlayVisibility
   data?: DungeonRoomData
+  bakedLightField?: BakedFloorLightField | null
   enableBuildAnimation?: boolean
 }) {
   const livePaintedCells = useDungeonStore((state) => state.paintedCells)
@@ -223,7 +225,7 @@ export function DungeonRoom({
       ) as PaintedCells,
     [layers, visiblePaintedCells],
   )
-  const bakedFloorLightField = useMemo(
+  const bakedFloorLightField = bakedLightField ?? useMemo(
     () => getOrBuildBakedFloorLightField({
       floorId: floorId ?? 'active-floor',
       floorCells: Object.values(visiblePaintedCellRecords).map((record) => record.cell),

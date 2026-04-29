@@ -3,10 +3,10 @@ import { useFrame, useThree } from '@react-three/fiber'
 import * as THREE from 'three'
 import type { PropLight } from '../../content-packs/types'
 import { FORWARD_PLUS_LOCAL_LIGHT_SHADOWS } from '../../rendering/forwardPlusConfig'
+import { getStableLightPhase } from '../../rendering/lightFlickerMath'
 import {
   classifyDynamicLightSources,
   DEFAULT_DYNAMIC_LIGHT_POOL_SIZE,
-  getStableLightPhase,
   getPropLightWorldPosition as getResolvedPropLightWorldPosition,
   resolveObjectLightSources,
   resolveRegisteredLightSources,

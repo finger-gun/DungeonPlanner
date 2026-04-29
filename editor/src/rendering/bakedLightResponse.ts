@@ -21,10 +21,10 @@ export const SURFACE_BAKED_LIGHT_RESPONSE: BakedLightResponseProfile = {
 export const PROP_BAKED_LIGHT_RESPONSE: BakedLightResponseProfile = {
   contrastFloor: 0.01,
   contrastRange: 0.3,
-  minIntensityScale: 0.88,
-  maxDesaturation: 0.03,
-  albedoBoost: 1.08,
-  emissiveBoost: 0.16,
+  minIntensityScale: 0.74,
+  maxDesaturation: 0.07,
+  albedoBoost: 0.86,
+  emissiveBoost: 0.08,
 }
 
 export const BILLBOARD_BAKED_LIGHT_RESPONSE: BakedLightResponseProfile = {

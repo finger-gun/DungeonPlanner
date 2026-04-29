@@ -3,6 +3,7 @@ import * as THREE from 'three'
 import { createStandardCompatibleMaterial } from '../../rendering/nodeMaterialUtils'
 import { applyBakedLightToMaterial, applyPropBakedLightToMaterial } from './bakedLightMaterial'
 import type { BakedFloorLightField } from '../../rendering/dungeonLightField'
+import type { PropBakedLightProbe } from '../../rendering/dungeonLightField'
 
 type TestNodeMaterial = THREE.Material & {
   isNodeMaterial?: boolean
@@ -112,5 +113,35 @@ describe('bakedLightMaterial', () => {
     expect(material.userData.propBakedLightSignature).toBe('off')
     expect(material.colorNode).toBe(material.userData.propBakedLightBaseColorNode)
     expect(material.emissiveNode).toBe(material.userData.propBakedLightBaseEmissiveNode ?? null)
+  })
+
+  it('includes runtime prop probe data in the prop baked lighting signature', () => {
+    const material = createStandardCompatibleMaterial({
+      color: '#ffffff',
+      roughness: 0.4,
+      metalness: 0.1,
+    }) as TestNodeMaterial
+    const lightField = createTestLightField()
+    const probe: PropBakedLightProbe = {
+      baseLight: [0.16, 0.08, 0.04],
+      topLight: [0.22, 0.12, 0.06],
+      baseY: 0.2,
+      topY: 1.6,
+      lightDirection: [1, 0, 0],
+      directionalStrength: 0.58,
+    }
+
+    material.isNodeMaterial = true
+
+    applyPropBakedLightToMaterial(material, {
+      lightField,
+      probe,
+    })
+
+    expect(material.userData.propBakedLightSignature).toContain(lightField.lightFieldTexture!.uuid)
+    expect(material.userData.propBakedLightSignature).toContain('0.16,0.08,0.04')
+    expect(material.userData.propBakedLightSignature).toContain('0.580')
+    expect(material.colorNode).toBeDefined()
+    expect(material.emissiveNode).toBeDefined()
   })
 })

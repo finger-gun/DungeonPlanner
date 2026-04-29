@@ -1,5 +1,4 @@
 import { Suspense, useLayoutEffect, useMemo, useRef } from 'react'
-import { useFrame } from '@react-three/fiber'
 import * as THREE from 'three'
 import type { PlayVisibilityState } from './playVisibility'
 import { ContentPackInstance } from './ContentPackInstance'
@@ -8,7 +7,7 @@ import { buildMergedTileGeometryMeshes, type BatchedTilePlacement } from './batc
 import { resolveBatchedTileAsset, type ResolvedBatchedTileAsset } from './tileAssetResolution'
 import { useGLTF } from '../../rendering/useGLTF'
 import { applyFogOfWarToMaterial, useFogOfWarRuntime } from './fogOfWar'
-import { applyBakedLightToMaterial, setBakedLightFlickerTime } from './bakedLightMaterial'
+import { applyBakedLightToMaterial } from './bakedLightMaterial'
 import type { BakedFloorLightField } from '../../rendering/dungeonLightField'
 import { useDungeonStore } from '../../store/useDungeonStore'
 
@@ -198,14 +197,6 @@ function MergedTileBucket({
   const useBakedFlicker = shouldRenderBase
     && lightFlickerEnabled
     && Boolean(bakedLightField?.flickerLightFieldTextures.some((texture) => texture))
-
-  useFrame(({ clock }) => {
-    if (!useBakedFlicker) {
-      return
-    }
-
-    setBakedLightFlickerTime(clock.elapsedTime)
-  })
 
   return (
     <>
