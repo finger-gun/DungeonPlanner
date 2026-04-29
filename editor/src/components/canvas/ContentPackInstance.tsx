@@ -11,15 +11,31 @@ import { shouldRenderLineOfSightGeometry } from './losRendering'
 import {
   cloneSceneWithNodeMaterials,
   createStandardCompatibleMaterial,
+  upgradeStandardMaterialsToNodeMaterials,
 } from '../../rendering/nodeMaterialUtils'
 import { useGLTF } from '../../rendering/useGLTF'
 import { applyFogOfWarToMaterial, applyFogOfWarToObject, useFogOfWarRuntime } from './fogOfWar'
+import {
+  applyBakedLightToMaterial,
+  applyBakedLightToObject,
+  applyPropBakedLightToMaterial,
+  applyPropBakedLightToObject,
+} from './bakedLightMaterial'
+import type { BakedFloorLightField } from '../../rendering/dungeonLightField'
+import {
+  getCachedObjectLocalBounds,
+} from '../../rendering/runtimePropProbe'
+import {
+  getCachedRuntimePropBakedLightProbe,
+  releaseCachedRuntimePropLightingProbe,
+} from '../../rendering/propLightingCache'
 
 function shouldUseGpuFog(variant: ContentPackInstanceVariant, fogOfWar: ReturnType<typeof useFogOfWarRuntime>) {
   return fogOfWar !== null && variant === 'floor'
 }
 
 type ContentPackInstanceVariant = 'floor' | 'wall' | 'prop'
+type SurfaceBakedLightDirection = readonly [number, number, number]
 
 /** Semi-transparent colour overlay — clones the geometry with a translucent material. */
 function TintOverlay({
@@ -74,6 +90,11 @@ type ContentPackInstanceProps = ThreeElements['group'] & {
   variant: ContentPackInstanceVariant
   variantKey?: string
   objectProps?: Record<string, unknown>
+  propInstanceKey?: string
+  bakedLightField?: BakedFloorLightField | null
+  bakedLightDirection?: SurfaceBakedLightDirection
+  bakedLightDirectionSecondary?: SurfaceBakedLightDirection
+  disableBakedLight?: boolean
 }
 
 export function ContentPackInstance({
@@ -89,6 +110,11 @@ export function ContentPackInstance({
   variant,
   variantKey,
   objectProps,
+  propInstanceKey,
+  bakedLightField = null,
+  bakedLightDirection,
+  bakedLightDirectionSecondary,
+  disableBakedLight = false,
   ...groupProps
 }: ContentPackInstanceProps) {
   const asset = assetId ? getContentPackAssetById(assetId) : null
@@ -96,6 +122,28 @@ export function ContentPackInstance({
   const AssetComponent = asset?.Component ?? null
   const castShadow = asset?.metadata?.castShadow !== false
   const receiveShadow = asset?.metadata?.receiveShadow !== false
+  const propDescriptorKey = useMemo(
+    () => buildPropDescriptorKey({
+      assetId,
+      assetPath,
+      hasComponent: Boolean(AssetComponent),
+      objectProps,
+      variant,
+      variantKey,
+    }),
+    [AssetComponent, assetId, assetPath, objectProps, variant, variantKey],
+  )
+  const propLightingFloorId = variant === 'prop' ? (bakedLightField?.floorId ?? null) : null
+
+  useEffect(() => {
+    if (!propLightingFloorId || !propInstanceKey) {
+      return
+    }
+
+    return () => {
+      releaseCachedRuntimePropLightingProbe(propLightingFloorId, propInstanceKey)
+    }
+  }, [propInstanceKey, propLightingFloorId])
 
   useEffect(() => {
     if (assetPath && !AssetComponent) {
@@ -116,6 +164,11 @@ export function ContentPackInstance({
           overlayOnly={overlayOnly}
           visibility={visibility}
           useLineOfSightPostMask={useLineOfSightPostMask}
+          bakedLightField={bakedLightField}
+          bakedLightDirection={bakedLightDirection}
+          bakedLightDirectionSecondary={bakedLightDirectionSecondary}
+          disableBakedLight={disableBakedLight}
+          propInstanceKey={propInstanceKey}
         />
       </group>
     )
@@ -135,6 +188,11 @@ export function ContentPackInstance({
             overlayOnly={overlayOnly}
             visibility={visibility}
             useLineOfSightPostMask={useLineOfSightPostMask}
+            bakedLightField={bakedLightField}
+            bakedLightDirection={bakedLightDirection}
+            bakedLightDirectionSecondary={bakedLightDirectionSecondary}
+            disableBakedLight={disableBakedLight}
+            propInstanceKey={propInstanceKey}
           />
         </group>
       }
@@ -157,6 +215,12 @@ export function ContentPackInstance({
           visibility={visibility}
           useLineOfSightPostMask={useLineOfSightPostMask}
           variant={variant}
+          bakedLightField={bakedLightField}
+          bakedLightDirection={bakedLightDirection}
+          bakedLightDirectionSecondary={bakedLightDirectionSecondary}
+          disableBakedLight={disableBakedLight}
+          propDescriptorKey={propDescriptorKey}
+          propInstanceKey={propInstanceKey}
           {...groupProps}
         />
       ) : (
@@ -172,6 +236,12 @@ export function ContentPackInstance({
           useLineOfSightPostMask={useLineOfSightPostMask}
           variantKey={variantKey}
           variant={variant}
+          bakedLightField={bakedLightField}
+          bakedLightDirection={bakedLightDirection}
+          bakedLightDirectionSecondary={bakedLightDirectionSecondary}
+          disableBakedLight={disableBakedLight}
+          propDescriptorKey={propDescriptorKey}
+          propInstanceKey={propInstanceKey}
           {...groupProps}
         />
       )}
@@ -193,6 +263,82 @@ function getComponentProps(
   }
 }
 
+export function buildPropDescriptorKey({
+  assetId,
+  assetPath,
+  hasComponent,
+  objectProps,
+  variant,
+  variantKey,
+}: {
+  assetId: string | null
+  assetPath?: string
+  hasComponent: boolean
+  objectProps?: Record<string, unknown>
+  variant: ContentPackInstanceVariant
+  variantKey?: string
+}) {
+  if (variant !== 'prop') {
+    return null
+  }
+
+  if (hasComponent) {
+    return [
+      'component',
+      assetId ?? 'unknown',
+      variantKey ?? 'default',
+      stableSerializeDescriptorProps(objectProps),
+    ].join(':')
+  }
+
+  if (assetPath) {
+    return `gltf:${assetPath}`
+  }
+
+  return [
+    'fallback',
+    assetId ?? 'unknown',
+    variantKey ?? 'default',
+  ].join(':')
+}
+
+function stableSerializeDescriptorProps(objectProps?: Record<string, unknown>) {
+  return JSON.stringify(objectProps ?? null, (_key, value) => {
+    if (!value || Array.isArray(value) || typeof value !== 'object') {
+      return value
+    }
+
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>)
+        .sort(([leftKey], [rightKey]) => leftKey.localeCompare(rightKey)),
+    )
+  })
+}
+
+function getSurfaceBakedLightOptions(
+  variant: ContentPackInstanceVariant,
+  bakedLightField: BakedFloorLightField | null | undefined,
+  bakedLightDirection?: SurfaceBakedLightDirection,
+  bakedLightDirectionSecondary?: SurfaceBakedLightDirection,
+) {
+  if (!bakedLightField) {
+    return null
+  }
+  if (variant === 'wall' && !bakedLightDirection) {
+    return null
+  }
+
+  return {
+    useLightAttribute: true,
+    useDirectionAttribute: variant === 'wall',
+    useSecondaryDirectionAttribute: variant === 'wall' && Boolean(bakedLightDirectionSecondary),
+    useTopSurfaceMask: variant === 'floor',
+    lightField: bakedLightField,
+    ...(bakedLightDirection ? { direction: bakedLightDirection } : {}),
+    ...(bakedLightDirectionSecondary ? { directionSecondary: bakedLightDirectionSecondary } : {}),
+  }
+}
+
 function GLTFModel({
   assetPath,
   receiveShadow,
@@ -205,6 +351,12 @@ function GLTFModel({
   useLineOfSightPostMask = false,
   variantKey,
   variant,
+  bakedLightField = null,
+  bakedLightDirection,
+  bakedLightDirectionSecondary,
+  disableBakedLight = false,
+  propDescriptorKey,
+  propInstanceKey,
   ...groupProps
 }: ThreeElements['group'] & {
   assetPath: string
@@ -218,6 +370,12 @@ function GLTFModel({
   useLineOfSightPostMask?: boolean
   variantKey?: string
   variant: ContentPackInstanceVariant
+  bakedLightField?: BakedFloorLightField | null
+  bakedLightDirection?: SurfaceBakedLightDirection
+  bakedLightDirectionSecondary?: SurfaceBakedLightDirection
+  disableBakedLight?: boolean
+  propDescriptorKey?: string | null
+  propInstanceKey?: string
 }) {
   const gltf = useGLTF(assetPath)
   const fogOfWar = useFogOfWarRuntime()
@@ -225,6 +383,18 @@ function GLTFModel({
   const fogCell = useMemo(
     () => (variant === 'floor' ? parseFogCellKey(variantKey) : null),
     [variant, variantKey],
+  )
+  const shouldRenderBase =
+    !overlayOnly && (usesGpuFog || shouldRenderLineOfSightGeometry(visibility ?? 'visible', useLineOfSightPostMask))
+  const canShowOverlay = (visibility ?? 'visible') !== 'hidden'
+  const surfaceBakedLightOptions = useMemo(
+    () => getSurfaceBakedLightOptions(
+      variant,
+      bakedLightField,
+      bakedLightDirection,
+      bakedLightDirectionSecondary,
+    ),
+    [bakedLightDirection, bakedLightDirectionSecondary, bakedLightField, variant],
   )
   const scene = useMemo(() => {
     const clone = cloneSceneWithNodeMaterials(gltf.scene)
@@ -236,24 +406,71 @@ function GLTFModel({
     })
     return clone
   }, [castShadow, gltf.scene, receiveShadow])
+  const propLocalBounds = useMemo(
+    () => (variant === 'prop' ? getCachedObjectLocalBounds(propDescriptorKey, scene) : null),
+    [propDescriptorKey, scene, variant],
+  )
 
-  useEffect(() => {
+  useLayoutEffect(() => {
+    if (!shouldRenderBase || disableBakedLight) {
+      applyPropBakedLightToObject(scene, null)
+      applyBakedLightToObject(scene, null)
+      return
+    }
+
+    if (variant === 'prop') {
+      const probe = getCachedRuntimePropBakedLightProbe({
+        lightField: bakedLightField,
+        instanceKey: propInstanceKey,
+        object: scene,
+        localBounds: propLocalBounds,
+      })
+      applyPropBakedLightToObject(scene, {
+        lightField: bakedLightField,
+        probe,
+      })
+      applyBakedLightToObject(scene, null)
+      return
+    }
+
+    applyPropBakedLightToObject(scene, null)
+    applyBakedLightToObject(scene, surfaceBakedLightOptions)
+  }, [
+    bakedLightDirection,
+    bakedLightDirectionSecondary,
+    bakedLightField,
+    disableBakedLight,
+    scene,
+    shouldRenderBase,
+    surfaceBakedLightOptions,
+    variant,
+    variantKey,
+    groupProps.position,
+    groupProps.rotation,
+    groupProps.scale,
+    propLocalBounds,
+    propInstanceKey,
+  ])
+
+  useLayoutEffect(() => {
     applyFogOfWarToObject(scene, usesGpuFog ? fogOfWar : null, {
       variant,
       cell: fogCell,
     })
-  }, [fogCell, fogOfWar, scene, usesGpuFog, variant])
+  }, [
+    fogCell,
+    fogOfWar,
+    scene,
+    usesGpuFog,
+    variant,
+  ])
 
-  const shouldRenderBase =
-    !overlayOnly && (usesGpuFog || shouldRenderLineOfSightGeometry(visibility ?? 'visible', useLineOfSightPostMask))
-  const canShowOverlay = (visibility ?? 'visible') !== 'hidden'
-
-    return (
-      <group {...groupProps}>
-        {shouldRenderBase && <primitive object={scene} />}
-        {tint && shouldRenderBase && canShowOverlay && (
-          <TintOverlay
-            source={scene}
+  return (
+    <group {...groupProps}>
+      {shouldRenderBase && <primitive object={scene} />}
+      {tint && shouldRenderBase && canShowOverlay && (
+        <TintOverlay
+          source={scene}
           color={tint}
           opacity={tintOpacity}
           refreshKey={variantKey ?? assetPath}
@@ -282,6 +499,12 @@ function ComponentAsset({
   visibility,
   useLineOfSightPostMask = false,
   variant,
+  bakedLightField = null,
+  bakedLightDirection,
+  bakedLightDirectionSecondary,
+  disableBakedLight = false,
+  propDescriptorKey,
+  propInstanceKey,
   ...groupProps
 }: ThreeElements['group'] & {
   Component: ComponentType<ContentPackComponentProps>
@@ -295,18 +518,38 @@ function ComponentAsset({
   visibility?: PlayVisibilityState
   useLineOfSightPostMask?: boolean
   variant: ContentPackInstanceVariant
+  bakedLightField?: BakedFloorLightField | null
+  bakedLightDirection?: SurfaceBakedLightDirection
+  bakedLightDirectionSecondary?: SurfaceBakedLightDirection
+  disableBakedLight?: boolean
+  propDescriptorKey?: string | null
+  propInstanceKey?: string
 }) {
   const contentRef = useRef<THREE.Group>(null)
   const [overlaySource, setOverlaySource] = useState<THREE.Group | null>(null)
+  const [propLocalBounds, setPropLocalBounds] = useState<THREE.Box3 | null>(null)
   const fogOfWar = useFogOfWarRuntime()
   const usesGpuFog = shouldUseGpuFog(variant, fogOfWar)
   const fogCell = useMemo(
     () => (variant === 'floor' ? parseFogCellKey(componentProps.variantKey) : null),
     [componentProps.variantKey, variant],
   )
+  const shouldRenderBase =
+    !overlayOnly && (usesGpuFog || shouldRenderLineOfSightGeometry(visibility ?? 'visible', useLineOfSightPostMask))
+  const canShowOverlay = (visibility ?? 'visible') !== 'hidden'
+  const surfaceBakedLightOptions = useMemo(
+    () => getSurfaceBakedLightOptions(
+      variant,
+      bakedLightField,
+      bakedLightDirection,
+      bakedLightDirectionSecondary,
+    ),
+    [bakedLightDirection, bakedLightDirectionSecondary, bakedLightField, variant],
+  )
 
   useLayoutEffect(() => {
     if (contentRef.current) {
+      upgradeStandardMaterialsToNodeMaterials(contentRef.current)
       setOverlaySource(contentRef.current)
     }
   }, [])
@@ -320,18 +563,74 @@ function ComponentAsset({
     })
   }, [castShadow, receiveShadow])
 
-  useEffect(() => {
-    if (contentRef.current) {
-      applyFogOfWarToObject(contentRef.current, usesGpuFog ? fogOfWar : null, {
-        variant,
-        cell: fogCell,
-      })
+  useLayoutEffect(() => {
+    if (variant !== 'prop' || !contentRef.current) {
+      setPropLocalBounds(null)
+      return
     }
-  }, [fogCell, fogOfWar, usesGpuFog, variant])
 
-  const shouldRenderBase =
-    !overlayOnly && (usesGpuFog || shouldRenderLineOfSightGeometry(visibility ?? 'visible', useLineOfSightPostMask))
-  const canShowOverlay = (visibility ?? 'visible') !== 'hidden'
+    setPropLocalBounds(getCachedObjectLocalBounds(propDescriptorKey, contentRef.current))
+  }, [Component, componentProps.variantKey, propDescriptorKey, variant])
+
+  useLayoutEffect(() => {
+    if (!contentRef.current) {
+      return
+    }
+
+    if (!shouldRenderBase || disableBakedLight) {
+      applyPropBakedLightToObject(contentRef.current, null)
+      applyBakedLightToObject(contentRef.current, null)
+      return
+    }
+
+    if (variant === 'prop') {
+      const probe = getCachedRuntimePropBakedLightProbe({
+        lightField: bakedLightField,
+        instanceKey: propInstanceKey,
+        object: contentRef.current,
+        localBounds: propLocalBounds,
+      })
+      applyPropBakedLightToObject(contentRef.current, {
+        lightField: bakedLightField,
+        probe,
+      })
+      applyBakedLightToObject(contentRef.current, null)
+      return
+    }
+
+    applyPropBakedLightToObject(contentRef.current, null)
+    applyBakedLightToObject(contentRef.current, surfaceBakedLightOptions)
+  }, [
+    bakedLightDirection,
+    bakedLightDirectionSecondary,
+    bakedLightField,
+    disableBakedLight,
+    componentProps,
+    groupProps.position,
+    groupProps.rotation,
+    groupProps.scale,
+    propLocalBounds,
+    propInstanceKey,
+    shouldRenderBase,
+    surfaceBakedLightOptions,
+    variant,
+  ])
+
+  useLayoutEffect(() => {
+    if (!contentRef.current) {
+      return
+    }
+
+    applyFogOfWarToObject(contentRef.current, usesGpuFog ? fogOfWar : null, {
+      variant,
+      cell: fogCell,
+    })
+  }, [
+    fogCell,
+    fogOfWar,
+    usesGpuFog,
+    variant,
+  ])
 
   return (
     <group {...groupProps}>
@@ -382,6 +681,11 @@ function FallbackMesh({
   castShadow = true,
   visibility = 'visible',
   useLineOfSightPostMask = false,
+  bakedLightField = null,
+  bakedLightDirection,
+  bakedLightDirectionSecondary,
+  disableBakedLight = false,
+  propInstanceKey,
 }: {
   selected: boolean
   tint?: string
@@ -393,6 +697,11 @@ function FallbackMesh({
   castShadow?: boolean
   visibility?: PlayVisibilityState
   useLineOfSightPostMask?: boolean
+  bakedLightField?: BakedFloorLightField | null
+  bakedLightDirection?: SurfaceBakedLightDirection
+  bakedLightDirectionSecondary?: SurfaceBakedLightDirection
+  disableBakedLight?: boolean
+  propInstanceKey?: string
 }) {
   const baseColor =
     variant === 'floor' ? '#34d399' : variant === 'wall' ? '#fbbf24' : '#7dd3fc'
@@ -405,6 +714,9 @@ function FallbackMesh({
       : variant === 'wall'
         ? ([GRID_SIZE * 0.96, 3, GRID_SIZE * 0.12] as const)
         : ([0.5, 0.9, 0.5] as const)
+  const geometryWidth = geometry[0]
+  const geometryHeight = geometry[1]
+  const geometryDepth = geometry[2]
   const yOffset = variant === 'floor' ? 0.03 : variant === 'wall' ? 1.5 : 0
   const meshRef = useRef<THREE.Mesh>(null)
   const fogOfWar = useFogOfWarRuntime()
@@ -420,6 +732,15 @@ function FallbackMesh({
     () => (variant === 'floor' ? parseFogCellKey(variantKey) : null),
     [variant, variantKey],
   )
+  const surfaceBakedLightOptions = useMemo(
+    () => getSurfaceBakedLightOptions(
+      variant,
+      bakedLightField,
+      bakedLightDirection,
+      bakedLightDirectionSecondary,
+    ),
+    [bakedLightDirection, bakedLightDirectionSecondary, bakedLightField, variant],
+  )
   const material = useMemo(
     () => createStandardCompatibleMaterial({
       color,
@@ -432,13 +753,69 @@ function FallbackMesh({
     }),
     [color, emissive, opacity, selected],
   )
+  const propLocalBounds = useMemo(
+    () => {
+      if (variant !== 'prop') {
+        return null
+      }
 
-  useEffect(() => {
+      return new THREE.Box3(
+        new THREE.Vector3(-geometryWidth * 0.5, -geometryHeight * 0.5, -geometryDepth * 0.5),
+        new THREE.Vector3(geometryWidth * 0.5, geometryHeight * 0.5, geometryDepth * 0.5),
+      )
+    },
+    [geometryDepth, geometryHeight, geometryWidth, variant],
+  )
+
+  useLayoutEffect(() => {
+    if (variant !== 'prop') {
+      applyPropBakedLightToMaterial(material, null)
+      applyBakedLightToMaterial(material, disableBakedLight ? null : surfaceBakedLightOptions)
+      return
+    }
+
+    if (disableBakedLight) {
+      applyPropBakedLightToMaterial(material, null)
+      applyBakedLightToMaterial(material, null)
+      return
+    }
+
+    const probe = getCachedRuntimePropBakedLightProbe({
+      lightField: bakedLightField,
+      instanceKey: propInstanceKey,
+      object: meshRef.current,
+      localBounds: propLocalBounds,
+    })
+    applyPropBakedLightToMaterial(material, {
+      lightField: bakedLightField,
+      probe,
+    })
+    applyBakedLightToMaterial(material, null)
+  }, [
+    bakedLightDirection,
+    bakedLightDirectionSecondary,
+    bakedLightField,
+    disableBakedLight,
+    material,
+    propLocalBounds,
+    propInstanceKey,
+    surfaceBakedLightOptions,
+    variant,
+    variantKey,
+  ])
+
+  useLayoutEffect(() => {
     applyFogOfWarToMaterial(material, usesGpuFog ? fogOfWar : null, {
       variant,
       cell: fogCell,
     })
-  }, [fogCell, fogOfWar, material, usesGpuFog, variant])
+  }, [
+    fogCell,
+    fogOfWar,
+    material,
+    usesGpuFog,
+    variant,
+  ])
 
   useEffect(() => () => material.dispose(), [material])
 

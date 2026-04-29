@@ -29,6 +29,7 @@ import {
   uniform,
   vec2,
 } from 'three/tsl'
+import { getTiledLightGridDimension, getTiledLightWorkgroupCount } from './tiledLightMath'
 
 export const circleIntersectsAABB = Fn(([circleCenter, radius, minBounds, maxBounds]) => {
   const closestX = minBounds.x.max(circleCenter.x.min(maxBounds.x))
@@ -71,6 +72,7 @@ class DungeonPlannerTiledLightsNode extends LightsNode {
     this._lightsTexture = null
     this._lightsCount = uniform(0, 'int')
     this._tileLightCount = 8
+    this._hasTiledLights = false
     this._screenSize = uniform(new Vector2())
     this._cameraProjectionMatrix = uniform('mat4')
     this._cameraViewMatrix = uniform('mat4')
@@ -78,7 +80,8 @@ class DungeonPlannerTiledLightsNode extends LightsNode {
   }
 
   override customCacheKey() {
-    return this._compute.getCacheKey() + super.customCacheKey()
+    const tiledLightsKey = this._hasTiledLights ? 1 : 0
+    return this._compute.getCacheKey() + super.customCacheKey() + tiledLightsKey
   }
 
   updateLightsTexture() {
@@ -128,7 +131,7 @@ class DungeonPlannerTiledLightsNode extends LightsNode {
     let materialIndex = 0
     let tiledIndex = 0
 
-    for (const light of lights) {
+    const addLight = (light) => {
       if (light.isPointLight === true) {
         this.tiledLights[tiledIndex] = light
         tiledIndex += 1
@@ -138,8 +141,13 @@ class DungeonPlannerTiledLightsNode extends LightsNode {
       }
     }
 
+    for (const light of lights) {
+      addLight(light)
+    }
+
     this.materialLights.length = materialIndex
     this.tiledLights.length = tiledIndex
+    this._hasTiledLights = tiledIndex > 0
 
     return super.setLights(this.materialLights)
   }
@@ -236,8 +244,8 @@ class DungeonPlannerTiledLightsNode extends LightsNode {
     const { tileSize, maxLights } = this
 
     const bufferSize = new Vector2(width, height)
-    const lineSize = Math.floor(bufferSize.width / tileSize)
-    const count = Math.floor((bufferSize.width * bufferSize.height) / tileSize)
+    const lineSize = getTiledLightGridDimension(bufferSize.width, tileSize)
+    const count = getTiledLightWorkgroupCount(bufferSize.width, bufferSize.height, tileSize)
 
     const lightsData = new Float32Array(maxLights * 4 * 2)
     const lightsTexture = new DataTexture(lightsData, lightsData.length / 8, 2, RGBAFormat, FloatType)

@@ -2,25 +2,27 @@ import { useCallback, useLayoutEffect, useMemo, useRef, type MutableRefObject } 
 import { useFrame, useThree } from '@react-three/fiber'
 import * as THREE from 'three'
 import type { PropLight } from '../../content-packs/types'
-import { getContentPackAssetById } from '../../content-packs/registry'
 import { FORWARD_PLUS_LOCAL_LIGHT_SHADOWS } from '../../rendering/forwardPlusConfig'
+import { getStableLightPhase } from '../../rendering/lightFlickerMath'
+import {
+  classifyDynamicLightSources,
+  DEFAULT_DYNAMIC_LIGHT_POOL_SIZE,
+  getPropLightWorldPosition as getResolvedPropLightWorldPosition,
+  resolveObjectLightSources,
+  resolveRegisteredLightSources,
+  type ResolvedDungeonLightSource,
+} from '../../rendering/dungeonLightField'
 import type { DungeonObjectRecord } from '../../store/useDungeonStore'
 import { useDungeonStore } from '../../store/useDungeonStore'
 import type { ObjectLightOverrides } from '../../store/lightOverrides'
-import {
-  getObjectLightOverrides,
-  mergePropLightWithOverrides,
-} from '../../store/lightOverrides'
 import type { PlayVisibility } from './playVisibility'
 import { shouldRenderLineOfSightLight } from './losRendering'
 import { useRegisteredLightSources } from './objectSourceRegistry'
 
-export const DEFAULT_POOLED_PROP_LIGHTS = 256
+export const MAX_DYNAMIC_PROP_LIGHTS = DEFAULT_DYNAMIC_LIGHT_POOL_SIZE
+export const DEFAULT_POOLED_PROP_LIGHTS = MAX_DYNAMIC_PROP_LIGHTS
 const NEAR_VIEW_LIGHT_MARGIN = 1.5
 const DORMANT_LIGHT_POSITION: [number, number, number] = [0, -1000, 0]
-const positionScratch = new THREE.Vector3()
-const offsetScratch = new THREE.Vector3()
-const rotationScratch = new THREE.Euler()
 const sphereScratch = new THREE.Sphere()
 const cameraProjectionMatrixScratch = new THREE.Matrix4()
 const cameraPositionScratch = new THREE.Vector3()
@@ -36,11 +38,7 @@ export type PropLightPoolAssignment = {
  * A pre-resolved light source — asset registry lookup is done once when the
  * objects list changes rather than inside the per-frame useFrame callback.
  */
-export type PropLightSource = {
-  key: string
-  object: DungeonObjectRecord
-  light: PropLight
-}
+export type PropLightSource = ResolvedDungeonLightSource
 
 /**
  * Pre-computes the list of objects that emit light.
@@ -51,19 +49,7 @@ export function precomputeLightSources(
   objects: DungeonObjectRecord[],
   previewOverrides: Record<string, ObjectLightOverrides> = {},
 ): PropLightSource[] {
-  return objects.flatMap((object) => {
-    const asset = object.assetId ? getContentPackAssetById(object.assetId) : null
-    const baseLight = asset?.getLight?.(object.props) ?? asset?.metadata?.light ?? null
-    if (!baseLight) {
-      return []
-    }
-
-    const light = mergePropLightWithOverrides(
-      baseLight,
-      previewOverrides[object.id] ?? getObjectLightOverrides(object.props),
-    )
-    return light ? [{ key: object.id, object, light }] : []
-  })
+  return resolveObjectLightSources(objects, previewOverrides)
 }
 
 export function getDesiredPropLightPoolSize(lightSourceCount: number) {
@@ -71,12 +57,7 @@ export function getDesiredPropLightPoolSize(lightSourceCount: number) {
 }
 
 export function getPropLightRenderCapacity(lightCount: number) {
-  const safeCount = Math.max(0, Math.floor(lightCount))
-  if (safeCount === 0) {
-    return 0
-  }
-
-  return Math.ceil(safeCount / DEFAULT_POOLED_PROP_LIGHTS) * DEFAULT_POOLED_PROP_LIGHTS
+  return Math.max(0, Math.floor(lightCount))
 }
 
 export function distributeForwardPlusLightBudget(requestedCounts: number[], totalBudget: number) {
@@ -97,6 +78,7 @@ export function applyPropLightPoolAssignment(
   pooledLight: THREE.PointLight,
   assignment: PropLightPoolAssignment | undefined,
   elapsedTime: number,
+  flickerEnabled = true,
 ) {
   if (!assignment) {
     pooledLight.position.set(...DORMANT_LIGHT_POSITION)
@@ -112,7 +94,7 @@ export function applyPropLightPoolAssignment(
   pooledLight.color.set(assignment.light.color)
   pooledLight.distance = assignment.light.distance
   pooledLight.decay = assignment.light.decay ?? 2
-  pooledLight.intensity = getPooledLightIntensity(assignment, elapsedTime)
+  pooledLight.intensity = getPooledLightIntensity(assignment, elapsedTime, flickerEnabled)
   pooledLight.visible = true
 }
 
@@ -127,45 +109,53 @@ export function PropLightPool({
 }) {
   const { camera, invalidate, scene } = useThree()
   const refs = useRef<Array<THREE.PointLight | null>>([])
+  const lightFlickerEnabled = useDungeonStore((state) => state.lightFlickerEnabled)
+  const selection = useDungeonStore((state) => state.selection)
   const objectLightPreviewOverrides = useDungeonStore((state) => state.objectLightPreviewOverrides)
   const registeredLightSources = useRegisteredLightSources(scopeKey)
   const lightSources = useMemo(
-    () =>
-      registeredLightSources.flatMap((source) => {
-        const light = mergePropLightWithOverrides(
-          source.light,
-          objectLightPreviewOverrides[source.key] ?? getObjectLightOverrides(source.object.props),
-        )
-        return light ? [{ ...source, light }] : []
-      }),
+    () => resolveRegisteredLightSources(registeredLightSources, objectLightPreviewOverrides),
     [objectLightPreviewOverrides, registeredLightSources],
   )
-  const visibleAssignments = useMemo(
-    () => collectVisiblePropLightAssignments({
-      lightSources,
-      visibility,
-      useLineOfSightPostMask: visibility.active,
-    }),
+  const visibleLightSources = useMemo(
+    () =>
+      lightSources.filter((lightSource) =>
+        shouldRenderLineOfSightLight(
+          visibility.getObjectVisibility(lightSource.object),
+          visibility.active,
+        )),
     [lightSources, visibility],
   )
+  const selectedLightKeys = useMemo(
+    () => (selection ? new Set([selection]) : new Set<string>()),
+    [selection],
+  )
+  const previewLightKeys = useMemo(
+    () => new Set(Object.keys(objectLightPreviewOverrides)),
+    [objectLightPreviewOverrides],
+  )
   const hasFlicker = useMemo(
-    () => visibleAssignments.some((assignment) => assignment.light.flicker),
-    [visibleAssignments],
+    () => lightFlickerEnabled && visibleLightSources.some((assignment) => assignment.light.flicker),
+    [lightFlickerEnabled, visibleLightSources],
   )
   const renderCapacity = useMemo(() => getPropLightRenderCapacity(maxLights), [maxLights])
   const lastCameraMatrixElementsRef = useRef<Float32Array | null>(null)
   const lastProjectionMatrixElementsRef = useRef<Float32Array | null>(null)
 
   const publishAssignments = useCallback((elapsedTime: number) => {
-    const cameraAwareAssignments =
-      visibleAssignments.length > maxLights
-        ? prioritizePropLightAssignments({
-          assignments: visibleAssignments,
-          cameraPosition: getCameraPosition(camera),
-          cameraFrustum: getCameraFrustum(camera),
-          maxLights,
-        })
-        : visibleAssignments.slice(0, maxLights)
+    const { dynamicLightSources } = classifyDynamicLightSources({
+      lightSources: visibleLightSources,
+      selectedKeys: selectedLightKeys,
+      previewKeys: previewLightKeys,
+      cameraPosition: getCameraPosition(camera),
+      cameraFrustum: getCameraFrustum(camera),
+      maxDynamicLights: renderCapacity,
+    })
+    const cameraAwareAssignments = dynamicLightSources.map((lightSource) => ({
+      key: lightSource.key,
+      position: lightSource.position,
+      light: lightSource.light,
+    }))
 
     for (let index = 0; index < renderCapacity; index += 1) {
       const pooledLight = refs.current[index]
@@ -173,9 +163,9 @@ export function PropLightPool({
         continue
       }
 
-      applyPropLightPoolAssignment(pooledLight, cameraAwareAssignments[index], elapsedTime)
+      applyPropLightPoolAssignment(pooledLight, cameraAwareAssignments[index], elapsedTime, lightFlickerEnabled)
     }
-  }, [camera, maxLights, renderCapacity, visibleAssignments])
+  }, [camera, lightFlickerEnabled, previewLightKeys, renderCapacity, selectedLightKeys, visibleLightSources])
 
   useLayoutEffect(() => {
     while (refs.current.length < renderCapacity) {
@@ -210,8 +200,7 @@ export function PropLightPool({
   }, [invalidate, publishAssignments])
 
   useFrame(({ clock }) => {
-    const cameraAwareSelection = visibleAssignments.length > maxLights
-    const cameraChanged = cameraAwareSelection && hasCameraChanged(
+    const cameraChanged = hasCameraChanged(
       camera,
       lastCameraMatrixElementsRef,
       lastProjectionMatrixElementsRef,
@@ -352,16 +341,7 @@ export function getPropLightWorldPosition(
   object: Pick<DungeonObjectRecord, 'position' | 'rotation'>,
   offset?: [number, number, number],
 ): [number, number, number] {
-  positionScratch.set(...object.position)
-  if (!offset) {
-    return positionScratch.toArray() as [number, number, number]
-  }
-
-  offsetScratch.set(...offset)
-  rotationScratch.set(...object.rotation)
-  offsetScratch.applyEuler(rotationScratch)
-  positionScratch.add(offsetScratch)
-  return positionScratch.toArray() as [number, number, number]
+  return getResolvedPropLightWorldPosition(object, offset)
 }
 
 function getPropLightViewPriority(
@@ -388,8 +368,12 @@ function getPropLightViewPriority(
   return null
 }
 
-function getPooledLightIntensity(assignment: PropLightPoolAssignment, elapsedTime: number) {
-  if (!assignment.light.flicker) {
+function getPooledLightIntensity(
+  assignment: PropLightPoolAssignment,
+  elapsedTime: number,
+  flickerEnabled: boolean,
+) {
+  if (!flickerEnabled || !assignment.light.flicker) {
     return assignment.light.intensity
   }
 
@@ -401,16 +385,6 @@ function getPooledLightIntensity(assignment: PropLightPoolAssignment, elapsedTim
     Math.sin(t * 23.7) * 0.05
 
   return assignment.light.intensity * (1 + noise)
-}
-
-function getStableLightPhase(key: string) {
-  let hash = 2166136261
-  for (let index = 0; index < key.length; index += 1) {
-    hash ^= key.charCodeAt(index)
-    hash = Math.imul(hash, 16777619)
-  }
-
-  return (hash >>> 0) / 4294967296 * Math.PI * 2
 }
 
 export function getCameraFrustum(camera: THREE.Camera) {

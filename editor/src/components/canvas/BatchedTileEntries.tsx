@@ -7,6 +7,9 @@ import { buildMergedTileGeometryMeshes, type BatchedTilePlacement } from './batc
 import { resolveBatchedTileAsset, type ResolvedBatchedTileAsset } from './tileAssetResolution'
 import { useGLTF } from '../../rendering/useGLTF'
 import { applyFogOfWarToMaterial, useFogOfWarRuntime } from './fogOfWar'
+import { applyBakedLightToMaterial } from './bakedLightMaterial'
+import type { BakedFloorLightField } from '../../rendering/dungeonLightField'
+import { useDungeonStore } from '../../store/useDungeonStore'
 
 export type StaticTileEntry = BatchedTilePlacement & {
   assetId: string | null
@@ -14,6 +17,7 @@ export type StaticTileEntry = BatchedTilePlacement & {
   variantKey?: string
   objectProps?: Record<string, unknown>
   visibility: PlayVisibilityState
+  bakedLightField?: BakedFloorLightField
   fogCell?: readonly [number, number]
 }
 
@@ -108,6 +112,7 @@ function ResolvedBatchedTileEntries({
         entry.transformKey,
         usesGpuFog ? `gpu-los:${entry.variant}` : entry.visibility,
         entry.receiveShadow ? 'shadow' : 'flat',
+        entry.bakedLightDirectionSecondary ? 'double-direction' : 'single-direction',
       ].join('|')
 
       if (!grouped.has(bucketKey)) {
@@ -185,6 +190,13 @@ function MergedTileBucket({
 
   const shouldRenderBase = usesGpuFog || shouldRenderLineOfSightGeometry(visibility, useLineOfSightPostMask)
   const overlayOpacity = visibility === 'explored' ? 0.6 : 0
+  const useBakedLight = entries.some((entry) => entry.bakedLight || entry.bakedLightField)
+  const bakedLightField = entries[0]!.bakedLightField ?? null
+  const useSecondaryDirectionAttribute = entries.some((entry) => Boolean(entry.bakedLightDirectionSecondary))
+  const lightFlickerEnabled = useDungeonStore((state) => state.lightFlickerEnabled)
+  const useBakedFlicker = shouldRenderBase
+    && lightFlickerEnabled
+    && Boolean(bakedLightField?.flickerLightFieldTextures.some((texture) => texture))
 
   return (
     <>
@@ -196,9 +208,13 @@ function MergedTileBucket({
           receiveShadow={receiveShadow}
           visibility={visibility}
           variant={entries[0]!.variant}
+          bakedLightField={bakedLightField}
+          useBakedLight={useBakedLight}
+          useBakedFlicker={useBakedFlicker}
+          useSecondaryDirectionAttribute={useSecondaryDirectionAttribute}
           useGpuFog={usesGpuFog}
-        />
-      ))}
+          />
+        ))}
       {!usesGpuFog && visibility === 'explored' && meshes.map((mesh) => (
         <MergedTintMesh
           key={`overlay:${mesh.key}`}
@@ -216,6 +232,10 @@ function MergedTileMesh({
   receiveShadow,
   visibility,
   variant,
+  bakedLightField,
+  useBakedLight,
+  useBakedFlicker,
+  useSecondaryDirectionAttribute,
   useGpuFog,
 }: {
   geometry: THREE.BufferGeometry
@@ -223,6 +243,10 @@ function MergedTileMesh({
   receiveShadow: boolean
   visibility: PlayVisibilityState
   variant: 'floor' | 'wall'
+  bakedLightField: BakedFloorLightField | null
+  useBakedLight: boolean
+  useBakedFlicker: boolean
+  useSecondaryDirectionAttribute: boolean
   useGpuFog: boolean
 }) {
   const ref = useRef<THREE.Mesh>(null)
@@ -243,6 +267,19 @@ function MergedTileMesh({
   }, [visibility, depthMaterial])
 
   useLayoutEffect(() => {
+    applyBakedLightToMaterial(
+      material,
+      useBakedLight
+        ? {
+          useLightAttribute: true,
+          useDirectionAttribute: variant === 'wall',
+          useSecondaryDirectionAttribute: variant === 'wall' && useSecondaryDirectionAttribute,
+          useTopSurfaceMask: variant === 'floor',
+          useFlicker: useBakedFlicker,
+          lightField: bakedLightField,
+        }
+        : null,
+    )
     applyFogOfWarToMaterial(
       material,
       useGpuFog ? fogOfWar : null,
@@ -251,7 +288,7 @@ function MergedTileMesh({
         useCellAttribute: useGpuFog && variant === 'floor',
       },
     )
-  }, [fogOfWar, material, useGpuFog, variant])
+  }, [bakedLightField, fogOfWar, material, useBakedFlicker, useBakedLight, useGpuFog, useSecondaryDirectionAttribute, variant])
 
   return (
     <mesh

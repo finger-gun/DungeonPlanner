@@ -1,4 +1,4 @@
-import { memo, useRef, useLayoutEffect } from 'react'
+import { memo, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { type ThreeEvent } from '@react-three/fiber'
 import type { Group } from 'three'
 import { useDungeonStore, type DungeonObjectRecord } from '../../store/useDungeonStore'
@@ -14,11 +14,16 @@ import {
   getGeneratedCharacterIndicatorSize,
   getGeneratedCharacterScale,
 } from '../../generated-characters/rendering'
+import type { BakedFloorLightField } from '../../rendering/dungeonLightField'
+import { SELECTION_OUTLINE_IGNORE_USER_DATA } from '../../postprocessing/selectionOutlineConfig'
+
+const PROP_STATE_BAKED_LIGHT_SUSPEND_MS = 450
 
 type DungeonObjectProps = {
   object: DungeonObjectRecord
   visibility: PlayVisibility
   sourceScopeKey: string
+  bakedLightField?: BakedFloorLightField | null
   childrenByParent?: Record<string, DungeonObjectRecord[]>
   onPlayDragStart?: (object: DungeonObjectRecord, event: ThreeEvent<PointerEvent>) => void
   playerAnimationState?: 'default' | 'selected' | 'pickup' | 'holding' | 'release'
@@ -28,6 +33,7 @@ export const DungeonObject = memo(function DungeonObject({
   object,
   visibility,
   sourceScopeKey,
+  bakedLightField = null,
   childrenByParent,
   onPlayDragStart,
   playerAnimationState,
@@ -46,6 +52,9 @@ export const DungeonObject = memo(function DungeonObject({
   const selected = selection === object.id
   const visibilityState = visibility.getObjectVisibility(object)
   const useLineOfSightPostMask = visibility.active
+  const [suspendBakedLight, setSuspendBakedLight] = useState(false)
+  const hasSeenInitialPropsRef = useRef(false)
+  const suspendTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const groupRef = useRef<Group>(null)
   useLayoutEffect(() => {
@@ -68,6 +77,37 @@ export const DungeonObject = memo(function DungeonObject({
   ])
 
   const asset = object.assetId ? getContentPackAssetById(object.assetId) : null
+  const isStatefulProp = object.type === 'prop' && Boolean(asset?.getPlayModeNextProps)
+
+  useEffect(() => {
+    if (!isStatefulProp) {
+      setSuspendBakedLight(false)
+      return
+    }
+
+    if (!hasSeenInitialPropsRef.current) {
+      hasSeenInitialPropsRef.current = true
+      return
+    }
+
+    setSuspendBakedLight(true)
+    if (suspendTimeoutRef.current) {
+      clearTimeout(suspendTimeoutRef.current)
+    }
+    suspendTimeoutRef.current = setTimeout(() => {
+      setSuspendBakedLight(false)
+      suspendTimeoutRef.current = null
+    }, PROP_STATE_BAKED_LIGHT_SUSPEND_MS)
+
+    return () => {
+      if (suspendTimeoutRef.current) {
+        clearTimeout(suspendTimeoutRef.current)
+        suspendTimeoutRef.current = null
+      }
+    }
+  }, [isStatefulProp, object.props])
+
+  const disableBakedLight = suspendBakedLight || (playerAnimationState != null && playerAnimationState !== 'default')
 
   function handleClick(event: ThreeEvent<MouseEvent>) {
     if (tool === 'play') {
@@ -128,6 +168,7 @@ export const DungeonObject = memo(function DungeonObject({
           position={[0, playerHitHeight * 0.5, 0]}
           onPointerDown={handlePointerDown}
           onClick={handleClick}
+          userData={{ [SELECTION_OUTLINE_IGNORE_USER_DATA]: true }}
         >
           <cylinderGeometry args={[playerHitRadius, playerHitRadius, playerHitHeight, 24]} />
           <meshBasicMaterial transparent opacity={0} depthWrite={false} />
@@ -140,6 +181,7 @@ export const DungeonObject = memo(function DungeonObject({
         playerAnimationState={playerAnimationState ?? 'default'}
         variantKey={object.cellKey}
         objectProps={object.props}
+        propInstanceKey={object.id}
         visibility={visibilityState}
         useLineOfSightPostMask={useLineOfSightPostMask}
         userData={{ objectId: object.id }}
@@ -147,6 +189,8 @@ export const DungeonObject = memo(function DungeonObject({
         onClick={handleClick}
         onContextMenu={handleContextMenu}
         variant="prop"
+        bakedLightField={bakedLightField}
+        disableBakedLight={disableBakedLight}
       />
       {showPlayerSelectionRing && <PlayerSelectionRing assetId={object.assetId} />}
       {childObjects.map((childObject) => (
@@ -155,6 +199,7 @@ export const DungeonObject = memo(function DungeonObject({
           object={childObject}
           visibility={visibility}
           sourceScopeKey={sourceScopeKey}
+          bakedLightField={bakedLightField}
           childrenByParent={childrenByParent}
           onPlayDragStart={onPlayDragStart}
         />

@@ -58,23 +58,37 @@ describe('GeneratedStandeePlayer', () => {
     cleanup()
   })
 
-  it('mirrors the portrait texture on the back card surface', () => {
+  it('renders the back card surface as a rotated mirrored reverse side', () => {
     render(<GeneratedStandeePlayer character={TEST_CHARACTER} />)
 
     expect(mockGeneratedStandeeBaseMesh).toHaveBeenCalledTimes(1)
     expect(mockGeneratedStandeeSilhouetteMesh).toHaveBeenCalledTimes(1)
     expect(mockGeneratedStandeeCardSurfaceMesh).toHaveBeenCalledTimes(2)
     const firstSurfaceProps = mockGeneratedStandeeCardSurfaceMesh.mock.calls[0]?.[0] as
-      | { mirrorX?: boolean; rotation?: [number, number, number] }
+      | {
+        bakedLightMode?: string
+        mirrorX?: boolean
+        rotation?: [number, number, number]
+        excludeFromSelectionOutline?: boolean
+      }
       | undefined
     const secondSurfaceProps = mockGeneratedStandeeCardSurfaceMesh.mock.calls[1]?.[0] as
-      | { mirrorX?: boolean; rotation?: [number, number, number] }
+      | {
+        bakedLightMode?: string
+        mirrorX?: boolean
+        rotation?: [number, number, number]
+        excludeFromSelectionOutline?: boolean
+      }
       | undefined
 
     expect(firstSurfaceProps?.mirrorX).toBeUndefined()
+    expect(firstSurfaceProps?.excludeFromSelectionOutline).toBe(true)
+    expect(firstSurfaceProps?.bakedLightMode).toBe('prop')
     expect(secondSurfaceProps).toMatchObject({
+      bakedLightMode: 'prop',
       mirrorX: true,
       rotation: [0, Math.PI, 0],
+      excludeFromSelectionOutline: true,
     })
   })
 

@@ -3,6 +3,7 @@ import { useFrame } from '@react-three/fiber'
 import * as THREE from 'three'
 import { DecalGeometry } from 'three-stdlib'
 import { getDecalReceiverMeshes, useDecalReceiverRegistryVersion } from './decalReceiverRegistry'
+import { SELECTION_OUTLINE_IGNORE_USER_DATA } from '../../postprocessing/selectionOutlineConfig'
 
 const PROJECTOR_FORWARD = new THREE.Vector3(0, 0, 1)
 const PROJECTOR_UP = new THREE.Vector3(0, 1, 0)
@@ -56,8 +57,10 @@ export function ProjectedGroundDecal({
     }
 
     anchor.userData.ignoreLosRaycast = true
+    anchor.userData[SELECTION_OUTLINE_IGNORE_USER_DATA] = true
     anchor.traverse((child) => {
       child.userData.ignoreLosRaycast = true
+      child.userData[SELECTION_OUTLINE_IGNORE_USER_DATA] = true
       if (child instanceof THREE.Mesh) {
         child.raycast = () => {}
       }
@@ -103,7 +106,11 @@ export function ProjectedGroundDecal({
     <group ref={anchorRef}>
       {geometry ? (
         <>
-          <mesh geometry={geometry} renderOrder={2.9}>
+          <mesh
+            geometry={geometry}
+            renderOrder={2.9}
+            userData={{ [SELECTION_OUTLINE_IGNORE_USER_DATA]: true }}
+          >
             <meshBasicMaterial
               color={color}
               map={glowTexture}
@@ -118,7 +125,11 @@ export function ProjectedGroundDecal({
               toneMapped={false}
             />
           </mesh>
-          <mesh geometry={geometry} renderOrder={3}>
+          <mesh
+            geometry={geometry}
+            renderOrder={3}
+            userData={{ [SELECTION_OUTLINE_IGNORE_USER_DATA]: true }}
+          >
             <meshBasicMaterial
               color={color}
               map={coreTexture}
@@ -141,6 +152,7 @@ export function ProjectedGroundDecal({
             position={[0, 0.02, 0]}
             scale={[size * 1.02, size * 1.02, 1]}
             renderOrder={2.9}
+            userData={{ [SELECTION_OUTLINE_IGNORE_USER_DATA]: true }}
           >
             <meshBasicMaterial
               color={color}
@@ -161,6 +173,7 @@ export function ProjectedGroundDecal({
             position={[0, 0.02, 0]}
             scale={[size, size, 1]}
             renderOrder={3}
+            userData={{ [SELECTION_OUTLINE_IGNORE_USER_DATA]: true }}
           >
             <meshBasicMaterial
               color={color}

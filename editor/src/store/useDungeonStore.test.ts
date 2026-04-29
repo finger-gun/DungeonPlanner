@@ -911,6 +911,16 @@ describe('useDungeonStore history', () => {
     expect(useDungeonStore.getState().showLensFocusDebugPoint).toBe(false)
   })
 
+  it('toggles the prop probe debug visibility flag', () => {
+    expect(useDungeonStore.getState().showPropProbeDebug).toBe(false)
+
+    useDungeonStore.getState().setShowPropProbeDebug(true)
+    expect(useDungeonStore.getState().showPropProbeDebug).toBe(true)
+
+    useDungeonStore.getState().setShowPropProbeDebug(false)
+    expect(useDungeonStore.getState().showPropProbeDebug).toBe(false)
+  })
+
   it('tracks transient object light previews outside persisted object props', () => {
     useDungeonStore.getState().setObjectLightPreview('torch-1', {
       intensity: 3,

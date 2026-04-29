@@ -135,6 +135,7 @@ export function usePlayVisibility(): PlayVisibility {
       return null
     }
 
+    void objectRegistryVersion
     const playerOrigins = playerOriginObjects
       .map((object) => object.cell)
     const blockerLookup = getBlockingObjectIdsByCell(placedObjects, layers)

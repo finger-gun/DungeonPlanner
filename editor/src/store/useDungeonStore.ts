@@ -271,6 +271,7 @@ type DungeonState = DungeonSnapshot & {
   showLosDebugRays: boolean
   showLensFocusDebugPoint: boolean
   showProjectionDebugMesh: boolean
+  showPropProbeDebug: boolean
   floorViewMode: FloorViewMode
   generatedCharacters: Record<string, GeneratedCharacterRecord>
   characterSheet: CharacterSheetState
@@ -334,8 +335,11 @@ type DungeonState = DungeonSnapshot & {
   setShowLosDebugRays: (show: boolean) => void
   setShowLensFocusDebugPoint: (show: boolean) => void
   setShowProjectionDebugMesh: (show: boolean) => void
+  setShowPropProbeDebug: (show: boolean) => void
   lightEffectsEnabled: boolean
   setLightEffectsEnabled: (enabled: boolean) => void
+  lightFlickerEnabled: boolean
+  setLightFlickerEnabled: (enabled: boolean) => void
   particleEffectsEnabled: boolean
   setParticleEffectsEnabled: (enabled: boolean) => void
   setFloorViewMode: (mode: FloorViewMode) => void
@@ -562,6 +566,7 @@ function serializeCurrentDungeonState(state: DungeonState) {
     outdoorTerrainHeights: state.outdoorTerrainHeights,
     sceneLighting: state.sceneLighting,
     postProcessing: state.postProcessing,
+    lightFlickerEnabled: state.lightFlickerEnabled,
     layers: state.layers,
     layerOrder: state.layerOrder,
     activeLayerId: state.activeLayerId,
@@ -1599,7 +1604,9 @@ export const useDungeonStore = create<DungeonState>()(
   showLosDebugRays: false,
   showLensFocusDebugPoint: false,
   showProjectionDebugMesh: false,
+  showPropProbeDebug: false,
   lightEffectsEnabled: true,
+  lightFlickerEnabled: true,
   particleEffectsEnabled: true,
   floorViewMode: 'active' as FloorViewMode,
   generatedCharacters: {},
@@ -2866,8 +2873,14 @@ export const useDungeonStore = create<DungeonState>()(
   setShowProjectionDebugMesh: (show) => {
     set((state) => ({ ...state, showProjectionDebugMesh: show }))
   },
+  setShowPropProbeDebug: (show) => {
+    set((state) => ({ ...state, showPropProbeDebug: show }))
+  },
   setLightEffectsEnabled: (enabled) => {
     set((state) => ({ ...state, lightEffectsEnabled: enabled }))
+  },
+  setLightFlickerEnabled: (enabled) => {
+    set((state) => ({ ...state, lightFlickerEnabled: enabled }))
   },
   setParticleEffectsEnabled: (enabled) => {
     set((state) => ({ ...state, particleEffectsEnabled: enabled }))
@@ -3099,6 +3112,9 @@ export const useDungeonStore = create<DungeonState>()(
         activeCameraMode: 'perspective',
         cameraPreset: null,
         objectLightPreviewOverrides: {},
+        lightEffectsEnabled: true,
+        lightFlickerEnabled: true,
+        particleEffectsEnabled: true,
         history: [],
       future: [],
     }))
@@ -3147,6 +3163,10 @@ export const useDungeonStore = create<DungeonState>()(
         showLosDebugRays: false,
         showLensFocusDebugPoint: false,
         showProjectionDebugMesh: false,
+        showPropProbeDebug: false,
+        lightEffectsEnabled: true,
+        lightFlickerEnabled: true,
+        particleEffectsEnabled: true,
         // Undo/redo cleared
       history: [],
       future: [],
@@ -4037,6 +4057,7 @@ export const useDungeonStore = create<DungeonState>()(
         selectedAssetIds: state.selectedAssetIds,
         generatedCharacters: state.generatedCharacters,
         lightEffectsEnabled: state.lightEffectsEnabled,
+        lightFlickerEnabled: state.lightFlickerEnabled,
         floors: state.floors,
         floorOrder: state.floorOrder,
         activeFloorId: state.activeFloorId,
@@ -4074,6 +4095,7 @@ export const useDungeonStore = create<DungeonState>()(
           state.postProcessing as Partial<PostProcessingSettings> | undefined,
         )
         state.lightEffectsEnabled = state.lightEffectsEnabled ?? true
+        state.lightFlickerEnabled = state.lightFlickerEnabled ?? true
         state.particleEffectsEnabled = state.particleEffectsEnabled ?? true
         state.generatedCharacters = normalizeGeneratedCharacters(
           state.generatedCharacters as Record<string, Partial<GeneratedCharacterRecord>> | undefined,
