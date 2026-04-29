@@ -181,6 +181,22 @@ export function Grid({ size = 120, playMode = false }: GridProps) {
   const roomWallBrushModeRef = useRef<'paint' | 'erase' | null>(null)
   const roomWallBrushTargetsRef = useRef<RoomWallEditTarget[]>([])
   const roomWallBrushAnchorRef = useRef<RoomWallBrushAnchor | null>(null)
+  const hoverPreviewStateRef = useRef<{
+    hoveredCell: SnappedGridPosition | null
+    hoveredPoint: { x: number; y: number; z: number } | null
+    hoveredRay: {
+      origin: [number, number, number]
+      direction: [number, number, number]
+    } | null
+    hoveredTerrainCell: GridCell | null
+    hoveredSurfaceHit: PlacementSurfaceHit | null
+  }>({
+    hoveredCell: null,
+    hoveredPoint: null,
+    hoveredRay: null,
+    hoveredTerrainCell: null,
+    hoveredSurfaceHit: null,
+  })
   const placementOrientationKey = pickedUpObject
     ? `pickup:${pickedUpObject.objectId}:${pickedUpObject.assetId}:${wallConnectionMode}`
     : `${selectedPropAssetId ?? ''}:${selectedCharacterAssetId ?? ''}:${selectedOpeningAssetId ?? ''}:${wallConnectionMode}`
@@ -198,6 +214,16 @@ export function Grid({ size = 120, playMode = false }: GridProps) {
     placementOrientation.key === placementOrientationKey
       ? placementOrientation.wallFlipped
       : false
+
+  useEffect(() => {
+    hoverPreviewStateRef.current = {
+      hoveredCell,
+      hoveredPoint,
+      hoveredRay,
+      hoveredTerrainCell,
+      hoveredSurfaceHit,
+    }
+  }, [hoveredCell, hoveredPoint, hoveredRay, hoveredSurfaceHit, hoveredTerrainCell])
 
   const resolvePlacementSurfaceHit = useCallback((pointerEvent: PointerEvent) => {
     const rect = gl.domElement.getBoundingClientRect()
@@ -289,11 +315,36 @@ export function Grid({ size = 120, playMode = false }: GridProps) {
   }, [camera, gl.domElement, getSnappedHoverCell, mapMode, paintedCells, placedObjects, scene.children])
 
   const applyResolvedHoverState = useCallback((resolved: ReturnType<typeof resolvePointerPlacementState>) => {
-    setHoveredCell(resolved?.snapped ?? null)
-    setHoveredPoint(resolved ? resolved.point : null)
-    setHoveredRay(resolved?.ray ?? null)
-    setHoveredTerrainCell(resolved?.terrainCell ?? null)
-    setHoveredSurfaceHit(resolved?.surfaceHit ?? null)
+    const nextHoveredCell = resolved?.snapped ?? null
+    const nextHoveredPoint = resolved ? resolved.point : null
+    const nextHoveredRay = resolved?.ray ?? null
+    const nextHoveredTerrainCell = resolved?.terrainCell ?? null
+    const nextHoveredSurfaceHit = resolved?.surfaceHit ?? null
+    const current = hoverPreviewStateRef.current
+
+    if (
+      areSnappedGridPositionsEqual(current.hoveredCell, nextHoveredCell) &&
+      areHoverPointsEqual(current.hoveredPoint, nextHoveredPoint) &&
+      areHoverRaysEqual(current.hoveredRay, nextHoveredRay) &&
+      areGridCellsEqual(current.hoveredTerrainCell, nextHoveredTerrainCell) &&
+      arePlacementSurfaceHitsEqual(current.hoveredSurfaceHit, nextHoveredSurfaceHit)
+    ) {
+      return
+    }
+
+    hoverPreviewStateRef.current = {
+      hoveredCell: nextHoveredCell,
+      hoveredPoint: nextHoveredPoint,
+      hoveredRay: nextHoveredRay,
+      hoveredTerrainCell: nextHoveredTerrainCell,
+      hoveredSurfaceHit: nextHoveredSurfaceHit,
+    }
+
+    setHoveredCell(nextHoveredCell)
+    setHoveredPoint(nextHoveredPoint)
+    setHoveredRay(nextHoveredRay)
+    setHoveredTerrainCell(nextHoveredTerrainCell)
+    setHoveredSurfaceHit(nextHoveredSurfaceHit)
   }, [
     setHoveredCell,
     setHoveredPoint,
@@ -1829,6 +1880,96 @@ function findOutdoorTerrainHit(intersections: THREE.Intersection[]) {
   }
 
   return null
+}
+
+function areGridCellsEqual(left: GridCell | null, right: GridCell | null) {
+  return (
+    left === right ||
+    (
+      left !== null &&
+      right !== null &&
+      left[0] === right[0] &&
+      left[1] === right[1]
+    )
+  )
+}
+
+function areHoverPointsEqual(
+  left: { x: number; y: number; z: number } | null,
+  right: { x: number; y: number; z: number } | null,
+) {
+  return (
+    left === right ||
+    (
+      left !== null &&
+      right !== null &&
+      left.x === right.x &&
+      left.y === right.y &&
+      left.z === right.z
+    )
+  )
+}
+
+function areHoverRaysEqual(
+  left: {
+    origin: [number, number, number]
+    direction: [number, number, number]
+  } | null,
+  right: {
+    origin: [number, number, number]
+    direction: [number, number, number]
+  } | null,
+) {
+  return (
+    left === right ||
+    (
+      left !== null &&
+      right !== null &&
+      left.origin[0] === right.origin[0] &&
+      left.origin[1] === right.origin[1] &&
+      left.origin[2] === right.origin[2] &&
+      left.direction[0] === right.direction[0] &&
+      left.direction[1] === right.direction[1] &&
+      left.direction[2] === right.direction[2]
+    )
+  )
+}
+
+function arePlacementSurfaceHitsEqual(
+  left: PlacementSurfaceHit | null,
+  right: PlacementSurfaceHit | null,
+) {
+  return (
+    left === right ||
+    (
+      left !== null &&
+      right !== null &&
+      left.objectId === right.objectId &&
+      left.supportCellKey === right.supportCellKey &&
+      areGridCellsEqual(left.cell, right.cell) &&
+      left.position[0] === right.position[0] &&
+      left.position[1] === right.position[1] &&
+      left.position[2] === right.position[2]
+    )
+  )
+}
+
+function areSnappedGridPositionsEqual(
+  left: SnappedGridPosition | null,
+  right: SnappedGridPosition | null,
+) {
+  return (
+    left === right ||
+    (
+      left !== null &&
+      right !== null &&
+      left.key === right.key &&
+      areGridCellsEqual(left.cell, right.cell) &&
+      left.position[0] === right.position[0] &&
+      left.position[1] === right.position[1] &&
+      left.position[2] === right.position[2]
+    )
+  )
 }
 
 function raycastObjectId(object: THREE.Object3D | null) {
