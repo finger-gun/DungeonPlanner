@@ -4,9 +4,7 @@ import { useEffect, useRef } from 'react'
 import * as THREE from 'three'
 import type { OrbitControls as OrbitControlsImpl } from 'three-stdlib'
 import { useDungeonStore } from '../../store/useDungeonStore'
-
-const PAN_SPEED = 0.006
-const ROTATE_SPEED = 0.025
+import { getKeyboardPanAmount, getKeyboardRotateAmount } from './keyboardCameraMath'
 
 const TRACKED_KEYS = new Set([
   'w', 'a', 's', 'd',
@@ -77,7 +75,7 @@ function KeyboardCameraControls() {
     }
   }, [isObjectDragActive, isPaintingStrokeActive])
 
-  useFrame((state) => {
+  useFrame((state, deltaSeconds) => {
     if (isPaintingStrokeActive || isObjectDragActive) return
     const keys = pressedKeys.current
     if (keys.size === 0) return
@@ -88,7 +86,7 @@ function KeyboardCameraControls() {
 
     const target   = orbitControls.target as THREE.Vector3
     const distance = camera.position.distanceTo(target)
-    const speed    = distance * PAN_SPEED
+    const speed    = getKeyboardPanAmount(distance, deltaSeconds)
 
     let forward: THREE.Vector3
     let right: THREE.Vector3
@@ -123,7 +121,9 @@ function KeyboardCameraControls() {
 
     // Q/E orbital rotation only in perspective mode
     if (activeCameraMode === 'perspective' && (keys.has('q') || keys.has('e'))) {
-      const angle = keys.has('q') ? ROTATE_SPEED : -ROTATE_SPEED
+      const angle = keys.has('q')
+        ? getKeyboardRotateAmount(deltaSeconds)
+        : -getKeyboardRotateAmount(deltaSeconds)
       const offset = new THREE.Vector3().subVectors(camera.position, target)
       offset.applyAxisAngle(new THREE.Vector3(0, 1, 0), angle)
       camera.position.copy(target).add(offset)
