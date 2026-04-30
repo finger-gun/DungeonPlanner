@@ -9,10 +9,11 @@ export const dungeonPostAsset = createDungeonAsset({
   modelName: 'post',
   transform: DUNGEON_PROP_TRANSFORM,
   metadata: {
+    snapsTo: 'GRID',
     connectors: [
       {
         point: [0, 0, 0],
-        type: 'WALL',
+        type: 'FLOOR',
       },
     ],
     blocksLineOfSight: false,
