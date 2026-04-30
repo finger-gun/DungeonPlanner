@@ -1,4 +1,4 @@
-import { cleanup, renderHook } from '@testing-library/react'
+import { act, cleanup, renderHook } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import * as dungeonLightField from './dungeonLightField'
 import { useBakedFloorLightField } from './useBakedFloorLightField'
@@ -73,4 +73,89 @@ describe('useBakedFloorLightField', () => {
       maxCellZ: 0,
     })
   })
+
+  it('uses the worker-backed pending field for the first lit build when Worker is available', async () => {
+    class FakeWorker {
+      private listeners = new Set<(event: MessageEvent<{ requestId: number, result: dungeonLightField.BakedFloorLightFieldWorkerResult }>) => void>()
+
+      addEventListener(
+        type: string,
+        listener: (event: MessageEvent<{ requestId: number, result: dungeonLightField.BakedFloorLightFieldWorkerResult }>) => void,
+      ) {
+        if (type === 'message') {
+          this.listeners.add(listener)
+        }
+      }
+
+      removeEventListener(
+        type: string,
+        listener: (event: MessageEvent<{ requestId: number, result: dungeonLightField.BakedFloorLightFieldWorkerResult }>) => void,
+      ) {
+        if (type === 'message') {
+          this.listeners.delete(listener)
+        }
+      }
+
+      postMessage() {}
+
+      terminate() {
+        this.listeners.clear()
+      }
+    }
+
+    Object.defineProperty(globalThis, 'Worker', {
+      configurable: true,
+      writable: true,
+      value: FakeWorker,
+    })
+
+    const getOrBuildSpy = vi.spyOn(dungeonLightField, 'getOrBuildBakedFloorLightField')
+    const input = {
+      floorId: 'floor-worker-first-build',
+      floorCells: [[0, 0]] as [number, number][],
+      staticLightSources: [createResolvedLightSource('torch', [1, 1.5, 1])],
+    }
+
+    const { result } = renderHook(() => useBakedFloorLightField(input))
+
+    await act(async () => {})
+
+    expect(getOrBuildSpy).not.toHaveBeenCalled()
+    expect(result.current.bounds).toEqual({
+      minCellX: 0,
+      maxCellX: 0,
+      minCellZ: 0,
+      maxCellZ: 0,
+    })
+    expect(result.current.lightFieldTexture).toBeNull()
+    expect(result.current.staticLightSources.map((lightSource) => lightSource.key)).toEqual(['torch'])
+  })
 })
+
+function createResolvedLightSource(
+  id: string,
+  position: [number, number, number],
+): dungeonLightField.ResolvedDungeonLightSource {
+  return {
+    key: id,
+    object: {
+      id,
+      type: 'prop',
+      assetId: 'dungeon.props_torch',
+      position,
+      rotation: [0, 0, 0],
+      props: {},
+      cell: [0, 0],
+      cellKey: '0:0:floor',
+      layerId: 'default',
+    },
+    light: {
+      color: '#ff9944',
+      intensity: 1.5,
+      distance: 8,
+      decay: 2,
+    },
+    position,
+    linearColor: [1, 0.5583403896342679, 0.05780543019106723],
+  }
+}

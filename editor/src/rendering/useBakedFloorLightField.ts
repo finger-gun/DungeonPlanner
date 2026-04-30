@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   applyBakedFloorLightFieldWorkerResult,
+  createPendingBakedFloorLightField,
   getOrBuildBakedFloorLightField,
   prepareBakedFloorLightFieldBuild,
   prepareBakedFloorLightFieldWorkerBuild,
@@ -14,7 +15,21 @@ export function useBakedFloorLightField(input: BakedFloorLightFieldBuildInput) {
     () => prepareBakedFloorLightFieldBuild(input),
     [input],
   )
-  const [field, setField] = useState<BakedFloorLightField>(() => getOrBuildBakedFloorLightField(input))
+  const [field, setField] = useState<BakedFloorLightField>(() => {
+    if (typeof Worker === 'undefined') {
+      return getOrBuildBakedFloorLightField(input)
+    }
+
+    const workerBuild = prepareBakedFloorLightFieldWorkerBuild(prepared)
+    if (!workerBuild) {
+      return getOrBuildBakedFloorLightField(input)
+    }
+
+    return prepared.cachedField ?? createPendingBakedFloorLightField({
+      prepared,
+      layout: workerBuild.layout,
+    })
+  })
   const workerRef = useRef<Worker | null>(null)
   const requestIdRef = useRef(0)
   const pendingBuildRef = useRef<{
@@ -62,31 +77,34 @@ export function useBakedFloorLightField(input: BakedFloorLightFieldBuildInput) {
 
   useEffect(() => {
     const cachedField = prepared.cachedField
-    if (!cachedField || cachedField.sourceHash === prepared.sourceHash) {
-      const nextField = getOrBuildBakedFloorLightField(input)
+    if (cachedField?.sourceHash === prepared.sourceHash) {
       pendingBuildRef.current = null
-      setField((current) => (current === nextField ? current : nextField))
+      setField((current) => (current === cachedField ? current : cachedField))
       return
     }
 
     const workerBuild = prepareBakedFloorLightFieldWorkerBuild(prepared)
-    if (!workerBuild || !workerRef.current) {
-      const nextField = getOrBuildBakedFloorLightField(input)
-      pendingBuildRef.current = null
-      setField((current) => (current === nextField ? current : nextField))
+    if (workerBuild && workerRef.current) {
+      const pendingField = cachedField ?? createPendingBakedFloorLightField({
+        prepared,
+        layout: workerBuild.layout,
+      })
+      pendingBuildRef.current = {
+        prepared,
+        workerBuild,
+      }
+      requestIdRef.current += 1
+      setField((current) => (current === pendingField ? current : pendingField))
+      workerRef.current.postMessage({
+        requestId: requestIdRef.current,
+        input: workerBuild.workerInput,
+      })
       return
     }
 
-    pendingBuildRef.current = {
-      prepared,
-      workerBuild,
-    }
-    requestIdRef.current += 1
-    setField((current) => (current === cachedField ? current : cachedField))
-    workerRef.current.postMessage({
-      requestId: requestIdRef.current,
-      input: workerBuild.workerInput,
-    })
+    const nextField = getOrBuildBakedFloorLightField(input)
+    pendingBuildRef.current = null
+    setField((current) => (current === nextField ? current : nextField))
   }, [input, prepared])
 
   return field

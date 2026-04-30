@@ -34,11 +34,14 @@ import { sampleOutdoorTerrainHeight, type OutdoorTerrainHeightfield } from '../.
 import {
   getCanonicalWallKey as getCanonicalWallKeyForGrid,
   getInheritedWallAssetIdForWallKey,
-  getOppositeDirection,
   isInterRoomBoundary,
   isWallBoundary,
   wallKeyToWorldPosition,
 } from '../../store/wallSegments'
+import {
+  buildEligibleOpenPassageWalls,
+  buildWallOpeningDerivedState,
+} from '../../store/derived/wallOpeningDerived'
 import { triggerBuild } from '../../store/buildAnimations'
 import { FloorGridOverlay } from './FloorGridOverlay'
 import { ContentPackInstance } from './ContentPackInstance'
@@ -985,7 +988,9 @@ export function Grid({ size = 120, playMode = false }: GridProps) {
         paintedCells,
       )
       const hoveredConnection = openingPlacement
-        ? findWallConnectionAtPlacement(openingPlacement, wallOpenings)
+        ? wallOpeningDerivedState.wallOpeningsBySegmentKey[
+          `${getCellKey(openingPlacement.cell)}:${openingPlacement.direction}`
+        ] ?? null
         : null
 
       if (event.button === 2) {
@@ -1223,11 +1228,18 @@ export function Grid({ size = 120, playMode = false }: GridProps) {
         paintedCells,
       )
     : null
+  const wallOpeningDerivedState = buildWallOpeningDerivedState(wallOpenings)
   const hoveredWallConnection = wallConnectionPlacement
-    ? findWallConnectionAtPlacement(wallConnectionPlacement, wallOpenings)
+    ? wallOpeningDerivedState.wallOpeningsBySegmentKey[
+      `${getCellKey(wallConnectionPlacement.cell)}:${wallConnectionPlacement.direction}`
+    ] ?? null
     : null
-  const suppressedWallKeys = getSuppressedWallKeys(wallOpenings)
-  const eligibleOpenPassageWalls = deriveEligibleOpenPassageWalls(paintedCells, wallOpenings)
+  const suppressedWallKeys = wallOpeningDerivedState.suppressedWallKeys
+  const eligibleOpenPassageWalls = buildEligibleOpenPassageWalls(
+    paintedCells,
+    wallOpenings,
+    wallOpeningDerivedState,
+  )
   const eligibleOpenPassageWallKeys = new Set(eligibleOpenPassageWalls.map((wall) => wall.wallKey))
   const isFloorVariantMode = (tool === 'room' && roomEditMode === 'floor-variants') || isUnifiedFloorVariantMode
   const isWallVariantMode = (tool === 'room' && roomEditMode === 'wall-variants') || isUnifiedWallVariantMode
@@ -2264,80 +2276,6 @@ function getWallConnectionPlacement(
   }
 
   return getOpeningPlacement(1, point, paintedCells, true)
-}
-
-function findWallConnectionAtPlacement(
-  placement: Pick<OpeningPlacement, 'cell' | 'direction'>,
-  wallOpenings: ReturnType<typeof useDungeonStore.getState>['wallOpenings'],
-) {
-  const hoveredWallKey = `${getCellKey(placement.cell)}:${placement.direction}`
-  return Object.values(wallOpenings).find((opening) =>
-    getOpeningSegments(opening.wallKey, opening.width).includes(hoveredWallKey),
-  ) ?? null
-}
-
-function getSuppressedWallKeys(
-  wallOpenings: ReturnType<typeof useDungeonStore.getState>['wallOpenings'],
-) {
-  const suppressed = new Set<string>()
-
-  Object.values(wallOpenings).forEach((opening) => {
-    getOpeningSegments(opening.wallKey, opening.width).forEach((wallKey) => {
-      suppressed.add(wallKey)
-
-      const parts = wallKey.split(':')
-      const direction = WALL_CONNECTOR_DIRECTIONS.find((entry) => entry.name === parts[2])
-      if (!direction) return
-
-      const cell: GridCell = [parseInt(parts[0], 10), parseInt(parts[1], 10)]
-      const neighbor: GridCell = [cell[0] + direction.delta[0], cell[1] + direction.delta[1]]
-      suppressed.add(`${getCellKey(neighbor)}:${getOppositeDirection(direction.name)}`)
-    })
-  })
-
-  return suppressed
-}
-
-function deriveEligibleOpenPassageWalls(
-  paintedCells: Record<string, PaintedCellRecord>,
-  wallOpenings: ReturnType<typeof useDungeonStore.getState>['wallOpenings'],
-) {
-  const walls: Array<{
-    wallKey: string
-    position: [number, number, number]
-    rotation: [number, number, number]
-  }> = []
-  const suppressed = getSuppressedWallKeys(wallOpenings)
-
-  Object.values(paintedCells).forEach((record) => {
-    const cell = record.cell
-    const cellKey = getCellKey(cell)
-
-    WALL_CONNECTOR_DIRECTIONS.forEach((direction) => {
-      const neighbor: GridCell = [cell[0] + direction.delta[0], cell[1] + direction.delta[1]]
-      const neighborKey = getCellKey(neighbor)
-      const wallKey = `${cellKey}:${direction.name}`
-
-      if (
-        !isInterRoomBoundary(cell, neighbor, paintedCells) ||
-        cellKey > neighborKey ||
-        suppressed.has(wallKey)
-      ) {
-        return
-      }
-
-      const position = wallKeyToWorldPosition(wallKey)
-      if (!position) return
-
-      walls.push({
-        wallKey,
-        position: position.position,
-        rotation: position.rotation,
-      })
-    })
-  })
-
-  return walls
 }
 
 function getRoomWallEditTarget(

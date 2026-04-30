@@ -10,6 +10,7 @@ import { DungeonObject } from './DungeonObject'
 import { PlayerSelectionRing } from './DungeonObject'
 import { DungeonRoom } from './DungeonRoom'
 import { useDungeonStore, type DungeonObjectRecord } from '../../store/useDungeonStore'
+import { buildFloorDerivedBundle, type FloorDerivedBundle } from '../../store/derived/floorDerived'
 import { usePlayVisibility } from './playVisibility'
 import { ContentPackInstance } from './ContentPackInstance'
 import { getCellKey, snapWorldPointToGrid } from '../../hooks/useSnapToGrid'
@@ -18,7 +19,6 @@ import { MovementRangeOverlay } from './MovementRangeOverlay'
 import { buildMovementRange, type MovementRange } from './playMovement'
 import { RoomResizeOverlay } from './RoomResizeOverlay'
 import { getEffectiveFloorViewMode } from './floorViewMode'
-import type { DungeonRoomData } from './DungeonRoom'
 import { isDownStairAssetId } from '../../store/stairAssets'
 import { OutdoorGround } from './OutdoorGround'
 import { getEnvironmentLightingState } from './environmentLighting'
@@ -28,7 +28,6 @@ import { registerDebugCameraPoseReader, registerDebugWorldProjector } from './de
 import {
   getOrBuildBakedFloorLightField,
   pruneBakedFloorLightFieldCache,
-  resolveObjectLightSources,
   type BakedFloorLightField,
 } from '../../rendering/dungeonLightField'
 import { setBakedLightFlickerTime } from './bakedLightMaterial'
@@ -262,34 +261,8 @@ function DebugCameraBridgeBinder() {
 type FloorRenderEntry = {
   id: string
   level: number
-  data: DungeonRoomData
+  derived: FloorDerivedBundle
   bakedLightField: BakedFloorLightField
-  objects: DungeonObjectRecord[]
-  topLevelObjects: DungeonObjectRecord[]
-  childrenByParent: Record<string, DungeonObjectRecord[]>
-}
-
-function getTopLevelObjects(objects: DungeonObjectRecord[]) {
-  const objectIds = new Set(objects.map((object) => object.id))
-  return objects.filter((object) => !object.parentObjectId || !objectIds.has(object.parentObjectId))
-}
-
-function buildObjectChildrenIndex(objects: DungeonObjectRecord[]) {
-  const childrenByParent: Record<string, DungeonObjectRecord[]> = {}
-
-  objects.forEach((object) => {
-    if (!object.parentObjectId) {
-      return
-    }
-
-    if (!childrenByParent[object.parentObjectId]) {
-      childrenByParent[object.parentObjectId] = []
-    }
-
-    childrenByParent[object.parentObjectId].push(object)
-  })
-
-  return childrenByParent
 }
 
 function SceneOverviewContent() {
@@ -322,84 +295,50 @@ function SceneOverviewContent() {
       }
 
       if (floorId === activeFloorId) {
-        const visibleObjects = Object.values(placedObjects).filter(
-          (object) => layers[object.layerId]?.visible !== false,
-        )
-        const visiblePaintedCells = Object.fromEntries(
-          Object.entries(paintedCells).filter(([, record]) => layers[record.layerId]?.visible !== false),
-        )
+        const derived = buildFloorDerivedBundle({
+          floorId,
+          paintedCells,
+          layers,
+          rooms,
+          wallOpenings,
+          innerWalls,
+          placedObjects,
+          floorTileAssetIds,
+          wallSurfaceAssetIds,
+          wallSurfaceProps,
+          globalFloorAssetId,
+          globalWallAssetId,
+        })
+
           return [{
             id: floorId,
             level: floor.level,
-            data: {
-              floorId,
-              paintedCells,
-              layers,
-              rooms,
-            wallOpenings,
-            innerWalls,
-            placedObjects,
-            floorTileAssetIds,
-            wallSurfaceAssetIds,
-            wallSurfaceProps,
-            globalFloorAssetId,
-            globalWallAssetId,
-          },
-          bakedLightField: getOrBuildBakedFloorLightField({
-            floorId,
-            floorCells: Object.values(visiblePaintedCells).map((record) => record.cell),
-            staticLightSources: resolveObjectLightSources(visibleObjects),
-            occlusionInput: {
-              paintedCells: visiblePaintedCells,
-              wallOpenings,
-              innerWalls,
-              wallSurfaceProps,
-            },
-          }),
-          objects: visibleObjects,
-          topLevelObjects: getTopLevelObjects(visibleObjects),
-          childrenByParent: buildObjectChildrenIndex(visibleObjects),
+            derived,
+            bakedLightField: getOrBuildBakedFloorLightField(derived.bakedLightBuildInput),
         }]
       }
 
       const snapshot = floor.snapshot
-      const visibleObjects = Object.values(snapshot.placedObjects).filter(
-        (object) => snapshot.layers[object.layerId]?.visible !== false,
-      )
-      const visiblePaintedCells = Object.fromEntries(
-        Object.entries(snapshot.paintedCells).filter(([, record]) => snapshot.layers[record.layerId]?.visible !== false),
-      )
+      const derived = buildFloorDerivedBundle({
+        floorId,
+        paintedCells: snapshot.paintedCells,
+        layers: snapshot.layers,
+        rooms: snapshot.rooms,
+        wallOpenings: snapshot.wallOpenings,
+        innerWalls: snapshot.innerWalls,
+        placedObjects: snapshot.placedObjects,
+        floorTileAssetIds: snapshot.floorTileAssetIds,
+        wallSurfaceAssetIds: snapshot.wallSurfaceAssetIds,
+        wallSurfaceProps: snapshot.wallSurfaceProps,
+        globalFloorAssetId: snapshot.selectedAssetIds.floor,
+        globalWallAssetId: snapshot.selectedAssetIds.wall,
+      })
+
         return [{
           id: floorId,
           level: floor.level,
-          data: {
-            floorId,
-            paintedCells: snapshot.paintedCells,
-              layers: snapshot.layers,
-             rooms: snapshot.rooms,
-             wallOpenings: snapshot.wallOpenings,
-             innerWalls: snapshot.innerWalls,
-             placedObjects: snapshot.placedObjects,
-             floorTileAssetIds: snapshot.floorTileAssetIds,
-             wallSurfaceAssetIds: snapshot.wallSurfaceAssetIds,
-              wallSurfaceProps: snapshot.wallSurfaceProps,
-              globalFloorAssetId: snapshot.selectedAssetIds.floor,
-              globalWallAssetId: snapshot.selectedAssetIds.wall,
-            },
-          bakedLightField: getOrBuildBakedFloorLightField({
-            floorId,
-            floorCells: Object.values(visiblePaintedCells).map((record) => record.cell),
-            staticLightSources: resolveObjectLightSources(visibleObjects),
-            occlusionInput: {
-              paintedCells: visiblePaintedCells,
-              wallOpenings: snapshot.wallOpenings,
-              innerWalls: snapshot.innerWalls,
-              wallSurfaceProps: snapshot.wallSurfaceProps,
-            },
-          }),
-          objects: visibleObjects,
-          topLevelObjects: getTopLevelObjects(visibleObjects),
-          childrenByParent: buildObjectChildrenIndex(visibleObjects),
+          derived,
+          bakedLightField: getOrBuildBakedFloorLightField(derived.bakedLightBuildInput),
       }]
     })
   }, [
@@ -428,8 +367,14 @@ function SceneOverviewContent() {
       )}
       {floorEntries.map((entry) => (
         <group key={entry.id} position={[0, entry.level * SCENE_OVERVIEW_FLOOR_HEIGHT_UNIT, 0]}>
-          <DungeonRoom data={entry.data} visibility={ALWAYS_VISIBLE} enableBuildAnimation={false} />
-          {entry.topLevelObjects
+          <DungeonRoom
+            derived={entry.derived}
+            bakedLightField={entry.bakedLightField}
+            visibility={ALWAYS_VISIBLE}
+            enableBuildAnimation={false}
+            enableFloorReceiver={false}
+          />
+          {entry.derived.topLevelObjects
             .filter((object) => !isDownStairAssetId(object.assetId))
             .map((object) => (
                 <DungeonObject
@@ -438,7 +383,7 @@ function SceneOverviewContent() {
                   visibility={ALWAYS_VISIBLE}
                   sourceScopeKey={entry.id}
                   bakedLightField={entry.bakedLightField}
-                  childrenByParent={entry.childrenByParent}
+                  childrenByParent={entry.derived.childrenByParent}
                 />
               ))}
         </group>
@@ -457,11 +402,16 @@ function FloorContent({ startY = 0 }: { startY?: number }) {
   const mapMode = useDungeonStore((state) => state.mapMode)
   const occupancy = useDungeonStore((state) => state.occupancy)
   const layers = useDungeonStore((state) => state.layers)
+  const rooms = useDungeonStore((state) => state.rooms)
   const tool = useDungeonStore((state) => state.tool)
   const selection = useDungeonStore((state) => state.selection)
   const wallOpenings = useDungeonStore((state) => state.wallOpenings)
   const wallSurfaceProps = useDungeonStore((state) => state.wallSurfaceProps)
   const innerWalls = useDungeonStore((state) => state.innerWalls)
+  const floorTileAssetIds = useDungeonStore((state) => state.floorTileAssetIds)
+  const wallSurfaceAssetIds = useDungeonStore((state) => state.wallSurfaceAssetIds)
+  const globalFloorAssetId = useDungeonStore((state) => state.selectedAssetIds.floor)
+  const globalWallAssetId = useDungeonStore((state) => state.selectedAssetIds.wall)
   const showLensFocusDebugPoint = useDungeonStore((state) => state.showLensFocusDebugPoint)
   const showPropProbeDebug = useDungeonStore((state) => state.showPropProbeDebug)
   const moveObject = useDungeonStore((state) => state.moveObject)
@@ -472,45 +422,37 @@ function FloorContent({ startY = 0 }: { startY?: number }) {
   const visibility = usePlayVisibility()
   const [releaseAnimationIds, setReleaseAnimationIds] = useState<Record<string, true>>({})
 
-  const objects = useMemo(
-    () => Object.values(placedObjects).filter((obj) => layers[obj.layerId]?.visible !== false),
-    [placedObjects, layers],
-  )
-  const visiblePaintedCells = useMemo(
-    () =>
-      Object.values(paintedCells)
-        .filter((record) => layers[record.layerId]?.visible !== false)
-        .map((record) => record.cell),
-    [layers, paintedCells],
-  )
-  const visiblePaintedCellRecords = useMemo(
-    () =>
-      Object.fromEntries(
-        Object.entries(paintedCells).filter(([, record]) => layers[record.layerId]?.visible !== false),
-      ),
-    [layers, paintedCells],
-  )
-  const staticLightSources = useMemo(
-    () => resolveObjectLightSources(objects),
-    [objects],
-  )
-  const bakedLightBuildInput = useMemo(
-    () => ({
+  const floorDerived = useMemo(
+    () => buildFloorDerivedBundle({
       floorId: activeFloorId,
-      floorCells: visiblePaintedCells,
-      staticLightSources,
-      occlusionInput: {
-        paintedCells: visiblePaintedCellRecords,
-        wallOpenings,
-        wallSurfaceProps,
-        innerWalls,
-      },
+      paintedCells,
+      layers,
+      rooms,
+      wallOpenings,
+      innerWalls,
+      placedObjects,
+      floorTileAssetIds,
+      wallSurfaceAssetIds,
+      wallSurfaceProps,
+      globalFloorAssetId,
+      globalWallAssetId,
     }),
-    [activeFloorId, innerWalls, staticLightSources, visiblePaintedCellRecords, visiblePaintedCells, wallOpenings, wallSurfaceProps],
+    [
+      activeFloorId,
+      floorTileAssetIds,
+      globalFloorAssetId,
+      globalWallAssetId,
+      innerWalls,
+      layers,
+      paintedCells,
+      placedObjects,
+      rooms,
+      wallOpenings,
+      wallSurfaceAssetIds,
+      wallSurfaceProps,
+    ],
   )
-  const bakedFloorLightField = useBakedFloorLightField(bakedLightBuildInput)
-  const topLevelObjects = useMemo(() => getTopLevelObjects(objects), [objects])
-  const childrenByParent = useMemo(() => buildObjectChildrenIndex(objects), [objects])
+  const bakedFloorLightField = useBakedFloorLightField(floorDerived.bakedLightBuildInput)
   const showPostProcessing = true
   const postProcessingKey = `${lensEnabled ? 'lens' : 'nolens'}:${pixelateEnabled ? 'pixel' : 'clean'}:${showLensFocusDebugPoint ? 'focus' : 'nofocus'}`
 
@@ -797,12 +739,16 @@ function FloorContent({ startY = 0 }: { startY?: number }) {
         {movementRange && (
           <MovementRangeOverlay cells={movementRange.reachableCells} />
         )}
-        <DungeonRoom visibility={visibility} bakedLightField={bakedFloorLightField} />
+        <DungeonRoom
+          derived={floorDerived}
+          visibility={visibility}
+          bakedLightField={bakedFloorLightField}
+        />
         <RoomResizeOverlay />
         {showPropProbeDebug && (
           <PropProbeDebugOverlay floorId={activeFloorId} />
         )}
-        {topLevelObjects.map((object) => (
+        {floorDerived.topLevelObjects.map((object) => (
           dragState?.objectId === object.id ? null : (
             <DungeonObject
               key={object.id}
@@ -810,7 +756,7 @@ function FloorContent({ startY = 0 }: { startY?: number }) {
               visibility={visibility}
               sourceScopeKey={activeFloorId}
               bakedLightField={bakedFloorLightField}
-              childrenByParent={childrenByParent}
+              childrenByParent={floorDerived.childrenByParent}
               onPlayDragStart={startDrag}
               playerAnimationState={releaseAnimationIds[object.id] ? 'release' : undefined}
             />

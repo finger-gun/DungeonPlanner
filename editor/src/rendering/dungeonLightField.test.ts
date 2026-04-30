@@ -420,6 +420,21 @@ describe('dungeonLightField', () => {
     expect(workerBuild!.workerInput.sourceHash).toBe(prepared.sourceHash)
   })
 
+  it('prepares worker-friendly payloads for uncached lit floors', () => {
+    clearBakedFloorLightFieldCache()
+
+    const prepared = prepareBakedFloorLightFieldBuild({
+      floorId: 'floor-worker-initial',
+      floorCells: [[0, 0], [8, 0]],
+      staticLightSources: [createResolvedLightSource('torch', [1, 1.5, 1])],
+    })
+    const workerBuild = prepareBakedFloorLightFieldWorkerBuild(prepared)
+
+    expect(workerBuild).not.toBeNull()
+    expect(workerBuild!.workerInput.chunks.map((chunk) => chunk.key)).toEqual(['0:0', '1:0'])
+    expect(workerBuild!.workerInput.staticLightSources.map((lightSource) => lightSource.key)).toEqual(['torch'])
+  })
+
   it('builds corner-sampled light textures for shader interpolation', () => {
     clearBakedFloorLightFieldCache()
 
