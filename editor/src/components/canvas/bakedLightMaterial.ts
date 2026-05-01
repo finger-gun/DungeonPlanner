@@ -156,7 +156,7 @@ export function applyBakedLightToMaterial(
       : null
     const bakedLight = options.lightField?.lightFieldTexture
       ? buildSmoothedBakedLightNode(options.lightField, bakedSampleOffset)
-      : vec3(attribute('bakedLight', 'vec3') as never)
+      : vec3(0, 0, 0)
     const bakedFlicker = options.useFlicker && options.lightField?.flickerLightFieldTextures.some((texture) => texture)
       ? buildSmoothedBakedFlickerNode(options.lightField, bakedSampleOffset)
       : vec3(0, 0, 0)
@@ -300,7 +300,12 @@ export function applyPropBakedLightToMaterial(
           buildSmoothedBakedLightNode(lightField as BakedFloorLightField),
           responseProfile,
         )
-        : probeHeightLight
+        : vec3(0, 0, 0)
+      const combinedProbeLight = mix(
+        sampledFieldLight,
+        sampledFieldLight.add(probeHeightLight as never),
+        float(probeUniformState.probeEnabled),
+      )
       const directionalFaceAlignment = saturate(dot(
         normalWorld,
         vec3(probeUniformState.lightDirection as never),
@@ -315,7 +320,7 @@ export function applyPropBakedLightToMaterial(
           ),
           float(probeUniformState.probeEnabled),
         )
-      const propLight = sampledFieldLight.mul(propLightFactor as never)
+      const propLight = combinedProbeLight.mul(propLightFactor as never)
       const albedoBoost = vec3(1, 1, 1).add(
         propLight.mul(float(
           isBillboardSurface

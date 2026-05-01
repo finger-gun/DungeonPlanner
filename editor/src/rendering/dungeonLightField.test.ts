@@ -148,6 +148,53 @@ describe('dungeonLightField', () => {
     expect(getBakedLightSampleForCell(rebuilt, '1:0')).toEqual([0, 0, 0])
   })
 
+  it('limits occlusion-driven dirty chunks to the edited wall region', () => {
+    clearBakedFloorLightFieldCache()
+
+    getOrBuildBakedFloorLightField({
+      floorId: 'floor-occlusion-localized',
+      floorCells: [[0, 0], [8, 0], [16, 0], [17, 0]],
+      staticLightSources: [createResolvedLightSource('torch', [1, 1.5, 1])],
+      occlusionInput: {
+        paintedCells: {
+          '0:0': { cell: [0, 0], layerId: 'default', roomId: 'room-a' },
+          '8:0': { cell: [8, 0], layerId: 'default', roomId: 'room-b' },
+          '16:0': { cell: [16, 0], layerId: 'default', roomId: 'room-c' },
+          '17:0': { cell: [17, 0], layerId: 'default', roomId: 'room-d' },
+        },
+        wallOpenings: {},
+        innerWalls: {},
+      },
+    })
+
+    const rebuilt = getOrBuildBakedFloorLightField({
+      floorId: 'floor-occlusion-localized',
+      floorCells: [[0, 0], [8, 0], [16, 0], [17, 0]],
+      staticLightSources: [createResolvedLightSource('torch', [1, 1.5, 1])],
+      occlusionInput: {
+        paintedCells: {
+          '0:0': { cell: [0, 0], layerId: 'default', roomId: 'room-a' },
+          '8:0': { cell: [8, 0], layerId: 'default', roomId: 'room-b' },
+          '16:0': { cell: [16, 0], layerId: 'default', roomId: 'room-c' },
+          '17:0': { cell: [17, 0], layerId: 'default', roomId: 'room-d' },
+        },
+        wallOpenings: {
+          farDoor: {
+            id: 'farDoor',
+            assetId: null,
+            wallKey: '16:0:east',
+            width: 1,
+            layerId: 'default',
+          },
+        },
+        innerWalls: {},
+      },
+    })
+
+    expect(rebuilt.dirtyChunkKeys).toEqual(['1:0', '2:0'])
+    expect(rebuilt.chunks.filter((chunk) => chunk.dirty).map((chunk) => chunk.key)).toEqual(['1:0', '2:0'])
+  })
+
   it('prunes cached light fields for floors that are no longer present', () => {
     clearBakedFloorLightFieldCache()
 
@@ -433,6 +480,100 @@ describe('dungeonLightField', () => {
     expect(workerBuild).not.toBeNull()
     expect(workerBuild!.workerInput.chunks.map((chunk) => chunk.key)).toEqual(['0:0', '1:0'])
     expect(workerBuild!.workerInput.staticLightSources.map((lightSource) => lightSource.key)).toEqual(['torch'])
+  })
+
+  it('uses dirty hints to bound incremental worker payloads to local chunks', () => {
+    clearBakedFloorLightFieldCache()
+    const localProbeLight: PropLight = {
+      ...TORCH_LIGHT,
+      distance: 1.5,
+    }
+
+    getOrBuildBakedFloorLightField({
+      floorId: 'floor-worker-dirty-hint',
+      floorCells: [[0, 0], [1, 0], [16, 0], [17, 0]],
+      staticLightSources: [
+        createResolvedLightSource('near', [1, 1.5, 1], localProbeLight),
+        createResolvedLightSource('far', [33, 1.5, 1], localProbeLight),
+      ],
+      occlusionInput: {
+        paintedCells: {
+          '0:0': { cell: [0, 0], layerId: 'default', roomId: 'room-a' },
+          '1:0': { cell: [1, 0], layerId: 'default', roomId: 'room-a' },
+          '16:0': { cell: [16, 0], layerId: 'default', roomId: 'room-b' },
+          '17:0': { cell: [17, 0], layerId: 'default', roomId: 'room-b' },
+        },
+        wallOpenings: {},
+        innerWalls: {},
+      },
+    })
+
+    const prepared = prepareBakedFloorLightFieldBuild({
+      floorId: 'floor-worker-dirty-hint',
+      floorCells: [[0, 0], [1, 0], [16, 0], [17, 0]],
+      staticLightSources: [
+        createResolvedLightSource('near', [1, 1.5, 1], localProbeLight),
+        createResolvedLightSource('far', [33, 1.5, 1], localProbeLight),
+      ],
+      dirtyHint: {
+        sequence: 1,
+        dirtyCellRect: {
+          minCellX: 0,
+          maxCellX: 1,
+          minCellZ: 0,
+          maxCellZ: 0,
+        },
+        dirtyWallKeys: [],
+        affectedObjectIds: ['near'],
+        fullRefresh: false,
+      },
+      occlusionInput: {
+        paintedCells: {
+          '0:0': { cell: [0, 0], layerId: 'default', roomId: 'room-a' },
+          '1:0': { cell: [1, 0], layerId: 'default', roomId: 'room-a' },
+          '16:0': { cell: [16, 0], layerId: 'default', roomId: 'room-b' },
+          '17:0': { cell: [17, 0], layerId: 'default', roomId: 'room-b' },
+        },
+        wallOpenings: {},
+        innerWalls: {},
+      },
+    })
+    const workerBuild = prepareBakedFloorLightFieldWorkerBuild(prepared)
+
+    expect(workerBuild).not.toBeNull()
+    expect(workerBuild!.workerInput.chunks.map((chunk) => chunk.key)).toEqual(['0:0'])
+    expect(workerBuild!.workerInput.staticLightSources.map((lightSource) => lightSource.key)).toEqual(['near'])
+  })
+
+  it('reuses a cheap identity-based source hash for stable derived inputs', () => {
+    clearBakedFloorLightFieldCache()
+
+    const floorCells: [number, number][] = [[0, 0], [1, 0]]
+    const staticLightSources = [createResolvedLightSource('torch', [1, 1.5, 1])]
+    const occlusionInput = {
+      paintedCells: {
+        '0:0': { cell: [0, 0] as [number, number], layerId: 'default', roomId: 'room-a' },
+        '1:0': { cell: [1, 0] as [number, number], layerId: 'default', roomId: 'room-a' },
+      },
+      wallOpenings: {},
+      innerWalls: {},
+      wallSurfaceProps: {},
+    }
+
+    const first = prepareBakedFloorLightFieldBuild({
+      floorId: 'floor-stable-hash',
+      floorCells,
+      staticLightSources,
+      occlusionInput,
+    })
+    const second = prepareBakedFloorLightFieldBuild({
+      floorId: 'floor-stable-hash',
+      floorCells,
+      staticLightSources,
+      occlusionInput,
+    })
+
+    expect(second.sourceHash).toBe(first.sourceHash)
   })
 
   it('builds corner-sampled light textures for shader interpolation', () => {

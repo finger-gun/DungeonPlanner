@@ -1,11 +1,13 @@
 import { describe, expect, it } from 'vitest'
 import * as THREE from 'three'
 import {
+  clearPlayVisibilityDerivedCache,
   buildPortalLookup,
   castVisibilityMaskRay,
   computeVisibilityMask,
   computeVisibilitySamples,
   computeVisibleCellKeys,
+  getOrBuildPlayVisibilityDerivedState,
   getObjectVisibilityState,
   isVisiblePlayerOrigin,
   shouldActivatePlayVisibility,
@@ -440,6 +442,119 @@ describe('shouldActivatePlayVisibility', () => {
 
   it('enables play visibility when an indoor play scene has a player origin', () => {
     expect(shouldActivatePlayVisibility('play', 'indoor', 1)).toBe(true)
+  })
+})
+
+describe('getOrBuildPlayVisibilityDerivedState', () => {
+  it('reuses cached worker inputs when visibility inputs keep the same identities', () => {
+    clearPlayVisibilityDerivedCache()
+    const paintedCells = makeCells([{ cell: [0, 0], roomId: 'room-a' }])
+    const generatedCharacters = {}
+    const wallOpenings = {}
+    const innerWalls = {}
+    const wallSurfaceProps = {}
+    const layers = {
+      default: { id: 'default', name: 'Default', visible: true, locked: false },
+    }
+    const placedObjects = {
+      player: {
+        id: 'player',
+        type: 'player' as const,
+        assetId: 'core.players_fighter',
+        position: [1, 0, 1] as [number, number, number],
+        rotation: [0, 0, 0] as [number, number, number],
+        props: {},
+        cell: [0, 0] as [number, number],
+        cellKey: '0:0:floor',
+        layerId: 'default',
+      },
+    }
+
+    const derivedA = getOrBuildPlayVisibilityDerivedState({
+      floorId: 'floor-1',
+      tool: 'play',
+      mapMode: 'indoor',
+      paintedCells,
+      wallOpenings,
+      innerWalls,
+      placedObjects,
+      wallSurfaceProps,
+      layers,
+      generatedCharacters,
+      objectRegistryVersion: 0,
+    })
+    const derivedB = getOrBuildPlayVisibilityDerivedState({
+      floorId: 'floor-1',
+      tool: 'play',
+      mapMode: 'indoor',
+      paintedCells,
+      wallOpenings,
+      innerWalls,
+      placedObjects,
+      wallSurfaceProps,
+      layers,
+      generatedCharacters,
+      objectRegistryVersion: 0,
+    })
+
+    expect(derivedB.playerOriginObjects).toBe(derivedA.playerOriginObjects)
+    expect(derivedB.playerOrigins).toBe(derivedA.playerOrigins)
+    expect(derivedB.workerInput).toBe(derivedA.workerInput)
+  })
+
+  it('keeps cached player origins while rebuilding worker input for changed blockers', () => {
+    clearPlayVisibilityDerivedCache()
+    const paintedCells = makeCells([{ cell: [0, 0], roomId: 'room-a' }])
+    const generatedCharacters = {}
+    const wallOpenings = {}
+    const innerWalls = {}
+    const layers = {
+      default: { id: 'default', name: 'Default', visible: true, locked: false },
+    }
+    const placedObjects = {
+      player: {
+        id: 'player',
+        type: 'player' as const,
+        assetId: 'core.players_fighter',
+        position: [1, 0, 1] as [number, number, number],
+        rotation: [0, 0, 0] as [number, number, number],
+        props: {},
+        cell: [0, 0] as [number, number],
+        cellKey: '0:0:floor',
+        layerId: 'default',
+      },
+    }
+
+    const derivedA = getOrBuildPlayVisibilityDerivedState({
+      floorId: 'floor-1',
+      tool: 'play',
+      mapMode: 'indoor',
+      paintedCells,
+      wallOpenings,
+      innerWalls,
+      placedObjects,
+      wallSurfaceProps: {},
+      layers,
+      generatedCharacters,
+      objectRegistryVersion: 0,
+    })
+    const derivedB = getOrBuildPlayVisibilityDerivedState({
+      floorId: 'floor-1',
+      tool: 'play',
+      mapMode: 'indoor',
+      paintedCells,
+      wallOpenings,
+      innerWalls,
+      placedObjects,
+      wallSurfaceProps: { '0:0:north': { blocksLineOfSight: true } },
+      layers,
+      generatedCharacters,
+      objectRegistryVersion: 0,
+    })
+
+    expect(derivedB.playerOriginObjects).toBe(derivedA.playerOriginObjects)
+    expect(derivedB.playerOrigins).toBe(derivedA.playerOrigins)
+    expect(derivedB.workerInput).not.toBe(derivedA.workerInput)
   })
 })
 

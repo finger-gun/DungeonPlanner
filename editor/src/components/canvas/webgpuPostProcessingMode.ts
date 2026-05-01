@@ -1,4 +1,4 @@
-import type { CameraPreset } from '../../store/useDungeonStore'
+import type { CameraPreset, DungeonTool } from '../../store/useDungeonStore'
 
 export function shouldApplyWebGpuLensBlur({
   activeCameraMode: _activeCameraMode,
@@ -23,4 +23,26 @@ export function getWebGpuPostProcessingPipeline({
     applyBlur: shouldApplyWebGpuLensBlur({ activeCameraMode, lensEnabled }),
     applyPixelate: pixelateEnabled,
   }
+}
+
+export function shouldEnableActiveFloorPostProcessing({
+  activeCameraMode,
+  lensEnabled,
+  pixelateEnabled,
+  tool,
+  selection,
+}: {
+  activeCameraMode: CameraPreset
+  lensEnabled: boolean
+  pixelateEnabled: boolean
+  tool: DungeonTool
+  selection: string | null
+}) {
+  const { applyBlur, applyPixelate } = getWebGpuPostProcessingPipeline({
+    activeCameraMode,
+    lensEnabled,
+    pixelateEnabled,
+  })
+
+  return applyBlur || applyPixelate || (tool === 'select' && Boolean(selection))
 }

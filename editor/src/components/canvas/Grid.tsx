@@ -42,8 +42,16 @@ import {
   buildEligibleOpenPassageWalls,
   buildWallOpeningDerivedState,
 } from '../../store/derived/wallOpeningDerived'
-import { triggerBuild } from '../../store/buildAnimations'
+import {
+  hasHeldBuildAnimations,
+  hasOutstandingHeldBuildBatch,
+  releaseHeldBuildAnimations,
+  triggerBuild,
+  useBuildAnimationVersion,
+} from '../../store/buildAnimations'
+import { traceBuildPerf } from '../../performance/runtimeBuildTrace'
 import { FloorGridOverlay } from './FloorGridOverlay'
+import { getRenderBatchChunkKeyForCell } from './batchDescriptors'
 import { ContentPackInstance } from './ContentPackInstance'
 import { getRoomPreviewCells } from './gridPreview'
 import { isPassiveGridMode, shouldRenderGridOverlay } from './gridMode'
@@ -53,6 +61,10 @@ import { getOpeningToolMode } from './openingToolMode'
 import { calculatePropSnapPosition } from './propPlacement'
 import { supportsPlacementRotationShortcut } from '../../rotationShortcuts'
 import { getObjectInstanceScale, getObjectTintColor } from '../../store/objectAppearance'
+import {
+  ACTIVE_FLOOR_RENDER_DOMAINS,
+  useActiveFloorSnapshot,
+} from '../../store/useActiveFloorSnapshot'
 import {
   getRoomWallBrushAnchor,
   getRoomWallBrushTargets,
@@ -66,6 +78,7 @@ type GridProps = {
 }
 
 const POINTER_MOVE_PLANE = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0)
+const HELD_ROOM_PREWARM_TIMEOUT_MS = 2000
 
 export function Grid({ size = 120, playMode = false }: GridProps) {
   const { snap } = useSnapToGrid()
@@ -73,14 +86,36 @@ export function Grid({ size = 120, playMode = false }: GridProps) {
   const { gl, camera, scene, invalidate } = useThree()
   const surfaceRaycasterRef = useRef(new THREE.Raycaster())
   const surfacePointerRef = useRef(new THREE.Vector2())
-  const paintedCells = useDungeonStore((state) => state.paintedCells)
-  const blockedCells = useDungeonStore((state) => state.blockedCells)
-  const outdoorTerrainStyleCells = useDungeonStore((state) => state.outdoorTerrainStyleCells)
-  const outdoorTerrainHeights = useDungeonStore((state) => state.outdoorTerrainHeights)
+  const {
+    paintedCells,
+    blockedCells,
+    outdoorTerrainStyleCells,
+    outdoorTerrainHeights,
+    placedObjects,
+    wallOpenings,
+    innerWalls,
+    rooms,
+    floorTileAssetIds,
+    wallSurfaceAssetIds,
+    globalWallAssetId,
+    globalFloorAssetId,
+  } = useActiveFloorSnapshot(ACTIVE_FLOOR_RENDER_DOMAINS, (state) => ({
+    paintedCells: state.paintedCells,
+    blockedCells: state.blockedCells,
+    outdoorTerrainStyleCells: state.outdoorTerrainStyleCells,
+    outdoorTerrainHeights: state.outdoorTerrainHeights,
+    placedObjects: state.placedObjects,
+    wallOpenings: state.wallOpenings,
+    innerWalls: state.innerWalls,
+    rooms: state.rooms,
+    floorTileAssetIds: state.floorTileAssetIds,
+    wallSurfaceAssetIds: state.wallSurfaceAssetIds,
+    globalWallAssetId: state.selectedAssetIds.wall,
+    globalFloorAssetId: state.selectedAssetIds.floor,
+  }))
   const outdoorBrushMode = useDungeonStore((state) => state.outdoorBrushMode)
   const outdoorTerrainSculptMode = useDungeonStore((state) => state.outdoorTerrainSculptMode)
   const mapMode = useDungeonStore((state) => state.mapMode)
-  const placedObjects = useDungeonStore((state) => state.placedObjects)
   const paintCells = useDungeonStore((state) => state.paintCells)
   const eraseCells = useDungeonStore((state) => state.eraseCells)
   const paintBlockedCells = useDungeonStore((state) => state.paintBlockedCells)
@@ -100,15 +135,10 @@ export function Grid({ size = 120, playMode = false }: GridProps) {
   const restoreOpenPassages = useDungeonStore((state) => state.restoreOpenPassages)
   const setInnerWallSegments = useDungeonStore((state) => state.setInnerWallSegments)
   const removeOpening = useDungeonStore((state) => state.removeOpening)
-  const wallOpenings = useDungeonStore((state) => state.wallOpenings)
-  const innerWalls = useDungeonStore((state) => state.innerWalls)
-  const rooms = useDungeonStore((state) => state.rooms)
   const roomEditMode = useDungeonStore((state) => state.roomEditMode)
   const assetBrowser = useDungeonStore((state) => state.assetBrowser)
   const outdoorOverpaintRegenerate = useDungeonStore((state) => state.outdoorOverpaintRegenerate)
   const surfaceBrushAssetIds = useDungeonStore((state) => state.surfaceBrushAssetIds)
-  const floorTileAssetIds = useDungeonStore((state) => state.floorTileAssetIds)
-  const wallSurfaceAssetIds = useDungeonStore((state) => state.wallSurfaceAssetIds)
   const setPaintingStrokeActive = useDungeonStore(
     (state) => state.setPaintingStrokeActive,
   )
@@ -126,8 +156,6 @@ export function Grid({ size = 120, playMode = false }: GridProps) {
   const selectedOpeningAssetId = useDungeonStore((state) => state.selectedAssetIds.opening)
   const selectedFloorBrushAssetId = surfaceBrushAssetIds.floor
   const selectedWallBrushAssetId = surfaceBrushAssetIds.wall
-  const globalWallAssetId = useDungeonStore((state) => state.selectedAssetIds.wall)
-  const globalFloorAssetId = useDungeonStore((state) => state.selectedAssetIds.floor)
   const wallConnectionMode = useDungeonStore((state) => state.wallConnectionMode)
   const selectedPropAsset = selectedPropAssetId
     ? getContentPackAssetById(selectedPropAssetId)
@@ -170,6 +198,10 @@ export function Grid({ size = 120, playMode = false }: GridProps) {
   const [strokeMode, setStrokeMode] = useState<'paint' | 'erase' | null>(null)
   const [strokeStartCell, setStrokeStartCell] = useState<GridCell | null>(null)
   const [strokeCurrentCell, setStrokeCurrentCell] = useState<GridCell | null>(null)
+  const [latchedRoomPreview, setLatchedRoomPreview] = useState<{
+    cells: GridCell[]
+    mode: 'paint' | 'erase'
+  } | null>(null)
   const [hoveredOpenWallKey, setHoveredOpenWallKey] = useState<string | null>(null)
   const [openPassageBrushWallKeys, setOpenPassageBrushWallKeys] = useState<string[]>([])
   const [hoveredRoomWallEditTarget, setHoveredRoomWallEditTarget] = useState<RoomWallEditTarget | null>(null)
@@ -184,6 +216,7 @@ export function Grid({ size = 120, playMode = false }: GridProps) {
   const roomWallBrushModeRef = useRef<'paint' | 'erase' | null>(null)
   const roomWallBrushTargetsRef = useRef<RoomWallEditTarget[]>([])
   const roomWallBrushAnchorRef = useRef<RoomWallBrushAnchor | null>(null)
+  const buildAnimationVersion = useBuildAnimationVersion()
   const hoverPreviewStateRef = useRef<{
     hoveredCell: SnappedGridPosition | null
     hoveredPoint: { x: number; y: number; z: number } | null
@@ -227,6 +260,34 @@ export function Grid({ size = 120, playMode = false }: GridProps) {
       hoveredSurfaceHit,
     }
   }, [hoveredCell, hoveredPoint, hoveredRay, hoveredSurfaceHit, hoveredTerrainCell])
+
+  useEffect(() => {
+    void buildAnimationVersion
+    if (!latchedRoomPreview || hasHeldBuildAnimations()) {
+      return
+    }
+
+    setLatchedRoomPreview(null)
+    invalidate()
+  }, [buildAnimationVersion, invalidate, latchedRoomPreview])
+
+  useEffect(() => {
+    if (!latchedRoomPreview || !hasHeldBuildAnimations()) {
+      return
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      if (!hasHeldBuildAnimations()) {
+        return
+      }
+
+      console.error('Held room build prewarm timed out; releasing animation without prewarm.')
+      releaseHeldBuildAnimations()
+      invalidate()
+    }, HELD_ROOM_PREWARM_TIMEOUT_MS)
+
+    return () => window.clearTimeout(timeoutId)
+  }, [buildAnimationVersion, invalidate, latchedRoomPreview])
 
   const resolvePlacementSurfaceHit = useCallback((pointerEvent: PointerEvent) => {
     const rect = gl.domElement.getBoundingClientRect()
@@ -638,6 +699,7 @@ export function Grid({ size = 120, playMode = false }: GridProps) {
 
     return getRoomPreviewCells({
       hoveredCell,
+      latchedPreviewCells: latchedRoomPreview?.cells,
       paintedCells: roomBrushCells,
       strokeCurrentCell,
       strokeMode,
@@ -652,11 +714,13 @@ export function Grid({ size = 120, playMode = false }: GridProps) {
     roomEditMode,
     isRoomResizeHandleActive,
     roomBrushCells,
-    strokeCurrentCell,
-    strokeMode,
-    strokeStartCell,
-    tool,
-  ])
+      strokeCurrentCell,
+      strokeMode,
+      strokeStartCell,
+      latchedRoomPreview,
+      tool,
+    ])
+  const previewStrokeMode = strokeMode ?? latchedRoomPreview?.mode ?? null
 
   const commitStroke = useEffectEvent(() => {
     if (tool !== 'room' || roomEditMode !== 'rooms') {
@@ -684,39 +748,59 @@ export function Grid({ size = 120, playMode = false }: GridProps) {
           )
 
     if (cells.length > 0) {
-      if (mode === 'paint') {
-        if (mapMode === 'outdoor') {
-          if (outdoorBrushMode === 'terrain-style') {
-            paintOutdoorTerrainStyleCells(cells)
-          } else if (outdoorBrushMode === 'terrain-sculpt') {
-            sculptOutdoorTerrain(cells, outdoorTerrainSculptMode)
-          } else {
-            paintBlockedCells(cells)
-          }
-        } else {
-          paintCells(cells)
-        }
-        // Cascade FROM the stroke start corner TOWARD the release corner (opposite diagonal).
-        // Tiles near where you first clicked appear first.
-        triggerBuild(cells, startCell)
-      } else {
-        if (mapMode === 'outdoor') {
-          if (outdoorBrushMode === 'terrain-style') {
-            eraseOutdoorTerrainStyleCells(cells)
-          } else if (outdoorBrushMode === 'terrain-sculpt') {
-            sculptOutdoorTerrain(
+      const chunkKeys = Array.from(new Set(cells.map((cell) => getRenderBatchChunkKeyForCell(cell)))).sort()
+      traceBuildPerf('room-stroke-commit', {
+        cellCount: cells.length,
+        chunkCount: chunkKeys.length,
+        chunkKeys,
+        mapMode,
+        mode,
+        outdoorBrushMode: mapMode === 'outdoor' ? outdoorBrushMode : null,
+      }, () => {
+        if (mode === 'paint') {
+          const shouldLatchPreview = mapMode !== 'outdoor'
+          if (shouldLatchPreview) {
+            setLatchedRoomPreview({
               cells,
-              outdoorTerrainSculptMode === 'raise' ? 'lower' : 'raise',
-            )
+              mode,
+            })
           } else {
-            eraseBlockedCells(cells)
+            setLatchedRoomPreview(null)
           }
+          if (mapMode === 'outdoor') {
+            if (outdoorBrushMode === 'terrain-style') {
+              paintOutdoorTerrainStyleCells(cells)
+            } else if (outdoorBrushMode === 'terrain-sculpt') {
+              sculptOutdoorTerrain(cells, outdoorTerrainSculptMode)
+            } else {
+              paintBlockedCells(cells)
+            }
+          } else {
+            paintCells(cells)
+          }
+          // Cascade FROM the stroke start corner TOWARD the release corner (opposite diagonal).
+          // Tiles near where you first clicked appear first.
+          triggerBuild(cells, startCell, { holdUntilReleased: shouldLatchPreview })
         } else {
-          eraseCells(cells)
+          setLatchedRoomPreview(null)
+          if (mapMode === 'outdoor') {
+            if (outdoorBrushMode === 'terrain-style') {
+              eraseOutdoorTerrainStyleCells(cells)
+            } else if (outdoorBrushMode === 'terrain-sculpt') {
+              sculptOutdoorTerrain(
+                cells,
+                outdoorTerrainSculptMode === 'raise' ? 'lower' : 'raise',
+              )
+            } else {
+              eraseBlockedCells(cells)
+            }
+          } else {
+            eraseCells(cells)
+          }
         }
-      }
 
-      invalidate()
+        invalidate()
+      })
     }
 
     updateStrokeState(null, null, null)
@@ -1168,6 +1252,10 @@ export function Grid({ size = 120, playMode = false }: GridProps) {
         return
       }
 
+      if (latchedRoomPreview || hasOutstandingHeldBuildBatch()) {
+        return
+      }
+
       if (roomEditMode === 'walls') {
         if (event.button !== 0 && event.button !== 2) {
           return
@@ -1319,7 +1407,7 @@ export function Grid({ size = 120, playMode = false }: GridProps) {
           hoveredCell={hoveredCell}
           hoveredPoint={hoveredPoint}
           previewCells={previewCells}
-          strokeMode={strokeMode}
+          strokeMode={previewStrokeMode}
           propPlacement={(() => {
             if (pickedUpAsset && hoveredPoint)
               return applyFloorRotation(

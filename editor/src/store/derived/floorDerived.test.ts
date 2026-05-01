@@ -1,5 +1,15 @@
 import { describe, expect, it } from 'vitest'
-import { buildFloorDerivedBundle, type DungeonRoomData } from './floorDerived'
+import {
+  buildBakedLightBuildInput,
+  buildFloorDerivedBundle,
+  buildObjectHierarchy,
+  buildStaticLightSources,
+  buildVisibleObjects,
+  buildVisibleOpenings,
+  buildVisiblePaintedCells,
+  type DungeonRoomData,
+} from './floorDerived'
+import { createFloorDirtyInfo } from '../floorDirtyDomains'
 
 describe('buildFloorDerivedBundle', () => {
   it('builds shared visible floor, object, and baked-light inputs once', () => {
@@ -96,5 +106,68 @@ describe('buildFloorDerivedBundle', () => {
     expect(derived.bakedLightBuildInput.occlusionInput?.paintedCells).toBe(derived.visiblePaintedCellRecords)
     expect(derived.wallOpeningDerivedState.suppressedWallKeys.has('0:0:east')).toBe(true)
     expect(derived.wallOpeningDerivedState.suppressedWallKeys.has('1:0:west')).toBe(true)
+  })
+
+  it('exposes split helpers that preserve the same derived slices', () => {
+    const data: DungeonRoomData = {
+      floorId: 'floor-1',
+      paintedCells: {
+        '0:0': { cell: [0, 0], layerId: 'visible', roomId: 'room-a' },
+      },
+      layers: {
+        visible: { id: 'visible', name: 'Visible', visible: true, locked: false },
+      },
+      rooms: {
+        'room-a': {
+          id: 'room-a',
+          name: 'Room A',
+          layerId: 'visible',
+          floorAssetId: null,
+          wallAssetId: null,
+        },
+      },
+      wallOpenings: {},
+      innerWalls: {},
+      placedObjects: {
+        torch: {
+          id: 'torch',
+          type: 'prop',
+          assetId: 'dungeon.props_torch',
+          position: [1, 0, 1],
+          rotation: [0, 0, 0],
+          props: {},
+          cell: [0, 0],
+          cellKey: '0:0:floor',
+          layerId: 'visible',
+        },
+      },
+      floorTileAssetIds: {},
+      wallSurfaceAssetIds: {},
+      wallSurfaceProps: {},
+      globalFloorAssetId: null,
+      globalWallAssetId: null,
+    }
+
+    const visiblePainted = buildVisiblePaintedCells(data)
+    const visibleObjects = buildVisibleObjects(data)
+    const visibleOpenings = buildVisibleOpenings(data)
+    const staticLightSources = buildStaticLightSources(visibleObjects)
+    const objectHierarchy = buildObjectHierarchy(visibleObjects)
+    const bakedLightBuildInput = buildBakedLightBuildInput(
+      data,
+      visiblePainted.visiblePaintedCells,
+      visiblePainted.visiblePaintedCellRecords,
+      staticLightSources,
+      createFloorDirtyInfo(),
+    )
+
+    expect(visiblePainted.visiblePaintedCells).toEqual([[0, 0]])
+    expect(Object.keys(visiblePainted.visiblePaintedCellRecords)).toEqual(['0:0'])
+    expect(visibleObjects.map((object) => object.id)).toEqual(['torch'])
+    expect(visibleOpenings).toEqual([])
+    expect(staticLightSources.map((lightSource) => lightSource.key)).toEqual(['torch'])
+    expect(objectHierarchy.topLevelObjects.map((object) => object.id)).toEqual(['torch'])
+    expect(bakedLightBuildInput.occlusionInput?.paintedCells).toBe(visiblePainted.visiblePaintedCellRecords)
+    expect(bakedLightBuildInput.dirtyHint?.sequence).toBe(0)
   })
 })

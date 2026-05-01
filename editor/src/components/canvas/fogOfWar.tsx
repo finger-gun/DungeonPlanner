@@ -35,6 +35,10 @@ import { GRID_SIZE, getCellKey, type GridCell } from '../../hooks/useSnapToGrid'
 import { getOpeningSegments } from '../../store/openingSegments'
 import { getMirroredWallKey, type InnerWallRecord } from '../../store/manualWalls'
 import { useDungeonStore, type OpeningRecord } from '../../store/useDungeonStore'
+import {
+  ACTIVE_FLOOR_VISIBILITY_DOMAINS,
+  useActiveFloorSnapshot,
+} from '../../store/useActiveFloorSnapshot'
 import type { PlayVisibility } from './playVisibility'
 
 const PLAYER_VISION_RANGE_CELLS = 8
@@ -123,10 +127,15 @@ export function FogOfWarProvider({
 }) {
   const renderer = useThree((state) => state.gl) as any
   const invalidate = useThree((state) => state.invalidate)
-  const paintedCells = useDungeonStore((state) => state.paintedCells)
   const exploredCells = useDungeonStore((state) => state.exploredCells)
-  const wallOpenings = useDungeonStore((state) => state.wallOpenings)
-  const innerWalls = useDungeonStore((state) => state.innerWalls)
+  const { paintedCells, wallOpenings, innerWalls } = useActiveFloorSnapshot(
+    ACTIVE_FLOOR_VISIBILITY_DOMAINS,
+    (state) => ({
+      paintedCells: state.paintedCells,
+      wallOpenings: state.wallOpenings,
+      innerWalls: state.innerWalls,
+    }),
+  )
   const layout = useMemo(
     () => buildFogOfWarLayout({
       active: visibility.active,

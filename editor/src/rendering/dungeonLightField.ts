@@ -9,6 +9,7 @@ import type {
   OpeningRecord,
   PaintedCells,
 } from '../store/useDungeonStore'
+import type { FloorDirtyInfo, FloorDirtyRect } from '../store/floorDirtyDomains'
 import type { ObjectLightOverrides } from '../store/lightOverrides'
 import { getObjectLightOverrides, mergePropLightWithOverrides } from '../store/lightOverrides'
 import { buildOpenWallSegmentSet } from '../store/openWallSegments'
@@ -139,6 +140,10 @@ export type BakedFloorLightFieldBuildInput = {
   floorCells: GridCell[]
   staticLightSources: ResolvedDungeonLightSource[]
   occlusionInput?: BakedLightOcclusionInput | null
+  dirtyHint?: Pick<
+    FloorDirtyInfo,
+    'sequence' | 'dirtyCellRect' | 'dirtyWallKeys' | 'affectedObjectIds' | 'fullRefresh'
+  > | null
   chunkSize?: number
 }
 
@@ -147,6 +152,7 @@ export type PreparedBakedFloorLightFieldBuild = {
   floorCells: GridCell[]
   staticLightSources: ResolvedDungeonLightSource[]
   occlusion: BakedLightOcclusion | null
+  dirtyHint?: BakedFloorLightFieldBuildInput['dirtyHint']
   chunkSize: number
   sourceHash: string
   cachedField: BakedFloorLightField | null
@@ -373,36 +379,47 @@ export function prepareBakedFloorLightFieldBuild({
   floorCells,
   staticLightSources,
   occlusionInput,
+  dirtyHint,
   chunkSize = DEFAULT_BAKED_LIGHT_CHUNK_SIZE,
 }: BakedFloorLightFieldBuildInput): PreparedBakedFloorLightFieldBuild {
   const occlusion = buildBakedLightOcclusion(occlusionInput)
-  const sourceHash = buildLightFieldSourceHash({
-    floorCells,
+  const cachedField = floorLightFieldCache.get(floorId) ?? null
+  const hintedDirtyChunkKeys = buildDirtyChunkKeysFromHint({
+    dirtyHint,
+    cachedField,
     staticLightSources,
-    occlusion,
     chunkSize,
   })
-  const cachedField = floorLightFieldCache.get(floorId) ?? null
-  const occlusionChanged = cachedField
-    ? hasBakedLightOcclusionChanged(cachedField.occlusion, occlusion)
-    : false
-  const dirtyChunkKeys = cachedField
-    ? occlusionChanged
-      ? null
-      : getDirtyChunkKeys({
-        previousFloorCells: Object.keys(cachedField.sampleByCellKey),
-        nextFloorCells: floorCells.map((cell) => getCellKey(cell)),
-        previousLightSources: cachedField.staticLightSources,
-        nextLightSources: staticLightSources,
-        chunkSize,
-      })
-    : null
+  const dirtyChunkKeys = hintedDirtyChunkKeys ?? (
+    cachedField
+      ? mergeDirtyChunkKeys(
+        getDirtyChunkKeys({
+          previousFloorCells: Object.keys(cachedField.sampleByCellKey),
+          nextFloorCells: floorCells.map((cell) => getCellKey(cell)),
+          previousLightSources: cachedField.staticLightSources,
+          nextLightSources: staticLightSources,
+          chunkSize,
+        }),
+        getDirtyChunkKeysForOcclusionChanges(cachedField.occlusion, occlusion, chunkSize),
+      )
+      : null
+  )
+  const sourceHash =
+    cachedField && dirtyChunkKeys?.size === 0
+      ? cachedField.sourceHash
+      : buildLightFieldSourceHash({
+          floorCells,
+          staticLightSources,
+          occlusion,
+          chunkSize,
+        })
 
   return {
     floorId,
     floorCells,
     staticLightSources,
     occlusion,
+    dirtyHint,
     chunkSize,
     sourceHash,
     cachedField,
@@ -982,6 +999,11 @@ export function prepareBakedFloorLightFieldWorkerBuild(
     return null
   }
 
+  const workerLightSources = getWorkerLightSourcesForDirtyChunks(
+    layout.staticLightSourcesByChunkKey,
+    layout.effectiveDirtyChunkKeys,
+  )
+
   return {
     layout,
     workerInput: {
@@ -991,10 +1013,22 @@ export function prepareBakedFloorLightFieldWorkerBuild(
       chunks: layout.chunks
         .filter((chunk) => layout.effectiveDirtyChunkKeys.has(chunk.key))
         .map((chunk) => ({ ...chunk })),
-      staticLightSources: serializeWorkerLightSources(prepared.staticLightSources),
-      flickerStaticLightSources: serializeWorkerLightSources(layout.flickerStaticLightSources),
-      solidWalls: prepared.occlusion ? [...prepared.occlusion.solidWalls] : [],
-      cornerBlockingWalls: prepared.occlusion ? [...prepared.occlusion.cornerBlockingWalls] : [],
+      staticLightSources: serializeWorkerLightSources(workerLightSources.staticLightSources),
+      flickerStaticLightSources: serializeWorkerLightSources(workerLightSources.flickerStaticLightSources),
+      solidWalls: prepared.occlusion
+        ? filterWallsForDirtyChunks(
+          prepared.occlusion.solidWalls,
+          layout.effectiveDirtyChunkKeys,
+          prepared.chunkSize,
+        )
+        : [],
+      cornerBlockingWalls: prepared.occlusion
+        ? filterWallsForDirtyChunks(
+          prepared.occlusion.cornerBlockingWalls,
+          layout.effectiveDirtyChunkKeys,
+          prepared.chunkSize,
+        )
+        : [],
     } satisfies BakedFloorLightFieldWorkerInput,
   }
 }
@@ -1006,8 +1040,14 @@ export function createPendingBakedFloorLightField({
   prepared: PreparedBakedFloorLightFieldBuild
   layout: BakedFloorLightFieldLayout
 }) {
-  const widthCells = layout.bounds ? layout.bounds.maxCellX - layout.bounds.minCellX + 1 : 0
-  const heightCells = layout.bounds ? layout.bounds.maxCellZ - layout.bounds.minCellZ + 1 : 0
+  const cachedField = prepared.cachedField
+  const { lightFieldTexture, flickerLightFieldTextures, lightFieldTextureSize, lightFieldGridSize } = prepareLightFieldTextures({
+    bounds: layout.bounds,
+    cachedField,
+    useFlickerTextures: layout.flickerStaticLightSources.length > 0,
+  })
+  const sampleByCellKey = clonePendingSampleByCellKey(cachedField, layout.uniqueCellKeys)
+  const cornerSampleByKey = clonePendingCornerSampleByKey(cachedField, layout.bounds)
 
   return {
     floorId: prepared.floorId,
@@ -1024,18 +1064,29 @@ export function createPendingBakedFloorLightField({
       .sort((left, right) => left.chunkZ - right.chunkZ || left.chunkX - right.chunkX),
     dirtyChunkKeys: [...layout.effectiveDirtyChunkKeys].sort(),
     dirtyChunkKeySet: layout.effectiveDirtyChunkKeys,
-    lightFieldTexture: null,
-    flickerLightFieldTextures: [null, null, null],
-    lightFieldTextureSize: { width: widthCells > 0 ? widthCells + 1 : 0, height: heightCells > 0 ? heightCells + 1 : 0 },
-    lightFieldGridSize: {
-      widthCells,
-      heightCells,
-    },
-    cornerSampleByKey: {},
-    sampleByCellKey: {},
-    previousSourceHash: prepared.cachedField?.sourceHash ?? null,
+    lightFieldTexture,
+    flickerLightFieldTextures,
+    lightFieldTextureSize,
+    lightFieldGridSize,
+    cornerSampleByKey,
+    sampleByCellKey,
+    previousSourceHash: cachedField?.sourceHash ?? null,
     sourceHash: prepared.sourceHash,
   } satisfies BakedFloorLightField
+}
+
+export function shouldShowPendingBakedFloorLightField({
+  cachedField,
+  bounds,
+  useFlickerTextures,
+}: {
+  cachedField: BakedFloorLightField | null
+  bounds: BakedFloorLightField['bounds']
+  useFlickerTextures: boolean
+}) {
+  return !cachedField
+    || !canReuseBakedLightLayout(cachedField, bounds)
+    || hasFlickerTextureTopologyChanged(cachedField, useFlickerTextures)
 }
 
 export function applyBakedFloorLightFieldWorkerResult({
@@ -1133,6 +1184,107 @@ function serializeWorkerLightSources(
   }))
 }
 
+function buildDirtyChunkKeysFromHint({
+  dirtyHint,
+  cachedField,
+  staticLightSources,
+  chunkSize,
+}: {
+  dirtyHint: BakedFloorLightFieldBuildInput['dirtyHint']
+  cachedField: BakedFloorLightField | null
+  staticLightSources: ResolvedDungeonLightSource[]
+  chunkSize: number
+}) {
+  if (!dirtyHint || dirtyHint.fullRefresh) {
+    return null
+  }
+
+  const dirtyChunkKeys = new Set<string>()
+
+  addDirtyRectChunkKeys(dirtyChunkKeys, dirtyHint.dirtyCellRect, chunkSize)
+  dirtyHint.dirtyWallKeys.forEach((wallKey) => {
+    for (const chunkKey of getChunkKeysForWallKey(wallKey, chunkSize)) {
+      dirtyChunkKeys.add(chunkKey)
+    }
+  })
+  addAffectedLightChunkKeys(dirtyChunkKeys, dirtyHint.affectedObjectIds, staticLightSources, chunkSize)
+  addAffectedLightChunkKeys(dirtyChunkKeys, dirtyHint.affectedObjectIds, cachedField?.staticLightSources ?? [], chunkSize)
+
+  return dirtyChunkKeys.size > 0 ? dirtyChunkKeys : null
+}
+
+function addDirtyRectChunkKeys(
+  target: Set<string>,
+  dirtyCellRect: FloorDirtyRect,
+  chunkSize: number,
+) {
+  if (!dirtyCellRect) {
+    return
+  }
+
+  for (let cellZ = dirtyCellRect.minCellZ; cellZ <= dirtyCellRect.maxCellZ; cellZ += 1) {
+    for (let cellX = dirtyCellRect.minCellX; cellX <= dirtyCellRect.maxCellX; cellX += 1) {
+      target.add(getChunkKeyForCell(cellX, cellZ, chunkSize))
+    }
+  }
+}
+
+function addAffectedLightChunkKeys(
+  target: Set<string>,
+  affectedObjectIds: string[],
+  lightSources: ResolvedDungeonLightSource[],
+  chunkSize: number,
+) {
+  if (affectedObjectIds.length === 0 || lightSources.length === 0) {
+    return
+  }
+
+  const affectedSet = new Set(affectedObjectIds)
+  lightSources.forEach((lightSource) => {
+    if (!affectedSet.has(lightSource.object.id)) {
+      return
+    }
+    getLightInfluencedChunkKeys(lightSource, chunkSize).forEach((chunkKey) => target.add(chunkKey))
+  })
+}
+
+function getWorkerLightSourcesForDirtyChunks(
+  staticLightSourcesByChunkKey: Record<string, ResolvedDungeonLightSource[]>,
+  effectiveDirtyChunkKeys: ReadonlySet<string>,
+) {
+  const staticLightSources = new Map<string, ResolvedDungeonLightSource>()
+  const flickerStaticLightSources = new Map<string, ResolvedDungeonLightSource>()
+
+  effectiveDirtyChunkKeys.forEach((chunkKey) => {
+    staticLightSourcesByChunkKey[chunkKey]?.forEach((lightSource) => {
+      staticLightSources.set(lightSource.key, lightSource)
+      if (lightSource.light.flicker) {
+        flickerStaticLightSources.set(lightSource.key, lightSource)
+      }
+    })
+  })
+
+  return {
+    staticLightSources: [...staticLightSources.values()],
+    flickerStaticLightSources: [...flickerStaticLightSources.values()],
+  }
+}
+
+function filterWallsForDirtyChunks(
+  walls: ReadonlySet<string>,
+  effectiveDirtyChunkKeys: ReadonlySet<string>,
+  chunkSize: number,
+) {
+  return [...walls].filter((wallKey) => {
+    for (const chunkKey of getChunkKeysForWallKey(wallKey, chunkSize)) {
+      if (effectiveDirtyChunkKeys.has(chunkKey)) {
+        return true
+      }
+    }
+    return false
+  })
+}
+
 function getDirtyChunkKeys({
   previousFloorCells,
   nextFloorCells,
@@ -1178,6 +1330,17 @@ function getDirtyChunkKeys({
   })
 
   return dirtyChunkKeys
+}
+
+function mergeDirtyChunkKeys(
+  left: Set<string> | null,
+  right: Set<string> | null,
+) {
+  if (left === null || right === null) {
+    return null
+  }
+
+  return new Set<string>([...left, ...right])
 }
 
 function areResolvedLightSourcesEqual(
@@ -1277,33 +1440,94 @@ function hasFlickerTextureTopologyChanged(
   return cachedHasFlickerTextures !== useFlickerTextures
 }
 
-function hasBakedLightOcclusionChanged(
+function getDirtyChunkKeysForOcclusionChanges(
   previousOcclusion: BakedLightOcclusion | null,
   nextOcclusion: BakedLightOcclusion | null,
+  chunkSize: number,
 ) {
   if (previousOcclusion === nextOcclusion) {
-    return false
+    return new Set<string>()
   }
   if (!previousOcclusion || !nextOcclusion) {
-    return previousOcclusion !== nextOcclusion
+    return previousOcclusion !== nextOcclusion ? null : new Set<string>()
   }
 
-  return !areStringSetsEqual(previousOcclusion.openWalls, nextOcclusion.openWalls)
-    || !areStringSetsEqual(previousOcclusion.solidWalls, nextOcclusion.solidWalls)
+  const changedWallKeys = new Set<string>()
+  collectChangedSetValues(previousOcclusion.openWalls, nextOcclusion.openWalls, changedWallKeys)
+  collectChangedSetValues(previousOcclusion.solidWalls, nextOcclusion.solidWalls, changedWallKeys)
+  collectChangedSetValues(previousOcclusion.cornerBlockingWalls, nextOcclusion.cornerBlockingWalls, changedWallKeys)
+
+  const dirtyChunkKeys = new Set<string>()
+  changedWallKeys.forEach((wallKey) => {
+    for (const candidateKey of getChunkKeysForWallKey(wallKey, chunkSize)) {
+      dirtyChunkKeys.add(candidateKey)
+    }
+  })
+
+  return dirtyChunkKeys
 }
 
-function areStringSetsEqual(left: ReadonlySet<string>, right: ReadonlySet<string>) {
-  if (left.size !== right.size) {
-    return false
-  }
-
-  for (const value of left) {
-    if (!right.has(value)) {
-      return false
+function collectChangedSetValues(
+  previous: ReadonlySet<string>,
+  next: ReadonlySet<string>,
+  target: Set<string>,
+) {
+  for (const value of previous) {
+    if (!next.has(value)) {
+      target.add(value)
     }
   }
 
-  return true
+  for (const value of next) {
+    if (!previous.has(value)) {
+      target.add(value)
+    }
+  }
+}
+
+function getChunkKeysForWallKey(wallKey: string, chunkSize: number) {
+  const chunkKeys = new Set<string>()
+
+  const addCell = (cellX: number, cellZ: number) => {
+    chunkKeys.add(getChunkKeyForCell(cellX, cellZ, chunkSize))
+  }
+
+  const parsed = parseWallCell(wallKey)
+  if (parsed) {
+    addCell(parsed.cellX, parsed.cellZ)
+  }
+
+  const mirroredWallKey = getMirroredWallKey(wallKey)
+  if (mirroredWallKey) {
+    const mirroredParsed = parseWallCell(mirroredWallKey)
+    if (mirroredParsed) {
+      addCell(mirroredParsed.cellX, mirroredParsed.cellZ)
+    }
+  }
+
+  return chunkKeys
+}
+
+function parseWallCell(wallKey: string) {
+  const [cellXPart, cellZPart] = wallKey.split(':')
+  const cellX = Number.parseInt(cellXPart ?? '', 10)
+  const cellZ = Number.parseInt(cellZPart ?? '', 10)
+
+  if (Number.isNaN(cellX) || Number.isNaN(cellZ)) {
+    return null
+  }
+
+  return { cellX, cellZ }
+}
+
+function parsePendingCellKey(cellKey: string): GridCell | null {
+  const [cellXPart, cellZPart] = cellKey.split(':')
+  const cellX = Number.parseInt(cellXPart ?? '', 10)
+  const cellZ = Number.parseInt(cellZPart ?? '', 10)
+  if (Number.isNaN(cellX) || Number.isNaN(cellZ)) {
+    return null
+  }
+  return [cellX, cellZ]
 }
 
 function createLightFieldTexture(data: Float32Array, width: number, height: number) {
@@ -1321,6 +1545,93 @@ function createLightFieldTexture(data: Float32Array, width: number, height: numb
   texture.generateMipmaps = false
   texture.needsUpdate = true
   return texture
+}
+
+function clonePendingSampleByCellKey(
+  cachedField: BakedFloorLightField | null,
+  uniqueCellKeys: ReadonlySet<string>,
+) {
+  if (!cachedField) {
+    return {}
+  }
+
+  const sampleByCellKey: Record<string, BakedLightSample> = {}
+  uniqueCellKeys.forEach((cellKey) => {
+    const sample = cachedField.sampleByCellKey[cellKey]
+    if (sample) {
+      sampleByCellKey[cellKey] = sample
+    }
+  })
+  return sampleByCellKey
+}
+
+function clonePendingCornerSampleByKey(
+  cachedField: BakedFloorLightField | null,
+  bounds: BakedFloorLightField['bounds'],
+) {
+  if (!cachedField || !bounds) {
+    return {}
+  }
+
+  const cornerSampleByKey: Record<string, BakedLightCornerSample> = {}
+  Object.entries(cachedField.cornerSampleByKey).forEach(([key, sample]) => {
+    const parsedCorner = parsePendingCellKey(key)
+    if (!parsedCorner) {
+      return
+    }
+    if (
+      parsedCorner[0] < bounds.minCellX
+      || parsedCorner[0] > bounds.maxCellX + 1
+      || parsedCorner[1] < bounds.minCellZ
+      || parsedCorner[1] > bounds.maxCellZ + 1
+    ) {
+      return
+    }
+    cornerSampleByKey[key] = sample
+  })
+  return cornerSampleByKey
+}
+
+function copyLightFieldTextureOverlap({
+  sourceTexture,
+  sourceBounds,
+  targetTexture,
+  targetBounds,
+}: {
+  sourceTexture: THREE.DataTexture | null
+  sourceBounds: BakedFloorLightField['bounds']
+  targetTexture: THREE.DataTexture | null
+  targetBounds: BakedFloorLightField['bounds']
+}) {
+  if (!sourceTexture || !targetTexture || !sourceBounds || !targetBounds) {
+    return
+  }
+
+  const sourceData = sourceTexture.image.data as Float32Array
+  const targetData = targetTexture.image.data as Float32Array
+  const sourceWidth = sourceBounds.maxCellX - sourceBounds.minCellX + 2
+  const targetWidth = targetBounds.maxCellX - targetBounds.minCellX + 2
+  const overlapMinX = Math.max(sourceBounds.minCellX, targetBounds.minCellX)
+  const overlapMaxX = Math.min(sourceBounds.maxCellX + 1, targetBounds.maxCellX + 1)
+  const overlapMinZ = Math.max(sourceBounds.minCellZ, targetBounds.minCellZ)
+  const overlapMaxZ = Math.min(sourceBounds.maxCellZ + 1, targetBounds.maxCellZ + 1)
+
+  if (overlapMinX > overlapMaxX || overlapMinZ > overlapMaxZ) {
+    return
+  }
+
+  for (let cellZ = overlapMinZ; cellZ <= overlapMaxZ; cellZ += 1) {
+    for (let cellX = overlapMinX; cellX <= overlapMaxX; cellX += 1) {
+      const sourceIndex = ((cellZ - sourceBounds.minCellZ) * sourceWidth + (cellX - sourceBounds.minCellX)) * 4
+      const targetIndex = ((cellZ - targetBounds.minCellZ) * targetWidth + (cellX - targetBounds.minCellX)) * 4
+      targetData[targetIndex] = sourceData[sourceIndex]
+      targetData[targetIndex + 1] = sourceData[sourceIndex + 1]
+      targetData[targetIndex + 2] = sourceData[sourceIndex + 2]
+      targetData[targetIndex + 3] = sourceData[sourceIndex + 3]
+    }
+  }
+
+  targetTexture.needsUpdate = true
 }
 
 function prepareLightFieldTextures({
@@ -1365,6 +1676,26 @@ function prepareLightFieldTextures({
         : createLightFieldTexture(new Float32Array(textureWidth * textureHeight * 4), textureWidth, textureHeight),
     ] as [THREE.DataTexture, THREE.DataTexture, THREE.DataTexture])
     : [null, null, null] as [null, null, null]
+
+  if (!canReuseLayout && cachedField?.bounds) {
+    copyLightFieldTextureOverlap({
+      sourceTexture: cachedField.lightFieldTexture,
+      sourceBounds: cachedField.bounds,
+      targetTexture: lightFieldTexture,
+      targetBounds: bounds,
+    })
+    flickerLightFieldTextures.forEach((texture, index) => {
+      if (!texture) {
+        return
+      }
+      copyLightFieldTextureOverlap({
+        sourceTexture: cachedField.flickerLightFieldTextures[index],
+        sourceBounds: cachedField.bounds,
+        targetTexture: texture,
+        targetBounds: bounds,
+      })
+    })
+  }
 
   return {
     lightFieldTexture,
@@ -1536,33 +1867,15 @@ function buildLightFieldSourceHash({
     return cachedHash
   }
 
-  const floorCellKeys = Array.from(new Set(floorCells.map((cell) => getCellKey(cell)))).sort()
-  const serialized = JSON.stringify({
-    version: BAKED_LIGHT_FIELD_SIGNATURE_VERSION,
+  const nextHash = [
+    BAKED_LIGHT_FIELD_SIGNATURE_VERSION,
     chunkSize,
-    floorCellKeys,
-    staticLightSources: staticLightSources
-      .map((lightSource) => ({
-        key: lightSource.key,
-        position: lightSource.position,
-        color: lightSource.light.color,
-        intensity: lightSource.light.intensity,
-        distance: lightSource.light.distance,
-        decay: lightSource.light.decay ?? 2,
-        flicker: Boolean(lightSource.light.flicker),
-        }))
-      .sort((left, right) => left.key.localeCompare(right.key)),
-    openWalls: occlusion ? [...occlusion.openWalls].sort() : [],
-    solidWalls: occlusion ? [...occlusion.solidWalls].sort() : [],
-  })
-
-  let hash = 2166136261
-  for (let index = 0; index < serialized.length; index += 1) {
-    hash ^= serialized.charCodeAt(index)
-    hash = Math.imul(hash, 16777619)
-  }
-
-  const nextHash = (hash >>> 0).toString(16)
+    floorCells.length,
+    staticLightSources.length,
+    getDerivedObjectIdentity(floorCells),
+    getDerivedObjectIdentity(staticLightSources),
+    occlusion ? getDerivedObjectIdentity(occlusion) : 'none',
+  ].join(':')
   bakedLightSourceHashCache.set(cacheKey, nextHash)
   return nextHash
 }

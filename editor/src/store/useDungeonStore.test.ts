@@ -62,6 +62,46 @@ describe('useDungeonStore history', () => {
     expect(useDungeonStore.getState().postProcessing.pixelSize).toBe(10)
   })
 
+  it('updates view and performance preferences through the extracted settings domain', () => {
+    const state = useDungeonStore.getState()
+
+    state.setShowGrid(false)
+    state.setLightFlickerEnabled(false)
+    state.setFpsLimit(120)
+    state.setCameraPreset('top-down')
+    state.clearCameraPreset()
+
+    const nextState = useDungeonStore.getState()
+    expect(nextState.showGrid).toBe(false)
+    expect(nextState.lightFlickerEnabled).toBe(false)
+    expect(nextState.fpsLimit).toBe(120)
+    expect(nextState.activeCameraMode).toBe('top-down')
+    expect(nextState.cameraPreset).toBeNull()
+  })
+
+  it('updates layer state through the extracted layer domain', () => {
+    const state = useDungeonStore.getState()
+    const layerId = state.addLayer('Lighting')
+
+    state.renameLayer(layerId, 'Lights')
+    state.setLayerVisible(layerId, false)
+    state.setLayerLocked(layerId, true)
+    state.setActiveLayer(layerId)
+
+    let nextState = useDungeonStore.getState()
+    expect(nextState.layers[layerId]).toMatchObject({
+      name: 'Lights',
+      visible: false,
+      locked: true,
+    })
+    expect(nextState.activeLayerId).toBe(layerId)
+
+    state.removeLayer(layerId)
+    nextState = useDungeonStore.getState()
+    expect(nextState.layers[layerId]).toBeUndefined()
+    expect(nextState.activeLayerId).toBe('default')
+  })
+
   it('creates an outdoor map with surrounding paint defaults', () => {
     useDungeonStore.getState().newDungeon('outdoor')
     const state = useDungeonStore.getState()
@@ -921,6 +961,16 @@ describe('useDungeonStore history', () => {
     expect(useDungeonStore.getState().showPropProbeDebug).toBe(false)
   })
 
+  it('toggles the build performance tracing debug flag', () => {
+    expect(useDungeonStore.getState().buildPerformanceTracingEnabled).toBe(false)
+
+    useDungeonStore.getState().setBuildPerformanceTracingEnabled(true)
+    expect(useDungeonStore.getState().buildPerformanceTracingEnabled).toBe(true)
+
+    useDungeonStore.getState().setBuildPerformanceTracingEnabled(false)
+    expect(useDungeonStore.getState().buildPerformanceTracingEnabled).toBe(false)
+  })
+
   it('tracks transient object light previews outside persisted object props', () => {
     useDungeonStore.getState().setObjectLightPreview('torch-1', {
       intensity: 3,
@@ -1748,6 +1798,77 @@ describe('useDungeonStore floors', () => {
     expect(useDungeonStore.getState().floorOrder).toHaveLength(before)
     const floor1 = Object.values(useDungeonStore.getState().floors).find((f) => f.level === 1)!
     expect(Object.keys(floor1.snapshot.placedObjects)).toHaveLength(1)
+  })
+})
+
+describe('useDungeonStore floor dirty domains', () => {
+  beforeEach(() => {
+    useDungeonStore.getState().reset()
+  })
+
+  it('records bounded dirty metadata for room painting', () => {
+    const floorId = useDungeonStore.getState().activeFloorId
+    const initial = useDungeonStore.getState().floorDirtyDomains[floorId]
+
+    useDungeonStore.getState().paintCells([
+      [0, 0],
+      [1, 0],
+    ])
+
+    const next = useDungeonStore.getState().floorDirtyDomains[floorId]
+    expect(next.tilesVersion).toBeGreaterThan(initial.tilesVersion)
+    expect(next.wallsVersion).toBeGreaterThan(initial.wallsVersion)
+    expect(next.openingsVersion).toBeGreaterThan(initial.openingsVersion)
+    expect(next.propsVersion).toBeGreaterThan(initial.propsVersion)
+    expect(next.lightingVersion).toBeGreaterThan(initial.lightingVersion)
+    expect(next.renderPlanVersion).toBeGreaterThan(initial.renderPlanVersion)
+    expect(next.occupancyVersion).toBeGreaterThan(initial.occupancyVersion)
+    expect(next.dirtyCellRect).toEqual({
+      minCellX: 0,
+      maxCellX: 1,
+      minCellZ: 0,
+      maxCellZ: 0,
+    })
+    expect(next.fullRefresh).toBe(false)
+  })
+
+  it('tracks affected objects and local cells for prop placement', () => {
+    useDungeonStore.getState().paintCells([[0, 0]])
+    const floorId = useDungeonStore.getState().activeFloorId
+    const initial = useDungeonStore.getState().floorDirtyDomains[floorId]
+
+    const objectId = useDungeonStore.getState().placeObject({
+      type: 'prop',
+      assetId: 'core.props_table_small',
+      position: [1, 0, 1],
+      rotation: [0, 0, 0],
+      props: { connector: 'FLOOR', direction: null },
+      cell: [0, 0],
+      cellKey: '0:0:floor',
+    })
+
+    const next = useDungeonStore.getState().floorDirtyDomains[floorId]
+    expect(objectId).toBeTruthy()
+    expect(next.propsVersion).toBeGreaterThan(initial.propsVersion)
+    expect(next.lightingVersion).toBeGreaterThan(initial.lightingVersion)
+    expect(next.occupancyVersion).toBeGreaterThan(initial.occupancyVersion)
+    expect(next.affectedObjectIds).toContain(objectId)
+    expect(next.dirtyCellRect).toEqual({
+      minCellX: 0,
+      maxCellX: 0,
+      minCellZ: 0,
+      maxCellZ: 0,
+    })
+  })
+
+  it('marks full refreshes when the active floor snapshot is replaced', () => {
+    useDungeonStore.getState().paintCells([[0, 0]])
+    useDungeonStore.getState().newDungeon('outdoor')
+
+    const next = useDungeonStore.getState().floorDirtyDomains['floor-1']
+    expect(next.fullRefresh).toBe(true)
+    expect(next.sequence).toBeGreaterThan(0)
+    expect(next.dirtyCellRect).toBeNull()
   })
 })
 

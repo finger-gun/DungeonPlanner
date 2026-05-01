@@ -15,7 +15,10 @@ import {
 import type { DungeonObjectRecord } from '../../store/useDungeonStore'
 import { useDungeonStore } from '../../store/useDungeonStore'
 import type { ObjectLightOverrides } from '../../store/lightOverrides'
+import { releaseContinuousRender, requestContinuousRender } from '../../rendering/renderActivity'
+import { hasActiveBuildAnimations, useBuildAnimationVersion } from '../../store/buildAnimations'
 import type { PlayVisibility } from './playVisibility'
+import { shouldRunContinuousSceneEffects } from './effectAnimationMode'
 import { shouldRenderLineOfSightLight } from './losRendering'
 import { useRegisteredLightSources } from './objectSourceRegistry'
 
@@ -111,8 +114,11 @@ export function PropLightPool({
   const refs = useRef<Array<THREE.PointLight | null>>([])
   const lightFlickerEnabled = useDungeonStore((state) => state.lightFlickerEnabled)
   const selection = useDungeonStore((state) => state.selection)
+  const tool = useDungeonStore((state) => state.tool)
   const objectLightPreviewOverrides = useDungeonStore((state) => state.objectLightPreviewOverrides)
   const registeredLightSources = useRegisteredLightSources(scopeKey)
+  const buildAnimationVersion = useBuildAnimationVersion()
+  const runContinuousEffects = shouldRunContinuousSceneEffects(tool, hasActiveBuildAnimations())
   const lightSources = useMemo(
     () => resolveRegisteredLightSources(registeredLightSources, objectLightPreviewOverrides),
     [objectLightPreviewOverrides, registeredLightSources],
@@ -199,6 +205,18 @@ export function PropLightPool({
     invalidate()
   }, [invalidate, publishAssignments])
 
+  useLayoutEffect(() => {
+    void buildAnimationVersion
+
+    if (hasFlicker && runContinuousEffects) {
+      requestContinuousRender('prop-light-flicker')
+      return () => releaseContinuousRender('prop-light-flicker')
+    }
+
+    releaseContinuousRender('prop-light-flicker')
+    return undefined
+  }, [buildAnimationVersion, hasFlicker, runContinuousEffects])
+
   useFrame(({ clock }) => {
     const cameraChanged = hasCameraChanged(
       camera,
@@ -206,7 +224,7 @@ export function PropLightPool({
       lastProjectionMatrixElementsRef,
     )
 
-    if (!hasFlicker && !cameraChanged) {
+    if ((!hasFlicker || !runContinuousEffects) && !cameraChanged) {
       return
     }
 

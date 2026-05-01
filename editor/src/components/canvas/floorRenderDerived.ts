@@ -53,34 +53,72 @@ export type FloorRenderDerivedBundle = {
   corners: RoomCornerRenderInstance[]
 }
 
-export function buildFloorRenderDerivedBundle(derived: FloorDerivedBundle): FloorRenderDerivedBundle {
+export type FloorRenderDerivedInput = {
+  visiblePaintedCellRecords: PaintedCells
+  rooms: Record<string, Room>
+  globalFloorAssetId: string | null
+  floorTileAssetIds: Record<string, string>
+  globalWallAssetId: string | null
+  wallSurfaceAssetIds: Record<string, string>
+  wallSurfaceProps: Record<string, Record<string, unknown>>
+  wallOpeningDerivedState: FloorDerivedBundle['wallOpeningDerivedState']
+  innerWalls: Record<string, InnerWallRecord>
+}
+
+export function buildFloorRenderDerivedBundle(
+  derived: FloorDerivedBundle,
+  options?: {
+    includeFloorReceivers?: boolean
+  },
+): FloorRenderDerivedBundle {
+  return buildFloorRenderDerivedBundleFromInput({
+    visiblePaintedCellRecords: derived.visiblePaintedCellRecords,
+    rooms: derived.data.rooms,
+    globalFloorAssetId: derived.data.globalFloorAssetId,
+    floorTileAssetIds: derived.data.floorTileAssetIds,
+    globalWallAssetId: derived.data.globalWallAssetId,
+    wallSurfaceAssetIds: derived.data.wallSurfaceAssetIds,
+    wallSurfaceProps: derived.data.wallSurfaceProps,
+    wallOpeningDerivedState: derived.wallOpeningDerivedState,
+    innerWalls: derived.data.innerWalls,
+  }, options)
+}
+
+export function buildFloorRenderDerivedBundleFromInput(
+  input: FloorRenderDerivedInput,
+  options?: {
+    includeFloorReceivers?: boolean
+  },
+): FloorRenderDerivedBundle {
   const floorRenderPlan = buildFloorRenderPlan(
-    derived.visiblePaintedCellRecords,
-    derived.data.rooms,
-    derived.data.globalFloorAssetId,
-    derived.data.floorTileAssetIds,
+    input.visiblePaintedCellRecords,
+    input.rooms,
+    input.globalFloorAssetId,
+    input.floorTileAssetIds,
   )
 
   return {
     floorGroups: floorRenderPlan.baseGroups as FloorRenderGroup[],
     floorSurfaceEntries: floorRenderPlan.surfacePlacements as FloorSurfacePlacement[],
-    visibleFloorReceiverCells: deriveFloorReceiverCells(floorRenderPlan),
+    visibleFloorReceiverCells: options?.includeFloorReceivers === false
+      ? []
+      : deriveFloorReceiverCells(floorRenderPlan),
     walls: deriveWallInstances(
-      derived.visiblePaintedCellRecords,
-      derived.data.rooms,
-      derived.data.globalWallAssetId,
-      derived.data.wallSurfaceAssetIds,
-      derived.data.wallSurfaceProps,
-      derived.wallOpeningDerivedState.suppressedWallKeys,
-      derived.data.innerWalls,
+      input.visiblePaintedCellRecords,
+      input.rooms,
+      input.globalWallAssetId,
+      input.wallSurfaceAssetIds,
+      input.wallSurfaceProps,
+      input.wallOpeningDerivedState.suppressedWallKeys,
+      input.innerWalls,
     ),
     corners: deriveVisibleWallCorners(
-      derived.visiblePaintedCellRecords,
-      derived.data.rooms,
-      derived.data.globalWallAssetId,
-      derived.data.wallSurfaceAssetIds,
-      derived.wallOpeningDerivedState.suppressedWallKeys,
-      derived.data.innerWalls,
+      input.visiblePaintedCellRecords,
+      input.rooms,
+      input.globalWallAssetId,
+      input.wallSurfaceAssetIds,
+      input.wallOpeningDerivedState.suppressedWallKeys,
+      input.innerWalls,
     ),
   }
 }

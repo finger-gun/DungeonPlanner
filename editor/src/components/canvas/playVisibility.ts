@@ -8,6 +8,7 @@ import { buildOpenWallSegmentSet } from '../../store/openWallSegments'
 import {
   useDungeonStore,
   type DungeonTool,
+  type InnerWallRecord,
   type MapMode,
   type OpeningRecord,
   type PaintedCells,
@@ -17,6 +18,10 @@ import { getRegisteredObject, useObjectRegistryVersion } from './objectRegistry'
 import { isGeneratedCharacterAssetId } from '../../content-packs/runtimeRegistry'
 import type { GeneratedCharacterRecord } from '../../generated-characters/types'
 import type { PlayVisibilityWorkerInput as CorePlayVisibilityWorkerInput } from './playVisibilityCore'
+import {
+  ACTIVE_FLOOR_VISIBILITY_DOMAINS,
+  useActiveFloorSnapshot,
+} from '../../store/useActiveFloorSnapshot'
 
 const PLAYER_VISION_RANGE = 8
 const MASK_BASE_SAMPLE_COUNT = 1024
@@ -101,73 +106,92 @@ type PortalSegment = {
   max: number
 }
 
+type CacheValue<T> = {
+  key: string
+  value: T
+}
+
+type PlayVisibilityDerivedState = {
+  visibilityActive: boolean
+  playerOriginObjects: DungeonObjectRecord[]
+  playerOrigins: ReadonlyArray<readonly [number, number]>
+  workerInput: PlayVisibilityWorkerInput | null
+}
+
+type PlayVisibilityDerivedCacheEntry = {
+  playerOriginObjects?: CacheValue<DungeonObjectRecord[]>
+  blockerSnapshot?: CacheValue<Pick<PlayVisibilityWorkerInput, 'blockingCellKeys' | 'blockerLookupEntries'>>
+  playerOrigins?: CacheValue<ReadonlyArray<readonly [number, number]>>
+  workerInput?: CacheValue<PlayVisibilityWorkerInput | null>
+}
+
 const WALL_DIRECTIONS: Record<WallDirection, { delta: GridCell; opposite: WallDirection }> = {
   north: { delta: [0, 1], opposite: 'south' },
   south: { delta: [0, -1], opposite: 'north' },
   east: { delta: [1, 0], opposite: 'west' },
   west: { delta: [-1, 0], opposite: 'east' },
 }
+const playVisibilityDerivedCache = new Map<string, PlayVisibilityDerivedCacheEntry>()
+const playVisibilityIdentityCache = new WeakMap<object, number>()
+let nextPlayVisibilityIdentity = 1
+const EMPTY_PLAYER_ORIGIN_OBJECTS: DungeonObjectRecord[] = []
+const EMPTY_PLAYER_ORIGINS: ReadonlyArray<readonly [number, number]> = []
+const EMPTY_BLOCKER_SNAPSHOT: Pick<PlayVisibilityWorkerInput, 'blockingCellKeys' | 'blockerLookupEntries'> = {
+  blockingCellKeys: [],
+  blockerLookupEntries: [],
+}
 
 export function usePlayVisibility(): PlayVisibility {
   const tool = useDungeonStore((state) => state.tool)
   const mapMode = useDungeonStore((state) => state.mapMode)
-  const paintedCells = useDungeonStore((state) => state.paintedCells)
   const exploredCells = useDungeonStore((state) => state.exploredCells)
-  const wallOpenings = useDungeonStore((state) => state.wallOpenings)
-  const innerWalls = useDungeonStore((state) => state.innerWalls)
-  const placedObjects = useDungeonStore((state) => state.placedObjects)
-  const wallSurfaceProps = useDungeonStore((state) => state.wallSurfaceProps)
-  const layers = useDungeonStore((state) => state.layers)
+  const {
+    activeFloorId,
+    paintedCells,
+    wallOpenings,
+    innerWalls,
+    placedObjects,
+    wallSurfaceProps,
+    layers,
+  } = useActiveFloorSnapshot(ACTIVE_FLOOR_VISIBILITY_DOMAINS, (state) => ({
+    activeFloorId: state.activeFloorId,
+    paintedCells: state.paintedCells,
+    wallOpenings: state.wallOpenings,
+    innerWalls: state.innerWalls,
+    placedObjects: state.placedObjects,
+    wallSurfaceProps: state.wallSurfaceProps,
+    layers: state.layers,
+  }))
   const generatedCharacters = useDungeonStore((state) => state.generatedCharacters)
   const mergeExploredCells = useDungeonStore((state) => state.mergeExploredCells)
   const objectRegistryVersion = useObjectRegistryVersion()
-
-  const playerOriginObjects = useMemo(
-    () => (tool !== 'play' || mapMode === 'outdoor'
-      ? []
-      : Object.values(placedObjects)
-          .filter((object) => isVisiblePlayerOrigin(object, paintedCells, layers, generatedCharacters))),
-    [generatedCharacters, layers, mapMode, paintedCells, placedObjects, tool],
-  )
-  const visibilityActive = shouldActivatePlayVisibility(tool, mapMode, playerOriginObjects.length)
-  const workerInput = useMemo(() => {
-    if (!visibilityActive) {
-      return null
-    }
-
-    void objectRegistryVersion
-    const playerOrigins = playerOriginObjects
-      .map((object) => object.cell)
-    const blockerLookup = getBlockingObjectIdsByCell(placedObjects, layers)
-    return {
+  const { visibilityActive, playerOrigins, workerInput } = useMemo(
+    () => getOrBuildPlayVisibilityDerivedState({
+      floorId: activeFloorId,
+      tool,
+      mapMode,
       paintedCells,
       wallOpenings,
-      wallSurfaceProps,
       innerWalls,
-      origins: playerOrigins,
-      range: PLAYER_VISION_RANGE,
-      blockingCellKeys: [...blockerLookup.keys()],
-      blockerLookupEntries: [...blockerLookup.entries()].flatMap(([cellKey, value]) => {
-        const blockerEntry = getBlockerCellEntry(value)
-        return blockerEntry ? [[cellKey, blockerEntry] as const] : []
-      }),
-    } satisfies PlayVisibilityWorkerInput
-  }, [
-    innerWalls,
-    layers,
-    objectRegistryVersion,
-    paintedCells,
-    placedObjects,
-    playerOriginObjects,
-    visibilityActive,
-    wallOpenings,
-    wallSurfaceProps,
-  ])
-  const playerOrigins = useMemo(
-    () => (visibilityActive
-      ? playerOriginObjects.map((object) => [object.position[0], object.position[2]] as const)
-      : []),
-    [playerOriginObjects, visibilityActive],
+      placedObjects,
+      wallSurfaceProps,
+      layers,
+      generatedCharacters,
+      objectRegistryVersion,
+    }),
+    [
+      activeFloorId,
+      generatedCharacters,
+      innerWalls,
+      layers,
+      mapMode,
+      objectRegistryVersion,
+      paintedCells,
+      placedObjects,
+      tool,
+      wallOpenings,
+      wallSurfaceProps,
+    ],
   )
   const workerRef = useRef<Worker | null>(null)
   const requestIdRef = useRef(0)
@@ -257,6 +281,161 @@ export function usePlayVisibility(): PlayVisibility {
       playerOrigins,
     }
   }, [exploredCells, generatedCharacters, playerOrigins, visibilityActive, visibleCellKeys])
+}
+
+export function clearPlayVisibilityDerivedCache() {
+  playVisibilityDerivedCache.clear()
+  nextPlayVisibilityIdentity = 1
+}
+
+export function getOrBuildPlayVisibilityDerivedState({
+  floorId,
+  tool,
+  mapMode,
+  paintedCells,
+  wallOpenings,
+  innerWalls,
+  placedObjects,
+  wallSurfaceProps,
+  layers,
+  generatedCharacters,
+  objectRegistryVersion,
+}: {
+  floorId: string
+  tool: DungeonTool
+  mapMode: MapMode
+  paintedCells: PaintedCells
+  wallOpenings: Record<string, OpeningRecord>
+  innerWalls: Record<string, InnerWallRecord>
+  placedObjects: Record<string, DungeonObjectRecord>
+  wallSurfaceProps: Record<string, Record<string, unknown>>
+  layers: Record<string, Layer>
+  generatedCharacters: Record<string, GeneratedCharacterRecord>
+  objectRegistryVersion: number
+}): PlayVisibilityDerivedState {
+  const cacheEntry = getPlayVisibilityDerivedCacheEntry(floorId)
+  const playerOriginObjects = getOrBuildCachedPlayVisibilityValue(
+    cacheEntry,
+    'playerOriginObjects',
+    [
+      tool,
+      mapMode,
+      `painted:${getPlayVisibilityIdentity(paintedCells)}`,
+      `layers:${getPlayVisibilityIdentity(layers)}`,
+      `objects:${getPlayVisibilityIdentity(placedObjects)}`,
+      `generated:${getPlayVisibilityIdentity(generatedCharacters)}`,
+    ].join('|'),
+    () => (tool !== 'play' || mapMode === 'outdoor'
+      ? EMPTY_PLAYER_ORIGIN_OBJECTS
+      : Object.values(placedObjects)
+          .filter((object) => isVisiblePlayerOrigin(object, paintedCells, layers, generatedCharacters))),
+  )
+  const visibilityActive = shouldActivatePlayVisibility(tool, mapMode, playerOriginObjects.length)
+  const blockerSnapshot = visibilityActive
+    ? getOrBuildCachedPlayVisibilityValue(
+      cacheEntry,
+      'blockerSnapshot',
+      [
+        `layers:${getPlayVisibilityIdentity(layers)}`,
+        `objects:${getPlayVisibilityIdentity(placedObjects)}`,
+        `registry:${objectRegistryVersion}`,
+      ].join('|'),
+      () => {
+        const blockerLookup = getBlockingObjectIdsByCell(placedObjects, layers)
+        return {
+          blockingCellKeys: [...blockerLookup.keys()],
+          blockerLookupEntries: [...blockerLookup.entries()].flatMap(([cellKey, value]) => {
+            const blockerEntry = getBlockerCellEntry(value)
+            return blockerEntry ? [[cellKey, blockerEntry] as const] : []
+          }),
+        }
+      },
+    )
+    : EMPTY_BLOCKER_SNAPSHOT
+  const playerOrigins = visibilityActive
+    ? getOrBuildCachedPlayVisibilityValue(
+      cacheEntry,
+      'playerOrigins',
+      `origins:${getPlayVisibilityIdentity(playerOriginObjects)}`,
+      () => playerOriginObjects.map((object) => [object.position[0], object.position[2]] as const),
+    )
+    : EMPTY_PLAYER_ORIGINS
+  const workerInput = getOrBuildCachedPlayVisibilityValue(
+    cacheEntry,
+    'workerInput',
+    visibilityActive
+      ? [
+          `painted:${getPlayVisibilityIdentity(paintedCells)}`,
+          `openings:${getPlayVisibilityIdentity(wallOpenings)}`,
+          `wall-props:${getPlayVisibilityIdentity(wallSurfaceProps)}`,
+          `inner-walls:${getPlayVisibilityIdentity(innerWalls)}`,
+          `origins:${getPlayVisibilityIdentity(playerOriginObjects)}`,
+          `blockers:${getPlayVisibilityIdentity(blockerSnapshot.blockerLookupEntries)}`,
+        ].join('|')
+      : 'inactive',
+    () => {
+      if (!visibilityActive) {
+        return null
+      }
+
+      return {
+        paintedCells,
+        wallOpenings,
+        wallSurfaceProps,
+        innerWalls,
+        origins: playerOriginObjects.map((object) => object.cell),
+        range: PLAYER_VISION_RANGE,
+        blockingCellKeys: blockerSnapshot.blockingCellKeys,
+        blockerLookupEntries: blockerSnapshot.blockerLookupEntries as Array<[string, BlockerCellEntry]>,
+      } satisfies PlayVisibilityWorkerInput
+    },
+  )
+
+  return {
+    visibilityActive,
+    playerOriginObjects,
+    playerOrigins,
+    workerInput,
+  }
+}
+
+function getPlayVisibilityDerivedCacheEntry(floorId: string) {
+  const cached = playVisibilityDerivedCache.get(floorId)
+  if (cached) {
+    return cached
+  }
+
+  const created: PlayVisibilityDerivedCacheEntry = {}
+  playVisibilityDerivedCache.set(floorId, created)
+  return created
+}
+
+function getOrBuildCachedPlayVisibilityValue<TKey extends keyof PlayVisibilityDerivedCacheEntry, TValue>(
+  entry: PlayVisibilityDerivedCacheEntry,
+  slot: TKey,
+  key: string,
+  build: () => TValue,
+) {
+  const cached = entry[slot] as CacheValue<TValue> | undefined
+  if (cached?.key === key) {
+    return cached.value
+  }
+
+  const value = build()
+  entry[slot] = { key, value } as PlayVisibilityDerivedCacheEntry[TKey]
+  return value
+}
+
+function getPlayVisibilityIdentity(value: object) {
+  const cached = playVisibilityIdentityCache.get(value)
+  if (cached) {
+    return cached
+  }
+
+  const identity = nextPlayVisibilityIdentity
+  nextPlayVisibilityIdentity += 1
+  playVisibilityIdentityCache.set(value, identity)
+  return identity
 }
 
 export function isVisiblePlayerOrigin(

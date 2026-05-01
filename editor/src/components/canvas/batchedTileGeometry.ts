@@ -1,13 +1,19 @@
 import * as THREE from 'three'
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js'
 import type { ContentPackModelTransform } from '../../content-packs/types'
-import { cloneMaterialWithNodeCompatibility } from '../../rendering/nodeMaterialUtils'
+import {
+  type CompatibleNodeMaterial,
+  cloneMaterialWithNodeCompatibility,
+  synchronizeCompatibleMaterialProperties,
+} from '../../rendering/nodeMaterialUtils'
 import { createWebGpuCompatibleGeometry } from './webgpuGeometry'
 
 export type BatchedTilePlacement = {
   key: string
   position: readonly [number, number, number]
   rotation: readonly [number, number, number]
+  buildAnimationDelay?: number
+  buildAnimationStart?: number
   bakedLight?: readonly [number, number, number]
   bakedLightDirection?: readonly [number, number, number]
   bakedLightDirectionSecondary?: readonly [number, number, number]
@@ -19,6 +25,8 @@ export type BatchedTileGeometryMesh = {
   geometry: THREE.BufferGeometry
   material: THREE.Material
 }
+
+const compatibleMaterialTemplateCache = new WeakMap<THREE.Material, THREE.Material>()
 
 export function buildMergedTileGeometryMeshes({
   sourceScene,
@@ -35,6 +43,7 @@ export function buildMergedTileGeometryMeshes({
   }
 
   const transformMatrix = getTransformMatrix(transform)
+  const hasBuildAnimation = placements.some((placement) => placement.buildAnimationStart !== undefined)
   sourceScene.updateWorldMatrix(true, true)
 
   const sourceMeshes = Array.from(iterateBatchableMeshes(sourceScene))
@@ -45,10 +54,20 @@ export function buildMergedTileGeometryMeshes({
         sourceMesh.geometry,
         getPlacementMatrix(placement).multiply(transformMatrix).multiply(sourceMesh.matrixWorld),
       )
-      if (placement.bakedLight) {
+      if (hasBuildAnimation) {
         geometry.setAttribute(
-          'bakedLight',
-          createRepeatedVector3Attribute(geometry.getAttribute('position').count, placement.bakedLight),
+          'buildAnimationStart',
+          createRepeatedScalarAttribute(
+            geometry.getAttribute('position').count,
+            placement.buildAnimationStart ?? -1,
+          ),
+        )
+        geometry.setAttribute(
+          'buildAnimationDelay',
+          createRepeatedScalarAttribute(
+            geometry.getAttribute('position').count,
+            placement.buildAnimationDelay ?? 0,
+          ),
         )
       }
       if (placement.bakedLightDirection) {
@@ -84,11 +103,32 @@ export function buildMergedTileGeometryMeshes({
       mergedMeshes.push({
         key: `${meshIndex}:${sourceMesh.uuid}`,
         geometry: mergedGeometry,
-        material: cloneMaterialWithNodeCompatibility(material),
+        material: cloneCompatibleMaterial(material),
       })
     })
 
   return mergedMeshes
+}
+
+function cloneCompatibleMaterial(material: THREE.Material) {
+  const cachedTemplate = compatibleMaterialTemplateCache.get(material)
+  if (cachedTemplate) {
+    const clone = cachedTemplate.clone()
+    synchronizeCompatibleMaterialProperties(
+      cachedTemplate as CompatibleNodeMaterial,
+      clone as CompatibleNodeMaterial,
+    )
+    return clone
+  }
+
+  const template = cloneMaterialWithNodeCompatibility(material)
+  compatibleMaterialTemplateCache.set(material, template)
+  const clone = template.clone()
+  synchronizeCompatibleMaterialProperties(
+    template as CompatibleNodeMaterial,
+    clone as CompatibleNodeMaterial,
+  )
+  return clone
 }
 
 function createRepeatedVector2Attribute(count: number, value: readonly [number, number]) {
@@ -99,6 +139,12 @@ function createRepeatedVector2Attribute(count: number, value: readonly [number, 
   }
 
   return new THREE.Float32BufferAttribute(array, 2)
+}
+
+function createRepeatedScalarAttribute(count: number, value: number) {
+  const array = new Float32Array(count)
+  array.fill(value)
+  return new THREE.Float32BufferAttribute(array, 1)
 }
 
 function createRepeatedVector3Attribute(count: number, value: readonly [number, number, number]) {

@@ -30,6 +30,7 @@ import { useDungeonStore } from '../../store/useDungeonStore'
 import { getRegisteredObject, useObjectRegistryVersion } from './objectRegistry'
 import { getAutofocusDistance, resolveAutofocusTarget } from './autofocusTarget'
 import { getWebGpuPostProcessingPipeline } from './webgpuPostProcessingMode'
+import { traceBuildPerf } from '../../performance/runtimeBuildTrace'
 
 export function WebGPUPostProcessing() {
   const { gl: renderer, scene, camera, invalidate } = useThree()
@@ -101,7 +102,12 @@ export function WebGPUPostProcessing() {
   // Build / rebuild the TSL pipeline when renderer / scene / camera / settings change.
   // NOTE: `size` is intentionally omitted — DepthOfFieldNode.updateBefore() calls setSize()
   // automatically each frame from texture dimensions, so resize is handled without a rebuild.
-  useLayoutEffect(() => {
+  useLayoutEffect(() => traceBuildPerf('postprocess-pipeline-build', {
+    activeCameraMode,
+    lensEnabled: settings.enabled,
+    pixelateEnabled: settings.pixelateEnabled,
+    showSelectionOutline,
+  }, () => {
     if (!renderer || !scene || !camera) return
 
     // Single shared scene pass — tiltShift, LoS, and outline all read from
@@ -162,7 +168,7 @@ export function WebGPUPostProcessing() {
       visibleLosCameraRef.current = null
       exploredLosCameraRef.current = null
     }
-  }, [camera, renderer, scene, settings.enabled, settings.pixelateEnabled, settings.pixelSize, activeCameraMode, showSelectionOutline])
+  }), [camera, renderer, scene, settings.enabled, settings.pixelateEnabled, settings.pixelSize, activeCameraMode, showSelectionOutline])
 
   // Multi-frame delay after each pipeline rebuild — lets Three.js begin WebGPU
   // shader compilation (especially for complex scenes with many lights) before

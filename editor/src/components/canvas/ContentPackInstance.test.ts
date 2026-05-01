@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { buildPropDescriptorKey } from './ContentPackInstance'
+import { shouldUseRuntimePropProbe } from './runtimePropProbeMode'
 
 describe('buildPropDescriptorKey', () => {
   it('reuses component descriptor keys for equivalent prop objects with different key ordering', () => {
@@ -64,5 +65,14 @@ describe('buildPropDescriptorKey', () => {
     })
 
     expect(firstKey).not.toBe(secondKey)
+  })
+})
+
+describe('shouldUseRuntimePropProbe', () => {
+  it('keeps runtime prop probes active in edit and play modes', () => {
+    expect(shouldUseRuntimePropProbe({ tool: 'play' })).toBe(true)
+    expect(shouldUseRuntimePropProbe({ tool: 'room' })).toBe(true)
+    expect(shouldUseRuntimePropProbe({ tool: 'select' })).toBe(true)
+    expect(shouldUseRuntimePropProbe({ tool: 'room', showPropProbeDebug: true })).toBe(true)
   })
 })

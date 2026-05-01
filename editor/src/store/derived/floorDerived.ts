@@ -12,6 +12,7 @@ import type {
   PaintedCells,
   Room,
 } from '../useDungeonStore'
+import type { FloorDirtyInfo } from '../floorDirtyDomains'
 import {
   buildWallOpeningDerivedState,
   type WallOpeningDerivedState,
@@ -45,12 +46,15 @@ export type FloorDerivedBundle = {
   wallOpeningDerivedState: WallOpeningDerivedState
 }
 
-export function buildFloorDerivedBundle(data: DungeonRoomData): FloorDerivedBundle {
+export function buildVisiblePaintedCells({
+  paintedCells,
+  layers,
+}: Pick<DungeonRoomData, 'paintedCells' | 'layers'>) {
   const visiblePaintedCells: GridCell[] = []
   const visiblePaintedCellRecords: PaintedCells = {}
 
-  for (const [cellKey, record] of Object.entries(data.paintedCells)) {
-    if (data.layers[record.layerId]?.visible === false) {
+  for (const [cellKey, record] of Object.entries(paintedCells)) {
+    if (layers[record.layerId]?.visible === false) {
       continue
     }
 
@@ -58,13 +62,77 @@ export function buildFloorDerivedBundle(data: DungeonRoomData): FloorDerivedBund
     visiblePaintedCellRecords[cellKey] = record
   }
 
-  const visibleObjects = Object.values(data.placedObjects).filter(
-    (object) => data.layers[object.layerId]?.visible !== false,
+  return {
+    visiblePaintedCells,
+    visiblePaintedCellRecords,
+  }
+}
+
+export function buildVisibleObjects({
+  placedObjects,
+  layers,
+}: Pick<DungeonRoomData, 'placedObjects' | 'layers'>) {
+  return Object.values(placedObjects).filter(
+    (object) => layers[object.layerId]?.visible !== false,
   )
-  const visibleOpenings = Object.values(data.wallOpenings).filter(
-    (opening) => data.layers[opening.layerId]?.visible !== false,
+}
+
+export function buildVisibleOpenings({
+  wallOpenings,
+  layers,
+}: Pick<DungeonRoomData, 'wallOpenings' | 'layers'>) {
+  return Object.values(wallOpenings).filter(
+    (opening) => layers[opening.layerId]?.visible !== false,
   )
-  const staticLightSources = resolveObjectLightSources(visibleObjects)
+}
+
+export function buildStaticLightSources(objects: DungeonObjectRecord[]) {
+  return resolveObjectLightSources(objects)
+}
+
+export function buildObjectHierarchy(objects: DungeonObjectRecord[]) {
+  return {
+    topLevelObjects: getTopLevelObjects(objects),
+    childrenByParent: buildObjectChildrenIndex(objects),
+  }
+}
+
+export function buildBakedLightBuildInput(
+  data: Pick<DungeonRoomData, 'floorId' | 'wallOpenings' | 'innerWalls' | 'wallSurfaceProps'>,
+  visiblePaintedCells: GridCell[],
+  visiblePaintedCellRecords: PaintedCells,
+  staticLightSources: ResolvedDungeonLightSource[],
+  dirtyHint?: Pick<
+    FloorDirtyInfo,
+    'sequence' | 'dirtyCellRect' | 'dirtyWallKeys' | 'affectedObjectIds' | 'fullRefresh'
+  > | null,
+): BakedFloorLightFieldBuildInput {
+  return {
+    floorId: data.floorId,
+    floorCells: visiblePaintedCells,
+    staticLightSources,
+    dirtyHint: dirtyHint ?? null,
+    occlusionInput: {
+      paintedCells: visiblePaintedCellRecords,
+      wallOpenings: data.wallOpenings,
+      innerWalls: data.innerWalls,
+      wallSurfaceProps: data.wallSurfaceProps,
+    },
+  }
+}
+
+export function buildFloorWallOpeningDerivedState({
+  wallOpenings,
+}: Pick<DungeonRoomData, 'wallOpenings'>) {
+  return buildWallOpeningDerivedState(wallOpenings)
+}
+
+export function buildFloorDerivedBundle(data: DungeonRoomData): FloorDerivedBundle {
+  const { visiblePaintedCells, visiblePaintedCellRecords } = buildVisiblePaintedCells(data)
+  const visibleObjects = buildVisibleObjects(data)
+  const visibleOpenings = buildVisibleOpenings(data)
+  const staticLightSources = buildStaticLightSources(visibleObjects)
+  const { topLevelObjects, childrenByParent } = buildObjectHierarchy(visibleObjects)
 
   return {
     data,
@@ -73,20 +141,16 @@ export function buildFloorDerivedBundle(data: DungeonRoomData): FloorDerivedBund
     visibleObjects,
     visibleOpenings,
     staticLightSources,
-    topLevelObjects: getTopLevelObjects(visibleObjects),
-    childrenByParent: buildObjectChildrenIndex(visibleObjects),
-    bakedLightBuildInput: {
-      floorId: data.floorId,
-      floorCells: visiblePaintedCells,
+    topLevelObjects,
+    childrenByParent,
+    bakedLightBuildInput: buildBakedLightBuildInput(
+      data,
+      visiblePaintedCells,
+      visiblePaintedCellRecords,
       staticLightSources,
-      occlusionInput: {
-        paintedCells: visiblePaintedCellRecords,
-        wallOpenings: data.wallOpenings,
-        innerWalls: data.innerWalls,
-        wallSurfaceProps: data.wallSurfaceProps,
-      },
-    },
-    wallOpeningDerivedState: buildWallOpeningDerivedState(data.wallOpenings),
+      null,
+    ),
+    wallOpeningDerivedState: buildFloorWallOpeningDerivedState(data),
   }
 }
 

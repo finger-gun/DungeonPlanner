@@ -11,16 +11,9 @@ import { PlayerSelectionRing } from './DungeonObject'
 import { DungeonRoom } from './DungeonRoom'
 import { useDungeonStore, type DungeonObjectRecord } from '../../store/useDungeonStore'
 import {
-  buildBakedLightBuildInput,
-  buildFloorDerivedBundle,
-  buildFloorWallOpeningDerivedState,
-  buildObjectHierarchy,
-  buildStaticLightSources,
-  buildVisibleObjects,
-  buildVisibleOpenings,
-  buildVisiblePaintedCells,
   type FloorDerivedBundle,
 } from '../../store/derived/floorDerived'
+import { getOrBuildCachedFloorDerivedBundle } from '../../store/derived/floorDerivedCache'
 import { usePlayVisibility } from './playVisibility'
 import { ContentPackInstance } from './ContentPackInstance'
 import { getCellKey, snapWorldPointToGrid } from '../../hooks/useSnapToGrid'
@@ -51,6 +44,8 @@ import {
   useActiveFloorSnapshot,
 } from '../../store/useActiveFloorSnapshot'
 import { useHasContinuousRenderRequests } from '../../rendering/renderActivity'
+import { pruneFloorLightComputeBridge } from '../../rendering/gpu'
+import { shouldEnableActiveFloorPostProcessing } from './webgpuPostProcessingMode'
 
 const WebGPUPostProcessing = lazy(() =>
   import('./WebGPUPostProcessing').then((module) => ({
@@ -109,6 +104,7 @@ export function Scene() {
   useEffect(() => {
     pruneBakedFloorLightFieldCache(floorOrder)
     pruneRuntimePropLightingCache(floorOrder)
+    pruneFloorLightComputeBridge(floorOrder)
   }, [floorOrder])
 
   return (
@@ -316,6 +312,7 @@ function SceneOverviewContent() {
     globalFloorAssetId: state.selectedAssetIds.floor,
     globalWallAssetId: state.selectedAssetIds.wall,
   }))
+  const floorDirtyInfo = useDungeonStore((state) => state.floorDirtyDomains[state.activeFloorId] ?? null)
   const floorEntries = useMemo<FloorRenderEntry[]>(() => {
     const sortedFloorIds = [...floorOrder].sort(
       (left, right) => (floors[right]?.level ?? 0) - (floors[left]?.level ?? 0),
@@ -328,55 +325,62 @@ function SceneOverviewContent() {
       }
 
       if (floorId === activeFloorId) {
-        const derived = buildFloorDerivedBundle({
-          floorId,
-          paintedCells,
-          layers,
-          rooms,
-          wallOpenings,
-          innerWalls,
-          placedObjects,
-          floorTileAssetIds,
-          wallSurfaceAssetIds,
-          wallSurfaceProps,
-          globalFloorAssetId,
-          globalWallAssetId,
+        const derived = getOrBuildCachedFloorDerivedBundle({
+          data: {
+            floorId,
+            paintedCells,
+            layers,
+            rooms,
+            wallOpenings,
+            innerWalls,
+            placedObjects,
+            floorTileAssetIds,
+            wallSurfaceAssetIds,
+            wallSurfaceProps,
+            globalFloorAssetId,
+            globalWallAssetId,
+          },
+          dirtyInfo: floorDirtyInfo,
         })
-
-          return [{
-            id: floorId,
-            level: floor.level,
-            derived,
-            bakedLightField: getOrBuildBakedFloorLightField(derived.bakedLightBuildInput),
-        }]
-      }
-
-      const snapshot = floor.snapshot
-      const derived = buildFloorDerivedBundle({
-        floorId,
-        paintedCells: snapshot.paintedCells,
-        layers: snapshot.layers,
-        rooms: snapshot.rooms,
-        wallOpenings: snapshot.wallOpenings,
-        innerWalls: snapshot.innerWalls,
-        placedObjects: snapshot.placedObjects,
-        floorTileAssetIds: snapshot.floorTileAssetIds,
-        wallSurfaceAssetIds: snapshot.wallSurfaceAssetIds,
-        wallSurfaceProps: snapshot.wallSurfaceProps,
-        globalFloorAssetId: snapshot.selectedAssetIds.floor,
-        globalWallAssetId: snapshot.selectedAssetIds.wall,
-      })
 
         return [{
           id: floorId,
           level: floor.level,
           derived,
           bakedLightField: getOrBuildBakedFloorLightField(derived.bakedLightBuildInput),
+        }]
+      }
+
+      const snapshot = floor.snapshot
+      const derived = getOrBuildCachedFloorDerivedBundle({
+        data: {
+          floorId,
+          paintedCells: snapshot.paintedCells,
+          layers: snapshot.layers,
+          rooms: snapshot.rooms,
+          wallOpenings: snapshot.wallOpenings,
+          innerWalls: snapshot.innerWalls,
+          placedObjects: snapshot.placedObjects,
+          floorTileAssetIds: snapshot.floorTileAssetIds,
+          wallSurfaceAssetIds: snapshot.wallSurfaceAssetIds,
+          wallSurfaceProps: snapshot.wallSurfaceProps,
+          globalFloorAssetId: snapshot.selectedAssetIds.floor,
+          globalWallAssetId: snapshot.selectedAssetIds.wall,
+        },
+        dirtyInfo: null,
+      })
+
+      return [{
+        id: floorId,
+        level: floor.level,
+        derived,
+        bakedLightField: getOrBuildBakedFloorLightField(derived.bakedLightBuildInput),
       }]
     })
   }, [
     activeFloorId,
     floorOrder,
+    floorDirtyInfo,
     floors,
     globalFloorAssetId,
     globalWallAssetId,
@@ -460,6 +464,7 @@ function FloorContent({ startY = 0 }: { startY?: number }) {
     globalFloorAssetId: state.selectedAssetIds.floor,
     globalWallAssetId: state.selectedAssetIds.wall,
   }))
+  const floorDirtyInfo = useDungeonStore((state) => state.floorDirtyDomains[state.activeFloorId] ?? null)
   const mapMode = useDungeonStore((state) => state.mapMode)
   const tool = useDungeonStore((state) => state.tool)
   const selection = useDungeonStore((state) => state.selection)
@@ -468,28 +473,33 @@ function FloorContent({ startY = 0 }: { startY?: number }) {
   const moveObject = useDungeonStore((state) => state.moveObject)
   const selectObject = useDungeonStore((state) => state.selectObject)
   const setObjectDragActive = useDungeonStore((state) => state.setObjectDragActive)
+  const activeCameraMode = useDungeonStore((state) => state.activeCameraMode)
   const lensEnabled = useDungeonStore((state) => state.postProcessing.enabled)
   const pixelateEnabled = useDungeonStore((state) => state.postProcessing.pixelateEnabled)
   const visibility = usePlayVisibility()
   const [releaseAnimationIds, setReleaseAnimationIds] = useState<Record<string, true>>({})
 
-  const floorData = useMemo(
-    () => ({
-      floorId: activeFloorId,
-      paintedCells,
-      layers,
-      rooms,
-      wallOpenings,
-      innerWalls,
-      placedObjects,
-      floorTileAssetIds,
-      wallSurfaceAssetIds,
-      wallSurfaceProps,
-      globalFloorAssetId,
-      globalWallAssetId,
+  const floorDerived = useMemo<FloorDerivedBundle>(
+    () => getOrBuildCachedFloorDerivedBundle({
+      data: {
+        floorId: activeFloorId,
+        paintedCells,
+        layers,
+        rooms,
+        wallOpenings,
+        innerWalls,
+        placedObjects,
+        floorTileAssetIds,
+        wallSurfaceAssetIds,
+        wallSurfaceProps,
+        globalFloorAssetId,
+        globalWallAssetId,
+      },
+      dirtyInfo: floorDirtyInfo,
     }),
     [
       activeFloorId,
+      floorDirtyInfo,
       floorTileAssetIds,
       globalFloorAssetId,
       globalWallAssetId,
@@ -503,76 +513,24 @@ function FloorContent({ startY = 0 }: { startY?: number }) {
       wallSurfaceProps,
     ],
   )
-  const visiblePaintedState = useMemo(
-    () => buildVisiblePaintedCells(floorData),
-    [floorData],
-  )
-  const visibleObjects = useMemo(
-    () => buildVisibleObjects(floorData),
-    [floorData],
-  )
-  const visibleOpenings = useMemo(
-    () => buildVisibleOpenings(floorData),
-    [floorData],
-  )
-  const staticLightSources = useMemo(
-    () => buildStaticLightSources(visibleObjects),
-    [visibleObjects],
-  )
-  const objectHierarchy = useMemo(
-    () => buildObjectHierarchy(visibleObjects),
-    [visibleObjects],
-  )
-  const bakedLightBuildInput = useMemo(
-    () => buildBakedLightBuildInput(
-      floorData,
-      visiblePaintedState.visiblePaintedCells,
-      visiblePaintedState.visiblePaintedCellRecords,
-      staticLightSources,
-    ),
-    [
-      floorData,
-      staticLightSources,
-      visiblePaintedState.visiblePaintedCells,
-      visiblePaintedState.visiblePaintedCellRecords,
-    ],
-  )
-  const wallOpeningDerivedState = useMemo(
-    () => buildFloorWallOpeningDerivedState(floorData),
-    [floorData],
-  )
-  const floorDerived = useMemo<FloorDerivedBundle>(
-    () => ({
-      data: floorData,
-      ...visiblePaintedState,
-      visibleObjects,
-      visibleOpenings,
-      staticLightSources,
-      ...objectHierarchy,
-      bakedLightBuildInput,
-      wallOpeningDerivedState,
-    }),
-    [
-      bakedLightBuildInput,
-      floorData,
-      objectHierarchy,
-      staticLightSources,
-      visibleObjects,
-      visibleOpenings,
-      visiblePaintedState,
-      wallOpeningDerivedState,
-    ],
-  )
-  const bakedFloorLightField = useBakedFloorLightField(floorDerived.bakedLightBuildInput)
-  const showPostProcessing = true
-  const postProcessingKey = `${lensEnabled ? 'lens' : 'nolens'}:${pixelateEnabled ? 'pixel' : 'clean'}:${showLensFocusDebugPoint ? 'focus' : 'nofocus'}`
-
   const groupRef = useRef<THREE.Group>(null)
   const animYRef = useRef(startY)
   const dragStateRef = useRef<PlayDragState | null>(null)
   const movementRangeRef = useRef<MovementRange | null>(null)
   const dragCleanupRef = useRef<(() => void) | null>(null)
   const { camera, gl, invalidate, controls } = useThree()
+  const bakedFloorLightField = useBakedFloorLightField(floorDerived.bakedLightBuildInput, {
+    deferPreparation: tool !== 'play',
+    renderer: gl,
+  })
+  const showPostProcessing = shouldEnableActiveFloorPostProcessing({
+    activeCameraMode,
+    lensEnabled,
+    pixelateEnabled,
+    tool,
+    selection,
+  })
+  const postProcessingKey = `${lensEnabled ? 'lens' : 'nolens'}:${pixelateEnabled ? 'pixel' : 'clean'}:${showLensFocusDebugPoint ? 'focus' : 'nofocus'}`
   const [dragState, setDragState] = useState<PlayDragState | null>(null)
   const dragPreviewScale = dragState ? getObjectInstanceScale(dragState.objectProps) : 1
   const dragPreviewTint = dragState ? getObjectTintColor(dragState.objectProps) : null

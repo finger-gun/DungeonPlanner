@@ -1,15 +1,23 @@
-import { Suspense, useLayoutEffect, useMemo, useRef } from 'react'
+import { Suspense, memo, useLayoutEffect, useMemo, useRef } from 'react'
+import { useFrame } from '@react-three/fiber'
 import * as THREE from 'three'
 import type { PlayVisibilityState } from './playVisibility'
 import { ContentPackInstance } from './ContentPackInstance'
 import { shouldRenderLineOfSightGeometry } from './losRendering'
 import { buildMergedTileGeometryMeshes, type BatchedTilePlacement } from './batchedTileGeometry'
-import { resolveBatchedTileAsset, type ResolvedBatchedTileAsset } from './tileAssetResolution'
 import { useGLTF } from '../../rendering/useGLTF'
 import { applyFogOfWarToMaterial, useFogOfWarRuntime } from './fogOfWar'
 import { applyBakedLightToMaterial } from './bakedLightMaterial'
 import type { BakedFloorLightField } from '../../rendering/dungeonLightField'
 import { useDungeonStore } from '../../store/useDungeonStore'
+import { getBuildYOffsetForAnimation, type BuildAnimationState } from '../../store/buildAnimations'
+import { buildBatchDescriptors, type BatchDescriptor } from './batchDescriptors'
+import {
+  applyBelowGroundClipToMaterial,
+  applyBuildAnimationToMaterial,
+  getBelowGroundClipMinY,
+} from './buildAnimationMaterial'
+import { recordBuildPerfEvent, traceBuildPerf } from '../../performance/runtimeBuildTrace'
 
 export type StaticTileEntry = BatchedTilePlacement & {
   assetId: string | null
@@ -21,15 +29,6 @@ export type StaticTileEntry = BatchedTilePlacement & {
   fogCell?: readonly [number, number]
 }
 
-type ResolvedStaticTileEntry = StaticTileEntry & ResolvedBatchedTileAsset
-
-function shouldUseBatchedGpuFog(
-  variant: StaticTileEntry['variant'],
-  fogOfWar: ReturnType<typeof useFogOfWarRuntime>,
-) {
-  return fogOfWar !== null && variant === 'floor'
-}
-
 export function BatchedTileEntries({
   entries,
   useLineOfSightPostMask = false,
@@ -37,46 +36,68 @@ export function BatchedTileEntries({
   entries: StaticTileEntry[]
   useLineOfSightPostMask?: boolean
 }) {
-  const { batchableEntries, fallbackEntries } = useMemo(() => {
-    const batchable: ResolvedStaticTileEntry[] = []
-    const fallback: StaticTileEntry[] = []
+  const fogOfWar = useFogOfWarRuntime()
+  const fogOfWarEnabled = fogOfWar !== null
+  const descriptors = useMemo(
+    () => buildBatchDescriptors(entries, fogOfWarEnabled),
+    [entries, fogOfWarEnabled],
+  )
+  const tracedDescriptorStateRef = useRef<{
+    bucketKeys: readonly string[]
+    chunkKeys: readonly string[]
+  } | null>(null)
 
-    entries.forEach((entry) => {
-      const resolved = resolveBatchedTileAsset(entry.assetId, entry.variantKey, entry.objectProps)
-      if (resolved) {
-        batchable.push({ ...entry, ...resolved })
-      } else {
-        fallback.push(entry)
-      }
-    })
+  useLayoutEffect(() => {
+    const nextBucketKeys = descriptors.batched.map((descriptor) => descriptor.bucketKey).sort()
+    const nextChunkKeys = Array.from(
+      new Set(descriptors.batched.map((descriptor) => descriptor.chunkKey)),
+    ).sort()
+    const previous = tracedDescriptorStateRef.current
 
-    return {
-      batchableEntries: batchable,
-      fallbackEntries: fallback,
+    tracedDescriptorStateRef.current = {
+      bucketKeys: nextBucketKeys,
+      chunkKeys: nextChunkKeys,
     }
-  }, [entries])
+
+    if (!previous) {
+      return
+    }
+
+    const addedChunkKeys = subtractStringSets(nextChunkKeys, previous.chunkKeys)
+    const removedChunkKeys = subtractStringSets(previous.chunkKeys, nextChunkKeys)
+    const addedBucketCount = subtractStringSets(nextBucketKeys, previous.bucketKeys).length
+    const removedBucketCount = subtractStringSets(previous.bucketKeys, nextBucketKeys).length
+
+    if (addedBucketCount === 0 && removedBucketCount === 0) {
+      return
+    }
+
+    recordBuildPerfEvent('batched-chunk-diff', {
+      batchedCount: descriptors.batched.length,
+      fallbackCount: descriptors.fallback.length,
+      chunkCount: nextChunkKeys.length,
+      addedChunkKeys,
+      removedChunkKeys,
+      addedBucketCount,
+      removedBucketCount,
+    })
+  }, [descriptors])
 
   return (
     <>
-      {batchableEntries.length > 0 && (
+      {descriptors.batched.length > 0 && (
         <Suspense fallback={null}>
           <ResolvedBatchedTileEntries
-            entries={batchableEntries}
+            descriptors={descriptors}
             useLineOfSightPostMask={useLineOfSightPostMask}
           />
         </Suspense>
       )}
-      {fallbackEntries.map((entry) => (
-        <ContentPackInstance
+      {descriptors.fallback.map((entry) => (
+        <FallbackTileEntry
           key={entry.key}
-          assetId={entry.assetId}
-          position={entry.position}
-          rotation={entry.rotation}
-          variant={entry.variant}
-          variantKey={entry.variantKey}
-          visibility={entry.visibility}
+          entry={entry}
           useLineOfSightPostMask={useLineOfSightPostMask}
-          objectProps={entry.objectProps}
         />
       ))}
     </>
@@ -84,16 +105,15 @@ export function BatchedTileEntries({
 }
 
 function ResolvedBatchedTileEntries({
-  entries,
+  descriptors,
   useLineOfSightPostMask,
 }: {
-  entries: ResolvedStaticTileEntry[]
+  descriptors: ReturnType<typeof buildBatchDescriptors>
   useLineOfSightPostMask: boolean
 }) {
-  const fogOfWar = useFogOfWarRuntime()
   const assetUrls = useMemo(
-    () => Array.from(new Set(entries.map((entry) => entry.assetUrl))),
-    [entries],
+    () => Array.from(new Set(descriptors.batched.map((desc) => desc.assetUrl))),
+    [descriptors.batched],
   )
   const gltfs = useGLTF(assetUrls as string[])
   const scenesByUrl = useMemo(() => {
@@ -103,51 +123,25 @@ function ResolvedBatchedTileEntries({
     )
   }, [assetUrls, gltfs])
 
-  const buckets = useMemo(() => {
-    const grouped = new Map<string, ResolvedStaticTileEntry[]>()
-    entries.forEach((entry) => {
-      const usesGpuFog = shouldUseBatchedGpuFog(entry.variant, fogOfWar)
-      const bucketKey = [
-        entry.assetUrl,
-        entry.transformKey,
-        usesGpuFog ? `gpu-los:${entry.variant}` : entry.visibility,
-        entry.receiveShadow ? 'shadow' : 'flat',
-        entry.bakedLightDirectionSecondary ? 'double-direction' : 'single-direction',
-      ].join('|')
-
-      if (!grouped.has(bucketKey)) {
-        grouped.set(bucketKey, [])
-      }
-      grouped.get(bucketKey)!.push(entry)
-    })
-    return Array.from(grouped.entries())
-  }, [entries, fogOfWar])
-
   return (
     <>
-      {buckets.map(([bucketKey, bucketEntries]) => {
-        const scene = scenesByUrl.get(bucketEntries[0]!.assetUrl)
+      {descriptors.batched.map((descriptor) => {
+        const scene = scenesByUrl.get(descriptor.assetUrl)
         if (!scene) {
-          return bucketEntries.map((entry) => (
-            <ContentPackInstance
+          return descriptor.entries.map((entry) => (
+            <FallbackTileEntry
               key={entry.key}
-              assetId={entry.assetId}
-              position={entry.position}
-              rotation={entry.rotation}
-              variant={entry.variant}
-              variantKey={entry.variantKey}
-              visibility={entry.visibility}
+              entry={entry}
               useLineOfSightPostMask={useLineOfSightPostMask}
-              objectProps={entry.objectProps}
             />
           ))
         }
 
         return (
-          <MergedTileBucket
-            key={bucketKey}
+          <MemoizedMergedTileBucket
+            key={descriptor.bucketKey}
+            descriptor={descriptor}
             sourceScene={scene}
-            entries={bucketEntries}
             useLineOfSightPostMask={useLineOfSightPostMask}
           />
         )
@@ -156,43 +150,144 @@ function ResolvedBatchedTileEntries({
   )
 }
 
-function MergedTileBucket({
-  sourceScene,
-  entries,
+function FallbackTileEntry({
+  entry,
   useLineOfSightPostMask,
 }: {
-  sourceScene: THREE.Object3D
-  entries: ResolvedStaticTileEntry[]
+  entry: StaticTileEntry
   useLineOfSightPostMask: boolean
 }) {
-  const fogOfWar = useFogOfWarRuntime()
-  const usesGpuFog = shouldUseBatchedGpuFog(entries[0]!.variant, fogOfWar)
+  const groupRef = useRef<THREE.Group>(null)
+  const buildAnimation = useMemo<BuildAnimationState | null>(
+    () => (entry.buildAnimationStart === undefined
+      ? null
+      : {
+        startedAt: entry.buildAnimationStart,
+        delay: entry.buildAnimationDelay ?? 0,
+      }),
+    [entry.buildAnimationDelay, entry.buildAnimationStart],
+  )
+
+  useFrame(() => {
+    const group = groupRef.current
+    if (!group) {
+      return
+    }
+
+    group.position.y = buildAnimation
+      ? getBuildYOffsetForAnimation(buildAnimation, performance.now())
+      : 0
+  })
+
+  useLayoutEffect(() => () => {
+    if (groupRef.current) {
+      groupRef.current.position.y = 0
+    }
+  }, [])
+
+  return (
+    <group ref={groupRef}>
+      <ContentPackInstance
+        assetId={entry.assetId}
+        position={entry.position}
+        rotation={entry.rotation}
+        variant={entry.variant}
+        variantKey={entry.variantKey}
+        visibility={entry.visibility}
+        useLineOfSightPostMask={useLineOfSightPostMask}
+        clipBelowGround={buildAnimation !== null}
+        objectProps={entry.objectProps}
+        castShadow={buildAnimation ? false : undefined}
+      />
+    </group>
+  )
+}
+
+function MergedTileBucket({
+  descriptor,
+  sourceScene,
+  useLineOfSightPostMask,
+}: {
+  descriptor: BatchDescriptor
+  sourceScene: THREE.Object3D
+  useLineOfSightPostMask: boolean
+}) {
+  const { entries, usesGpuFog } = descriptor
   const visibility = entries[0]!.visibility
   const receiveShadow = entries[0]!.receiveShadow
-  const meshes = useMemo(
-    () => buildMergedTileGeometryMeshes({
-      sourceScene,
-      placements: entries,
-      transform: entries[0]!.transform,
-    }),
-    [entries, sourceScene],
-  )
-
-  useLayoutEffect(
-    () => () => {
-      meshes.forEach((mesh) => {
-        mesh.geometry.dispose()
-        mesh.material.dispose()
-      })
-    },
-    [meshes],
-  )
-
-  const shouldRenderBase = usesGpuFog || shouldRenderLineOfSightGeometry(visibility, useLineOfSightPostMask)
-  const overlayOpacity = visibility === 'explored' ? 0.6 : 0
+  const useBuildAnimation = entries.some((entry) => entry.buildAnimationStart !== undefined)
   const useBakedLight = entries.some((entry) => entry.bakedLight || entry.bakedLightField)
   const bakedLightField = entries[0]!.bakedLightField ?? null
   const useSecondaryDirectionAttribute = entries.some((entry) => Boolean(entry.bakedLightDirectionSecondary))
+  const meshesRef = useRef<{
+    geometrySignature: string
+    sourceScene: THREE.Object3D
+    meshes: ReturnType<typeof buildMergedTileGeometryMeshes>
+  } | null>(null)
+  const cachedMeshes = meshesRef.current
+  const meshBuildMode =
+    cachedMeshes === null
+      ? 'create'
+      : cachedMeshes.geometrySignature !== descriptor.geometrySignature || cachedMeshes.sourceScene !== sourceScene
+        ? 'rebuild'
+        : 'reuse'
+  const meshes = meshBuildMode === 'reuse' && cachedMeshes
+    ? cachedMeshes.meshes
+    : traceBuildPerf('merged-geometry-build', {
+      bucketKey: descriptor.bucketKey,
+      chunkKey: descriptor.chunkKey,
+      entryCount: entries.length,
+      buildMode: meshBuildMode,
+    }, () => buildMergedTileGeometryMeshes({
+      sourceScene,
+      placements: entries,
+      transform: entries[0]!.transform,
+    }))
+
+  useLayoutEffect(
+    () => {
+      const previous = meshesRef.current
+      if (previous && previous.meshes !== meshes) {
+        previous.meshes.forEach((mesh) => {
+          mesh.geometry.dispose()
+          mesh.material.dispose()
+        })
+      }
+
+      meshesRef.current = {
+        geometrySignature: descriptor.geometrySignature,
+        sourceScene,
+        meshes,
+      }
+
+      return () => {
+        if (meshesRef.current?.meshes !== meshes) {
+          return
+        }
+
+        meshes.forEach((mesh) => {
+          mesh.geometry.dispose()
+          mesh.material.dispose()
+        })
+        meshesRef.current = null
+      }
+    },
+    [descriptor.geometrySignature, meshes, sourceScene],
+  )
+
+  useLayoutEffect(() => {
+    recordBuildPerfEvent('merged-bucket-mount', {
+      bucketKey: descriptor.bucketKey,
+      chunkKey: descriptor.chunkKey,
+      entryCount: entries.length,
+      meshCount: meshes.length,
+      buildMode: meshBuildMode,
+      animated: useBuildAnimation,
+    })
+  }, [descriptor.bucketKey, descriptor.chunkKey, entries.length, meshBuildMode, meshes.length, useBuildAnimation])
+
+  const shouldRenderBase = usesGpuFog || shouldRenderLineOfSightGeometry(visibility, useLineOfSightPostMask)
+  const overlayOpacity = visibility === 'explored' ? 0.6 : 0
   const lightFlickerEnabled = useDungeonStore((state) => state.lightFlickerEnabled)
   const useBakedFlicker = shouldRenderBase
     && lightFlickerEnabled
@@ -205,6 +300,7 @@ function MergedTileBucket({
           key={`base:${mesh.key}`}
           geometry={mesh.geometry}
           material={mesh.material}
+          castShadow={!useBuildAnimation}
           receiveShadow={receiveShadow}
           visibility={visibility}
           variant={entries[0]!.variant}
@@ -226,9 +322,18 @@ function MergedTileBucket({
   )
 }
 
+const MemoizedMergedTileBucket = memo(MergedTileBucket, (previous, next) =>
+  previous.sourceScene === next.sourceScene
+  && previous.useLineOfSightPostMask === next.useLineOfSightPostMask
+  && previous.descriptor.bucketKey === next.descriptor.bucketKey
+  && previous.descriptor.geometrySignature === next.descriptor.geometrySignature
+  && previous.descriptor.renderSignature === next.descriptor.renderSignature,
+)
+
 function MergedTileMesh({
   geometry,
   material,
+  castShadow,
   receiveShadow,
   visibility,
   variant,
@@ -240,6 +345,7 @@ function MergedTileMesh({
 }: {
   geometry: THREE.BufferGeometry
   material: THREE.Material
+  castShadow: boolean
   receiveShadow: boolean
   visibility: PlayVisibilityState
   variant: 'floor' | 'wall'
@@ -251,6 +357,7 @@ function MergedTileMesh({
 }) {
   const ref = useRef<THREE.Mesh>(null)
   const fogOfWar = useFogOfWarRuntime()
+  const clipMinY = getBelowGroundClipMinY(variant)
 
   // Create a shared depth material for shadows to avoid WebGPU pipeline issues
   const depthMaterial = useMemo(() => {
@@ -260,13 +367,17 @@ function MergedTileMesh({
   }, [])
 
   useLayoutEffect(() => {
+    const hasBuildAnimation = geometry.getAttribute('buildAnimationStart') !== undefined
     if (ref.current) {
-      // Set custom shadow materials to avoid WebGPU crashes with cloned materials
-      ref.current.customDepthMaterial = depthMaterial
+      // Set custom shadow materials to avoid WebGPU crashes with cloned materials.
+      ref.current.customDepthMaterial = castShadow ? depthMaterial : undefined
     }
-  }, [visibility, depthMaterial])
+    applyBelowGroundClipToMaterial(depthMaterial, hasBuildAnimation, clipMinY)
+  }, [castShadow, clipMinY, depthMaterial, geometry, visibility])
 
   useLayoutEffect(() => {
+    const hasBuildAnimation = geometry.getAttribute('buildAnimationStart') !== undefined
+    applyBuildAnimationToMaterial(material, hasBuildAnimation, clipMinY)
     applyBakedLightToMaterial(
       material,
       useBakedLight
@@ -288,14 +399,14 @@ function MergedTileMesh({
         useCellAttribute: useGpuFog && variant === 'floor',
       },
     )
-  }, [bakedLightField, fogOfWar, material, useBakedFlicker, useBakedLight, useGpuFog, useSecondaryDirectionAttribute, variant])
+  }, [bakedLightField, clipMinY, fogOfWar, geometry, material, useBakedFlicker, useBakedLight, useGpuFog, useSecondaryDirectionAttribute, variant])
 
   return (
     <mesh
       ref={ref}
       geometry={geometry}
       material={material}
-      castShadow={true}
+      castShadow={castShadow}
       receiveShadow={receiveShadow}
     />
   )
@@ -335,4 +446,12 @@ function MergedTintMesh({
       />
     </mesh>
   )
+}
+
+function subtractStringSets(
+  values: readonly string[],
+  valuesToRemove: readonly string[],
+) {
+  const removals = new Set(valuesToRemove)
+  return values.filter((value) => !removals.has(value))
 }

@@ -7,6 +7,7 @@
  */
 
 import { useDungeonStore } from '../../store/useDungeonStore'
+import { requestContinuousRender } from '../../rendering/renderActivity'
 
 export const CAMERA_BUMP  = 3     // world units the camera travels on transition
 const FADE_OUT_DURATION   = 0.28  // seconds to fade overlay to black
@@ -54,4 +55,5 @@ export function requestFloorTransition(targetId: string): void {
   transition.wantedCameraOffset  = transition.direction * CAMERA_BUMP
   transition.actualCameraOffset  = 0
   transition.phase               = 'out'
+  requestContinuousRender('floor-transition')
 }

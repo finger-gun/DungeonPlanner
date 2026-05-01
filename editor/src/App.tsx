@@ -35,6 +35,13 @@ import { ChevronLeft, ChevronRight, RotateCcw } from 'lucide-react'
 import { RendererErrorBoundary } from './components/RendererErrorBoundary'
 import { WebGpuRequiredNotice } from './components/WebGpuRequiredNotice'
 import { getWebGpuSupportMessage, isWebGpuSupported } from './rendering/webgpuSupport'
+import { useContinuousRenderReasons } from './rendering/renderActivity'
+import {
+  clearBuildTraceEntries,
+  type BuildTraceDetail,
+  useBuildTraceEntries,
+  syncBuildTraceObservers,
+} from './performance/runtimeBuildTrace'
 import {
   copyEditorDungeon,
   deleteEditorDungeon,
@@ -288,11 +295,15 @@ function App() {
   const showLensFocusDebugPoint = useDungeonStore((state) => state.showLensFocusDebugPoint)
   const showProjectionDebugMesh = useDungeonStore((state) => state.showProjectionDebugMesh)
   const showPropProbeDebug = useDungeonStore((state) => state.showPropProbeDebug)
+  const slowBuildAnimationDebug = useDungeonStore((state) => state.slowBuildAnimationDebug)
+  const buildPerformanceTracingEnabled = useDungeonStore((state) => state.buildPerformanceTracingEnabled)
   const setShowLosDebugMask = useDungeonStore((state) => state.setShowLosDebugMask)
   const setShowLosDebugRays = useDungeonStore((state) => state.setShowLosDebugRays)
   const setShowLensFocusDebugPoint = useDungeonStore((state) => state.setShowLensFocusDebugPoint)
   const setShowProjectionDebugMesh = useDungeonStore((state) => state.setShowProjectionDebugMesh)
   const setShowPropProbeDebug = useDungeonStore((state) => state.setShowPropProbeDebug)
+  const setSlowBuildAnimationDebug = useDungeonStore((state) => state.setSlowBuildAnimationDebug)
+  const setBuildPerformanceTracingEnabled = useDungeonStore((state) => state.setBuildPerformanceTracingEnabled)
   const debugAssetId = getDebugPanelAssetId({
     tool,
     selectedAssetIds,
@@ -309,6 +320,10 @@ function App() {
   const showSettingsPanel = sidebarPanel === 'settings'
   const sidebarVisible = sidebarOpen && (!isPlayMode || showSettingsPanel)
   const cameraRightOffset = sidebarVisible ? 400 : 16
+
+  useEffect(() => {
+    syncBuildTraceObservers()
+  }, [buildPerformanceTracingEnabled])
 
   const onWindowKeyDown = useEffectEvent((event: KeyboardEvent) => {
     if (event.ctrlKey && event.shiftKey && event.key === 'F12') {
@@ -808,17 +823,21 @@ function App() {
               clearExploredCells={clearExploredCells}
               showLosDebugMask={showLosDebugMask}
             showLosDebugRays={showLosDebugRays}
-            showLensFocusDebugPoint={showLensFocusDebugPoint}
-            showProjectionDebugMesh={showProjectionDebugMesh}
-            showPropProbeDebug={showPropProbeDebug}
-            setShowLosDebugMask={setShowLosDebugMask}
-            setShowLosDebugRays={setShowLosDebugRays}
-            setShowLensFocusDebugPoint={setShowLensFocusDebugPoint}
-            setShowProjectionDebugMesh={setShowProjectionDebugMesh}
-            setShowPropProbeDebug={setShowPropProbeDebug}
-            debugAssetName={debugAsset?.name ?? null}
-            debugAssetSourcePath={debugAssetSourcePath}
-            debugAssetSourceLink={debugAssetSourceLink}
+              showLensFocusDebugPoint={showLensFocusDebugPoint}
+              showProjectionDebugMesh={showProjectionDebugMesh}
+              showPropProbeDebug={showPropProbeDebug}
+              slowBuildAnimationDebug={slowBuildAnimationDebug}
+              buildPerformanceTracingEnabled={buildPerformanceTracingEnabled}
+              setShowLosDebugMask={setShowLosDebugMask}
+              setShowLosDebugRays={setShowLosDebugRays}
+              setShowLensFocusDebugPoint={setShowLensFocusDebugPoint}
+              setShowProjectionDebugMesh={setShowProjectionDebugMesh}
+              setShowPropProbeDebug={setShowPropProbeDebug}
+              setSlowBuildAnimationDebug={setSlowBuildAnimationDebug}
+              setBuildPerformanceTracingEnabled={setBuildPerformanceTracingEnabled}
+              debugAssetName={debugAsset?.name ?? null}
+              debugAssetSourcePath={debugAssetSourcePath}
+              debugAssetSourceLink={debugAssetSourceLink}
             />
           )}
 
@@ -976,11 +995,15 @@ function DebugVisibilityPanel({
   showLensFocusDebugPoint,
   showProjectionDebugMesh,
   showPropProbeDebug,
+  slowBuildAnimationDebug,
+  buildPerformanceTracingEnabled,
   setShowLosDebugMask,
   setShowLosDebugRays,
   setShowLensFocusDebugPoint,
   setShowProjectionDebugMesh,
   setShowPropProbeDebug,
+  setSlowBuildAnimationDebug,
+  setBuildPerformanceTracingEnabled,
   debugAssetName,
   debugAssetSourcePath,
   debugAssetSourceLink,
@@ -994,15 +1017,23 @@ function DebugVisibilityPanel({
   showLensFocusDebugPoint: boolean
   showProjectionDebugMesh: boolean
   showPropProbeDebug: boolean
+  slowBuildAnimationDebug: boolean
+  buildPerformanceTracingEnabled: boolean
   setShowLosDebugMask: (show: boolean) => void
   setShowLosDebugRays: (show: boolean) => void
   setShowLensFocusDebugPoint: (show: boolean) => void
   setShowProjectionDebugMesh: (show: boolean) => void
   setShowPropProbeDebug: (show: boolean) => void
+  setSlowBuildAnimationDebug: (show: boolean) => void
+  setBuildPerformanceTracingEnabled: (show: boolean) => void
   debugAssetName: string | null
   debugAssetSourcePath: string | null
   debugAssetSourceLink: string | null
 }) {
+  const traceEntries = useBuildTraceEntries()
+  const renderReasons = useContinuousRenderReasons()
+  const recentTraceEntries = [...traceEntries].reverse().slice(0, 6)
+
   return (
     <aside
       data-testid="debug-visibility-panel"
@@ -1053,6 +1084,57 @@ function DebugVisibilityPanel({
           pressed={showPropProbeDebug}
           onClick={() => setShowPropProbeDebug(!showPropProbeDebug)}
         />
+        <DebugToggleButton
+          label="Slow build animation x10"
+          pressed={slowBuildAnimationDebug}
+          onClick={() => setSlowBuildAnimationDebug(!slowBuildAnimationDebug)}
+        />
+        <DebugToggleButton
+          label="Trace build performance"
+          pressed={buildPerformanceTracingEnabled}
+          onClick={() => setBuildPerformanceTracingEnabled(!buildPerformanceTracingEnabled)}
+        />
+      </div>
+
+      <div className="rounded-xl border border-stone-800 bg-stone-900/90 p-3">
+        <div className="flex items-center justify-between gap-3">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-stone-400">
+            Build tracing
+          </p>
+          <button
+            type="button"
+            onClick={clearBuildTraceEntries}
+            disabled={traceEntries.length === 0}
+            className="rounded-lg border border-stone-700 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-stone-300 transition hover:border-stone-500 hover:text-stone-100 disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            Clear
+          </button>
+        </div>
+        <p className="mt-2 text-xs text-stone-400">
+          Capture a Chrome Performance trace and look for <span className="font-mono text-stone-200">dp:*</span> spans.
+        </p>
+        <p className="mt-2 text-xs text-stone-500">
+          Active render: {renderReasons.length > 0 ? renderReasons.join(', ') : 'none'}
+        </p>
+        <div className="mt-3 flex flex-col gap-2">
+          {recentTraceEntries.length > 0 ? recentTraceEntries.map((entry) => (
+            <div key={entry.id} className="rounded-lg border border-stone-800 bg-stone-950/70 px-2.5 py-2">
+              <div className="flex items-center justify-between gap-3">
+                <span className="truncate text-xs font-medium text-stone-200">{entry.name}</span>
+                <span className="shrink-0 font-mono text-[11px] text-amber-200">
+                  {entry.duration.toFixed(1)} ms
+                </span>
+              </div>
+              {entry.detail && (
+                <p className="mt-1 line-clamp-2 text-[11px] text-stone-500">
+                  {formatBuildTraceDetail(entry.detail)}
+                </p>
+              )}
+            </div>
+          )) : (
+            <p className="text-xs text-stone-500">No trace events yet.</p>
+          )}
+        </div>
       </div>
 
       <div className="rounded-xl border border-stone-800 bg-stone-900/90 p-3">
@@ -1103,4 +1185,18 @@ function DebugToggleButton({
       <span className="text-xs uppercase tracking-[0.22em]">{pressed ? 'On' : 'Off'}</span>
     </button>
   )
+}
+
+function formatBuildTraceDetail(detail: BuildTraceDetail) {
+  return Object.entries(detail)
+    .flatMap(([key, value]) => {
+      if (value === undefined || value === null || value === '') {
+        return []
+      }
+
+      const text = Array.isArray(value) ? value.join('|') : String(value)
+      return [`${key}=${text}`]
+    })
+    .slice(0, 4)
+    .join(' · ')
 }
