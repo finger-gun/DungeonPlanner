@@ -30,7 +30,7 @@ export function shouldEnableActiveFloorPostProcessing({
   lensEnabled,
   pixelateEnabled,
   tool,
-  selection,
+  selection: _selection,
 }: {
   activeCameraMode: CameraPreset
   lensEnabled: boolean
@@ -44,5 +44,5 @@ export function shouldEnableActiveFloorPostProcessing({
     pixelateEnabled,
   })
 
-  return applyBlur || applyPixelate || (tool === 'select' && Boolean(selection))
+  return applyBlur || applyPixelate || tool === 'select'
 }

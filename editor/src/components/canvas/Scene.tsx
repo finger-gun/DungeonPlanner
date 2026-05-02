@@ -39,6 +39,7 @@ import { PropProbeDebugOverlay } from './PropProbeDebugOverlay'
 import { pruneRuntimePropLightingCache } from '../../rendering/propLightingCache'
 import { getObjectInstanceScale, getObjectTintColor } from '../../store/objectAppearance'
 import { SelectionContextualUi } from './SelectionContextualUi'
+import { WorldRaycastAcceleration } from './WorldRaycastAcceleration'
 import {
   ACTIVE_FLOOR_RENDER_DOMAINS,
   useActiveFloorSnapshot,
@@ -807,29 +808,31 @@ function FloorContent({ startY = 0 }: { startY?: number }) {
         {movementRange && (
           <MovementRangeOverlay cells={movementRange.reachableCells} />
         )}
-        <DungeonRoom
-          derived={floorDerived}
-          visibility={visibility}
-          bakedLightField={bakedFloorLightField}
-        />
+        <WorldRaycastAcceleration>
+          <DungeonRoom
+            derived={floorDerived}
+            visibility={visibility}
+            bakedLightField={bakedFloorLightField}
+          />
+          {floorDerived.topLevelObjects.map((object) => (
+            dragState?.objectId === object.id ? null : (
+              <DungeonObject
+                key={object.id}
+                object={object}
+                visibility={visibility}
+                sourceScopeKey={activeFloorId}
+                bakedLightField={bakedFloorLightField}
+                childrenByParent={floorDerived.childrenByParent}
+                onPlayDragStart={startDrag}
+                playerAnimationState={releaseAnimationIds[object.id] ? 'release' : undefined}
+              />
+            )
+          ))}
+        </WorldRaycastAcceleration>
         <RoomResizeOverlay />
         {showPropProbeDebug && (
           <PropProbeDebugOverlay floorId={activeFloorId} />
         )}
-        {floorDerived.topLevelObjects.map((object) => (
-          dragState?.objectId === object.id ? null : (
-            <DungeonObject
-              key={object.id}
-              object={object}
-              visibility={visibility}
-              sourceScopeKey={activeFloorId}
-              bakedLightField={bakedFloorLightField}
-              childrenByParent={floorDerived.childrenByParent}
-              onPlayDragStart={startDrag}
-              playerAnimationState={releaseAnimationIds[object.id] ? 'release' : undefined}
-            />
-          )
-        ))}
         <SelectionContextualUi />
         {dragState && (
           <group position={dragState.displayPosition} rotation={dragState.rotation} scale={dragPreviewScale}>

@@ -65,7 +65,8 @@ export function WebGPUPostProcessing() {
   const focusTargetPointRef = useRef(new THREE.Vector3())
   const focusPointInitializedRef = useRef(false)
 
-  const showSelectionOutline = tool === 'select' && Boolean(selection)
+  const enableSelectionOutlinePass = tool === 'select'
+  const showSelectionOutline = enableSelectionOutlinePass && Boolean(selection)
 
   useEffect(() => {
     const clearOutlineProxy = () => {
@@ -106,7 +107,7 @@ export function WebGPUPostProcessing() {
     activeCameraMode,
     lensEnabled: settings.enabled,
     pixelateEnabled: settings.pixelateEnabled,
-    showSelectionOutline,
+    outlinePassEnabled: enableSelectionOutlinePass,
   }, () => {
     if (!renderer || !scene || !camera) return
 
@@ -146,9 +147,9 @@ export function WebGPUPostProcessing() {
      const outlineCamera = (camera as any).clone() as THREE.Camera
      outlineCameraRef.current = outlineCamera
 
-     if (showSelectionOutline) {
-       outputNode = alphaOver(outputNode, selectionOutline(outlineSceneRef.current, outlineCamera))
-     }
+      if (enableSelectionOutlinePass) {
+        outputNode = alphaOver(outputNode, selectionOutline(outlineSceneRef.current, outlineCamera))
+      }
 
     visibleLosCameraRef.current = null
     exploredLosCameraRef.current = null
@@ -168,7 +169,7 @@ export function WebGPUPostProcessing() {
       visibleLosCameraRef.current = null
       exploredLosCameraRef.current = null
     }
-  }), [camera, renderer, scene, settings.enabled, settings.pixelateEnabled, settings.pixelSize, activeCameraMode, showSelectionOutline])
+  }), [camera, renderer, scene, settings.enabled, settings.pixelateEnabled, settings.pixelSize, activeCameraMode, enableSelectionOutlinePass])
 
   // Multi-frame delay after each pipeline rebuild — lets Three.js begin WebGPU
   // shader compilation (especially for complex scenes with many lights) before
@@ -192,7 +193,7 @@ export function WebGPUPostProcessing() {
       cancelAnimationFrame(rafId)
       pipelineReadyRef.current = false
     }
-  }, [camera, renderer, scene, settings.enabled, settings.pixelateEnabled, settings.pixelSize, activeCameraMode, showSelectionOutline, invalidate])
+  }, [camera, renderer, scene, settings.enabled, settings.pixelateEnabled, settings.pixelSize, activeCameraMode, enableSelectionOutlinePass, invalidate])
 
   // Update shader uniforms only when settings actually change — not every frame.
   useEffect(() => {
