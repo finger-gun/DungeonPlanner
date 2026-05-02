@@ -147,9 +147,9 @@ export function WebGPUPostProcessing() {
      const outlineCamera = (camera as any).clone() as THREE.Camera
      outlineCameraRef.current = outlineCamera
 
-      if (enableSelectionOutlinePass) {
-        outputNode = alphaOver(outputNode, selectionOutline(outlineSceneRef.current, outlineCamera))
-      }
+     if (enableSelectionOutlinePass) {
+       outputNode = alphaOver(outputNode, selectionOutline(outlineSceneRef.current, outlineCamera))
+     }
 
     visibleLosCameraRef.current = null
     exploredLosCameraRef.current = null
@@ -165,7 +165,7 @@ export function WebGPUPostProcessing() {
       ;(postProcessing as unknown as { dispose?: () => void }).dispose?.()
       postProcessingRef.current = null
       pipelineReadyRef.current = false
-      outlineCameraRef.current  = null
+      outlineCameraRef.current = null
       visibleLosCameraRef.current = null
       exploredLosCameraRef.current = null
     }

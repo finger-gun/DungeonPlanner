@@ -23,7 +23,7 @@ vi.mock('@react-three/drei', () => ({
 }))
 
 describe('WorldRaycastAcceleration', () => {
-  it('wraps children in a BVH without changing hit semantics to first-hit-only', () => {
+  it('wraps children in a BVH using first-hit-only ray queries', () => {
     render(
       <WorldRaycastAcceleration>
         <span>world content</span>
@@ -31,7 +31,7 @@ describe('WorldRaycastAcceleration', () => {
     )
 
     expect(screen.getByTestId('world-bvh')).toHaveAttribute('data-enabled', 'true')
-    expect(screen.getByTestId('world-bvh')).toHaveAttribute('data-first-hit-only', 'false')
+    expect(screen.getByTestId('world-bvh')).toHaveAttribute('data-first-hit-only', 'true')
     expect(screen.getByText('world content')).toBeInTheDocument()
   })
 })
