@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useRef } from 'react'
 import { useThree } from '@react-three/fiber'
 import * as THREE from 'three'
-import { buildMergedTileGeometryMeshes } from './batchedTileGeometry'
 import { buildBatchDescriptors } from './batchDescriptors'
 import type { StaticTileEntry } from './BatchedTileEntries'
 import { shouldRenderLineOfSightGeometry } from './losRendering'
@@ -9,6 +8,11 @@ import { applyFogOfWarToMaterial, useFogOfWarRuntime } from './fogOfWar'
 import { applyBakedLightToMaterial } from './bakedLightMaterial'
 import { applyBuildAnimationToMaterial, getBelowGroundClipMinY } from './buildAnimationMaterial'
 import { useGLTF } from '../../rendering/useGLTF'
+import {
+  disposeInstancedMeshEntries,
+  makeInstancedMeshEntries,
+  updateInstancedMeshEntries,
+} from './instancedTileMesh'
 import { startBuildPerfSpan, traceBuildPerf } from '../../performance/runtimeBuildTrace'
 import {
   getHeldBuildBatchState,
@@ -173,11 +177,8 @@ export function BuildBucketPrewarmController({
         return
       }
 
-      const descriptorMeshes = buildMergedTileGeometryMeshes({
-        sourceScene,
-        placements: descriptor.entries,
-        transform: descriptor.entries[0]!.transform,
-      })
+      const descriptorMeshes = makeInstancedMeshEntries(sourceScene, descriptor.entries[0]!.transform)
+      updateInstancedMeshEntries(descriptorMeshes, descriptor.entries)
 
       const firstEntry = descriptor.entries[0]!
       const useBuildAnimation = descriptor.entries.some((entry) => entry.buildAnimationStart !== undefined)
@@ -192,21 +193,21 @@ export function BuildBucketPrewarmController({
         && Boolean(bakedLightField?.flickerLightFieldTextures.some((texture) => texture))
 
       if (!shouldRenderBase) {
-        descriptorMeshes.forEach((mesh) => {
-          mesh.geometry.dispose()
-          mesh.material.dispose()
-        })
+        disposeInstancedMeshEntries(descriptorMeshes)
         return
       }
 
-      descriptorMeshes.forEach((mesh) => {
+      descriptorMeshes.forEach((meshEntry) => {
+        const material = Array.isArray(meshEntry.instancedMesh.material)
+          ? meshEntry.instancedMesh.material[0]!
+          : meshEntry.instancedMesh.material
         applyBuildAnimationToMaterial(
-          mesh.material,
-          mesh.geometry.getAttribute('buildAnimationStart') !== undefined,
+          material,
+          useBuildAnimation,
           getBelowGroundClipMinY(firstEntry.variant),
         )
         applyBakedLightToMaterial(
-          mesh.material,
+          material,
           useBakedLight
             ? {
               useLightAttribute: true,
@@ -220,7 +221,7 @@ export function BuildBucketPrewarmController({
             : null,
         )
         applyFogOfWarToMaterial(
-          mesh.material,
+          material,
           descriptor.usesGpuFog ? fogOfWar : null,
           {
             variant: firstEntry.variant,
@@ -228,7 +229,7 @@ export function BuildBucketPrewarmController({
           },
         )
 
-        const prewarmMesh = new THREE.Mesh(mesh.geometry, mesh.material)
+        const prewarmMesh = meshEntry.instancedMesh
         prewarmMesh.castShadow = !useBuildAnimation
         prewarmMesh.receiveShadow = firstEntry.receiveShadow
         prewarmMesh.frustumCulled = false
@@ -241,11 +242,8 @@ export function BuildBucketPrewarmController({
         }
 
         prewarmScene.add(prewarmMesh)
-        resourcesToDispose.push(() => {
-          mesh.geometry.dispose()
-          mesh.material.dispose()
-        })
       })
+      resourcesToDispose.push(() => disposeInstancedMeshEntries(descriptorMeshes))
     })
 
     const runPrewarm = async () => {

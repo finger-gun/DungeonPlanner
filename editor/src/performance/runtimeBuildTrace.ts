@@ -120,6 +120,43 @@ export function recordBuildPerfEvent(
   })
 }
 
+export function recordBuildPerfDuration(
+  name: string,
+  detail: BuildTraceDetail | null | undefined,
+  startTime: number,
+  duration: number,
+) {
+  if (!isBuildTracingEnabled()) {
+    return
+  }
+
+  syncBuildTraceObservers()
+  const entryId = nextEntryId++
+  const traceName = `dp:${name}`
+
+  try {
+    performance.measure(traceName, {
+      start: startTime,
+      duration,
+    })
+  } catch {
+    const startMark = `${traceName}:${entryId}:start`
+    const endMark = `${traceName}:${entryId}:end`
+    performance.mark(startMark)
+    performance.mark(endMark)
+    performance.measure(traceName, startMark, endMark)
+  }
+
+  pushTraceEntry({
+    id: entryId,
+    kind: 'span',
+    name: traceName,
+    duration,
+    startTime,
+    detail: addRenderReasons(detail),
+  })
+}
+
 export function clearBuildTraceEntries() {
   if (entries.length === 0) {
     return

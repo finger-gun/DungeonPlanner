@@ -35,7 +35,6 @@ function buildBucketKey(
     entry.assetUrl,
     entry.transformKey,
     usesGpuFog ? `gpu-los:${entry.variant}` : entry.visibility,
-    entry.buildAnimationStart === undefined ? 'static-build' : 'animated-build',
     entry.receiveShadow ? 'shadow' : 'flat',
     entry.bakedLightDirectionSecondary ? 'double-direction' : 'single-direction',
   ].join('|')

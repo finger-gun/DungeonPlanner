@@ -238,6 +238,9 @@ export function applyFogOfWarToMaterial(
     ? `${options.variant}:${options.useCellAttribute ? 'cell-attribute' : 'world'}:${options.cell?.join(':') ?? 'dynamic'}`
     : 'off'
   const previousFogSignature = fogMaterial.userData.fogOfWarSignature ?? null
+  if (previousFogSignature === nextFogSignature) {
+    return
+  }
 
   if (runtime) {
     if (!Object.prototype.hasOwnProperty.call(fogMaterial.userData, 'fogOfWarBaseColorNode')) {

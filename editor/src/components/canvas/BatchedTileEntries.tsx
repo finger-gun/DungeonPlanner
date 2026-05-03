@@ -4,7 +4,7 @@ import * as THREE from 'three'
 import type { PlayVisibilityState } from './playVisibility'
 import { ContentPackInstance } from './ContentPackInstance'
 import { shouldRenderLineOfSightGeometry } from './losRendering'
-import { buildMergedTileGeometryMeshes, type BatchedTilePlacement } from './batchedTileGeometry'
+import type { BatchedTilePlacement } from './batchedTileGeometry'
 import { useGLTF } from '../../rendering/useGLTF'
 import { applyFogOfWarToMaterial, useFogOfWarRuntime } from './fogOfWar'
 import { applyBakedLightToMaterial } from './bakedLightMaterial'
@@ -18,6 +18,12 @@ import {
   getBelowGroundClipMinY,
 } from './buildAnimationMaterial'
 import { recordBuildPerfEvent, traceBuildPerf } from '../../performance/runtimeBuildTrace'
+import {
+  disposeInstancedMeshEntries,
+  makeInstancedMeshEntries,
+  updateInstancedMeshEntries,
+  type InstancedMeshEntry,
+} from './instancedTileMesh'
 
 export type StaticTileEntry = BatchedTilePlacement & {
   assetId: string | null
@@ -138,7 +144,7 @@ function ResolvedBatchedTileEntries({
         }
 
         return (
-          <MemoizedMergedTileBucket
+          <MemoizedInstancedTileBucket
             key={descriptor.bucketKey}
             descriptor={descriptor}
             sourceScene={scene}
@@ -203,7 +209,7 @@ function FallbackTileEntry({
   )
 }
 
-function MergedTileBucket({
+function InstancedTileBucket({
   descriptor,
   sourceScene,
   useLineOfSightPostMask,
@@ -219,72 +225,45 @@ function MergedTileBucket({
   const useBakedLight = entries.some((entry) => entry.bakedLight || entry.bakedLightField)
   const bakedLightField = entries[0]!.bakedLightField ?? null
   const useSecondaryDirectionAttribute = entries.some((entry) => Boolean(entry.bakedLightDirectionSecondary))
-  const meshesRef = useRef<{
-    geometrySignature: string
-    sourceScene: THREE.Object3D
-    meshes: ReturnType<typeof buildMergedTileGeometryMeshes>
-  } | null>(null)
-  const cachedMeshes = meshesRef.current
-  const meshBuildMode =
-    cachedMeshes === null
-      ? 'create'
-      : cachedMeshes.geometrySignature !== descriptor.geometrySignature || cachedMeshes.sourceScene !== sourceScene
-        ? 'rebuild'
-        : 'reuse'
-  const meshes = meshBuildMode === 'reuse' && cachedMeshes
-    ? cachedMeshes.meshes
-    : traceBuildPerf('merged-geometry-build', {
+  const depthMaterialsRef = useRef(new Map<string, THREE.MeshDepthMaterial>())
+  const fogOfWar = useFogOfWarRuntime()
+  const meshEntries = useMemo(
+    () => traceBuildPerf('instanced-bucket-create', {
       bucketKey: descriptor.bucketKey,
       chunkKey: descriptor.chunkKey,
       entryCount: entries.length,
-      buildMode: meshBuildMode,
-    }, () => buildMergedTileGeometryMeshes({
-      sourceScene,
-      placements: entries,
-      transform: entries[0]!.transform,
-    }))
+    }, () => makeInstancedMeshEntries(sourceScene, entries[0]!.transform)),
+    // `bucketKey` includes the asset URL and transform key. Entry changes only
+    // update per-instance buffers and should not recreate GPU mesh resources.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [descriptor.bucketKey, descriptor.chunkKey, sourceScene],
+  )
 
   useLayoutEffect(
     () => {
-      const previous = meshesRef.current
-      if (previous && previous.meshes !== meshes) {
-        previous.meshes.forEach((mesh) => {
-          mesh.geometry.dispose()
-          mesh.material.dispose()
-        })
-      }
-
-      meshesRef.current = {
-        geometrySignature: descriptor.geometrySignature,
-        sourceScene,
-        meshes,
-      }
-
+      const depthMaterials = depthMaterialsRef.current
       return () => {
-        if (meshesRef.current?.meshes !== meshes) {
-          return
-        }
-
-        meshes.forEach((mesh) => {
-          mesh.geometry.dispose()
-          mesh.material.dispose()
-        })
-        meshesRef.current = null
+        disposeInstancedMeshEntries(meshEntries)
+        depthMaterials.forEach((material) => material.dispose())
+        depthMaterials.clear()
       }
     },
-    [descriptor.geometrySignature, meshes, sourceScene],
+    [meshEntries],
   )
 
   useLayoutEffect(() => {
-    recordBuildPerfEvent('merged-bucket-mount', {
+    updateInstancedMeshEntries(meshEntries, entries)
+  }, [descriptor.geometrySignature, entries, meshEntries])
+
+  useLayoutEffect(() => {
+    recordBuildPerfEvent('instanced-bucket-update', {
       bucketKey: descriptor.bucketKey,
       chunkKey: descriptor.chunkKey,
       entryCount: entries.length,
-      meshCount: meshes.length,
-      buildMode: meshBuildMode,
+      meshCount: meshEntries.length,
       animated: useBuildAnimation,
     })
-  }, [descriptor.bucketKey, descriptor.chunkKey, entries.length, meshBuildMode, meshes.length, useBuildAnimation])
+  }, [descriptor.bucketKey, descriptor.chunkKey, entries.length, meshEntries.length, useBuildAnimation])
 
   const shouldRenderBase = usesGpuFog || shouldRenderLineOfSightGeometry(visibility, useLineOfSightPostMask)
   const overlayOpacity = visibility === 'explored' ? 0.6 : 0
@@ -292,37 +271,93 @@ function MergedTileBucket({
   const useBakedFlicker = shouldRenderBase
     && lightFlickerEnabled
     && Boolean(bakedLightField?.flickerLightFieldTextures.some((texture) => texture))
+  const clipMinY = getBelowGroundClipMinY(entries[0]!.variant)
+
+  useLayoutEffect(() => {
+    const activeMeshKeys = new Set(meshEntries.map((entry) => entry.meshKey))
+    depthMaterialsRef.current.forEach((material, meshKey) => {
+      if (activeMeshKeys.has(meshKey)) {
+        return
+      }
+
+      material.dispose()
+      depthMaterialsRef.current.delete(meshKey)
+    })
+
+    meshEntries.forEach((entry) => {
+      const material = getInstancedMaterial(entry)
+      applyBuildAnimationToMaterial(material, useBuildAnimation, clipMinY)
+      applyBakedLightToMaterial(
+        material,
+        useBakedLight
+          ? {
+            useLightAttribute: true,
+            useDirectionAttribute: entries[0]!.variant === 'wall',
+            useSecondaryDirectionAttribute: entries[0]!.variant === 'wall' && useSecondaryDirectionAttribute,
+            useTopSurfaceMask: entries[0]!.variant === 'floor',
+            useFlicker: useBakedFlicker,
+            lightField: bakedLightField,
+          }
+          : null,
+      )
+      applyFogOfWarToMaterial(
+        material,
+        usesGpuFog ? fogOfWar : null,
+        {
+          variant: entries[0]!.variant,
+          useCellAttribute: usesGpuFog && entries[0]!.variant === 'floor',
+        },
+      )
+
+      let depthMaterial = depthMaterialsRef.current.get(entry.meshKey)
+      if (!depthMaterial) {
+        depthMaterial = new THREE.MeshDepthMaterial()
+        depthMaterial.depthPacking = THREE.RGBADepthPacking
+        depthMaterialsRef.current.set(entry.meshKey, depthMaterial)
+      }
+      applyBelowGroundClipToMaterial(depthMaterial, useBuildAnimation, clipMinY)
+
+      entry.instancedMesh.castShadow = !useBuildAnimation
+      entry.instancedMesh.receiveShadow = receiveShadow
+      entry.instancedMesh.customDepthMaterial = entry.instancedMesh.castShadow ? depthMaterial : undefined
+      entry.tintMesh.visible = visibility === 'explored'
+      setTintOpacity(entry.tintMesh, overlayOpacity)
+    })
+  }, [
+    bakedLightField,
+    clipMinY,
+    entries,
+    fogOfWar,
+    meshEntries,
+    overlayOpacity,
+    receiveShadow,
+    useBakedFlicker,
+    useBakedLight,
+    useBuildAnimation,
+    useSecondaryDirectionAttribute,
+    usesGpuFog,
+    visibility,
+  ])
 
   return (
     <>
-      {shouldRenderBase && meshes.map((mesh) => (
-        <MergedTileMesh
-          key={`base:${mesh.key}`}
-          geometry={mesh.geometry}
-          material={mesh.material}
-          castShadow={!useBuildAnimation}
-          receiveShadow={receiveShadow}
-          visibility={visibility}
-          variant={entries[0]!.variant}
-          bakedLightField={bakedLightField}
-          useBakedLight={useBakedLight}
-          useBakedFlicker={useBakedFlicker}
-          useSecondaryDirectionAttribute={useSecondaryDirectionAttribute}
-          useGpuFog={usesGpuFog}
-          />
-        ))}
-      {!usesGpuFog && visibility === 'explored' && meshes.map((mesh) => (
-        <MergedTintMesh
-          key={`overlay:${mesh.key}`}
-          geometry={mesh.geometry}
-          opacity={overlayOpacity}
+      {shouldRenderBase && meshEntries.map((entry) => (
+        <primitive
+          key={`base:${entry.meshKey}`}
+          object={entry.instancedMesh}
+        />
+      ))}
+      {!usesGpuFog && visibility === 'explored' && meshEntries.map((entry) => (
+        <primitive
+          key={`overlay:${entry.meshKey}`}
+          object={entry.tintMesh}
         />
       ))}
     </>
   )
 }
 
-const MemoizedMergedTileBucket = memo(MergedTileBucket, (previous, next) =>
+const MemoizedInstancedTileBucket = memo(InstancedTileBucket, (previous, next) =>
   previous.sourceScene === next.sourceScene
   && previous.useLineOfSightPostMask === next.useLineOfSightPostMask
   && previous.descriptor.bucketKey === next.descriptor.bucketKey
@@ -330,122 +365,21 @@ const MemoizedMergedTileBucket = memo(MergedTileBucket, (previous, next) =>
   && previous.descriptor.renderSignature === next.descriptor.renderSignature,
 )
 
-function MergedTileMesh({
-  geometry,
-  material,
-  castShadow,
-  receiveShadow,
-  visibility,
-  variant,
-  bakedLightField,
-  useBakedLight,
-  useBakedFlicker,
-  useSecondaryDirectionAttribute,
-  useGpuFog,
-}: {
-  geometry: THREE.BufferGeometry
-  material: THREE.Material
-  castShadow: boolean
-  receiveShadow: boolean
-  visibility: PlayVisibilityState
-  variant: 'floor' | 'wall'
-  bakedLightField: BakedFloorLightField | null
-  useBakedLight: boolean
-  useBakedFlicker: boolean
-  useSecondaryDirectionAttribute: boolean
-  useGpuFog: boolean
-}) {
-  const ref = useRef<THREE.Mesh>(null)
-  const fogOfWar = useFogOfWarRuntime()
-  const clipMinY = getBelowGroundClipMinY(variant)
-
-  // Create a shared depth material for shadows to avoid WebGPU pipeline issues
-  const depthMaterial = useMemo(() => {
-    const mat = new THREE.MeshDepthMaterial()
-    mat.depthPacking = THREE.RGBADepthPacking
-    return mat
-  }, [])
-
-  useLayoutEffect(() => {
-    const hasBuildAnimation = geometry.getAttribute('buildAnimationStart') !== undefined
-    if (ref.current) {
-      // Set custom shadow materials to avoid WebGPU crashes with cloned materials.
-      ref.current.customDepthMaterial = castShadow ? depthMaterial : undefined
-    }
-    applyBelowGroundClipToMaterial(depthMaterial, hasBuildAnimation, clipMinY)
-  }, [castShadow, clipMinY, depthMaterial, geometry, visibility])
-
-  useLayoutEffect(() => {
-    const hasBuildAnimation = geometry.getAttribute('buildAnimationStart') !== undefined
-    applyBuildAnimationToMaterial(material, hasBuildAnimation, clipMinY)
-    applyBakedLightToMaterial(
-      material,
-      useBakedLight
-        ? {
-          useLightAttribute: true,
-          useDirectionAttribute: variant === 'wall',
-          useSecondaryDirectionAttribute: variant === 'wall' && useSecondaryDirectionAttribute,
-          useTopSurfaceMask: variant === 'floor',
-          useFlicker: useBakedFlicker,
-          lightField: bakedLightField,
-        }
-        : null,
-    )
-    applyFogOfWarToMaterial(
-      material,
-      useGpuFog ? fogOfWar : null,
-      {
-        variant,
-        useCellAttribute: useGpuFog && variant === 'floor',
-      },
-    )
-  }, [bakedLightField, clipMinY, fogOfWar, geometry, material, useBakedFlicker, useBakedLight, useGpuFog, useSecondaryDirectionAttribute, variant])
-
-  return (
-    <mesh
-      ref={ref}
-      geometry={geometry}
-      material={material}
-      castShadow={castShadow}
-      receiveShadow={receiveShadow}
-    />
-  )
+function getInstancedMaterial(entry: InstancedMeshEntry) {
+  const material = entry.instancedMesh.material
+  return Array.isArray(material) ? material[0]! : material
 }
 
-function MergedTintMesh({
-  geometry,
-  opacity,
-}: {
-  geometry: THREE.BufferGeometry
-  opacity: number
-}) {
-  const ref = useRef<THREE.Mesh>(null)
+function setTintOpacity(mesh: THREE.InstancedMesh, opacity: number) {
+  const material = mesh.material
+  if (Array.isArray(material)) {
+    material.forEach((entry) => {
+      entry.opacity = opacity
+    })
+    return
+  }
 
-  useLayoutEffect(() => {
-    if (!ref.current) {
-      return
-    }
-
-    ref.current.userData.ignoreLosRaycast = true
-    ref.current.raycast = () => {}
-  }, [])
-
-  return (
-    <mesh
-      ref={ref}
-      geometry={geometry}
-      renderOrder={1}
-    >
-      <meshBasicMaterial
-        color="#050609"
-        transparent
-        opacity={opacity}
-        depthWrite={false}
-        polygonOffset
-        polygonOffsetFactor={-1}
-      />
-    </mesh>
-  )
+  material.opacity = opacity
 }
 
 function subtractStringSets(

@@ -360,7 +360,7 @@ describe('buildBatchDescriptors', () => {
     expect(firstResult.batched[0]?.geometrySignature).not.toBe(secondResult.batched[0]?.geometrySignature)
   })
 
-  it('separates animated build entries from static buckets', () => {
+  it('keeps animated and static build entries in the same stable bucket', () => {
     const resolveSpy = vi.spyOn(tileAssetResolution, 'resolveBatchedTileAsset')
     resolveSpy.mockImplementation(() => ({
       assetUrl: '/assets/floor.glb',
@@ -389,9 +389,10 @@ describe('buildBatchDescriptors', () => {
       },
     ], false)
 
-    expect(result.batched).toHaveLength(2)
-    expect(result.batched.some((descriptor) => descriptor.bucketKey.includes('animated-build'))).toBe(true)
-    expect(result.batched.some((descriptor) => descriptor.bucketKey.includes('static-build'))).toBe(true)
+    expect(result.batched).toHaveLength(1)
+    expect(result.batched[0]?.entries).toHaveLength(2)
+    expect(result.batched[0]?.bucketKey).not.toContain('animated-build')
+    expect(result.batched[0]?.bucketKey).not.toContain('static-build')
   })
 
   it('should handle empty input', () => {

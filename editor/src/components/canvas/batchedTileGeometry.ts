@@ -103,14 +103,14 @@ export function buildMergedTileGeometryMeshes({
       mergedMeshes.push({
         key: `${meshIndex}:${sourceMesh.uuid}`,
         geometry: mergedGeometry,
-        material: cloneCompatibleMaterial(material),
+        material: createCompatibleMaterialClone(material),
       })
     })
 
   return mergedMeshes
 }
 
-function cloneCompatibleMaterial(material: THREE.Material) {
+export function createCompatibleMaterialClone(material: THREE.Material) {
   const cachedTemplate = compatibleMaterialTemplateCache.get(material)
   if (cachedTemplate) {
     const clone = cachedTemplate.clone()
