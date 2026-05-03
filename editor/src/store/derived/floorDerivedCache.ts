@@ -2,6 +2,7 @@ import type { FloorDirtyInfo } from '../floorDirtyDomains'
 import {
   buildBakedLightBuildInput,
   buildFloorDerivedBundle,
+  buildFloorSceneDerivedBundle,
   buildFloorWallOpeningDerivedState,
   buildObjectHierarchy,
   buildStaticLightSources,
@@ -10,6 +11,7 @@ import {
   buildVisiblePaintedCells,
   type DungeonRoomData,
   type FloorDerivedBundle,
+  type FloorSceneDerivedBundle,
 } from './floorDerived'
 
 type CacheValue<T> = {
@@ -26,6 +28,7 @@ type FloorDerivedCacheEntry = {
   objectHierarchy?: CacheValue<Pick<FloorDerivedBundle, 'topLevelObjects' | 'childrenByParent'>>
   bakedLightBuildInput?: CacheValue<FloorDerivedBundle['bakedLightBuildInput']>
   wallOpeningDerivedState?: CacheValue<FloorDerivedBundle['wallOpeningDerivedState']>
+  sceneBundle?: CacheValue<FloorSceneDerivedBundle>
   bundle?: CacheValue<FloorDerivedBundle>
 }
 
@@ -146,6 +149,88 @@ export function getOrBuildCachedFloorDerivedBundle({
   )
 }
 
+export function getOrBuildCachedFloorSceneDerivedBundle({
+  data,
+  dirtyInfo,
+}: {
+  data: DungeonRoomData
+  dirtyInfo?: FloorDirtyInfo | null
+}): FloorSceneDerivedBundle {
+  const cacheEntry = getFloorDerivedCacheEntry(data.floorId)
+  const cachedData = getOrBuildCachedValue(
+    cacheEntry,
+    'data',
+    buildDataCacheKey(data),
+    () => data,
+  )
+  const visiblePainted = getOrBuildCachedValue(
+    cacheEntry,
+    'visiblePainted',
+    [
+      buildVersionToken(dirtyInfo, 'tilesVersion', cachedData.paintedCells),
+      buildVersionToken(dirtyInfo, 'layerVisibilityVersion', cachedData.layers),
+    ].join('|'),
+    () => buildVisiblePaintedCells(cachedData),
+  )
+  const visibleObjects = getOrBuildCachedValue(
+    cacheEntry,
+    'visibleObjects',
+    [
+      buildVersionToken(dirtyInfo, 'propsVersion', cachedData.placedObjects),
+      buildVersionToken(dirtyInfo, 'layerVisibilityVersion', cachedData.layers),
+    ].join('|'),
+    () => buildVisibleObjects(cachedData),
+  )
+  const staticLightSources = getOrBuildCachedValue(
+    cacheEntry,
+    'staticLightSources',
+    `objects:${getDerivedIdentity(visibleObjects)}`,
+    () => buildStaticLightSources(visibleObjects),
+  )
+  const objectHierarchy = getOrBuildCachedValue(
+    cacheEntry,
+    'objectHierarchy',
+    `objects:${getDerivedIdentity(visibleObjects)}`,
+    () => buildObjectHierarchy(visibleObjects),
+  )
+  const bakedLightBuildInput = getOrBuildCachedValue(
+    cacheEntry,
+    'bakedLightBuildInput',
+    [
+      `painted:${getDerivedIdentity(visiblePainted.visiblePaintedCells)}`,
+      `painted-records:${getDerivedIdentity(visiblePainted.visiblePaintedCellRecords)}`,
+      `lights:${getDerivedIdentity(staticLightSources)}`,
+      buildVersionToken(dirtyInfo, 'openingsVersion', cachedData.wallOpenings),
+      buildVersionToken(dirtyInfo, 'wallsVersion', cachedData.innerWalls),
+      buildVersionToken(dirtyInfo, 'lightingVersion', cachedData.wallSurfaceProps),
+      buildDirtyHintToken(dirtyInfo),
+    ].join('|'),
+    () => buildBakedLightBuildInput(
+      cachedData,
+      visiblePainted.visiblePaintedCells,
+      visiblePainted.visiblePaintedCellRecords,
+      staticLightSources,
+      dirtyInfo,
+    ),
+  )
+
+  return getOrBuildCachedValue(
+    cacheEntry,
+    'sceneBundle',
+    [
+      `data:${getDerivedIdentity(cachedData)}`,
+      `hierarchy:${getDerivedIdentity(objectHierarchy.childrenByParent)}`,
+      `top-level:${getDerivedIdentity(objectHierarchy.topLevelObjects)}`,
+      `light-input:${getDerivedIdentity(bakedLightBuildInput)}`,
+    ].join('|'),
+    () => ({
+      data: cachedData,
+      ...objectHierarchy,
+      bakedLightBuildInput,
+    }),
+  )
+}
+
 function getFloorDerivedCacheEntry(floorId: string) {
   const cached = floorDerivedCache.get(floorId)
   if (cached) {
@@ -244,4 +329,12 @@ export function buildFloorDerivedBundleWithCache(data: DungeonRoomData) {
 
 export function buildUncachedFloorDerivedBundle(data: DungeonRoomData) {
   return buildFloorDerivedBundle(data)
+}
+
+export function buildFloorSceneDerivedBundleWithCache(data: DungeonRoomData) {
+  return getOrBuildCachedFloorSceneDerivedBundle({ data, dirtyInfo: null })
+}
+
+export function buildUncachedFloorSceneDerivedBundle(data: DungeonRoomData) {
+  return buildFloorSceneDerivedBundle(data)
 }

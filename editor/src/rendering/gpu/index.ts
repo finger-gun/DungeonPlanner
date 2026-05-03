@@ -100,6 +100,25 @@ export {
 } from './FloorLightComputePrototype'
 
 export {
+  TileGpuStream,
+  getTileGpuStreamMountId,
+  type TilePageStatus,
+  type TileStreamTransactionStatus,
+  type TileUploadProgress,
+  type TileStreamPreviewMode,
+  type TileStreamAssetContext,
+  type ResolvedTileStreamGroup,
+} from './TileGpuStream'
+
+export {
+  TileGpuUploadScheduler,
+  coalesceTileUploadRanges,
+  type TileUploadBudget,
+  type TilePageUpload,
+  type TileUploadBudgetResult,
+} from './TileGpuUploadScheduler'
+
+export {
   useFloorGpuResources,
   useFloorGpuResourceStats,
   type UseFloorGpuResourcesOptions,

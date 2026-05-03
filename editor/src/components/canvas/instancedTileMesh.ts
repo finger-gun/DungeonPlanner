@@ -5,11 +5,10 @@ import {
   cloneMaterialWithNodeCompatibility,
   synchronizeCompatibleMaterialProperties,
 } from '../../rendering/nodeMaterialUtils'
-import type { BatchedTilePlacement } from './batchedTileGeometry'
 import { getWebGpuCompatibleGeometryTemplate } from './webgpuGeometry'
+import type { TilePlacement } from './tileEntries'
 
-// Maximum tiles per instanced bucket. Sized for a fully-packed 9×9 chunk of walls.
-export const MAX_TILE_BUCKET_SIZE = 512
+export const TILE_PAGE_SIZE = 64
 
 export type InstancedMeshEntry = {
   /** Identifies this entry within the bucket (meshIndex:uuid). */
@@ -33,6 +32,11 @@ export type InstancedMeshEntry = {
    */
   baseTransform: THREE.Matrix4
   sourceMaterial: THREE.Material
+}
+
+export type TileUploadRange = {
+  start: number
+  count: number
 }
 
 // Module-level scratch objects — safe since updates run on the main thread only.
@@ -95,6 +99,7 @@ function buildAssetTransformMatrix(transform: ContentPackModelTransform | undefi
 export function makeInstancedMeshEntries(
   sourceScene: THREE.Object3D,
   transform: ContentPackModelTransform | undefined,
+  capacity: number = TILE_PAGE_SIZE,
 ): InstancedMeshEntry[] {
   sourceScene.updateWorldMatrix(true, true)
   const transformMatrix = buildAssetTransformMatrix(transform)
@@ -116,11 +121,11 @@ export function makeInstancedMeshEntries(
     // InstancedBufferAttribute: one value per instance (step mode = instance).
     // TSL `attribute('name')` reads per-instance because InstancedBufferAttribute
     // sets meshPerAttribute > 1, which Three.js maps to step mode 'instance' in WebGPU.
-    const buildStartAttr = new THREE.InstancedBufferAttribute(new Float32Array(MAX_TILE_BUCKET_SIZE).fill(-1), 1)
-    const buildDelayAttr = new THREE.InstancedBufferAttribute(new Float32Array(MAX_TILE_BUCKET_SIZE).fill(0), 1)
-    const bakedLightDirAttr = new THREE.InstancedBufferAttribute(new Float32Array(MAX_TILE_BUCKET_SIZE * 3).fill(0), 3)
-    const bakedLightDirSecAttr = new THREE.InstancedBufferAttribute(new Float32Array(MAX_TILE_BUCKET_SIZE * 3).fill(0), 3)
-    const fogCellAttr = new THREE.InstancedBufferAttribute(new Float32Array(MAX_TILE_BUCKET_SIZE * 2).fill(0), 2)
+    const buildStartAttr = new THREE.InstancedBufferAttribute(new Float32Array(capacity).fill(-1), 1)
+    const buildDelayAttr = new THREE.InstancedBufferAttribute(new Float32Array(capacity).fill(0), 1)
+    const bakedLightDirAttr = new THREE.InstancedBufferAttribute(new Float32Array(capacity * 3).fill(0), 3)
+    const bakedLightDirSecAttr = new THREE.InstancedBufferAttribute(new Float32Array(capacity * 3).fill(0), 3)
+    const fogCellAttr = new THREE.InstancedBufferAttribute(new Float32Array(capacity * 2).fill(0), 2)
     buildStartAttr.setUsage(THREE.DynamicDrawUsage)
     buildDelayAttr.setUsage(THREE.DynamicDrawUsage)
     bakedLightDirAttr.setUsage(THREE.DynamicDrawUsage)
@@ -135,7 +140,7 @@ export function makeInstancedMeshEntries(
 
     const material = createCompatibleMaterialCloneForInstanced(sourceMaterial)
 
-    const instancedMesh = new THREE.InstancedMesh(geometry, material, MAX_TILE_BUCKET_SIZE)
+    const instancedMesh = new THREE.InstancedMesh(geometry, material, capacity)
     instancedMesh.count = 0
     instancedMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage)
     // Always cast shadow — avoids a second pipeline variant when animation ends.
@@ -152,7 +157,7 @@ export function makeInstancedMeshEntries(
       polygonOffset: true,
       polygonOffsetFactor: -1,
     })
-    const tintMesh = new THREE.InstancedMesh(geometry, tintMaterial, MAX_TILE_BUCKET_SIZE)
+    const tintMesh = new THREE.InstancedMesh(geometry, tintMaterial, capacity)
     tintMesh.count = 0
     tintMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage)
     tintMesh.renderOrder = 1
@@ -183,74 +188,115 @@ export function makeInstancedMeshEntries(
 }
 
 /**
- * Updates instance matrices and per-instance attribute data in-place.
- * This is O(n) in the number of placements and does NOT upload the full geometry.
- * Only the changed attribute sub-ranges are marked dirty.
+ * Writes a single page slot in-place.
  */
-export function updateInstancedMeshEntries(
+export function writeInstancedMeshSlot(
   meshEntries: InstancedMeshEntry[],
-  placements: BatchedTilePlacement[],
+  slotIndex: number,
+  placement: TilePlacement | null,
 ): void {
-  const count = Math.min(placements.length, MAX_TILE_BUCKET_SIZE)
-
   for (const entry of meshEntries) {
-    const { instancedMesh, tintMesh, buildStartAttr, buildDelayAttr, bakedLightDirAttr, bakedLightDirSecAttr, fogCellAttr, baseTransform } = entry
+    const {
+      instancedMesh,
+      tintMesh,
+      buildStartAttr,
+      buildDelayAttr,
+      bakedLightDirAttr,
+      bakedLightDirSecAttr,
+      fogCellAttr,
+      baseTransform,
+    } = entry
 
-    for (let i = 0; i < count; i++) {
-      const p = placements[i]!
-
-      // Instance matrix = placementMatrix * baseTransform
-      _euler.set(...p.rotation)
+    if (placement) {
+      _euler.set(...placement.rotation)
       _quat.setFromEuler(_euler)
-      _pos.set(...p.position)
+      _pos.set(...placement.position)
       _scale.set(1, 1, 1)
       _placeMat.compose(_pos, _quat, _scale)
       _instanceMat.multiplyMatrices(_placeMat, baseTransform)
-      instancedMesh.setMatrixAt(i, _instanceMat)
-      tintMesh.setMatrixAt(i, _instanceMat)
+      instancedMesh.setMatrixAt(slotIndex, _instanceMat)
+      tintMesh.setMatrixAt(slotIndex, _instanceMat)
 
-      buildStartAttr.array[i] = p.buildAnimationStart ?? -1
-      buildDelayAttr.array[i] = p.buildAnimationDelay ?? 0
+      buildStartAttr.array[slotIndex] = placement.buildAnimationStart ?? -1
+      buildDelayAttr.array[slotIndex] = placement.buildAnimationDelay ?? 0
 
-      const ld = p.bakedLightDirection
-      if (ld) {
-        bakedLightDirAttr.array[i * 3] = ld[0]
-        bakedLightDirAttr.array[i * 3 + 1] = ld[1]
-        bakedLightDirAttr.array[i * 3 + 2] = ld[2]
-      } else {
-        bakedLightDirAttr.array[i * 3] = 0
-        bakedLightDirAttr.array[i * 3 + 1] = 0
-        bakedLightDirAttr.array[i * 3 + 2] = 0
-      }
+      const lightDirection = placement.bakedLightDirection
+      bakedLightDirAttr.array[slotIndex * 3] = lightDirection?.[0] ?? 0
+      bakedLightDirAttr.array[slotIndex * 3 + 1] = lightDirection?.[1] ?? 0
+      bakedLightDirAttr.array[slotIndex * 3 + 2] = lightDirection?.[2] ?? 0
 
-      const lds = p.bakedLightDirectionSecondary
-      if (lds) {
-        bakedLightDirSecAttr.array[i * 3] = lds[0]
-        bakedLightDirSecAttr.array[i * 3 + 1] = lds[1]
-        bakedLightDirSecAttr.array[i * 3 + 2] = lds[2]
-      } else {
-        bakedLightDirSecAttr.array[i * 3] = 0
-        bakedLightDirSecAttr.array[i * 3 + 1] = 0
-        bakedLightDirSecAttr.array[i * 3 + 2] = 0
-      }
+      const secondaryDirection = placement.bakedLightDirectionSecondary
+      bakedLightDirSecAttr.array[slotIndex * 3] = secondaryDirection?.[0] ?? 0
+      bakedLightDirSecAttr.array[slotIndex * 3 + 1] = secondaryDirection?.[1] ?? 0
+      bakedLightDirSecAttr.array[slotIndex * 3 + 2] = secondaryDirection?.[2] ?? 0
 
-      const fc = p.fogCell
-      if (fc) {
-        fogCellAttr.array[i * 2] = fc[0]
-        fogCellAttr.array[i * 2 + 1] = fc[1]
-      }
+      const fogCell = placement.fogCell
+      fogCellAttr.array[slotIndex * 2] = fogCell?.[0] ?? 0
+      fogCellAttr.array[slotIndex * 2 + 1] = fogCell?.[1] ?? 0
+      continue
     }
 
-    instancedMesh.count = count
-    tintMesh.count = count
-    instancedMesh.instanceMatrix.needsUpdate = true
-    tintMesh.instanceMatrix.needsUpdate = true
-    buildStartAttr.needsUpdate = true
-    buildDelayAttr.needsUpdate = true
-    bakedLightDirAttr.needsUpdate = true
-    bakedLightDirSecAttr.needsUpdate = true
-    fogCellAttr.needsUpdate = true
+    _pos.set(0, 0, 0)
+    _quat.identity()
+    _scale.set(0, 0, 0)
+    _placeMat.compose(_pos, _quat, _scale)
+    _instanceMat.copy(_placeMat)
+    instancedMesh.setMatrixAt(slotIndex, _instanceMat)
+    tintMesh.setMatrixAt(slotIndex, _instanceMat)
+    buildStartAttr.array[slotIndex] = -1
+    buildDelayAttr.array[slotIndex] = 0
+    bakedLightDirAttr.array[slotIndex * 3] = 0
+    bakedLightDirAttr.array[slotIndex * 3 + 1] = 0
+    bakedLightDirAttr.array[slotIndex * 3 + 2] = 0
+    bakedLightDirSecAttr.array[slotIndex * 3] = 0
+    bakedLightDirSecAttr.array[slotIndex * 3 + 1] = 0
+    bakedLightDirSecAttr.array[slotIndex * 3 + 2] = 0
+    fogCellAttr.array[slotIndex * 2] = 0
+    fogCellAttr.array[slotIndex * 2 + 1] = 0
   }
+}
+
+export function setInstancedMeshEntryCount(
+  meshEntries: InstancedMeshEntry[],
+  count: number,
+) {
+  meshEntries.forEach((entry) => {
+    entry.instancedMesh.count = count
+    entry.tintMesh.count = count
+  })
+}
+
+export function applyInstancedMeshUpdateRanges(
+  meshEntries: InstancedMeshEntry[],
+  ranges: TileUploadRange[],
+) {
+  meshEntries.forEach((entry) => {
+    resetUpdateRanges(entry.instancedMesh.instanceMatrix)
+    resetUpdateRanges(entry.tintMesh.instanceMatrix)
+    resetUpdateRanges(entry.buildStartAttr)
+    resetUpdateRanges(entry.buildDelayAttr)
+    resetUpdateRanges(entry.bakedLightDirAttr)
+    resetUpdateRanges(entry.bakedLightDirSecAttr)
+    resetUpdateRanges(entry.fogCellAttr)
+
+    ranges.forEach((range) => {
+      addUpdateRange(entry.instancedMesh.instanceMatrix, range.start * 16, range.count * 16)
+      addUpdateRange(entry.tintMesh.instanceMatrix, range.start * 16, range.count * 16)
+      addUpdateRange(entry.buildStartAttr, range.start, range.count)
+      addUpdateRange(entry.buildDelayAttr, range.start, range.count)
+      addUpdateRange(entry.bakedLightDirAttr, range.start * 3, range.count * 3)
+      addUpdateRange(entry.bakedLightDirSecAttr, range.start * 3, range.count * 3)
+      addUpdateRange(entry.fogCellAttr, range.start * 2, range.count * 2)
+    })
+
+    entry.instancedMesh.instanceMatrix.needsUpdate = true
+    entry.tintMesh.instanceMatrix.needsUpdate = true
+    entry.buildStartAttr.needsUpdate = true
+    entry.buildDelayAttr.needsUpdate = true
+    entry.bakedLightDirAttr.needsUpdate = true
+    entry.bakedLightDirSecAttr.needsUpdate = true
+    entry.fogCellAttr.needsUpdate = true
+  })
 }
 
 /** Disposes geometry, materials, and overlay resources owned by this bucket. */
@@ -270,4 +316,12 @@ export function disposeInstancedMeshEntries(meshEntries: InstancedMeshEntry[]): 
       tintMat.dispose()
     }
   }
+}
+
+function addUpdateRange(attribute: THREE.BufferAttribute, start: number, count: number) {
+  attribute.addUpdateRange(start, count)
+}
+
+function resetUpdateRanges(attribute: THREE.BufferAttribute) {
+  attribute.clearUpdateRanges()
 }

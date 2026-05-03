@@ -63,4 +63,16 @@ describe('RoomToolPanel', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Lower' }))
     expect(useDungeonStore.getState().outdoorTerrainSculptMode).toBe('lower')
   })
+
+  it('does not render a room row for each room in the sidebar', () => {
+    const state = useDungeonStore.getState()
+    const roomId = state.createRoom('Painted Room')
+    state.renameRoom(roomId, 'Painted Room')
+
+    render(<RoomToolPanel />)
+
+    expect(screen.queryByText('No rooms yet. Create one to override room-wide floor/wall assets.')).not.toBeInTheDocument()
+    expect(screen.queryByText('Painted Room')).not.toBeInTheDocument()
+    expect(screen.getByText(/left-drag to paint rooms/i)).toBeInTheDocument()
+  })
 })

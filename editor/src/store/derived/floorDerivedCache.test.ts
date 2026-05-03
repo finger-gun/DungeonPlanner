@@ -4,6 +4,7 @@ import type { DungeonRoomData } from './floorDerived'
 import {
   clearFloorDerivedCache,
   getOrBuildCachedFloorDerivedBundle,
+  getOrBuildCachedFloorSceneDerivedBundle,
 } from './floorDerivedCache'
 
 describe('floorDerivedCache', () => {
@@ -56,6 +57,28 @@ describe('floorDerivedCache', () => {
     expect(derivedB.visiblePaintedCells).toBe(derivedA.visiblePaintedCells)
     expect(derivedB.visibleObjects).toBe(derivedA.visibleObjects)
     expect(derivedB.bakedLightBuildInput).toBe(derivedA.bakedLightBuildInput)
+  })
+
+  it('reuses cached scene bundles and omits render-only tile slices', () => {
+    const data = createFloorData()
+    const derivedA = getOrBuildCachedFloorSceneDerivedBundle({
+      data,
+      dirtyInfo: null,
+    })
+    const derivedB = getOrBuildCachedFloorSceneDerivedBundle({
+      data: {
+        ...data,
+      },
+      dirtyInfo: null,
+    })
+
+    expect(derivedB).toBe(derivedA)
+    expect(derivedB.data).toBe(derivedA.data)
+    expect(derivedB.topLevelObjects).toBe(derivedA.topLevelObjects)
+    expect(derivedB.childrenByParent).toBe(derivedA.childrenByParent)
+    expect(derivedB.bakedLightBuildInput).toBe(derivedA.bakedLightBuildInput)
+    expect('visiblePaintedCellRecords' in derivedB).toBe(false)
+    expect('visibleOpenings' in derivedB).toBe(false)
   })
 })
 

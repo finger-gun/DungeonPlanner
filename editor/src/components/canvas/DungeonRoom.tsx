@@ -1,4 +1,4 @@
-import { Suspense, useCallback, useMemo, useLayoutEffect, useRef } from 'react'
+import { useCallback, useMemo, useLayoutEffect, useRef } from 'react'
 import type { ReactNode } from 'react'
 import { useFrame } from '@react-three/fiber'
 import type { ThreeEvent } from '@react-three/fiber'
@@ -8,6 +8,7 @@ import {
   cellToWorldPosition,
   getCellKey,
 } from '../../hooks/useSnapToGrid'
+import type { FloorDirtyInfo } from '../../store/floorDirtyDomains'
 import { getContentPackAssetById } from '../../content-packs/registry'
 import {
   useDungeonStore,
@@ -18,17 +19,16 @@ import { getOpeningSegments } from '../../store/openingSegments'
 import {
   advanceBuildAnimations,
   getBuildAnimationTimeScale,
-  getHeldBuildBatchState,
   getHeldBuildBatchUniformState,
   getBuildAnimationState,
   getBuildYOffset,
   isAnimationActive,
   useBuildAnimationVersion,
 } from '../../store/buildAnimations'
-import type { FloorRenderGroup, FloorSurfacePlacement } from '../../store/floorSurfaceLayout'
+import { getFloorTileSpan, type FloorRenderGroup, type FloorSurfacePlacement } from '../../store/floorSurfaceLayout'
 import { wallKeyToWorldPosition } from '../../store/wallSegments'
 import {
-  type FloorDerivedBundle,
+  type FloorSceneDerivedBundle,
 } from '../../store/derived/floorDerived'
 import { isDownStairAssetId } from '../../store/stairAssets'
 import { ContentPackInstance } from './ContentPackInstance'
@@ -43,7 +43,9 @@ import type { ContentPackModelTransform } from '../../content-packs/types'
 import { resolveProjectionReceiverAsset } from './tileAssetResolution'
 import { getCornerInteriorLightDirections, getWallSpanInteriorLightDirections } from './wallLighting'
 import {
-  buildFloorRenderDerivedBundleFromInput,
+  buildChunkedFloorRenderDerivedCache,
+  type FloorRenderChunkBundle,
+  type FloorRenderChunkCache,
   type FloorReceiverCellInput,
   type RoomWallInstance,
 } from './floorRenderDerived'
@@ -52,7 +54,7 @@ import {
   type BakedFloorLightField,
 } from '../../rendering/dungeonLightField'
 import { setBuildAnimationTime } from './buildAnimationMaterial'
-import { BuildBucketPrewarmController } from './BuildBucketPrewarmController'
+import { TileGpuStreamMount, getTileGpuStreamMountId } from './TileGpuStreamContext'
 
 const WALL_EXTRA_DELAY_MS = 70
 const ZERO_ROTATION = [0, 0, 0] as const
@@ -105,19 +107,24 @@ export function DungeonRoom({
   bakedLightField,
   enableBuildAnimation = true,
   enableFloorReceiver = true,
+  streamScopeKey = 'active',
+  dirtyInfo = null,
 }: {
   visibility: PlayVisibility
-  derived: FloorDerivedBundle
+  derived: FloorSceneDerivedBundle
   bakedLightField?: BakedFloorLightField | null
   enableBuildAnimation?: boolean
   enableFloorReceiver?: boolean
+  streamScopeKey?: string
+  dirtyInfo?: FloorDirtyInfo | null
 }) {
   const buildAnimationVersion = useBuildAnimationVersion()
-  const isBuildAnimationCurrentlyActive = useIsBuildAnimationActive(buildAnimationVersion)
   const tool = useDungeonStore((state) => state.tool)
   const showProjectionDebugMesh = useDungeonStore((state) => state.showProjectionDebugMesh)
   const { placedObjects } = derived.data
+  const floorId = derived.data.floorId
   const floorReceiverActive = enableFloorReceiver && shouldActivateFloorReceiver(tool, showProjectionDebugMesh)
+  const floorRenderChunkCacheRef = useRef<FloorRenderChunkCache | null>(null)
 
   // Floor cells occupied by a StaircaseDown have no floor tile — the staircase
   // model fills the space and a tile would clip through it.
@@ -137,43 +144,130 @@ export function DungeonRoom({
 
     return getOrBuildBakedFloorLightField(derived.bakedLightBuildInput)
   }, [bakedLightField, derived.bakedLightBuildInput])
-  const floorRenderDerived = useMemo(
-    () => buildFloorRenderDerivedBundleFromInput({
-      visiblePaintedCellRecords: derived.visiblePaintedCellRecords,
-      rooms: derived.data.rooms,
-      globalFloorAssetId: derived.data.globalFloorAssetId,
-      floorTileAssetIds: derived.data.floorTileAssetIds,
-      globalWallAssetId: derived.data.globalWallAssetId,
-      wallSurfaceAssetIds: derived.data.wallSurfaceAssetIds,
-      wallSurfaceProps: derived.data.wallSurfaceProps,
-      wallOpeningDerivedState: derived.wallOpeningDerivedState,
-      innerWalls: derived.data.innerWalls,
-    }, {
+  const renderInvalidationHaloCells = useMemo(
+    () => Math.max(
+      1,
+      ...Object.values(derived.data.floorTileAssetIds).map((assetId) => {
+        const span = getFloorTileSpan(assetId)
+        return Math.max(span.gridWidth - 1, span.gridHeight - 1)
+      }),
+    ),
+    [derived.data.floorTileAssetIds],
+  )
+  const floorRenderChunkCache = useMemo(
+    () => buildChunkedFloorRenderDerivedCache({
+      previous: floorRenderChunkCacheRef.current,
+      floorId,
+      input: {
+        paintedCells: derived.data.paintedCells,
+        layers: derived.data.layers,
+        rooms: derived.data.rooms,
+        wallOpenings: derived.data.wallOpenings,
+        globalFloorAssetId: derived.data.globalFloorAssetId,
+        floorTileAssetIds: derived.data.floorTileAssetIds,
+        globalWallAssetId: derived.data.globalWallAssetId,
+        wallSurfaceAssetIds: derived.data.wallSurfaceAssetIds,
+        wallSurfaceProps: derived.data.wallSurfaceProps,
+        innerWalls: derived.data.innerWalls,
+      },
+      dirtyInfo,
       includeFloorReceivers: floorReceiverActive,
+      haloCells: renderInvalidationHaloCells,
     }),
     [
       derived.data.floorTileAssetIds,
       derived.data.globalFloorAssetId,
       derived.data.globalWallAssetId,
       derived.data.innerWalls,
+      derived.data.layers,
+      derived.data.paintedCells,
       derived.data.rooms,
+      derived.data.wallOpenings,
       derived.data.wallSurfaceAssetIds,
       derived.data.wallSurfaceProps,
-      derived.visiblePaintedCellRecords,
-      derived.wallOpeningDerivedState,
+      dirtyInfo,
+      floorId,
       floorReceiverActive,
+      renderInvalidationHaloCells,
     ],
   )
-  const {
-    floorGroups,
-    floorSurfaceEntries,
-    visibleFloorReceiverCells,
-    walls,
-    corners,
-  } = floorRenderDerived
+  floorRenderChunkCacheRef.current = floorRenderChunkCache
+  const streamMountId = useMemo(
+    () => getTileGpuStreamMountId(floorId, streamScopeKey),
+    [floorId, streamScopeKey],
+  )
+  useFrame(() => {
+    const now = performance.now()
+    const { holdBatchStart, holdReleaseAt } = getHeldBuildBatchUniformState(now)
+    setBuildAnimationTime(now, getBuildAnimationTimeScale(), holdBatchStart, holdReleaseAt)
+    advanceBuildAnimations(now)
+  })
+
+  return (
+    <>
+      <TileGpuStreamMount mountId={streamMountId} />
+      {floorRenderChunkCache.orderedChunkKeys.map((chunkKey) => {
+        const bundle = floorRenderChunkCache.bundlesByChunk.get(chunkKey)
+        if (!bundle) {
+          return null
+        }
+
+        return (
+          <FloorRenderChunkRenderer
+            key={chunkKey}
+            chunkKey={chunkKey}
+            bundle={bundle}
+            floorId={floorId}
+            mountId={streamMountId}
+            streamScopeKey={streamScopeKey}
+            bakedFloorLightField={bakedFloorLightField}
+            blockedFloorCellKeys={blockedFloorCellKeys}
+            visibility={visibility}
+            enableBuildAnimation={enableBuildAnimation}
+            buildAnimationVersion={buildAnimationVersion}
+            enableFloorReceiver={enableFloorReceiver}
+            floorReceiverActive={floorReceiverActive}
+            showProjectionDebugMesh={showProjectionDebugMesh}
+          />
+        )
+      })}
+    </>
+  )
+}
+
+function FloorRenderChunkRenderer({
+  chunkKey,
+  bundle,
+  floorId,
+  mountId,
+  streamScopeKey,
+  bakedFloorLightField,
+  blockedFloorCellKeys,
+  visibility,
+  enableBuildAnimation,
+  buildAnimationVersion,
+  enableFloorReceiver,
+  floorReceiverActive,
+  showProjectionDebugMesh,
+}: {
+  chunkKey: string
+  bundle: FloorRenderChunkBundle
+  floorId: string
+  mountId: string
+  streamScopeKey: string
+  bakedFloorLightField: BakedFloorLightField
+  blockedFloorCellKeys: Set<string>
+  visibility: PlayVisibility
+  enableBuildAnimation: boolean
+  buildAnimationVersion: number
+  enableFloorReceiver: boolean
+  floorReceiverActive: boolean
+  showProjectionDebugMesh: boolean
+}) {
+  const isBuildAnimationCurrentlyActive = useIsBuildAnimationActive(buildAnimationVersion)
   const useLineOfSightPostMask = visibility.active
   const staticWallEntries = useMemo<StaticTileEntry[]>(
-    () => walls.flatMap((wall) => {
+    () => bundle.walls.flatMap((wall) => {
       const floorKey = getBuildAnimationCellKeyFromWallKeys(wall.segmentKeys, isBuildAnimationCurrentlyActive) ?? wall.key
       if (isInteractiveWallAsset(wall.assetId)) {
         return []
@@ -183,39 +277,39 @@ export function DungeonRoom({
         ? getBuildAnimationState(floorKey, WALL_EXTRA_DELAY_MS)
         : null
       return [{
-          key: wall.key,
-          assetId: wall.assetId,
-          position: wall.position,
-          rotation: wall.rotation,
-          buildAnimationDelay: buildAnimation?.delay,
-          buildAnimationStart: buildAnimation?.startedAt,
-          variant: 'wall',
-          variantKey: wall.key,
-          visibility: getWallSpanVisibilityState(visibility, wall.segmentKeys),
-          bakedLightField: bakedFloorLightField,
-          bakedLightDirection: wall.bakedLightDirection,
-          bakedLightDirectionSecondary: wall.bakedLightDirectionSecondary,
+        key: wall.key,
+        assetId: wall.assetId,
+        position: wall.position,
+        rotation: wall.rotation,
+        buildAnimationDelay: buildAnimation?.delay,
+        buildAnimationStart: buildAnimation?.startedAt,
+        variant: 'wall',
+        variantKey: wall.key,
+        visibility: getWallSpanVisibilityState(visibility, wall.segmentKeys),
+        bakedLightField: bakedFloorLightField,
+        bakedLightDirection: wall.bakedLightDirection,
+        bakedLightDirectionSecondary: wall.bakedLightDirectionSecondary,
         objectProps: wall.objectProps,
       }]
     }),
-    [bakedFloorLightField, enableBuildAnimation, isBuildAnimationCurrentlyActive, visibility, walls],
+    [bakedFloorLightField, bundle.walls, enableBuildAnimation, isBuildAnimationCurrentlyActive, visibility],
   )
   const staticInteractiveWalls = useMemo(
-    () => walls.filter((wall) => {
+    () => bundle.walls.filter((wall) => {
       const floorKey = getBuildAnimationCellKeyFromWallKeys(wall.segmentKeys, isBuildAnimationCurrentlyActive) ?? wall.key
       return !(enableBuildAnimation && isBuildAnimationCurrentlyActive(floorKey)) && isInteractiveWallAsset(wall.assetId)
     }),
-    [enableBuildAnimation, isBuildAnimationCurrentlyActive, walls],
+    [bundle.walls, enableBuildAnimation, isBuildAnimationCurrentlyActive],
   )
   const animatedInteractiveWalls = useMemo(
-    () => walls.filter((wall) => {
+    () => bundle.walls.filter((wall) => {
       const floorKey = getBuildAnimationCellKeyFromWallKeys(wall.segmentKeys, isBuildAnimationCurrentlyActive) ?? wall.key
       return enableBuildAnimation && isBuildAnimationCurrentlyActive(floorKey) && isInteractiveWallAsset(wall.assetId)
     }),
-    [enableBuildAnimation, isBuildAnimationCurrentlyActive, walls],
+    [bundle.walls, enableBuildAnimation, isBuildAnimationCurrentlyActive],
   )
   const staticCornerEntries = useMemo<StaticTileEntry[]>(
-    () => corners.map((corner) => {
+    () => bundle.corners.map((corner) => {
       const cellKey = getBuildAnimationCellKeyFromWallKeys(corner.wallKeys, isBuildAnimationCurrentlyActive) ?? corner.key
       const buildAnimation = enableBuildAnimation
         ? getBuildAnimationState(cellKey, WALL_EXTRA_DELAY_MS)
@@ -238,133 +332,26 @@ export function DungeonRoom({
         objectProps: corner.objectProps,
       }
     }),
-    [bakedFloorLightField, corners, enableBuildAnimation, isBuildAnimationCurrentlyActive, visibility],
+    [bakedFloorLightField, bundle.corners, enableBuildAnimation, isBuildAnimationCurrentlyActive, visibility],
   )
-  const heldBuildBatch = getHeldBuildBatchState()
-  const pendingFloorEntries = useMemo<StaticTileEntry[]>(
-    () => {
-      if (!heldBuildBatch || heldBuildBatch.released) {
-        return []
-      }
-
-      return floorGroups.flatMap((group) => group.cells.flatMap((cell) => {
-        const key = getCellKey(cell)
-        if (blockedFloorCellKeys.has(key)) {
-          return []
-        }
-
-        const buildAnimation = enableBuildAnimation
-          ? getBuildAnimationState(key)
-          : null
-        if (!buildAnimation || buildAnimation.startedAt < heldBuildBatch.startedAt - 0.5) {
-          return []
-        }
-
-        return [{
-          key: `floor:${key}`,
-          assetId: group.floorAssetId,
-          position: cellToWorldPosition(cell),
-          rotation: ZERO_ROTATION,
-          buildAnimationDelay: buildAnimation.delay,
-          buildAnimationStart: buildAnimation.startedAt,
-          variant: 'floor',
-          variantKey: key,
-          visibility: 'visible',
-          bakedLightField: bakedFloorLightField,
-          fogCell: cell,
-        }] satisfies StaticTileEntry[]
-      }))
-    },
-    [bakedFloorLightField, blockedFloorCellKeys, enableBuildAnimation, floorGroups, heldBuildBatch],
-  )
-  const pendingFloorSurfaceEntries = useMemo<StaticTileEntry[]>(
-    () => {
-      if (!heldBuildBatch || heldBuildBatch.released) {
-        return []
-      }
-
-      return floorSurfaceEntries.flatMap((placement) => {
-        const shouldSkip = placement.coveredCellKeys.some((cellKey) => blockedFloorCellKeys.has(cellKey))
-        if (shouldSkip) {
-          return []
-        }
-
-        const buildAnimationCellKey = placement.coveredCellKeys.find((cellKey) =>
-          enableBuildAnimation && isBuildAnimationCurrentlyActive(cellKey),
-        ) ?? placement.anchorCellKey
-        const buildAnimation = enableBuildAnimation
-          ? getBuildAnimationState(buildAnimationCellKey)
-          : null
-        if (!buildAnimation || buildAnimation.startedAt < heldBuildBatch.startedAt - 0.5) {
-          return []
-        }
-
-        return [{
-          key: `floor-surface:${placement.anchorCellKey}`,
-          assetId: placement.assetId,
-          position: placement.position,
-          rotation: ZERO_ROTATION,
-          buildAnimationDelay: buildAnimation.delay,
-          buildAnimationStart: buildAnimation.startedAt,
-          variant: 'floor',
-          variantKey: placement.anchorCellKey,
-          visibility: 'visible',
-          bakedLightField: bakedFloorLightField,
-          fogCell: placement.anchorCell,
-        }] satisfies StaticTileEntry[]
-      })
-    },
-    [
-      bakedFloorLightField,
-      blockedFloorCellKeys,
-      enableBuildAnimation,
-      floorSurfaceEntries,
-      heldBuildBatch,
-      isBuildAnimationCurrentlyActive,
-    ],
-  )
-  const pendingPrewarmEntries = useMemo(
-    () => [
-      ...pendingFloorEntries,
-      ...pendingFloorSurfaceEntries,
-      ...staticWallEntries.filter((entry) =>
-        entry.buildAnimationStart !== undefined
-        && heldBuildBatch
-        && !heldBuildBatch.released
-        && entry.buildAnimationStart >= heldBuildBatch.startedAt - 0.5,
-      ),
-      ...staticCornerEntries.filter((entry) =>
-        entry.buildAnimationStart !== undefined
-        && heldBuildBatch
-        && !heldBuildBatch.released
-        && entry.buildAnimationStart >= heldBuildBatch.startedAt - 0.5,
-      ),
-    ],
-    [heldBuildBatch, pendingFloorEntries, pendingFloorSurfaceEntries, staticCornerEntries, staticWallEntries],
-  )
-
-  useFrame(() => {
-    const now = performance.now()
-    const { holdBatchStart, holdReleaseAt } = getHeldBuildBatchUniformState(now)
-    setBuildAnimationTime(now, getBuildAnimationTimeScale(), holdBatchStart, holdReleaseAt)
-    advanceBuildAnimations(now)
-  })
 
   return (
     <>
       {enableFloorReceiver && (
         <FloorDecalReceiver
-          receiverId="floor-receiver:active"
-          cells={visibleFloorReceiverCells}
+          receiverId={`floor-receiver:${mountId}:${chunkKey}`}
+          cells={bundle.visibleFloorReceiverCells}
           blockedFloorCellKeys={blockedFloorCellKeys}
           enabled={floorReceiverActive}
           showProjectionDebugMesh={showProjectionDebugMesh}
         />
       )}
-      {floorGroups.map((group) => (
+      {bundle.floorGroups.map((group) => (
         <CellGroupRenderer
-          key={group.floorAssetId ?? 'none'}
+          key={group.groupKey}
           group={group}
+          floorId={floorId}
+          mountId={mountId}
           bakedFloorLightField={bakedFloorLightField}
           blockedFloorCellKeys={blockedFloorCellKeys}
           visibility={visibility}
@@ -373,21 +360,21 @@ export function DungeonRoom({
         />
       ))}
       <FloorSurfaceRenderer
-        placements={floorSurfaceEntries}
+        placements={bundle.floorSurfaceEntries}
+        floorId={floorId}
+        mountId={mountId}
+        sourceId={`floor-surfaces:${floorId}:${chunkKey}`}
         bakedFloorLightField={bakedFloorLightField}
         blockedFloorCellKeys={blockedFloorCellKeys}
         visibility={visibility}
         enableBuildAnimation={enableBuildAnimation}
         buildAnimationVersion={buildAnimationVersion}
       />
-      <Suspense fallback={null}>
-        <BuildBucketPrewarmController
-          entries={pendingPrewarmEntries}
-          useLineOfSightPostMask={useLineOfSightPostMask}
-        />
-      </Suspense>
       <BatchedTileEntries
         entries={staticWallEntries}
+        floorId={floorId}
+        mountId={mountId}
+        sourceId={`${streamScopeKey}:${floorId}:walls:${chunkKey}`}
         useLineOfSightPostMask={useLineOfSightPostMask}
       />
       {staticInteractiveWalls.map((wall) => (
@@ -420,14 +407,17 @@ export function DungeonRoom({
       })}
       <BatchedTileEntries
         entries={staticCornerEntries}
+        floorId={floorId}
+        mountId={mountId}
+        sourceId={`${streamScopeKey}:${floorId}:corners:${chunkKey}`}
         useLineOfSightPostMask={useLineOfSightPostMask}
       />
-      {derived.visibleOpenings.map((opening) => (
+      {bundle.openings.map((opening) => (
         <OpeningRenderer
           key={opening.id}
           opening={opening}
           bakedLightField={bakedFloorLightField}
-          paintedCells={derived.visiblePaintedCellRecords}
+          paintedCells={bundle.contextPaintedCells}
           visibility={visibility}
           enableBuildAnimation={enableBuildAnimation}
         />
@@ -438,6 +428,8 @@ export function DungeonRoom({
 
 function CellGroupRenderer({
   group,
+  floorId,
+  mountId,
   bakedFloorLightField,
   blockedFloorCellKeys,
   visibility,
@@ -445,6 +437,8 @@ function CellGroupRenderer({
   buildAnimationVersion,
 }: {
   group: FloorRenderGroup
+  floorId: string
+  mountId: string
   bakedFloorLightField: BakedFloorLightField
   blockedFloorCellKeys: Set<string>
   visibility: PlayVisibility
@@ -483,6 +477,9 @@ function CellGroupRenderer({
   return (
     <BatchedTileEntries
       entries={staticEntries}
+      floorId={floorId}
+      mountId={mountId}
+      sourceId={`floor-group:${floorId}:${group.groupKey}`}
       useLineOfSightPostMask={useLineOfSightPostMask}
     />
   )
@@ -490,6 +487,9 @@ function CellGroupRenderer({
 
 function FloorSurfaceRenderer({
   placements,
+  floorId,
+  mountId,
+  sourceId,
   bakedFloorLightField,
   blockedFloorCellKeys,
   visibility,
@@ -497,6 +497,9 @@ function FloorSurfaceRenderer({
   buildAnimationVersion,
 }: {
   placements: FloorSurfacePlacement[]
+  floorId: string
+  mountId: string
+  sourceId: string
   bakedFloorLightField: BakedFloorLightField
   blockedFloorCellKeys: Set<string>
   visibility: PlayVisibility
@@ -539,6 +542,9 @@ function FloorSurfaceRenderer({
   return (
     <BatchedTileEntries
       entries={staticEntries}
+      floorId={floorId}
+      mountId={mountId}
+      sourceId={sourceId}
       useLineOfSightPostMask={useLineOfSightPostMask}
     />
   )

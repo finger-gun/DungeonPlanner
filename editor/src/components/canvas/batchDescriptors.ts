@@ -1,11 +1,14 @@
-import type { StaticTileEntry } from './BatchedTileEntries'
+import { shouldRenderLineOfSightGeometry } from './losRendering'
+import type { StaticTileEntry } from './tileEntries'
 import { resolveBatchedTileAsset, type ResolvedBatchedTileAsset } from './tileAssetResolution'
+import type { BakedFloorLightField } from '../../rendering/dungeonLightField'
 
 export type ResolvedStaticTileEntry = StaticTileEntry & ResolvedBatchedTileAsset
 
 export const DEFAULT_RENDER_BATCH_CHUNK_SIZE = 9
 
 export type BatchDescriptor = {
+  floorId: string
   bucketKey: string
   chunkKey: string
   entries: ResolvedStaticTileEntry[]
@@ -13,11 +16,27 @@ export type BatchDescriptor = {
   usesGpuFog: boolean
   geometrySignature: string
   renderSignature: string
+  variant: StaticTileEntry['variant']
+  visibility: StaticTileEntry['visibility']
+  receiveShadow: boolean
+  useBuildAnimation: boolean
+  useBakedLight: boolean
+  useBakedFlicker: boolean
+  useSecondaryDirectionAttribute: boolean
+  shouldRenderBase: boolean
+  useLineOfSightPostMask: boolean
 }
 
 export type BatchDescriptorBundle = {
   batched: BatchDescriptor[]
   fallback: StaticTileEntry[]
+}
+
+export type BuildBatchDescriptorOptions = {
+  floorId: string
+  fogOfWarEnabled: boolean
+  useLineOfSightPostMask: boolean
+  lightFlickerEnabled: boolean
 }
 
 function shouldUseBatchedGpuFog(
@@ -28,15 +47,27 @@ function shouldUseBatchedGpuFog(
 }
 
 function buildBucketKey(
+  floorId: string,
   entry: ResolvedStaticTileEntry,
   usesGpuFog: boolean,
+  lightFlickerEnabled: boolean,
 ): string {
+  const bakedLightFieldHash = entry.bakedLightField?.sourceHash ?? 'no-light-field'
+  const useBakedFlicker =
+    lightFlickerEnabled
+    && Boolean(entry.bakedLightField?.flickerLightFieldTextures.some((texture) => texture))
+
   return [
+    floorId,
+    getChunkKeyForEntry(entry),
     entry.assetUrl,
     entry.transformKey,
+    entry.variant,
     usesGpuFog ? `gpu-los:${entry.variant}` : entry.visibility,
     entry.receiveShadow ? 'shadow' : 'flat',
+    entry.bakedLight || entry.bakedLightField ? `baked:${bakedLightFieldHash}` : 'unlit',
     entry.bakedLightDirectionSecondary ? 'double-direction' : 'single-direction',
+    useBakedFlicker ? 'flicker' : 'steady',
   ].join('|')
 }
 
@@ -47,8 +78,8 @@ export function getRenderBatchChunkKeyForCell(
   return `${Math.floor(cell[0] / chunkSize)}:${Math.floor(cell[1] / chunkSize)}`
 }
 
-function getChunkKeyForEntry(
-  entry: ResolvedStaticTileEntry,
+export function getChunkKeyForStaticTileEntry(
+  entry: Pick<StaticTileEntry, 'fogCell' | 'variantKey' | 'key' | 'position'>,
   chunkSize: number = DEFAULT_RENDER_BATCH_CHUNK_SIZE,
 ) {
   const cell = entry.fogCell
@@ -56,6 +87,13 @@ function getChunkKeyForEntry(
     ?? parseCellFromKey(entry.key)
     ?? [Math.round(entry.position[0]), Math.round(entry.position[2])] as const
   return getRenderBatchChunkKeyForCell(cell, chunkSize)
+}
+
+function getChunkKeyForEntry(
+  entry: ResolvedStaticTileEntry,
+  chunkSize: number = DEFAULT_RENDER_BATCH_CHUNK_SIZE,
+) {
+  return getChunkKeyForStaticTileEntry(entry, chunkSize)
 }
 
 function parseCellFromKey(key: string | undefined) {
@@ -82,6 +120,18 @@ function serializeOptionalVector(value: readonly number[] | undefined) {
   return value ? value.join(',') : ''
 }
 
+function buildBakedLightFieldRenderSignature(field: BakedFloorLightField | undefined) {
+  if (!field) {
+    return 'no-light-field'
+  }
+
+  return [
+    field.sourceHash,
+    field.lightFieldTexture?.uuid ?? 'pending-light-field',
+    field.flickerLightFieldTextures.map((texture) => texture?.uuid ?? 'no-flicker').join(','),
+  ].join('|')
+}
+
 function buildGeometrySignature(entries: ResolvedStaticTileEntry[]) {
   return entries.map((entry) => [
     entry.key,
@@ -98,69 +148,99 @@ function buildGeometrySignature(entries: ResolvedStaticTileEntry[]) {
 function buildRenderSignature(
   entries: ResolvedStaticTileEntry[],
   usesGpuFog: boolean,
+  useLineOfSightPostMask: boolean,
 ) {
   return entries.map((entry) => [
     entry.key,
     entry.visibility,
     usesGpuFog ? 'gpu-fog' : 'no-fog',
-    entry.bakedLightField?.sourceHash ?? 'no-light-field',
+    buildBakedLightFieldRenderSignature(entry.bakedLightField),
+    useLineOfSightPostMask ? 'post-mask' : 'no-post-mask',
+    entry.buildAnimationStart === undefined ? 'static' : 'animated',
   ].join('|')).join(';')
 }
 
 /**
- * Precomputes batch descriptors for static tile entries.
- * Moves asset resolution and compatibility grouping out of React render hot path.
+ * Precomputes stream descriptors for static tile entries.
+ * Group identity matches the new page stream key prefix (everything except page index).
  */
 export function buildBatchDescriptors(
   entries: StaticTileEntry[],
-  fogOfWarEnabled: boolean,
+  options: BuildBatchDescriptorOptions | boolean,
 ): BatchDescriptorBundle {
+  const resolvedOptions = typeof options === 'boolean'
+    ? {
+      floorId: 'floor-1',
+      fogOfWarEnabled: options,
+      useLineOfSightPostMask: false,
+      lightFlickerEnabled: false,
+    }
+    : options
   const resolved: ResolvedStaticTileEntry[] = []
   const fallback: StaticTileEntry[] = []
 
-  // Phase 1: Resolve assets
   entries.forEach((entry) => {
     const resolvedAsset = resolveBatchedTileAsset(entry.assetId, entry.variantKey, entry.objectProps)
-    if (resolvedAsset) {
-      resolved.push({ ...entry, ...resolvedAsset })
-    } else {
+    if (!resolvedAsset) {
       fallback.push(entry)
+      return
     }
+
+    const usesGpuFog = shouldUseBatchedGpuFog(entry.variant, resolvedOptions.fogOfWarEnabled)
+    const shouldRenderBase = usesGpuFog || shouldRenderLineOfSightGeometry(entry.visibility, resolvedOptions.useLineOfSightPostMask)
+    if (!shouldRenderBase && entry.visibility !== 'explored') {
+      return
+    }
+
+    resolved.push({ ...entry, ...resolvedAsset })
   })
 
-  // Phase 2: Group into buckets
   const bucketMap = new Map<string, ResolvedStaticTileEntry[]>()
-
   resolved.forEach((entry) => {
-    const usesGpuFog = shouldUseBatchedGpuFog(entry.variant, fogOfWarEnabled)
-    const chunkKey = getChunkKeyForEntry(entry)
-    const bucketKey = `${chunkKey}|${buildBucketKey(entry, usesGpuFog)}`
-
+    const usesGpuFog = shouldUseBatchedGpuFog(entry.variant, resolvedOptions.fogOfWarEnabled)
+    const bucketKey = buildBucketKey(resolvedOptions.floorId, entry, usesGpuFog, resolvedOptions.lightFlickerEnabled)
     if (!bucketMap.has(bucketKey)) {
       bucketMap.set(bucketKey, [])
     }
     bucketMap.get(bucketKey)!.push(entry)
   })
 
-  // Phase 3: Build descriptors
   const batched: BatchDescriptor[] = []
-  bucketMap.forEach((entries, bucketKey) => {
-    entries.sort((left, right) => left.key.localeCompare(right.key))
-    const firstEntry = entries[0]!
-    const usesGpuFog = shouldUseBatchedGpuFog(firstEntry.variant, fogOfWarEnabled)
-    const [chunkKey] = bucketKey.split('|', 1)
+  bucketMap.forEach((groupEntries, bucketKey) => {
+    groupEntries.sort((left, right) => left.key.localeCompare(right.key))
+    const firstEntry = groupEntries[0]!
+    const usesGpuFog = shouldUseBatchedGpuFog(firstEntry.variant, resolvedOptions.fogOfWarEnabled)
+    const chunkKey = getChunkKeyForEntry(firstEntry)
+    const shouldRenderBase = usesGpuFog || shouldRenderLineOfSightGeometry(firstEntry.visibility, resolvedOptions.useLineOfSightPostMask)
+    const useBakedLight = groupEntries.some((entry) => entry.bakedLight || entry.bakedLightField)
+    const useBuildAnimation = groupEntries.some((entry) => entry.buildAnimationStart !== undefined)
+    const useSecondaryDirectionAttribute = groupEntries.some((entry) => Boolean(entry.bakedLightDirectionSecondary))
+    const useBakedFlicker =
+      shouldRenderBase
+      && resolvedOptions.lightFlickerEnabled
+      && Boolean(firstEntry.bakedLightField?.flickerLightFieldTextures.some((texture) => texture))
 
     batched.push({
+      floorId: resolvedOptions.floorId,
       bucketKey,
-      chunkKey: chunkKey ?? '0:0',
-      entries,
+      chunkKey,
+      entries: groupEntries,
       assetUrl: firstEntry.assetUrl,
       usesGpuFog,
-      geometrySignature: buildGeometrySignature(entries),
-      renderSignature: buildRenderSignature(entries, usesGpuFog),
+      geometrySignature: buildGeometrySignature(groupEntries),
+      renderSignature: buildRenderSignature(groupEntries, usesGpuFog, resolvedOptions.useLineOfSightPostMask),
+      variant: firstEntry.variant,
+      visibility: firstEntry.visibility,
+      receiveShadow: firstEntry.receiveShadow,
+      useBuildAnimation,
+      useBakedLight,
+      useBakedFlicker,
+      useSecondaryDirectionAttribute,
+      shouldRenderBase,
+      useLineOfSightPostMask: resolvedOptions.useLineOfSightPostMask,
     })
   })
-  
+
   return {
     batched,
     fallback,

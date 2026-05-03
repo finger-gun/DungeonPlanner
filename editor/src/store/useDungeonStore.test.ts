@@ -951,6 +951,16 @@ describe('useDungeonStore history', () => {
     expect(useDungeonStore.getState().showLensFocusDebugPoint).toBe(false)
   })
 
+  it('toggles the chunk debug overlay visibility flag', () => {
+    expect(useDungeonStore.getState().showChunkDebugOverlay).toBe(false)
+
+    useDungeonStore.getState().setShowChunkDebugOverlay(true)
+    expect(useDungeonStore.getState().showChunkDebugOverlay).toBe(true)
+
+    useDungeonStore.getState().setShowChunkDebugOverlay(false)
+    expect(useDungeonStore.getState().showChunkDebugOverlay).toBe(false)
+  })
+
   it('toggles the prop probe debug visibility flag', () => {
     expect(useDungeonStore.getState().showPropProbeDebug).toBe(false)
 

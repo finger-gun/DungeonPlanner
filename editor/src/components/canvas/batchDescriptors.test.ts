@@ -1,7 +1,13 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
-import { buildBatchDescriptors, getRenderBatchChunkKeyForCell } from './batchDescriptors'
-import type { StaticTileEntry } from './BatchedTileEntries'
+import * as THREE from 'three'
+import {
+  buildBatchDescriptors,
+  getChunkKeyForStaticTileEntry,
+  getRenderBatchChunkKeyForCell,
+} from './batchDescriptors'
+import { buildChunkEntrySignature, type StaticTileEntry } from './BatchedTileEntries'
 import * as tileAssetResolution from './tileAssetResolution'
+import type { BakedFloorLightField } from '../../rendering/dungeonLightField'
 
 describe('buildBatchDescriptors', () => {
   beforeEach(() => {
@@ -54,6 +60,14 @@ describe('buildBatchDescriptors', () => {
     expect(getRenderBatchChunkKeyForCell([8, 8])).toBe('0:0')
     expect(getRenderBatchChunkKeyForCell([9, 0])).toBe('1:0')
     expect(getRenderBatchChunkKeyForCell([16, 0])).toBe('1:0')
+  })
+
+  it('derives static entry chunk keys from variant keys before falling back to position', () => {
+    expect(getChunkKeyForStaticTileEntry({
+      key: 'wall:0:0:north',
+      variantKey: '16:0:north',
+      position: [0.5, 0, 0],
+    })).toBe('1:0')
   })
 
   it('should group entries by compatibility bucket', () => {
@@ -401,4 +415,72 @@ describe('buildBatchDescriptors', () => {
     expect(result.batched).toHaveLength(0)
     expect(result.fallback).toHaveLength(0)
   })
+
+  it('changes render signatures when a baked light field becomes ready without changing source hash', () => {
+    const resolveSpy = vi.spyOn(tileAssetResolution, 'resolveBatchedTileAsset')
+    resolveSpy.mockImplementation(() => ({
+      assetUrl: '/assets/floor.glb',
+      transformKey: 'default',
+      receiveShadow: true,
+    }))
+
+    const pendingField = createBakedLightField('light-hash', null)
+    const readyField = createBakedLightField('light-hash', new THREE.DataTexture())
+
+    const pendingResult = buildBatchDescriptors([
+      createLitFloorEntry(pendingField),
+    ], false)
+    const readyResult = buildBatchDescriptors([
+      createLitFloorEntry(readyField),
+    ], false)
+
+    expect(pendingResult.batched[0]?.bucketKey).toBe(readyResult.batched[0]?.bucketKey)
+    expect(pendingResult.batched[0]?.renderSignature).not.toBe(readyResult.batched[0]?.renderSignature)
+  })
+
+  it('changes chunk entry signatures when baked light textures change without geometry edits', () => {
+    const pendingField = createBakedLightField('light-hash', null)
+    const readyField = createBakedLightField('light-hash', new THREE.DataTexture())
+
+    expect(buildChunkEntrySignature([createLitFloorEntry(pendingField)])).not.toBe(
+      buildChunkEntrySignature([createLitFloorEntry(readyField)]),
+    )
+  })
 })
+
+function createLitFloorEntry(bakedLightField: BakedFloorLightField): StaticTileEntry {
+  return {
+    key: 'floor:0:0',
+    assetId: 'floor-tile',
+    position: [0, 0, 0],
+    rotation: [0, 0, 0],
+    variant: 'floor',
+    visibility: 'visible',
+    bakedLightField,
+  }
+}
+
+function createBakedLightField(
+  sourceHash: string,
+  lightFieldTexture: THREE.DataTexture | null,
+): BakedFloorLightField {
+  return {
+    floorId: 'floor-1',
+    chunkSize: 8,
+    bounds: { minCellX: 0, maxCellX: 0, minCellZ: 0, maxCellZ: 0 },
+    staticLightSources: [],
+    staticLightSourcesByChunkKey: {},
+    occlusion: null,
+    chunks: [],
+    dirtyChunkKeys: [],
+    dirtyChunkKeySet: new Set(),
+    lightFieldTexture,
+    flickerLightFieldTextures: [null, null, null],
+    lightFieldTextureSize: { width: 1, height: 1 },
+    lightFieldGridSize: { widthCells: 1, heightCells: 1 },
+    cornerSampleByKey: {},
+    sampleByCellKey: {},
+    previousSourceHash: null,
+    sourceHash,
+  }
+}

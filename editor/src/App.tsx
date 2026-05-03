@@ -293,6 +293,7 @@ function App() {
   const showLosDebugMask = useDungeonStore((state) => state.showLosDebugMask)
   const showLosDebugRays = useDungeonStore((state) => state.showLosDebugRays)
   const showLensFocusDebugPoint = useDungeonStore((state) => state.showLensFocusDebugPoint)
+  const showChunkDebugOverlay = useDungeonStore((state) => state.showChunkDebugOverlay)
   const showProjectionDebugMesh = useDungeonStore((state) => state.showProjectionDebugMesh)
   const showPropProbeDebug = useDungeonStore((state) => state.showPropProbeDebug)
   const slowBuildAnimationDebug = useDungeonStore((state) => state.slowBuildAnimationDebug)
@@ -300,6 +301,7 @@ function App() {
   const setShowLosDebugMask = useDungeonStore((state) => state.setShowLosDebugMask)
   const setShowLosDebugRays = useDungeonStore((state) => state.setShowLosDebugRays)
   const setShowLensFocusDebugPoint = useDungeonStore((state) => state.setShowLensFocusDebugPoint)
+  const setShowChunkDebugOverlay = useDungeonStore((state) => state.setShowChunkDebugOverlay)
   const setShowProjectionDebugMesh = useDungeonStore((state) => state.setShowProjectionDebugMesh)
   const setShowPropProbeDebug = useDungeonStore((state) => state.setShowPropProbeDebug)
   const setSlowBuildAnimationDebug = useDungeonStore((state) => state.setSlowBuildAnimationDebug)
@@ -822,8 +824,9 @@ function App() {
               exploredCellCount={exploredCellCount}
               clearExploredCells={clearExploredCells}
               showLosDebugMask={showLosDebugMask}
-            showLosDebugRays={showLosDebugRays}
+              showLosDebugRays={showLosDebugRays}
               showLensFocusDebugPoint={showLensFocusDebugPoint}
+              showChunkDebugOverlay={showChunkDebugOverlay}
               showProjectionDebugMesh={showProjectionDebugMesh}
               showPropProbeDebug={showPropProbeDebug}
               slowBuildAnimationDebug={slowBuildAnimationDebug}
@@ -831,6 +834,7 @@ function App() {
               setShowLosDebugMask={setShowLosDebugMask}
               setShowLosDebugRays={setShowLosDebugRays}
               setShowLensFocusDebugPoint={setShowLensFocusDebugPoint}
+              setShowChunkDebugOverlay={setShowChunkDebugOverlay}
               setShowProjectionDebugMesh={setShowProjectionDebugMesh}
               setShowPropProbeDebug={setShowPropProbeDebug}
               setSlowBuildAnimationDebug={setSlowBuildAnimationDebug}
@@ -993,6 +997,7 @@ function DebugVisibilityPanel({
   showLosDebugMask,
   showLosDebugRays,
   showLensFocusDebugPoint,
+  showChunkDebugOverlay,
   showProjectionDebugMesh,
   showPropProbeDebug,
   slowBuildAnimationDebug,
@@ -1000,6 +1005,7 @@ function DebugVisibilityPanel({
   setShowLosDebugMask,
   setShowLosDebugRays,
   setShowLensFocusDebugPoint,
+  setShowChunkDebugOverlay,
   setShowProjectionDebugMesh,
   setShowPropProbeDebug,
   setSlowBuildAnimationDebug,
@@ -1015,6 +1021,7 @@ function DebugVisibilityPanel({
   showLosDebugMask: boolean
   showLosDebugRays: boolean
   showLensFocusDebugPoint: boolean
+  showChunkDebugOverlay: boolean
   showProjectionDebugMesh: boolean
   showPropProbeDebug: boolean
   slowBuildAnimationDebug: boolean
@@ -1022,6 +1029,7 @@ function DebugVisibilityPanel({
   setShowLosDebugMask: (show: boolean) => void
   setShowLosDebugRays: (show: boolean) => void
   setShowLensFocusDebugPoint: (show: boolean) => void
+  setShowChunkDebugOverlay: (show: boolean) => void
   setShowProjectionDebugMesh: (show: boolean) => void
   setShowPropProbeDebug: (show: boolean) => void
   setSlowBuildAnimationDebug: (show: boolean) => void
@@ -1073,6 +1081,11 @@ function DebugVisibilityPanel({
           label="Show autofocus point"
           pressed={showLensFocusDebugPoint}
           onClick={() => setShowLensFocusDebugPoint(!showLensFocusDebugPoint)}
+        />
+        <DebugToggleButton
+          label="Visualize chunk bounds"
+          pressed={showChunkDebugOverlay}
+          onClick={() => setShowChunkDebugOverlay(!showChunkDebugOverlay)}
         />
         <DebugToggleButton
           label="Show projection mesh"

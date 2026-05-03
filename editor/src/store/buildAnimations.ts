@@ -7,6 +7,9 @@ export const BUILD_ANIMATION_DEPTH = 3.0   // world units tiles emerge from belo
 export const BUILD_ANIMATION_RISE_DURATION_MS = 450   // ms each tile takes to rise to the surface
 export const BUILD_ANIMATION_DEBUG_SLOW_MULTIPLIER = 10
 export const BUILD_ANIMATION_WARMUP_MS = 0
+// Temporary profiling switch used during GPU-stall investigation. Keep enabled
+// in normal editor behavior.
+export const BUILD_ANIMATIONS_ENABLED = true
 const MAX_STAGGER_MS     = 320   // max additional delay for the furthest cells
 const CLEANUP_BUFFER_MS  = 200   // extra time after full animation before map cleanup
 const MAX_BUILD_ANIMATION_EXTRA_DELAY_MS = 200

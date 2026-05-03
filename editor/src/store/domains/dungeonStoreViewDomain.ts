@@ -20,6 +20,7 @@ type ViewActionKeys =
   | 'setShowLosDebugMask'
   | 'setShowLosDebugRays'
   | 'setShowLensFocusDebugPoint'
+  | 'setShowChunkDebugOverlay'
   | 'setShowProjectionDebugMesh'
   | 'setShowPropProbeDebug'
   | 'setSlowBuildAnimationDebug'
@@ -162,6 +163,9 @@ export function createDungeonStoreViewActions({
     },
     setShowLensFocusDebugPoint: (show) => {
       set((state) => ({ ...state, showLensFocusDebugPoint: show }))
+    },
+    setShowChunkDebugOverlay: (show) => {
+      set((state) => ({ ...state, showChunkDebugOverlay: show }))
     },
     setShowProjectionDebugMesh: (show) => {
       set((state) => ({ ...state, showProjectionDebugMesh: show }))

@@ -302,6 +302,7 @@ export type DungeonState = DungeonSnapshot & {
   showLosDebugMask: boolean
   showLosDebugRays: boolean
   showLensFocusDebugPoint: boolean
+  showChunkDebugOverlay: boolean
   showProjectionDebugMesh: boolean
   showPropProbeDebug: boolean
   slowBuildAnimationDebug: boolean
@@ -379,6 +380,7 @@ export type DungeonState = DungeonSnapshot & {
   setShowLosDebugMask: (show: boolean) => void
   setShowLosDebugRays: (show: boolean) => void
   setShowLensFocusDebugPoint: (show: boolean) => void
+  setShowChunkDebugOverlay: (show: boolean) => void
   setShowProjectionDebugMesh: (show: boolean) => void
   setShowPropProbeDebug: (show: boolean) => void
   setSlowBuildAnimationDebug: (show: boolean) => void
@@ -1818,6 +1820,7 @@ export const useDungeonStore = create<DungeonState>()(
   showLosDebugMask: false,
   showLosDebugRays: false,
   showLensFocusDebugPoint: false,
+  showChunkDebugOverlay: false,
   showProjectionDebugMesh: false,
   showPropProbeDebug: false,
   slowBuildAnimationDebug: false,
@@ -3333,6 +3336,7 @@ export const useDungeonStore = create<DungeonState>()(
         showLosDebugMask: false,
         showLosDebugRays: false,
         showLensFocusDebugPoint: false,
+        showChunkDebugOverlay: false,
         showProjectionDebugMesh: false,
         showPropProbeDebug: false,
         slowBuildAnimationDebug: false,

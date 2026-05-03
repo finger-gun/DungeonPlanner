@@ -1,7 +1,9 @@
 import { getContentPackAssetById } from '../../content-packs/registry'
 import type { ContentPackModelTransform } from '../../content-packs/types'
-import { cellToWorldPosition, getCellKey, type GridCell } from '../../hooks/useSnapToGrid'
+import { GRID_SIZE, cellToWorldPosition, getCellKey, type GridCell } from '../../hooks/useSnapToGrid'
+import type { FloorDirtyInfo } from '../../store/floorDirtyDomains'
 import { getInnerWallOwnerRecord } from '../../store/manualWalls'
+import { buildWallOpeningDerivedState } from '../../store/derived/wallOpeningDerived'
 import {
   buildFloorRenderPlan,
   type FloorRenderGroup,
@@ -13,10 +15,11 @@ import {
   wallKeyToWorldPosition,
   type BoundaryWallSegment,
 } from '../../store/wallSegments'
-import type { InnerWallRecord, PaintedCells, Room } from '../../store/useDungeonStore'
+import type { InnerWallRecord, Layer, OpeningRecord, PaintedCells, Room } from '../../store/useDungeonStore'
 import type { FloorDerivedBundle } from '../../store/derived/floorDerived'
 import { deriveWallCornersFromSegments, type WallCornerInstance } from './wallCornerLayout'
 import { getWallSpanInteriorLightDirections } from './wallLighting'
+import { DEFAULT_RENDER_BATCH_CHUNK_SIZE, getRenderBatchChunkKeyForCell } from './batchDescriptors'
 
 export type RoomWallInstance = {
   key: string
@@ -53,6 +56,19 @@ export type FloorRenderDerivedBundle = {
   corners: RoomCornerRenderInstance[]
 }
 
+export type FloorRenderChunkBundle = FloorRenderDerivedBundle & {
+  contextPaintedCells: PaintedCells
+  openings: OpeningRecord[]
+}
+
+export type FloorRenderChunkCache = {
+  floorId: string
+  includeFloorReceivers: boolean
+  haloCells: number
+  orderedChunkKeys: string[]
+  bundlesByChunk: Map<string, FloorRenderChunkBundle>
+}
+
 export type FloorRenderDerivedInput = {
   visiblePaintedCellRecords: PaintedCells
   rooms: Record<string, Room>
@@ -63,6 +79,19 @@ export type FloorRenderDerivedInput = {
   wallSurfaceProps: Record<string, Record<string, unknown>>
   wallOpeningDerivedState: FloorDerivedBundle['wallOpeningDerivedState']
   innerWalls: Record<string, InnerWallRecord>
+}
+
+export type FloorRenderChunkInput = {
+  paintedCells: PaintedCells
+  layers: Record<string, Layer>
+  rooms: Record<string, Room>
+  wallOpenings: Record<string, OpeningRecord>
+  innerWalls: Record<string, InnerWallRecord>
+  floorTileAssetIds: Record<string, string>
+  wallSurfaceAssetIds: Record<string, string>
+  wallSurfaceProps: Record<string, Record<string, unknown>>
+  globalFloorAssetId: string | null
+  globalWallAssetId: string | null
 }
 
 export function buildFloorRenderDerivedBundle(
@@ -121,6 +150,196 @@ export function buildFloorRenderDerivedBundleFromInput(
       input.innerWalls,
     ),
   }
+}
+
+export function buildFloorRenderDerivedBundleForChunk(
+  input: FloorRenderChunkInput,
+  chunkKey: string,
+  options?: {
+    includeFloorReceivers?: boolean
+    haloCells?: number
+  },
+): FloorRenderChunkBundle {
+  const targetRect = getChunkRect(chunkKey)
+  const contextRect = expandFloorRenderRect(targetRect, options?.haloCells ?? 0)
+  const contextPaintedCells = filterVisiblePaintedCellsByRect(
+    input.paintedCells,
+    input.layers,
+    contextRect,
+  )
+  const contextWallOpenings = filterVisibleOpeningRecordByRect(
+    input.wallOpenings,
+    input.layers,
+    contextRect,
+  )
+  const contextWallOpeningDerivedState = buildWallOpeningDerivedState(contextWallOpenings)
+  const localBundle = buildFloorRenderDerivedBundleFromInput({
+    visiblePaintedCellRecords: contextPaintedCells,
+    rooms: input.rooms,
+    globalFloorAssetId: input.globalFloorAssetId,
+    floorTileAssetIds: filterCellKeyRecordByRect(input.floorTileAssetIds, contextRect),
+    globalWallAssetId: input.globalWallAssetId,
+    wallSurfaceAssetIds: filterWallKeyRecordByRect(input.wallSurfaceAssetIds, contextRect),
+    wallSurfaceProps: filterWallKeyRecordByRect(input.wallSurfaceProps, contextRect),
+    wallOpeningDerivedState: contextWallOpeningDerivedState,
+    innerWalls: filterWallKeyRecordByRect(input.innerWalls, contextRect),
+  }, options)
+
+  return {
+    contextPaintedCells,
+    openings: Object.values(contextWallOpenings).filter((opening) =>
+      isWallKeyInFloorRenderRect(opening.wallKey, targetRect)),
+    floorGroups: localBundle.floorGroups.flatMap((group) => {
+      const chunkCells = group.cells.filter((cell) => isCellInFloorRenderRect(cell, targetRect))
+      if (chunkCells.length === 0) {
+        return []
+      }
+
+      return [{
+        ...group,
+        groupKey: `${chunkKey}:${group.floorAssetId ?? 'none'}`,
+        cells: chunkCells,
+      }]
+    }),
+    floorSurfaceEntries: localBundle.floorSurfaceEntries.filter((placement) =>
+      isCellInFloorRenderRect(placement.anchorCell, targetRect)),
+    visibleFloorReceiverCells: localBundle.visibleFloorReceiverCells.filter((cell) =>
+      isCellInFloorRenderRect(cell.cell, targetRect)),
+    walls: localBundle.walls.filter((wall) => getChunkKeyForWallInstance(wall) === chunkKey),
+    corners: localBundle.corners.filter((corner) => getChunkKeyForCornerInstance(corner) === chunkKey),
+  }
+}
+
+export function buildChunkedFloorRenderDerivedCache({
+  previous,
+  floorId,
+  input,
+  dirtyInfo,
+  includeFloorReceivers,
+  haloCells,
+}: {
+  previous: FloorRenderChunkCache | null
+  floorId: string
+  input: FloorRenderChunkInput
+  dirtyInfo: FloorDirtyInfo | null | undefined
+  includeFloorReceivers: boolean
+  haloCells: number
+}): FloorRenderChunkCache {
+  const orderedChunkKeys = collectChunkKeysFromPaintedCells(input.paintedCells, input.layers)
+  const nextChunkKeySet = new Set(orderedChunkKeys)
+  const shouldRebuildAll =
+    !previous
+    || previous.floorId !== floorId
+    || previous.includeFloorReceivers !== includeFloorReceivers
+    || previous.haloCells !== haloCells
+    || !dirtyInfo?.dirtyCellRect
+    || dirtyInfo.fullRefresh
+
+  if (shouldRebuildAll) {
+    return {
+      floorId,
+      includeFloorReceivers,
+      haloCells,
+      orderedChunkKeys,
+      bundlesByChunk: new Map(
+        orderedChunkKeys.map((chunkKey) => [
+          chunkKey,
+          buildFloorRenderDerivedBundleForChunk(input, chunkKey, {
+            includeFloorReceivers,
+            haloCells,
+          }),
+        ]),
+      ),
+    }
+  }
+
+  const bundlesByChunk = new Map(previous.bundlesByChunk)
+  for (const chunkKey of [...bundlesByChunk.keys()]) {
+    if (!nextChunkKeySet.has(chunkKey)) {
+      bundlesByChunk.delete(chunkKey)
+    }
+  }
+
+  const affectedChunkKeys = new Set(getChunkKeysForDirtyRect(dirtyInfo.dirtyCellRect, haloCells))
+  orderedChunkKeys.forEach((chunkKey) => {
+    if (!bundlesByChunk.has(chunkKey)) {
+      affectedChunkKeys.add(chunkKey)
+    }
+  })
+
+  affectedChunkKeys.forEach((chunkKey) => {
+    if (!nextChunkKeySet.has(chunkKey)) {
+      bundlesByChunk.delete(chunkKey)
+      return
+    }
+
+    bundlesByChunk.set(
+      chunkKey,
+      buildFloorRenderDerivedBundleForChunk(input, chunkKey, {
+        includeFloorReceivers,
+        haloCells,
+      }),
+    )
+  })
+
+  return {
+    floorId,
+    includeFloorReceivers,
+    haloCells,
+    orderedChunkKeys,
+    bundlesByChunk,
+  }
+}
+
+export function flattenFloorRenderChunkCache(
+  cache: FloorRenderChunkCache | null,
+): FloorRenderDerivedBundle {
+  if (!cache || cache.orderedChunkKeys.length === 0) {
+    return createEmptyFloorRenderDerivedBundle()
+  }
+
+  return cache.orderedChunkKeys.reduce<FloorRenderDerivedBundle>((accumulator, chunkKey) => {
+    const bundle = cache.bundlesByChunk.get(chunkKey)
+    if (!bundle) {
+      return accumulator
+    }
+
+    accumulator.floorGroups.push(...bundle.floorGroups)
+    accumulator.floorSurfaceEntries.push(...bundle.floorSurfaceEntries)
+    accumulator.visibleFloorReceiverCells.push(...bundle.visibleFloorReceiverCells)
+    accumulator.walls.push(...bundle.walls)
+    accumulator.corners.push(...bundle.corners)
+    return accumulator
+  }, createEmptyFloorRenderDerivedBundle())
+}
+
+export function getChunkKeysForDirtyRect(
+  dirtyRect: FloorDirtyInfo['dirtyCellRect'],
+  haloCells = 0,
+): string[] {
+  if (!dirtyRect) {
+    return []
+  }
+
+  const expanded = expandFloorRenderRect({
+    minCellX: dirtyRect.minCellX,
+    maxCellX: dirtyRect.maxCellX,
+    minCellZ: dirtyRect.minCellZ,
+    maxCellZ: dirtyRect.maxCellZ,
+  }, haloCells)
+  const minChunkX = Math.floor(expanded.minCellX / DEFAULT_RENDER_BATCH_CHUNK_SIZE)
+  const maxChunkX = Math.floor(expanded.maxCellX / DEFAULT_RENDER_BATCH_CHUNK_SIZE)
+  const minChunkZ = Math.floor(expanded.minCellZ / DEFAULT_RENDER_BATCH_CHUNK_SIZE)
+  const maxChunkZ = Math.floor(expanded.maxCellZ / DEFAULT_RENDER_BATCH_CHUNK_SIZE)
+  const chunkKeys: string[] = []
+
+  for (let chunkZ = minChunkZ; chunkZ <= maxChunkZ; chunkZ += 1) {
+    for (let chunkX = minChunkX; chunkX <= maxChunkX; chunkX += 1) {
+      chunkKeys.push(`${chunkX}:${chunkZ}`)
+    }
+  }
+
+  return chunkKeys
 }
 
 function deriveFloorReceiverCells(plan: ReturnType<typeof buildFloorRenderPlan>): FloorReceiverCellInput[] {
@@ -332,4 +551,168 @@ function getWallSpanWorldTransform(
     ],
     rotation: transforms[0].rotation,
   }
+}
+
+type FloorRenderRect = {
+  minCellX: number
+  maxCellX: number
+  minCellZ: number
+  maxCellZ: number
+}
+
+function createEmptyFloorRenderDerivedBundle(): FloorRenderDerivedBundle {
+  return {
+    floorGroups: [],
+    floorSurfaceEntries: [],
+    visibleFloorReceiverCells: [],
+    walls: [],
+    corners: [],
+  }
+}
+
+function collectChunkKeysFromPaintedCells(
+  paintedCells: PaintedCells,
+  layers: Record<string, Layer>,
+) {
+  return [...new Set(
+    Object.values(paintedCells)
+      .filter((record) => layers[record.layerId]?.visible !== false)
+      .map((record) => getRenderBatchChunkKeyForCell(record.cell)),
+  )].sort()
+}
+
+function getChunkRect(chunkKey: string): FloorRenderRect {
+  const [chunkXText, chunkZText] = chunkKey.split(':')
+  const chunkX = Number.parseInt(chunkXText ?? '', 10)
+  const chunkZ = Number.parseInt(chunkZText ?? '', 10)
+  const normalizedChunkX = Number.isNaN(chunkX) ? 0 : chunkX
+  const normalizedChunkZ = Number.isNaN(chunkZ) ? 0 : chunkZ
+
+  return {
+    minCellX: normalizedChunkX * DEFAULT_RENDER_BATCH_CHUNK_SIZE,
+    maxCellX: (normalizedChunkX + 1) * DEFAULT_RENDER_BATCH_CHUNK_SIZE - 1,
+    minCellZ: normalizedChunkZ * DEFAULT_RENDER_BATCH_CHUNK_SIZE,
+    maxCellZ: (normalizedChunkZ + 1) * DEFAULT_RENDER_BATCH_CHUNK_SIZE - 1,
+  }
+}
+
+function expandFloorRenderRect(rect: FloorRenderRect, haloCells: number): FloorRenderRect {
+  return {
+    minCellX: rect.minCellX - haloCells,
+    maxCellX: rect.maxCellX + haloCells,
+    minCellZ: rect.minCellZ - haloCells,
+    maxCellZ: rect.maxCellZ + haloCells,
+  }
+}
+
+function isCellInFloorRenderRect(cell: GridCell, rect: FloorRenderRect) {
+  return (
+    cell[0] >= rect.minCellX
+    && cell[0] <= rect.maxCellX
+    && cell[1] >= rect.minCellZ
+    && cell[1] <= rect.maxCellZ
+  )
+}
+
+function filterVisiblePaintedCellsByRect(
+  paintedCells: PaintedCells,
+  layers: Record<string, Layer>,
+  rect: FloorRenderRect,
+): PaintedCells {
+  return Object.fromEntries(
+    Object.entries(paintedCells).filter(([, record]) => {
+      if (!isCellInFloorRenderRect(record.cell, rect)) {
+        return false
+      }
+      const layer = layers[record.layerId]
+      return layer?.visible !== false
+    }),
+  )
+}
+
+function filterVisibleOpeningRecordByRect(
+  openings: Record<string, OpeningRecord>,
+  layers: Record<string, Layer>,
+  rect: FloorRenderRect,
+): Record<string, OpeningRecord> {
+  return Object.fromEntries(
+    Object.entries(openings).filter(([, opening]) => {
+      if (!isWallKeyInFloorRenderRect(opening.wallKey, rect)) {
+        return false
+      }
+      const layer = layers[opening.layerId]
+      return layer?.visible !== false
+    }),
+  )
+}
+
+function filterCellKeyRecordByRect<T>(
+  records: Record<string, T>,
+  rect: FloorRenderRect,
+): Record<string, T> {
+  return Object.fromEntries(
+    Object.entries(records).filter(([cellKey]) => isCellKeyInFloorRenderRect(cellKey, rect)),
+  )
+}
+
+function filterWallKeyRecordByRect<T>(
+  records: Record<string, T>,
+  rect: FloorRenderRect,
+): Record<string, T> {
+  return Object.fromEntries(
+    Object.entries(records).filter(([wallKey]) => isWallKeyInFloorRenderRect(wallKey, rect)),
+  )
+}
+
+function isCellKeyInFloorRenderRect(cellKey: string, rect: FloorRenderRect) {
+  const cell = parseCellKey(cellKey)
+  return cell ? isCellInFloorRenderRect(cell, rect) : false
+}
+
+function isWallKeyInFloorRenderRect(wallKey: string, rect: FloorRenderRect) {
+  const wallCell = parseWallCellKey(wallKey)
+  return wallCell ? isCellInFloorRenderRect(wallCell, rect) : false
+}
+
+function parseCellKey(cellKey: string): GridCell | null {
+  const [cellXText, cellZText] = cellKey.split(':')
+  const cellX = Number.parseInt(cellXText ?? '', 10)
+  const cellZ = Number.parseInt(cellZText ?? '', 10)
+  if (Number.isNaN(cellX) || Number.isNaN(cellZ)) {
+    return null
+  }
+
+  return [cellX, cellZ]
+}
+
+function parseWallCellKey(wallKey: string): GridCell | null {
+  const [cellXText, cellZText] = wallKey.split(':')
+  const cellX = Number.parseInt(cellXText ?? '', 10)
+  const cellZ = Number.parseInt(cellZText ?? '', 10)
+  if (Number.isNaN(cellX) || Number.isNaN(cellZ)) {
+    return null
+  }
+
+  return [cellX, cellZ]
+}
+
+function getChunkKeyForWallInstance(wall: Pick<RoomWallInstance, 'segmentKeys' | 'position'>) {
+  const wallCell = wall.segmentKeys[0] ? parseWallCellKey(wall.segmentKeys[0]) : null
+  if (wallCell) {
+    return getRenderBatchChunkKeyForCell(wallCell)
+  }
+
+  return getRenderBatchChunkKeyForCell([Math.round(wall.position[0]), Math.round(wall.position[2])])
+}
+
+function getChunkKeyForCornerInstance(corner: Pick<RoomCornerRenderInstance, 'key' | 'position'>) {
+  const cornerCell = parseCellKey(corner.key)
+  if (cornerCell) {
+    return getRenderBatchChunkKeyForCell(cornerCell)
+  }
+
+  return getRenderBatchChunkKeyForCell([
+    Math.round(corner.position[0] / GRID_SIZE),
+    Math.round(corner.position[2] / GRID_SIZE),
+  ])
 }

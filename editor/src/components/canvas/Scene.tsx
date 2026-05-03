@@ -11,9 +11,9 @@ import { PlayerSelectionRing } from './DungeonObject'
 import { DungeonRoom } from './DungeonRoom'
 import { useDungeonStore, type DungeonObjectRecord } from '../../store/useDungeonStore'
 import {
-  type FloorDerivedBundle,
+  type FloorSceneDerivedBundle,
 } from '../../store/derived/floorDerived'
-import { getOrBuildCachedFloorDerivedBundle } from '../../store/derived/floorDerivedCache'
+import { getOrBuildCachedFloorSceneDerivedBundle } from '../../store/derived/floorDerivedCache'
 import { usePlayVisibility } from './playVisibility'
 import { ContentPackInstance } from './ContentPackInstance'
 import { getCellKey, snapWorldPointToGrid } from '../../hooks/useSnapToGrid'
@@ -40,6 +40,8 @@ import { pruneRuntimePropLightingCache } from '../../rendering/propLightingCache
 import { getObjectInstanceScale, getObjectTintColor } from '../../store/objectAppearance'
 import { SelectionContextualUi } from './SelectionContextualUi'
 import { WorldRaycastAcceleration } from './WorldRaycastAcceleration'
+import { TileGpuStreamProvider } from './TileGpuStreamContext'
+import { BUILD_ANIMATIONS_ENABLED } from '../../store/buildAnimations'
 import {
   ACTIVE_FLOOR_RENDER_DOMAINS,
   useActiveFloorSnapshot,
@@ -61,6 +63,7 @@ const FireParticleSystem = lazy(() =>
 )
 
 const SCENE_OVERVIEW_FLOOR_HEIGHT_UNIT = 3
+const LIGHT_RIG_SHADOWS_ENABLED = true
 const PLAYER_ANIMATION_MS = {
   pickup: 520,
   release: 520,
@@ -117,14 +120,16 @@ export function Scene() {
       frameloop="demand"
     >
       <Suspense fallback={null}>
-        {/* Global scene elements — never remount on floor switch */}
-        <GlobalContent />
-        {/* Floor-specific content — remounts when active floor changes */}
-        {effectiveFloorViewMode === 'scene' ? (
-          <SceneOverviewContent />
-        ) : (
-          <FloorContent key={activeFloorId} startY={floorAnimStartY.current} />
-        )}
+        <TileGpuStreamProvider>
+          {/* Global scene elements — never remount on floor switch */}
+          <GlobalContent />
+          {/* Floor-specific content — remounts when active floor changes */}
+          {effectiveFloorViewMode === 'scene' ? (
+            <SceneOverviewContent />
+          ) : (
+            <FloorContent key={activeFloorId} startY={floorAnimStartY.current} />
+          )}
+        </TileGpuStreamProvider>
       </Suspense>
     </Canvas>
   )
@@ -182,7 +187,7 @@ function GlobalContent() {
         <>
           <ambientLight intensity={1.6 * lightIntensity} color={ambientColor} />
           <directionalLight
-            castShadow
+            castShadow={LIGHT_RIG_SHADOWS_ENABLED}
             intensity={keyMultiplier * lightIntensity}
             color={keyColor}
             position={mapMode === 'outdoor' ? sunPosition : [9, 14, 7]}
@@ -276,7 +281,7 @@ function DebugCameraBridgeBinder() {
 type FloorRenderEntry = {
   id: string
   level: number
-  derived: FloorDerivedBundle
+  derived: FloorSceneDerivedBundle
   bakedLightField: BakedFloorLightField
 }
 
@@ -326,7 +331,7 @@ function SceneOverviewContent() {
       }
 
       if (floorId === activeFloorId) {
-        const derived = getOrBuildCachedFloorDerivedBundle({
+        const derived = getOrBuildCachedFloorSceneDerivedBundle({
           data: {
             floorId,
             paintedCells,
@@ -353,7 +358,7 @@ function SceneOverviewContent() {
       }
 
       const snapshot = floor.snapshot
-      const derived = getOrBuildCachedFloorDerivedBundle({
+      const derived = getOrBuildCachedFloorSceneDerivedBundle({
         data: {
           floorId,
           paintedCells: snapshot.paintedCells,
@@ -411,6 +416,7 @@ function SceneOverviewContent() {
             visibility={ALWAYS_VISIBLE}
             enableBuildAnimation={false}
             enableFloorReceiver={false}
+            streamScopeKey="overview"
           />
           {entry.derived.topLevelObjects
             .filter((object) => !isDownStairAssetId(object.assetId))
@@ -480,8 +486,8 @@ function FloorContent({ startY = 0 }: { startY?: number }) {
   const visibility = usePlayVisibility()
   const [releaseAnimationIds, setReleaseAnimationIds] = useState<Record<string, true>>({})
 
-  const floorDerived = useMemo<FloorDerivedBundle>(
-    () => getOrBuildCachedFloorDerivedBundle({
+  const floorDerived = useMemo<FloorSceneDerivedBundle>(
+    () => getOrBuildCachedFloorSceneDerivedBundle({
       data: {
         floorId: activeFloorId,
         paintedCells,
@@ -813,6 +819,9 @@ function FloorContent({ startY = 0 }: { startY?: number }) {
             derived={floorDerived}
             visibility={visibility}
             bakedLightField={bakedFloorLightField}
+            enableBuildAnimation={BUILD_ANIMATIONS_ENABLED}
+            streamScopeKey="active"
+            dirtyInfo={floorDirtyInfo}
           />
           {floorDerived.topLevelObjects.map((object) => (
             dragState?.objectId === object.id ? null : (

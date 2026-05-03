@@ -46,6 +46,11 @@ export type FloorDerivedBundle = {
   wallOpeningDerivedState: WallOpeningDerivedState
 }
 
+export type FloorSceneDerivedBundle = Pick<
+  FloorDerivedBundle,
+  'data' | 'topLevelObjects' | 'childrenByParent' | 'bakedLightBuildInput'
+>
+
 export function buildVisiblePaintedCells({
   paintedCells,
   layers,
@@ -151,6 +156,26 @@ export function buildFloorDerivedBundle(data: DungeonRoomData): FloorDerivedBund
       null,
     ),
     wallOpeningDerivedState: buildFloorWallOpeningDerivedState(data),
+  }
+}
+
+export function buildFloorSceneDerivedBundle(data: DungeonRoomData): FloorSceneDerivedBundle {
+  const { visiblePaintedCells, visiblePaintedCellRecords } = buildVisiblePaintedCells(data)
+  const visibleObjects = buildVisibleObjects(data)
+  const staticLightSources = buildStaticLightSources(visibleObjects)
+  const { topLevelObjects, childrenByParent } = buildObjectHierarchy(visibleObjects)
+
+  return {
+    data,
+    topLevelObjects,
+    childrenByParent,
+    bakedLightBuildInput: buildBakedLightBuildInput(
+      data,
+      visiblePaintedCells,
+      visiblePaintedCellRecords,
+      staticLightSources,
+      null,
+    ),
   }
 }
 

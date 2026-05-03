@@ -27,12 +27,15 @@ type UseBakedFloorLightFieldOptions = {
   enableGpuComputePrototype?: boolean
   deferPreparation?: boolean
 }
-
 export function useBakedFloorLightField(
   input: BakedFloorLightFieldBuildInput,
   options: UseBakedFloorLightFieldOptions = {},
-) {
-  const { renderer = null, enableGpuComputePrototype = false, deferPreparation = false } = options
+): BakedFloorLightField {
+  const {
+    renderer = null,
+    enableGpuComputePrototype = false,
+    deferPreparation = false,
+  } = options
   const [field, setField] = useState<BakedFloorLightField>(() => {
     if (typeof Worker === 'undefined') {
       return getOrBuildBakedFloorLightField(input)
