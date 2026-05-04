@@ -6,6 +6,12 @@ import type {
 } from '../../store/useDungeonStore'
 import { DEFAULT_FLOOR_CHUNK_SIZE } from '../../store/floorChunkKeys'
 
+/**
+ * Packs per-floor tile, opening, and inner-wall state into compact integer buffers.
+ *
+ * These mirrored buffers give GPU compute and rendering paths a stable snapshot of
+ * wall-adjacent floor data without re-walking the richer store structures.
+ */
 export const DEFAULT_FLOOR_WALL_TILE_MIRROR_CHUNK_SIZE = DEFAULT_FLOOR_CHUNK_SIZE
 export const FLOOR_TILE_MIRROR_STRIDE = 4
 export const FLOOR_OPENING_MIRROR_STRIDE = 4
@@ -205,30 +211,3 @@ function getDirectionCode(direction: string) {
   }
 }
 
-export function createFloorWallTileMirrorDirtyHint(cellKeys: Array<[number, number]>) {
-  if (cellKeys.length === 0) {
-    return null
-  }
-
-  let minCellX = Number.POSITIVE_INFINITY
-  let maxCellX = Number.NEGATIVE_INFINITY
-  let minCellZ = Number.POSITIVE_INFINITY
-  let maxCellZ = Number.NEGATIVE_INFINITY
-  cellKeys.forEach((cell) => {
-    minCellX = Math.min(minCellX, cell[0])
-    maxCellX = Math.max(maxCellX, cell[0])
-    minCellZ = Math.min(minCellZ, cell[1])
-    maxCellZ = Math.max(maxCellZ, cell[1])
-  })
-
-  return {
-    dirtyCellRect: {
-      minCellX,
-      maxCellX,
-      minCellZ,
-      maxCellZ,
-    },
-    dirtyWallKeys: [],
-    fullRefresh: false,
-  } as const
-}

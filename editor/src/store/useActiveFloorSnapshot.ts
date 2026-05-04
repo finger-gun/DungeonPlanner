@@ -5,6 +5,20 @@ import {
   type FloorDirtyDomainKey,
 } from './floorDirtyDomains'
 
+/**
+ * Subscribes to specific dirty domains on the active floor and returns a
+ * synchronously derived snapshot.
+ *
+ * Uses `useDungeonStore` to subscribe to version counters for the given
+ * domains — this causes React to re-render when any of those domains are
+ * marked dirty. The derived value is then computed synchronously from the
+ * latest store state (bypassing the stale closure problem inherent to
+ * selector-based subscriptions).
+ *
+ * The `void dependencyKey` is intentional: we call `useDungeonStore` for
+ * its subscription side-effect (triggering re-renders), not to use the
+ * returned value directly.
+ */
 export const ACTIVE_FLOOR_RENDER_DOMAINS = [
   'tiles',
   'blocked',
@@ -40,6 +54,7 @@ export function useActiveFloorSnapshot<T>(
     ].join(':')
   })
 
+  // Intentionally unused: reading this value keeps the component subscribed.
   void dependencyKey
   return select(useDungeonStore.getState())
 }

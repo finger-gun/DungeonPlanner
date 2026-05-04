@@ -1,6 +1,22 @@
 import { getCellKey, type GridCell } from '../hooks/useSnapToGrid'
 import { getFloorChunkKeysForCells } from './floorChunkKeys'
 
+/**
+ * Per-floor dirty domain tracking.
+ *
+ * Tracks which logical domains (tiles, walls, props, lighting, etc.) have
+ * changed on a given floor, along with spatial hints (dirty cell rects,
+ * chunk keys) to enable incremental updates.
+ *
+ * Each floor gets a `FloorDirtyInfo` entry. Every mutation bumps a version
+ * counter on the affected domains. Consumers (e.g. `useActiveFloorSnapshot`)
+ * subscribe to specific domains and re-derive data only when those versions change.
+ *
+ * ## Usage
+ * - `applyFloorDirtyMutation` — called from store actions to record changes
+ * - `syncFloorDirtyState` — ensures all active floors have an entry
+ * - `createFloorDirtyInfo` — creates a zero-version baseline
+ */
 export type FloorDirtyDomainKey =
   | 'tiles'
   | 'blocked'
@@ -73,6 +89,7 @@ export const ALL_FLOOR_DIRTY_DOMAINS = Object.keys(
   FLOOR_DIRTY_DOMAIN_VERSION_KEYS,
 ) as FloorDirtyDomainKey[]
 
+/** Creates the zero-version dirty tracking baseline for a floor. */
 export function createFloorDirtyInfo(): FloorDirtyInfo {
   return {
     sequence: 0,
@@ -97,6 +114,7 @@ export function createFloorDirtyInfo(): FloorDirtyInfo {
   }
 }
 
+/** Ensures every known floor has a dirty tracking entry before mutations are applied. */
 export function syncFloorDirtyState(
   floorDirtyState: FloorDirtyState | null | undefined,
   floorIds: Iterable<string>,
@@ -110,6 +128,12 @@ export function syncFloorDirtyState(
   return synced
 }
 
+/**
+ * Applies a dirty-domain mutation for one floor and returns the updated state map.
+ *
+ * This bumps the requested domain version counters and records spatial/object hints
+ * that downstream consumers can use for incremental recomputation.
+ */
 export function applyFloorDirtyMutation({
   floorDirtyState,
   floorIds,

@@ -65,7 +65,6 @@ export {
 } from './FloorLightComputeRuntime'
 
 export {
-  createFloorWallTileMirrorDirtyHint,
   DEFAULT_FLOOR_WALL_TILE_MIRROR_CHUNK_SIZE,
   FLOOR_INNER_WALL_MIRROR_STRIDE,
   FLOOR_OPENING_MIRROR_STRIDE,
@@ -77,19 +76,15 @@ export {
 
 export {
   createFloorLightComputePrototypeDispatch,
-  createPrototypeDirtyHint,
   DEFAULT_FLOOR_LIGHT_COMPUTE_MAX_LIGHTS,
   DEFAULT_FLOOR_LIGHT_COMPUTE_WORKGROUP_SIZE,
   FLOOR_LIGHT_COMPUTE_CELL_STRIDE,
   FLOOR_LIGHT_COMPUTE_CONFIG_VECTORS,
   FLOOR_LIGHT_COMPUTE_LIGHT_VECTORS_PER_LIGHT,
   getFloorLightComputePrototypeTransferables,
-  getPrototypeLightBufferOffset,
-  isPrototypeLightIncluded,
   packFloorLightComputePrototype,
   prepareFloorLightComputePrototype,
   prepareFloorLightComputePrototypeFromBuild,
-  serializePrototypeLightSource,
   type FloorLightComputePrototypeBuffer,
   type FloorLightComputePrototypeDispatch,
   type FloorLightComputePrototypeOptions,

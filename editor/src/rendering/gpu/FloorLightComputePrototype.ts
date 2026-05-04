@@ -8,19 +8,33 @@ import {
   instanceIndex,
   vec4,
 } from 'three/tsl'
-import { GRID_SIZE, getCellKey, type GridCell } from '../../hooks/useSnapToGrid'
+import { GRID_SIZE, type GridCell } from '../../hooks/useSnapToGrid'
 import type { FloorDirtyRect } from '../../store/floorDirtyDomains'
-import { getFloorChunkKeysForCells } from '../../store/floorChunkKeys'
 import {
   prepareBakedFloorLightFieldBuild,
   prepareBakedFloorLightFieldWorkerBuild,
   type BakedFloorLightFieldBuildInput,
   type BakedFloorLightFieldWorkerChunk,
   type BakedFloorLightFieldWorkerInput,
-  type BakedFloorLightFieldWorkerLightSource,
   type PreparedBakedFloorLightFieldBuild,
 } from '../dungeonLightField'
 
+/**
+ * GPU compute packer for floor light computation.
+ *
+ * Packs floor cell geometry, light sources, and wall occlusion data into
+ * GPU-compatible buffers for WebGPU compute dispatch. This is an experimental
+ * fast path that offloads baked light computation from the web worker to the
+ * GPU, running light sampling in parallel across all floor cells.
+ *
+ * ## Pipeline
+ * 1. `packFloorLightComputePrototype` — packs CPU data into typed arrays
+ * 2. `createFloorLightComputePrototypeDispatch` — builds the TSL compute node
+ * 3. `prepareFloorLightComputePrototypeFromBuild` — convenience wrapper used in `useBakedFloorLightField`
+ *
+ * The compute shader runs one invocation per floor cell, accumulating
+ * light contributions from all sources within range.
+ */
 export const DEFAULT_FLOOR_LIGHT_COMPUTE_WORKGROUP_SIZE = 64
 export const DEFAULT_FLOOR_LIGHT_COMPUTE_MAX_LIGHTS = 128
 export const FLOOR_LIGHT_COMPUTE_CELL_STRIDE = 4
@@ -100,6 +114,12 @@ type PackedCellEntry = {
   chunkZ: number
 }
 
+/**
+ * Packs prepared worker lightfield data into deterministic GPU buffer payloads.
+ *
+ * The returned job contains sorted cell and light metadata plus typed arrays
+ * ready to be bound as storage buffers for compute dispatch.
+ */
 export function packFloorLightComputePrototype({
   floorId,
   sourceHash,
@@ -220,6 +240,12 @@ export function packFloorLightComputePrototype({
   }
 }
 
+/**
+ * Builds the prototype TSL compute node and dispatch metadata for a packed job.
+ *
+ * The shader executes one invocation per packed floor cell and writes the
+ * accumulated lighting result into the output buffer.
+ */
 export function createFloorLightComputePrototypeDispatch(
   packed: FloorLightComputePrototypePackedJob,
   options: FloorLightComputePrototypeOptions = {},
@@ -273,6 +299,12 @@ export function createFloorLightComputePrototypeDispatch(
   }
 }
 
+/**
+ * Prepares a full floor-light compute prototype directly from public build input.
+ *
+ * This is the highest-level entry point for callers that have not yet prepared
+ * the baked lightfield worker payload.
+ */
 export function prepareFloorLightComputePrototype(
   input: BakedFloorLightFieldBuildInput,
   options: FloorLightComputePrototypeOptions = {},
@@ -286,6 +318,12 @@ export function prepareFloorLightComputePrototype(
   return prepareFloorLightComputePrototypeFromBuild(prepared, workerBuild, options)
 }
 
+/**
+ * Creates a dispatch-ready prototype from an existing prepared build and worker payload.
+ *
+ * Returns `null` when there is nothing useful to dispatch, such as empty cell or
+ * light buffers.
+ */
 export function prepareFloorLightComputePrototypeFromBuild(
   prepared: PreparedBakedFloorLightFieldBuild,
   workerBuild: Pick<NonNullable<ReturnType<typeof prepareBakedFloorLightFieldWorkerBuild>>, 'workerInput'>,
@@ -312,6 +350,12 @@ export function prepareFloorLightComputePrototypeFromBuild(
   }
 }
 
+/**
+ * Returns the transferable ArrayBuffers associated with a packed compute job.
+ *
+ * Useful when handing prototype data off to workers or other structured-clone
+ * boundaries without copying the underlying typed arrays.
+ */
 export function getFloorLightComputePrototypeTransferables(
   packed: FloorLightComputePrototypePackedJob,
 ) {
@@ -405,54 +449,3 @@ function parseCellKey(cellKey: string): GridCell | null {
   return [cellX, cellZ]
 }
 
-export function createPrototypeDirtyHint(cells: GridCell[]): NonNullable<BakedFloorLightFieldBuildInput['dirtyHint']> {
-  const dirtyCellKeys = cells.map(getCellKey)
-  const dirtyChunkKeys = getFloorChunkKeysForCells(dirtyCellKeys)
-
-  return {
-    sequence: 1,
-    dirtyCellRect: buildDirtyRectFromCells(cells.map((cell) => ({
-      cellKey: getCellKey(cell),
-      cellX: cell[0],
-      cellZ: cell[1],
-      chunkX: 0,
-      chunkZ: 0,
-    }))),
-    dirtyCellKeys,
-    dirtyChunkKeys,
-    dirtyLightChunkKeys: dirtyChunkKeys,
-    dirtyWallKeys: [],
-    affectedObjectIds: [],
-    fullRefresh: false,
-  }
-}
-
-export function isPrototypeLightIncluded(
-  lightKey: string,
-  packed: FloorLightComputePrototypePackedJob,
-) {
-  return packed.lightKeys.includes(lightKey)
-}
-
-export function getPrototypeLightBufferOffset(
-  packed: FloorLightComputePrototypePackedJob,
-  lightKey: string,
-) {
-  const lightIndex = packed.lightKeys.indexOf(lightKey)
-  return lightIndex === -1 ? -1 : lightIndex * FLOOR_LIGHT_COMPUTE_LIGHT_VECTORS_PER_LIGHT * 4
-}
-
-export function serializePrototypeLightSource(
-  lightSource: BakedFloorLightFieldWorkerLightSource,
-) {
-  return {
-    key: lightSource.key,
-    position: [...lightSource.position] as [number, number, number],
-    linearColor: [...lightSource.linearColor] as [number, number, number],
-    light: {
-      intensity: lightSource.light.intensity,
-      distance: lightSource.light.distance,
-      decay: lightSource.light.decay,
-    },
-  }
-}

@@ -1,16 +1,49 @@
 import { beforeEach, describe, expect, it } from 'vitest'
+import { getFloorChunkKeysForCells } from '../../store/floorChunkKeys'
 import {
   clearBakedFloorLightFieldCache,
   getOrBuildBakedFloorLightField,
+  type BakedFloorLightFieldBuildInput,
   type ResolvedDungeonLightSource,
 } from '../dungeonLightField'
 import {
-  createPrototypeDirtyHint,
+  FLOOR_LIGHT_COMPUTE_LIGHT_VECTORS_PER_LIGHT,
   getFloorLightComputePrototypeTransferables,
-  getPrototypeLightBufferOffset,
-  isPrototypeLightIncluded,
   prepareFloorLightComputePrototype,
+  type FloorLightComputePrototypePackedJob,
 } from './FloorLightComputePrototype'
+
+// Local test helpers — not part of the public API
+function createTestDirtyHint(cells: [number, number][]): NonNullable<BakedFloorLightFieldBuildInput['dirtyHint']> {
+  const dirtyCellKeys = cells.map(([x, z]) => `${x}:${z}`)
+  const dirtyChunkKeys = getFloorChunkKeysForCells(dirtyCellKeys)
+  const xs = cells.map(([x]) => x)
+  const zs = cells.map(([, z]) => z)
+  return {
+    sequence: 1,
+    dirtyCellRect: cells.length === 0 ? null : {
+      minCellX: Math.min(...xs),
+      maxCellX: Math.max(...xs),
+      minCellZ: Math.min(...zs),
+      maxCellZ: Math.max(...zs),
+    },
+    dirtyCellKeys,
+    dirtyChunkKeys,
+    dirtyLightChunkKeys: dirtyChunkKeys,
+    dirtyWallKeys: [],
+    affectedObjectIds: [],
+    fullRefresh: false,
+  }
+}
+
+function isLightIncludedInPacked(lightKey: string, packed: FloorLightComputePrototypePackedJob) {
+  return packed.lightKeys.includes(lightKey)
+}
+
+function getLightBufferOffset(packed: FloorLightComputePrototypePackedJob, lightKey: string) {
+  const idx = packed.lightKeys.indexOf(lightKey)
+  return idx === -1 ? -1 : idx * FLOOR_LIGHT_COMPUTE_LIGHT_VECTORS_PER_LIGHT * 4
+}
 
 describe('FloorLightComputePrototype', () => {
   beforeEach(() => {
@@ -35,7 +68,7 @@ describe('FloorLightComputePrototype', () => {
     const prototype = prepareFloorLightComputePrototype(
       {
         ...baseInput,
-        dirtyHint: createPrototypeDirtyHint([[5, 0]]),
+        dirtyHint: createTestDirtyHint([[5, 0]]),
       },
       {
         workgroupSize: 4,
@@ -96,7 +129,7 @@ describe('FloorLightComputePrototype', () => {
     const prototype = prepareFloorLightComputePrototype(
       {
         ...baseInput,
-        dirtyHint: createPrototypeDirtyHint([[5, 0]]),
+        dirtyHint: createTestDirtyHint([[5, 0]]),
       },
       {
         maxLightsPerDispatch: 2,
@@ -114,11 +147,11 @@ describe('FloorLightComputePrototype', () => {
     expect(prototype?.packed.lightKeys).toEqual(['alpha', 'beta'])
     expect(prototype?.packed.lightCount).toBe(2)
     expect(prototype?.packed.truncatedLightCount).toBe(1)
-    expect(isPrototypeLightIncluded('beta', prototype!.packed)).toBe(true)
-    expect(isPrototypeLightIncluded('gamma', prototype!.packed)).toBe(false)
-    expect(getPrototypeLightBufferOffset(prototype!.packed, 'alpha')).toBe(0)
-    expect(getPrototypeLightBufferOffset(prototype!.packed, 'beta')).toBe(12)
-    expect(getPrototypeLightBufferOffset(prototype!.packed, 'gamma')).toBe(-1)
+    expect(isLightIncludedInPacked('beta', prototype!.packed)).toBe(true)
+    expect(isLightIncludedInPacked('gamma', prototype!.packed)).toBe(false)
+    expect(getLightBufferOffset(prototype!.packed, 'alpha')).toBe(0)
+    expect(getLightBufferOffset(prototype!.packed, 'beta')).toBe(12)
+    expect(getLightBufferOffset(prototype!.packed, 'gamma')).toBe(-1)
   })
 
   it('returns null when there is no lit work to prototype', () => {

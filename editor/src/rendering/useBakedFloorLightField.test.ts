@@ -345,7 +345,7 @@ describe('useBakedFloorLightField', () => {
   })
 
   it('keeps the cached field visible while a bounds-expanding async rebuild is in progress (no dark-flash)', async () => {
-    let workerListeners: Set<(event: MessageEvent<{ requestId: number, result: dungeonLightField.BakedFloorLightFieldWorkerResult }>) => void> = new Set()
+    const workerListeners: Set<(event: MessageEvent<{ requestId: number, result: dungeonLightField.BakedFloorLightFieldWorkerResult }>) => void> = new Set()
 
     class FakeLayoutWorker {
       addEventListener(

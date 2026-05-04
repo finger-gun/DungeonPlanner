@@ -113,7 +113,7 @@ export function useBakedFloorLightField(
         },
         (error) => {
           markFloorLightComputePrototypeFailed(prototype.prepared.floorId, sourceHash, error)
-          console.error('Failed to dispatch floor light compute prototype.', error)
+          console.error('Failed to dispatch floor light compute for floor', prototype.prepared.floorId, error)
         },
       )
       .finally(() => {
