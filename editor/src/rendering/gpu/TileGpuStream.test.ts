@@ -150,6 +150,57 @@ describe('TileGpuStream', () => {
     expect(stream.getTransactionProgress('tx-1')).toBeNull()
   })
 
+  it('streams transaction pages offscreen and adopts them when static entries commit', () => {
+    const stream = new TileGpuStream({ invalidate: vi.fn() })
+    const transactionEntry = createEntry(0, {
+      buildAnimationStart: 1000,
+      buildAnimationDelay: 25,
+    })
+    const transactionGroup = createGroup([transactionEntry], {
+      useBuildAnimation: true,
+    })
+
+    stream.beginTileStreamTransaction('tx-1', 'floor-1', 1000)
+    stream.updateTileStreamPreview('tx-1', [[0, 0]], 'paint', {
+      mountId: 'mount-1',
+      assetId: 'floor-tile',
+    })
+    stream.setSourceRegistration('mount-1', 'transaction:tx-1', {
+      kind: 'transaction',
+      floorId: 'floor-1',
+      transactionId: 'tx-1',
+      groups: [transactionGroup],
+    })
+
+    const previewSnapshot = stream.getDebugSnapshot('mount-1')
+    expect(previewSnapshot.pageCount).toBe(1)
+    const mountGroup = stream.getMountGroup('mount-1')
+    expect(mountGroup.children[0]?.position.y).toBeLessThan(-1000)
+
+    stream.processTileUploadBudget({ maxMs: 5, maxPages: 2 })
+    stream.commitTileStreamTransaction('tx-1', 1000)
+    stream.setSourceRegistration('mount-1', 'static-floor', {
+      kind: 'static',
+      floorId: 'floor-1',
+      groups: [transactionGroup],
+    })
+
+    expect(stream.getDebugSnapshot('mount-1').pageCount).toBe(1)
+    expect(mountGroup.children[0]?.position.y).toBe(0)
+    expect(stream.getTransactionProgress('tx-1')).toEqual({
+      totalPages: 1,
+      readyPages: 0,
+      pendingPages: 1,
+    })
+
+    stream.processTileUploadBudget({ maxMs: 5, maxPages: 2 })
+    expect(stream.getTransactionProgress('tx-1')).toEqual({
+      totalPages: 1,
+      readyPages: 1,
+      pendingPages: 0,
+    })
+  })
+
   it('skips mount rebuilds when a source registration is unchanged', () => {
     const invalidate = vi.fn()
     const stream = new TileGpuStream({ invalidate })

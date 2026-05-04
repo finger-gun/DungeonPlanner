@@ -18,6 +18,8 @@ type BatchedTileEntriesProps = {
   floorId: string
   mountId: string
   sourceId: string
+  sourceKind?: 'static' | 'transaction'
+  transactionId?: string
   useLineOfSightPostMask?: boolean
 }
 
@@ -36,6 +38,8 @@ export function BatchedTileEntries({
   floorId,
   mountId,
   sourceId,
+  sourceKind = 'static',
+  transactionId,
   useLineOfSightPostMask = false,
 }: BatchedTileEntriesProps) {
   const entryChunks = useMemo(
@@ -53,6 +57,8 @@ export function BatchedTileEntries({
           floorId={floorId}
           mountId={mountId}
           sourceId={`${sourceId}:${chunk.chunkKey}`}
+          sourceKind={sourceKind}
+          transactionId={transactionId}
           useLineOfSightPostMask={useLineOfSightPostMask}
         />
       ))}
@@ -65,6 +71,8 @@ function BatchedTileEntriesChunk({
   floorId,
   mountId,
   sourceId,
+  sourceKind = 'static',
+  transactionId,
   useLineOfSightPostMask = false,
 }: BatchedTileEntriesChunkProps) {
   const fogOfWar = useFogOfWarRuntime()
@@ -126,11 +134,13 @@ function BatchedTileEntriesChunk({
             floorId={floorId}
             mountId={mountId}
             sourceId={sourceId}
+            sourceKind={sourceKind}
+            transactionId={transactionId}
             fogRuntime={fogOfWar}
           />
         </Suspense>
       )}
-      {descriptors.fallback.map((entry) => (
+      {sourceKind === 'static' && descriptors.fallback.map((entry) => (
         <FallbackTileEntry
           key={entry.key}
           entry={entry}
@@ -148,6 +158,8 @@ const MemoizedBatchedTileEntriesChunk = memo(
     && previous.floorId === next.floorId
     && previous.mountId === next.mountId
     && previous.sourceId === next.sourceId
+    && previous.sourceKind === next.sourceKind
+    && previous.transactionId === next.transactionId
     && previous.useLineOfSightPostMask === next.useLineOfSightPostMask,
 )
 
@@ -156,12 +168,16 @@ function ResolvedBatchedTileEntries({
   floorId,
   mountId,
   sourceId,
+  sourceKind = 'static',
+  transactionId,
   fogRuntime,
 }: {
   descriptors: ReturnType<typeof buildBatchDescriptors>
   floorId: string
   mountId: string
   sourceId: string
+  sourceKind?: 'static' | 'transaction'
+  transactionId?: string
   fogRuntime: ReturnType<typeof useFogOfWarRuntime>
 }) {
   const stream = useTileGpuStream()
@@ -196,15 +212,16 @@ function ResolvedBatchedTileEntries({
 
   useLayoutEffect(() => {
     stream.setSourceRegistration(mountId, sourceId, {
-      kind: 'static',
+      kind: sourceKind,
       floorId,
+      transactionId,
       groups: resolvedGroups,
     })
 
     return () => {
       stream.clearSourceRegistration(mountId, sourceId)
     }
-  }, [floorId, mountId, resolvedGroups, sourceId, stream])
+  }, [floorId, mountId, resolvedGroups, sourceId, sourceKind, stream, transactionId])
 
   const unresolvedEntries = useMemo(
     () => descriptors.batched.flatMap((descriptor) => {
@@ -219,7 +236,7 @@ function ResolvedBatchedTileEntries({
 
   return (
     <>
-      {unresolvedEntries.map((entry) => (
+      {sourceKind === 'static' && unresolvedEntries.map((entry) => (
         <FallbackTileEntry
           key={entry.key}
           entry={entry}

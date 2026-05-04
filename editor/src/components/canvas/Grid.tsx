@@ -19,6 +19,7 @@ import {
   useDungeonStore,
   type DungeonObjectRecord,
   type MapMode,
+  type OpeningRecord,
   type PaintedCellRecord,
   type Room,
   type WallConnectionMode,
@@ -44,6 +45,7 @@ import {
 } from '../../store/derived/wallOpeningDerived'
 import {
   BUILD_ANIMATIONS_ENABLED,
+  MAX_BUILD_STAGGER_MS,
   hasHeldBuildAnimations,
   hasOutstandingHeldBuildBatch,
   releaseHeldBuildAnimations,
@@ -53,7 +55,10 @@ import {
 import { traceBuildPerf } from '../../performance/runtimeBuildTrace'
 import { FloorGridOverlay } from './FloorGridOverlay'
 import { DEFAULT_RENDER_BATCH_CHUNK_SIZE, getRenderBatchChunkKeyForCell } from './batchDescriptors'
+import { BatchedTileEntries, type StaticTileEntry } from './BatchedTileEntries'
+import { WALL_EXTRA_DELAY_MS } from './DungeonRoom'
 import { ContentPackInstance } from './ContentPackInstance'
+import { buildFloorRenderDerivedBundleFromInput } from './floorRenderDerived'
 import { getRoomPreviewCells } from './gridPreview'
 import { isPassiveGridMode, shouldRenderGridOverlay } from './gridMode'
 import { getEligibleOpenPassageWallKey } from './openPassageInteraction'
@@ -62,6 +67,7 @@ import { getOpeningToolMode } from './openingToolMode'
 import { calculatePropSnapPosition } from './propPlacement'
 import { supportsPlacementRotationShortcut } from '../../rotationShortcuts'
 import { getObjectInstanceScale, getObjectTintColor } from '../../store/objectAppearance'
+import type { BakedFloorLightField } from '../../rendering/dungeonLightField'
 import {
   ACTIVE_FLOOR_RENDER_DOMAINS,
   useActiveFloorSnapshot,
@@ -81,12 +87,13 @@ import {
 type GridProps = {
   size?: number
   playMode?: boolean
+  bakedLightField?: BakedFloorLightField | null
 }
 
 const POINTER_MOVE_PLANE = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0)
 const HELD_ROOM_PREWARM_TIMEOUT_MS = 2000
 
-export function Grid({ size = 120, playMode = false }: GridProps) {
+export function Grid({ size = 120, playMode = false, bakedLightField = null }: GridProps) {
   const { snap } = useSnapToGrid()
   const raycaster = useRaycaster(0)
   const { gl, camera, scene, invalidate } = useThree()
@@ -104,6 +111,7 @@ export function Grid({ size = 120, playMode = false }: GridProps) {
     rooms,
     floorTileAssetIds,
     wallSurfaceAssetIds,
+    wallSurfaceProps,
     globalWallAssetId,
     globalFloorAssetId,
   } = useActiveFloorSnapshot(ACTIVE_FLOOR_RENDER_DOMAINS, (state) => ({
@@ -118,6 +126,7 @@ export function Grid({ size = 120, playMode = false }: GridProps) {
     rooms: state.rooms,
     floorTileAssetIds: state.floorTileAssetIds,
     wallSurfaceAssetIds: state.wallSurfaceAssetIds,
+    wallSurfaceProps: state.wallSurfaceProps,
     globalWallAssetId: state.selectedAssetIds.wall,
     globalFloorAssetId: state.selectedAssetIds.floor,
   }))
@@ -146,6 +155,7 @@ export function Grid({ size = 120, playMode = false }: GridProps) {
   const roomEditMode = useDungeonStore((state) => state.roomEditMode)
   const assetBrowser = useDungeonStore((state) => state.assetBrowser)
   const outdoorOverpaintRegenerate = useDungeonStore((state) => state.outdoorOverpaintRegenerate)
+  const activeLayerId = useDungeonStore((state) => state.activeLayerId)
   const surfaceBrushAssetIds = useDungeonStore((state) => state.surfaceBrushAssetIds)
   const setPaintingStrokeActive = useDungeonStore(
     (state) => state.setPaintingStrokeActive,
@@ -229,6 +239,7 @@ export function Grid({ size = 120, playMode = false }: GridProps) {
   const tileGpuStream = useTileGpuStream()
   const tileGpuStreamVersion = useTileGpuStreamVersion()
   const roomStreamTransactionIdRef = useRef<string | null>(null)
+  const roomStreamTransactionStartedAtRef = useRef<number | null>(null)
   const hoverPreviewStateRef = useRef<{
     hoveredCell: SnappedGridPosition | null
     hoveredPoint: { x: number; y: number; z: number } | null
@@ -282,6 +293,7 @@ export function Grid({ size = 120, playMode = false }: GridProps) {
     if (roomStreamTransactionIdRef.current) {
       tileGpuStream.cancelTileStreamTransaction(roomStreamTransactionIdRef.current)
       roomStreamTransactionIdRef.current = null
+      roomStreamTransactionStartedAtRef.current = null
     }
     setLatchedRoomPreview(null)
     invalidate()
@@ -569,6 +581,7 @@ export function Grid({ size = 120, playMode = false }: GridProps) {
     if (transactionId) {
       tileGpuStream.cancelTileStreamTransaction(transactionId)
       roomStreamTransactionIdRef.current = null
+      roomStreamTransactionStartedAtRef.current = null
     }
     if (hasHeldBuildAnimations()) {
       releaseHeldBuildAnimations()
@@ -796,6 +809,59 @@ export function Grid({ size = 120, playMode = false }: GridProps) {
     )
   }, [activeFloorId, globalFloorAssetId, previewCells, previewStrokeMode, tileGpuStream])
 
+  const roomStreamTransactionId = roomStreamTransactionIdRef.current
+  const roomStreamTransactionStartedAt = roomStreamTransactionStartedAtRef.current
+  const roomStreamMountId = getTileGpuStreamMountId(activeFloorId, 'active')
+  const previewStreamEntries = useMemo(
+    () => {
+      if (
+        !roomStreamTransactionId
+        || roomStreamTransactionStartedAt === null
+        || previewStrokeMode !== 'paint'
+        || mapMode === 'outdoor'
+        || previewCells.length === 0
+      ) {
+        return []
+      }
+
+      return buildSpeculativeRoomTileEntries({
+        activeLayerId,
+        bakedLightField,
+        buildStartedAt: roomStreamTransactionStartedAt,
+        cells: previewCells,
+        floorTileAssetIds,
+        globalFloorAssetId,
+        globalWallAssetId,
+        innerWalls,
+        originCell: strokeStartCell ?? previewCells[0]!,
+        paintedCells,
+        rooms,
+        wallOpenings,
+        wallSurfaceAssetIds,
+        wallSurfaceProps,
+      })
+    },
+    [
+      activeLayerId,
+      bakedLightField,
+      floorTileAssetIds,
+      globalFloorAssetId,
+      globalWallAssetId,
+      innerWalls,
+      mapMode,
+      paintedCells,
+      previewCells,
+      previewStrokeMode,
+      roomStreamTransactionId,
+      roomStreamTransactionStartedAt,
+      rooms,
+      strokeStartCell,
+      wallOpenings,
+      wallSurfaceAssetIds,
+      wallSurfaceProps,
+    ],
+  )
+
   const commitStroke = useEffectEvent(() => {
     if (tool !== 'room' || roomEditMode !== 'rooms') {
       updateStrokeState(null, null, null)
@@ -856,11 +922,15 @@ export function Grid({ size = 120, playMode = false }: GridProps) {
             if (BUILD_ANIMATIONS_ENABLED) {
               // Cascade FROM the stroke start corner TOWARD the release corner (opposite diagonal).
               // Tiles near where you first clicked appear first.
-              const startedAt = triggerBuild(cells, startCell, { holdUntilReleased: shouldLatchPreview })
+              const startedAt = triggerBuild(cells, startCell, {
+                holdUntilReleased: shouldLatchPreview,
+                startedAt: roomStreamTransactionStartedAtRef.current ?? undefined,
+              })
               tileGpuStream.commitTileStreamTransaction(roomStreamTransactionIdRef.current, startedAt)
             } else {
               tileGpuStream.cancelTileStreamTransaction(roomStreamTransactionIdRef.current)
               roomStreamTransactionIdRef.current = null
+              roomStreamTransactionStartedAtRef.current = null
             }
           } else if (BUILD_ANIMATIONS_ENABLED) {
             // Cascade FROM the stroke start corner TOWARD the release corner (opposite diagonal).
@@ -872,6 +942,7 @@ export function Grid({ size = 120, playMode = false }: GridProps) {
           if (roomStreamTransactionIdRef.current) {
             tileGpuStream.cancelTileStreamTransaction(roomStreamTransactionIdRef.current)
             roomStreamTransactionIdRef.current = null
+            roomStreamTransactionStartedAtRef.current = null
           }
           if (mapMode === 'outdoor') {
             if (outdoorBrushMode === 'terrain-style') {
@@ -896,6 +967,7 @@ export function Grid({ size = 120, playMode = false }: GridProps) {
     if (cells.length === 0 && roomStreamTransactionIdRef.current) {
       tileGpuStream.cancelTileStreamTransaction(roomStreamTransactionIdRef.current)
       roomStreamTransactionIdRef.current = null
+      roomStreamTransactionStartedAtRef.current = null
     }
 
     updateStrokeState(null, null, null)
@@ -1425,8 +1497,10 @@ export function Grid({ size = 120, playMode = false }: GridProps) {
 
     if (event.button === 0 && tool === 'room' && roomEditMode === 'rooms' && mapMode !== 'outdoor') {
       const transactionId = `tile-stream:${performance.now()}:${Math.random().toString(36).slice(2, 8)}`
+      const transactionStartedAt = performance.now()
       roomStreamTransactionIdRef.current = transactionId
-      tileGpuStream.beginTileStreamTransaction(transactionId, activeFloorId)
+      roomStreamTransactionStartedAtRef.current = transactionStartedAt
+      tileGpuStream.beginTileStreamTransaction(transactionId, activeFloorId, transactionStartedAt)
       tileGpuStream.updateTileStreamPreview(
         transactionId,
         [snapped.cell],
@@ -1563,6 +1637,18 @@ export function Grid({ size = 120, playMode = false }: GridProps) {
         />
       )}
 
+      {roomStreamTransactionId && previewStreamEntries.length > 0 && (
+        <BatchedTileEntries
+          entries={previewStreamEntries}
+          floorId={activeFloorId}
+          mountId={roomStreamMountId}
+          sourceId={`transaction:${roomStreamTransactionId}`}
+          sourceKind="transaction"
+          transactionId={roomStreamTransactionId}
+          useLineOfSightPostMask={false}
+        />
+      )}
+
       {!isNavigationTool && (
         <HoverPreview
           hoveredCell={hoveredCell}
@@ -1681,6 +1767,196 @@ export function Grid({ size = 120, playMode = false }: GridProps) {
        )}
     </group>
   )
+}
+
+function buildSpeculativeRoomTileEntries({
+  activeLayerId,
+  bakedLightField,
+  buildStartedAt,
+  cells,
+  floorTileAssetIds,
+  globalFloorAssetId,
+  globalWallAssetId,
+  innerWalls,
+  originCell,
+  paintedCells,
+  rooms,
+  wallOpenings,
+  wallSurfaceAssetIds,
+  wallSurfaceProps,
+}: {
+  activeLayerId: string
+  bakedLightField: BakedFloorLightField | null
+  buildStartedAt: number
+  cells: GridCell[]
+  floorTileAssetIds: Record<string, string>
+  globalFloorAssetId: string | null
+  globalWallAssetId: string | null
+  innerWalls: ReturnType<typeof useDungeonStore.getState>['innerWalls']
+  originCell: GridCell
+  paintedCells: Record<string, PaintedCellRecord>
+  rooms: Record<string, Room>
+  wallOpenings: Record<string, OpeningRecord>
+  wallSurfaceAssetIds: Record<string, string>
+  wallSurfaceProps: Record<string, Record<string, unknown>>
+}): StaticTileEntry[] {
+  const previewCellKeys = new Set(cells.map(getCellKey))
+  const previewRoomId = `preview-room:${activeLayerId}`
+  const previewPaintedCells = { ...paintedCells }
+
+  cells.forEach((cell) => {
+    const cellKey = getCellKey(cell)
+    if (previewPaintedCells[cellKey]) {
+      return
+    }
+
+    previewPaintedCells[cellKey] = {
+      cell: [...cell] as GridCell,
+      layerId: activeLayerId,
+      roomId: previewRoomId,
+    }
+  })
+
+  const bundle = buildFloorRenderDerivedBundleFromInput({
+    visiblePaintedCellRecords: previewPaintedCells,
+    rooms: {
+      ...rooms,
+      [previewRoomId]: {
+        id: previewRoomId,
+        name: 'Preview Room',
+        layerId: activeLayerId,
+        floorAssetId: null,
+        wallAssetId: null,
+      },
+    },
+    globalFloorAssetId,
+    floorTileAssetIds,
+    globalWallAssetId,
+    wallSurfaceAssetIds,
+    wallSurfaceProps,
+    wallOpeningDerivedState: buildWallOpeningDerivedState(wallOpenings),
+    innerWalls,
+  }, {
+    includeFloorReceivers: false,
+  })
+
+  return [
+    ...bundle.floorGroups.flatMap((group) =>
+      group.cells
+        .filter((cell) => previewCellKeys.has(getCellKey(cell)))
+        .map((cell) => {
+          const cellKey = getCellKey(cell)
+          return {
+            key: `floor:${cellKey}`,
+            assetId: group.floorAssetId,
+            position: cellToWorldPosition(cell),
+            rotation: [0, 0, 0] as const,
+            buildAnimationDelay: getSpeculativeBuildDelay(cells, originCell, cell),
+            buildAnimationStart: buildStartedAt,
+            variant: 'floor' as const,
+            variantKey: cellKey,
+            visibility: 'visible' as const,
+            bakedLightField: bakedLightField ?? undefined,
+            fogCell: cell,
+          }
+        })),
+    ...bundle.floorSurfaceEntries
+      .filter((placement) => previewCellKeys.has(placement.anchorCellKey))
+      .map((placement) => ({
+        key: `floor-surface:${placement.anchorCellKey}`,
+        assetId: placement.assetId,
+        position: placement.position,
+        rotation: [0, 0, 0] as const,
+        buildAnimationDelay: getSpeculativeBuildDelay(cells, originCell, placement.anchorCell),
+        buildAnimationStart: buildStartedAt,
+        variant: 'floor' as const,
+        variantKey: placement.anchorCellKey,
+        visibility: 'visible' as const,
+        bakedLightField: bakedLightField ?? undefined,
+        fogCell: placement.anchorCell,
+      })),
+    ...bundle.walls
+      .filter((wall) => wall.segmentKeys.some((wallKey) => isWallKeyRelatedToCells(wallKey, previewCellKeys)))
+      .map((wall) => {
+        const wallCell = getFirstWallCellForPreview(wall.segmentKeys, previewCellKeys) ?? cells[0]!
+        return {
+          key: wall.key,
+          assetId: wall.assetId,
+          position: wall.position,
+          rotation: wall.rotation,
+          buildAnimationDelay: getSpeculativeBuildDelay(cells, originCell, wallCell, WALL_EXTRA_DELAY_MS),
+          buildAnimationStart: buildStartedAt,
+          variant: 'wall' as const,
+          variantKey: wall.key,
+          visibility: 'visible' as const,
+          bakedLightField: bakedLightField ?? undefined,
+          bakedLightDirection: wall.bakedLightDirection,
+          bakedLightDirectionSecondary: wall.bakedLightDirectionSecondary,
+          objectProps: wall.objectProps,
+        }
+      }),
+    ...bundle.corners
+      .filter((corner) => corner.wallKeys.some((wallKey) => isWallKeyRelatedToCells(wallKey, previewCellKeys)))
+      .map((corner) => {
+        const cornerCell = getFirstWallCellForPreview(corner.wallKeys, previewCellKeys) ?? cells[0]!
+        return {
+          key: corner.key,
+          assetId: corner.assetId,
+          position: corner.position,
+          rotation: corner.rotation,
+          buildAnimationDelay: getSpeculativeBuildDelay(cells, originCell, cornerCell, WALL_EXTRA_DELAY_MS),
+          buildAnimationStart: buildStartedAt,
+          variant: 'wall' as const,
+          variantKey: corner.key,
+          visibility: 'visible' as const,
+          objectProps: corner.objectProps,
+        }
+      }),
+  ]
+}
+
+function getSpeculativeBuildDelay(
+  cells: readonly GridCell[],
+  originCell: GridCell,
+  cell: GridCell,
+  extraDelay = 0,
+) {
+  const maxDist = cells.reduce((max, candidate) => {
+    const distance = Math.abs(candidate[0] - originCell[0]) + Math.abs(candidate[1] - originCell[1])
+    return Math.max(max, distance)
+  }, 1)
+  const distance = Math.abs(cell[0] - originCell[0]) + Math.abs(cell[1] - originCell[1])
+  return (distance / maxDist) * MAX_BUILD_STAGGER_MS + extraDelay
+}
+
+function isWallKeyRelatedToCells(wallKey: string, cellKeys: ReadonlySet<string>) {
+  return getWallPreviewCells(wallKey).some((cell) => cellKeys.has(getCellKey(cell)))
+}
+
+function getFirstWallCellForPreview(wallKeys: readonly string[], cellKeys: ReadonlySet<string>) {
+  for (const wallKey of wallKeys) {
+    const cell = getWallPreviewCells(wallKey).find((candidate) => cellKeys.has(getCellKey(candidate)))
+    if (cell) {
+      return cell
+    }
+  }
+  return null
+}
+
+function getWallPreviewCells(wallKey: string): GridCell[] {
+  const [xText, zText, direction] = wallKey.split(':')
+  const x = Number.parseInt(xText ?? '', 10)
+  const z = Number.parseInt(zText ?? '', 10)
+  if (Number.isNaN(x) || Number.isNaN(z)) {
+    return []
+  }
+
+  const cell: GridCell = [x, z]
+  if (direction === 'north') return [cell, [x, z - 1]]
+  if (direction === 'south') return [cell, [x, z + 1]]
+  if (direction === 'west') return [cell, [x - 1, z]]
+  if (direction === 'east') return [cell, [x + 1, z]]
+  return [cell]
 }
 
 function HoverPreview({

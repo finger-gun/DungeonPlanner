@@ -10,7 +10,7 @@ export const BUILD_ANIMATION_WARMUP_MS = 0
 // Temporary profiling switch used during GPU-stall investigation. Keep enabled
 // in normal editor behavior.
 export const BUILD_ANIMATIONS_ENABLED = true
-const MAX_STAGGER_MS     = 320   // max additional delay for the furthest cells
+export const MAX_BUILD_STAGGER_MS = 320   // max additional delay for the furthest cells
 const CLEANUP_BUFFER_MS  = 200   // extra time after full animation before map cleanup
 const MAX_BUILD_ANIMATION_EXTRA_DELAY_MS = 200
 const BUILD_ANIMATION_RENDER_ACTIVITY = 'build-animations'
@@ -18,7 +18,7 @@ const NO_HELD_BUILD_BATCH_START = Number.MAX_SAFE_INTEGER
 
 type AnimEntry = { delay: number; startedAt: number; active: boolean }
 export type BuildAnimationState = { delay: number; startedAt: number }
-export type TriggerBuildOptions = { holdUntilReleased?: boolean }
+export type TriggerBuildOptions = { holdUntilReleased?: boolean; startedAt?: number }
 export type HeldBuildBatchState = {
   startedAt: number
   effectiveReleaseAt: number
@@ -58,7 +58,7 @@ export function triggerBuild(
   if (cells.length === 0) {
     return null
   }
-  const now = performance.now()
+  const now = options.startedAt ?? performance.now()
   if (options.holdUntilReleased) {
     heldBuildBatch = {
       startedAt: now,
@@ -74,7 +74,7 @@ export function triggerBuild(
 
   cells.forEach((cell) => {
     const d     = Math.abs(cell[0] - originCell[0]) + Math.abs(cell[1] - originCell[1])
-    const delay = (d / maxDist) * MAX_STAGGER_MS
+    const delay = (d / maxDist) * MAX_BUILD_STAGGER_MS
     const key = getCellKey(cell)
     const previous = registry.get(key)
     if (!previous?.active) {
@@ -201,7 +201,7 @@ export function advanceBuildAnimations(now: number = performance.now()) {
   let changed = false
   const timeScale = getBuildAnimationTimeScale()
   const cleanupThreshold =
-    BUILD_ANIMATION_RISE_DURATION_MS + MAX_STAGGER_MS + CLEANUP_BUFFER_MS + MAX_BUILD_ANIMATION_EXTRA_DELAY_MS
+    BUILD_ANIMATION_RISE_DURATION_MS + MAX_BUILD_STAGGER_MS + CLEANUP_BUFFER_MS + MAX_BUILD_ANIMATION_EXTRA_DELAY_MS
 
   for (const entry of registry.values()) {
     if (!entry.active) {

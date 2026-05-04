@@ -145,9 +145,6 @@ function GlobalContent() {
   const outdoorTerrainStyleCells = useDungeonStore((state) => state.outdoorTerrainStyleCells)
   const outdoorTerrainHeights = useDungeonStore((state) => state.outdoorTerrainHeights)
   const outdoorTimeOfDay = useDungeonStore((state) => state.outdoorTimeOfDay)
-  const tool = useDungeonStore((state) => state.tool)
-  const floorViewMode = useDungeonStore((state) => state.floorViewMode)
-  const effectiveFloorViewMode = getEffectiveFloorViewMode(floorViewMode, tool)
   const outdoorBlend = outdoorTimeOfDay
   const {
     ambientColor,
@@ -210,7 +207,6 @@ function GlobalContent() {
 
       <BakedLightFlickerClock />
       <DebugCameraBridgeBinder />
-      {effectiveFloorViewMode === 'active' && <Grid playMode={tool === 'play'} />}
       <Controls />
       <FloorTransitionController />
       <CameraPresetManager />
@@ -807,6 +803,10 @@ function FloorContent({ startY = 0 }: { startY?: number }) {
         {movementRange && (
           <MovementRangeOverlay cells={movementRange.reachableCells} />
         )}
+        <Grid
+          playMode={tool === 'play'}
+          bakedLightField={bakedFloorLightField}
+        />
         <WorldRaycastAcceleration>
           <DungeonRoom
             derived={floorDerived}

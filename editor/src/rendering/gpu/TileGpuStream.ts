@@ -23,6 +23,7 @@ import type { GridCell } from '../../hooks/useSnapToGrid'
 type FogRuntime = Parameters<typeof applyFogOfWarToMaterial>[1]
 
 const TILE_UPLOAD_RENDER_ACTIVITY = 'tile-page-uploads'
+const TRANSACTION_PAGE_PREVIEW_Y = -100000
 
 export type TilePageStatus = 'idle' | 'dirty' | 'uploading' | 'ready' | 'disposed'
 export type TileStreamTransactionStatus = 'preview' | 'committed' | 'cancelled'
@@ -159,14 +160,14 @@ export class TileGpuStream {
     this.rebuildMount(mountId)
   }
 
-  beginTileStreamTransaction(id: string, floorId: string) {
+  beginTileStreamTransaction(id: string, floorId: string, startedAt: number = performance.now()) {
     this.transactions.set(id, {
       id,
       floorId,
       mountId: null,
       previewMode: null,
       status: 'preview',
-      startedAt: null,
+      startedAt,
       progress: {
         totalPages: 0,
         readyPages: 0,
@@ -432,7 +433,7 @@ export class TileGpuStream {
       const assignment = pageGroup!.keyToSlot.get(entryState.entry.key)
       const page = assignment
         ? pageGroup!.pages.get(assignment.pageIndex) ?? null
-        : this.allocatePageForEntry(mount, pageGroup!, descriptor)
+        : this.allocatePageForEntry(mount, pageGroup!, descriptor, entryState.renderVisible)
       if (!page) {
         return
       }
@@ -451,12 +452,13 @@ export class TileGpuStream {
       writeInstancedMeshSlot(
         page.meshEntries,
         slotIndex,
-        entryState.renderVisible ? entryState.entry : null,
+        entryState.entry,
       )
       page.activeCount = Math.max(page.activeCount, slotIndex + 1)
       setInstancedMeshEntryCount(page.meshEntries, page.activeCount)
       this.markPageDirty(page, { start: slotIndex, count: 1 })
       pageGroup!.entryStates.set(entryState.entry.key, entryState)
+      this.updatePageRenderPlacement(pageGroup!, page)
     })
   }
 
@@ -464,10 +466,13 @@ export class TileGpuStream {
     mount: TileStreamMount,
     pageGroup: TilePageGroup,
     descriptor: ResolvedTileStreamGroup,
+    renderVisible: boolean,
   ) {
     const reusable = [...pageGroup.pages.values()]
       .sort((left, right) => left.pageIndex - right.pageIndex)
-      .find((page) => page.freeSlots.length > 0)
+      .find((page) =>
+        page.freeSlots.length > 0
+        && this.isPageRenderVisible(pageGroup, page) === renderVisible)
     if (reusable) {
       return reusable
     }
@@ -496,6 +501,7 @@ export class TileGpuStream {
     }
 
     this.configureTilePage(page, descriptor)
+    this.updatePageRenderPlacement(pageGroup, page)
     pageGroup.pages.set(nextPageIndex, page)
     mount.group.add(page.root)
     return page
@@ -582,6 +588,7 @@ export class TileGpuStream {
     this.markPageDirty(page, { start: assignment.slotIndex, count: 1 })
     pageGroup.keyToSlot.delete(entryKey)
     pageGroup.entryStates.delete(entryKey)
+    this.updatePageRenderPlacement(pageGroup, page)
 
     if (page.slotKeys.every((key) => key === null)) {
       this.disposePage(mount, pageGroup, page)
@@ -613,6 +620,15 @@ export class TileGpuStream {
     page.pendingDirtyRanges = [...page.pendingDirtyRanges, range]
     page.status = 'dirty'
     this.enqueueTilePageUpload(page.pageKey, page.pendingDirtyRanges)
+  }
+
+  private isPageRenderVisible(pageGroup: TilePageGroup, page: TilePage) {
+    return page.slotKeys.some((entryKey) =>
+      entryKey ? pageGroup.entryStates.get(entryKey)?.renderVisible === true : false)
+  }
+
+  private updatePageRenderPlacement(pageGroup: TilePageGroup, page: TilePage) {
+    page.root.position.y = this.isPageRenderVisible(pageGroup, page) ? 0 : TRANSACTION_PAGE_PREVIEW_Y
   }
 
   private refreshTransactionProgress(transaction: TileStreamTransaction) {

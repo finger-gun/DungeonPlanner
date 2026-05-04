@@ -56,7 +56,7 @@ import {
 import { setBuildAnimationTime } from './buildAnimationMaterial'
 import { TileGpuStreamMount, getTileGpuStreamMountId } from './TileGpuStreamContext'
 
-const WALL_EXTRA_DELAY_MS = 70
+export const WALL_EXTRA_DELAY_MS = 70
 const ZERO_ROTATION = [0, 0, 0] as const
 
 function useIsBuildAnimationActive(buildAnimationVersion: number) {
