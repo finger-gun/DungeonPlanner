@@ -8,6 +8,43 @@ import {
 } from './floorRenderDerived'
 
 describe('buildFloorRenderDerivedBundle', () => {
+  it('uses uniform pillar assets for room corners', () => {
+    const derived = buildFloorDerivedBundle({
+      floorId: 'floor-1',
+      paintedCells: {
+        '0:0': { cell: [0, 0], layerId: 'visible', roomId: 'room-a' },
+      },
+      layers: {
+        visible: { id: 'visible', name: 'Visible', visible: true, locked: false },
+      },
+      rooms: {
+        'room-a': {
+          id: 'room-a',
+          name: 'Room A',
+          layerId: 'visible',
+          floorAssetId: null,
+          wallAssetId: null,
+        },
+      },
+      wallOpenings: {},
+      innerWalls: {},
+      placedObjects: {},
+      floorTileAssetIds: {},
+      wallSurfaceAssetIds: {},
+      wallSurfaceProps: {},
+      globalFloorAssetId: 'dungeon.floor_floor_tile_small',
+      globalWallAssetId: 'dungeon.wall_wall',
+    } satisfies DungeonRoomData)
+
+    const bundle = buildFloorRenderDerivedBundle(derived, {
+      includeFloorReceivers: false,
+    })
+
+    expect(bundle.corners).toHaveLength(4)
+    expect(bundle.corners.every((corner) => corner.assetId === 'dungeon.props_pillars_pillar')).toBe(true)
+    expect(bundle.corners.every((corner) => corner.rotation[0] === 0 && corner.rotation[1] === 0 && corner.rotation[2] === 0)).toBe(true)
+  })
+
   it('skips floor receiver planning when edit-mode receiver work is disabled', () => {
     const derived = buildFloorDerivedBundle({
       floorId: 'floor-1',

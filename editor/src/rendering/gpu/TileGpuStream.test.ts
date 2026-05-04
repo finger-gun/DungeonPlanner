@@ -1,8 +1,20 @@
 import { describe, expect, it, vi } from 'vitest'
 import * as THREE from 'three'
 import type { ResolvedStaticTileEntry } from '../../components/canvas/batchDescriptors'
+import { applyBakedLightToMaterial } from '../../components/canvas/bakedLightMaterial'
 import type { ResolvedTileStreamGroup } from './TileGpuStream'
 import { TileGpuStream } from './TileGpuStream'
+
+vi.mock('../../components/canvas/bakedLightMaterial', async () => {
+  const actual = await vi.importActual<typeof import('../../components/canvas/bakedLightMaterial')>(
+    '../../components/canvas/bakedLightMaterial',
+  )
+
+  return {
+    ...actual,
+    applyBakedLightToMaterial: vi.fn(),
+  }
+})
 
 function createSourceScene() {
   const material = new THREE.MeshStandardMaterial({ color: '#ffffff' })
@@ -156,5 +168,32 @@ describe('TileGpuStream', () => {
     expect(stream.getVersion()).toBe(versionAfterFirstRegistration)
     expect(invalidate).not.toHaveBeenCalled()
     expect(stream.getDebugSnapshot('mount-1').pageCount).toBe(1)
+  })
+
+  it('keeps wall pillars unlit when no baked light field is supplied', () => {
+    const stream = new TileGpuStream({ invalidate: vi.fn() })
+    const applyBakedLightMock = vi.mocked(applyBakedLightToMaterial)
+    applyBakedLightMock.mockClear()
+
+    stream.setSourceRegistration('mount-1', 'static-wall-pillar', {
+      kind: 'static',
+      floorId: 'floor-1',
+      groups: [createGroup([
+        createEntry(0, {
+          key: 'corner:0:0',
+          assetId: 'dungeon.props_pillars_pillar',
+          assetUrl: '/assets/pillar.glb',
+          variant: 'wall',
+          variantKey: '0:0:corner',
+        }),
+      ], {
+        bucketKey: 'floor-1|0:0|/assets/pillar.glb|default|wall|visible|shadow|unlit|single-direction|steady',
+        variant: 'wall',
+        useBakedLight: false,
+      })],
+    })
+
+    const bakedLightCall = applyBakedLightMock.mock.calls.find(([, options]) => options !== undefined)
+    expect(bakedLightCall?.[1]).toBeNull()
   })
 })

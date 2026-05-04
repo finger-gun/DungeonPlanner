@@ -4,7 +4,7 @@ import { deriveWallCornersFromSegments } from './wallCornerLayout'
 import { shouldActivateFloorReceiver } from './floorReceiverMode'
 
 describe('deriveWallCornersFromSegments', () => {
-  it('creates passage-end corners from surviving orthogonal wall segments', () => {
+  it('creates pillar corners from surviving orthogonal wall segments', () => {
     const corners = deriveWallCornersFromSegments([
       { key: '0:0:north' },
       { key: '0:0:west' },
@@ -19,14 +19,33 @@ describe('deriveWallCornersFromSegments', () => {
           key: '0:1:corner',
           wallKeys: expect.arrayContaining(['0:0:north', '0:0:west']),
           position: [0, 0, 2],
+          rotation: [0, 0, 0],
         }),
         expect.objectContaining({
           key: '3:1:corner',
           wallKeys: expect.arrayContaining(['2:0:north', '3:0:west']),
           position: [6, 0, 2],
+          rotation: [0, 0, 0],
         }),
       ]),
     )
+  })
+
+  it('keeps a pillar when orthogonal walls meet at a t-junction', () => {
+    const corners = deriveWallCornersFromSegments([
+      { key: '0:0:north' },
+      { key: '0:0:east' },
+      { key: '1:0:west' },
+    ])
+
+    expect(corners).toEqual([
+      expect.objectContaining({
+        key: '1:1:corner',
+        wallKeys: expect.arrayContaining(['0:0:north', '0:0:east', '1:0:west']),
+        position: [2, 0, 2],
+        rotation: [0, 0, 0],
+      }),
+    ])
   })
 
   it('does not create corners for straight wall runs', () => {

@@ -48,6 +48,8 @@ type BoundaryWallSegmentWithAsset = BoundaryWallSegment & {
   assetId: string | null
 }
 
+const WALL_CORNER_PILLAR_ASSET_ID = 'dungeon.props_pillars_pillar'
+
 export type FloorRenderDerivedBundle = {
   floorGroups: FloorRenderGroup[]
   floorSurfaceEntries: FloorSurfacePlacement[]
@@ -465,18 +467,11 @@ function deriveVisibleWallCorners(
     suppressedWallKeys,
     innerWalls,
   )
-  const wallAssetIdsByKey = new Map(wallSegments.map((segment) => [segment.key, segment.assetId]))
 
-  return deriveWallCornersFromSegments(wallSegments)
-    .flatMap<RoomCornerRenderInstance>((corner) => {
-      const assetId =
-        corner.wallKeys
-          .map((wallKey) => wallAssetIdsByKey.get(wallKey) ?? null)
-          .find((candidate) => getContentPackAssetById(candidate ?? '')?.metadata?.wallCornerType === 'solitary') ??
-        null
-
-      return assetId ? [{ ...corner, assetId }] : []
-    })
+  return deriveWallCornersFromSegments(wallSegments).map((corner) => ({
+    ...corner,
+    assetId: WALL_CORNER_PILLAR_ASSET_ID,
+  }))
 }
 
 function collectRenderableWallSegments(

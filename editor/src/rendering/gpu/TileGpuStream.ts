@@ -515,10 +515,10 @@ export class TileGpuStream {
     page.meshEntries.forEach((entry) => {
       const material = getInstancedMaterial(entry)
       applyBuildAnimationToMaterial(material, useBuildAnimation, clipMinY)
-      applyBakedLightToMaterial(
-        material,
-        descriptor.useBakedLight
-          ? {
+        applyBakedLightToMaterial(
+          material,
+          descriptor.useBakedLight
+            ? {
             useLightAttribute: true,
             useDirectionAttribute: descriptor.variant === 'wall',
             useSecondaryDirectionAttribute: descriptor.variant === 'wall' && descriptor.useSecondaryDirectionAttribute,

@@ -41,7 +41,7 @@ import { useGLTF } from '../../rendering/useGLTF'
 import { shouldActivateFloorReceiver } from './floorReceiverMode'
 import type { ContentPackModelTransform } from '../../content-packs/types'
 import { resolveProjectionReceiverAsset } from './tileAssetResolution'
-import { getCornerInteriorLightDirections, getWallSpanInteriorLightDirections } from './wallLighting'
+import { getWallSpanInteriorLightDirections } from './wallLighting'
 import {
   buildChunkedFloorRenderDerivedCache,
   type FloorRenderChunkBundle,
@@ -314,7 +314,6 @@ function FloorRenderChunkRenderer({
       const buildAnimation = enableBuildAnimation
         ? getBuildAnimationState(cellKey, WALL_EXTRA_DELAY_MS)
         : null
-      const interiorDirections = getCornerInteriorLightDirections(corner.wallKeys)
 
       return {
         key: corner.key,
@@ -326,13 +325,10 @@ function FloorRenderChunkRenderer({
         variant: 'wall',
         variantKey: corner.key,
         visibility: getWallSpanVisibilityState(visibility, corner.wallKeys),
-        bakedLightField: bakedFloorLightField,
-        bakedLightDirection: interiorDirections.primary,
-        bakedLightDirectionSecondary: interiorDirections.secondary,
         objectProps: corner.objectProps,
       }
     }),
-    [bakedFloorLightField, bundle.corners, enableBuildAnimation, isBuildAnimationCurrentlyActive, visibility],
+    [bundle.corners, enableBuildAnimation, isBuildAnimationCurrentlyActive, visibility],
   )
 
   return (

@@ -211,13 +211,6 @@ function GlobalContent() {
       <BakedLightFlickerClock />
       <DebugCameraBridgeBinder />
       {effectiveFloorViewMode === 'active' && <Grid playMode={tool === 'play'} />}
-      <pointLight
-        position={[0, -1000, 0]}
-        intensity={0.0001}
-        distance={0.25}
-        decay={2}
-        color="#ff9944"
-      />
       <Controls />
       <FloorTransitionController />
       <CameraPresetManager />
