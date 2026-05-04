@@ -344,16 +344,16 @@ describe('useBakedFloorLightField', () => {
     expect(result.current.lightFieldTexture).toBe(initialField.lightFieldTexture)
   })
 
-  it('switches to a seeded pending field when the async rebuild changes light-field bounds', async () => {
-    class FakeLayoutWorker {
-      private listeners = new Set<(event: MessageEvent<{ requestId: number, result: dungeonLightField.BakedFloorLightFieldWorkerResult }>) => void>()
+  it('keeps the cached field visible while a bounds-expanding async rebuild is in progress (no dark-flash)', async () => {
+    let workerListeners: Set<(event: MessageEvent<{ requestId: number, result: dungeonLightField.BakedFloorLightFieldWorkerResult }>) => void> = new Set()
 
+    class FakeLayoutWorker {
       addEventListener(
         type: string,
         listener: (event: MessageEvent<{ requestId: number, result: dungeonLightField.BakedFloorLightFieldWorkerResult }>) => void,
       ) {
         if (type === 'message') {
-          this.listeners.add(listener)
+          workerListeners.add(listener)
         }
       }
 
@@ -362,14 +362,14 @@ describe('useBakedFloorLightField', () => {
         listener: (event: MessageEvent<{ requestId: number, result: dungeonLightField.BakedFloorLightFieldWorkerResult }>) => void,
       ) {
         if (type === 'message') {
-          this.listeners.delete(listener)
+          workerListeners.delete(listener)
         }
       }
 
       postMessage() {}
 
       terminate() {
-        this.listeners.clear()
+        workerListeners.clear()
       }
     }
 
@@ -411,15 +411,16 @@ describe('useBakedFloorLightField', () => {
 
     await act(async () => {})
 
-    expect(result.current).not.toBe(initialField)
+    // With a cached field present, the hook must NOT swap to a dark pending field
+    // while the worker is running — doing so forces a full GPU pipeline recompilation
+    // for every tile page and causes a visible multi-frame stutter.
+    expect(result.current).toBe(initialField)
     expect(result.current.bounds).toEqual({
       minCellX: 0,
-      maxCellX: 2,
+      maxCellX: 1,
       minCellZ: 0,
       maxCellZ: 0,
     })
-    expect(result.current.lightFieldTexture).not.toBeNull()
-    expect(result.current.previousSourceHash).toBe(initialField.sourceHash)
   })
 
   it('defers worker preparation until after the next frame when requested', async () => {
