@@ -20,6 +20,10 @@ import type { FloorDerivedBundle } from '../../store/derived/floorDerived'
 import { deriveWallCornersFromSegments, type WallCornerInstance } from './wallCornerLayout'
 import { getWallSpanInteriorLightDirections } from './wallLighting'
 import { DEFAULT_RENDER_BATCH_CHUNK_SIZE, getRenderBatchChunkKeyForCell } from './batchDescriptors'
+import {
+  getFloorChunkKeysForCells,
+  getFloorChunkKeysForRect,
+} from '../../store/floorChunkKeys'
 
 export type RoomWallInstance = {
   key: string
@@ -234,8 +238,8 @@ export function buildChunkedFloorRenderDerivedCache({
     || previous.floorId !== floorId
     || previous.includeFloorReceivers !== includeFloorReceivers
     || previous.haloCells !== haloCells
-    || !dirtyInfo?.dirtyCellRect
-    || dirtyInfo.fullRefresh
+    || !hasDirtyRenderScope(dirtyInfo)
+    || Boolean(dirtyInfo?.fullRefresh)
 
   if (shouldRebuildAll) {
     return {
@@ -262,7 +266,7 @@ export function buildChunkedFloorRenderDerivedCache({
     }
   }
 
-  const affectedChunkKeys = new Set(getChunkKeysForDirtyRect(dirtyInfo.dirtyCellRect, haloCells))
+  const affectedChunkKeys = new Set(getChunkKeysForDirtyInfo(dirtyInfo, haloCells))
   orderedChunkKeys.forEach((chunkKey) => {
     if (!bundlesByChunk.has(chunkKey)) {
       affectedChunkKeys.add(chunkKey)
@@ -319,29 +323,40 @@ export function getChunkKeysForDirtyRect(
   dirtyRect: FloorDirtyInfo['dirtyCellRect'],
   haloCells = 0,
 ): string[] {
-  if (!dirtyRect) {
+  return getFloorChunkKeysForRect(dirtyRect, {
+    chunkSize: DEFAULT_RENDER_BATCH_CHUNK_SIZE,
+    haloCells,
+  })
+}
+
+export function getChunkKeysForDirtyInfo(
+  dirtyInfo: FloorDirtyInfo | null | undefined,
+  haloCells = 0,
+): string[] {
+  if (!dirtyInfo) {
     return []
   }
 
-  const expanded = expandFloorRenderRect({
-    minCellX: dirtyRect.minCellX,
-    maxCellX: dirtyRect.maxCellX,
-    minCellZ: dirtyRect.minCellZ,
-    maxCellZ: dirtyRect.maxCellZ,
-  }, haloCells)
-  const minChunkX = Math.floor(expanded.minCellX / DEFAULT_RENDER_BATCH_CHUNK_SIZE)
-  const maxChunkX = Math.floor(expanded.maxCellX / DEFAULT_RENDER_BATCH_CHUNK_SIZE)
-  const minChunkZ = Math.floor(expanded.minCellZ / DEFAULT_RENDER_BATCH_CHUNK_SIZE)
-  const maxChunkZ = Math.floor(expanded.maxCellZ / DEFAULT_RENDER_BATCH_CHUNK_SIZE)
-  const chunkKeys: string[] = []
-
-  for (let chunkZ = minChunkZ; chunkZ <= maxChunkZ; chunkZ += 1) {
-    for (let chunkX = minChunkX; chunkX <= maxChunkX; chunkX += 1) {
-      chunkKeys.push(`${chunkX}:${chunkZ}`)
-    }
+  if (dirtyInfo.dirtyRenderChunkKeys.length > 0) {
+    return dirtyInfo.dirtyRenderChunkKeys
   }
 
-  return chunkKeys
+  if (dirtyInfo.dirtyCellKeys.length > 0) {
+    return getFloorChunkKeysForCells(dirtyInfo.dirtyCellKeys, {
+      chunkSize: DEFAULT_RENDER_BATCH_CHUNK_SIZE,
+      haloCells,
+    })
+  }
+
+  return getChunkKeysForDirtyRect(dirtyInfo.dirtyCellRect, haloCells)
+}
+
+function hasDirtyRenderScope(dirtyInfo: FloorDirtyInfo | null | undefined) {
+  return Boolean(
+    dirtyInfo?.dirtyCellRect
+      || dirtyInfo?.dirtyCellKeys.length
+      || dirtyInfo?.dirtyRenderChunkKeys.length,
+  )
 }
 
 function deriveFloorReceiverCells(plan: ReturnType<typeof buildFloorRenderPlan>): FloorReceiverCellInput[] {

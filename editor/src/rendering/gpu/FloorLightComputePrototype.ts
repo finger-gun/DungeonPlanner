@@ -10,6 +10,7 @@ import {
 } from 'three/tsl'
 import { GRID_SIZE, getCellKey, type GridCell } from '../../hooks/useSnapToGrid'
 import type { FloorDirtyRect } from '../../store/floorDirtyDomains'
+import { getFloorChunkKeysForCells } from '../../store/floorChunkKeys'
 import {
   prepareBakedFloorLightFieldBuild,
   prepareBakedFloorLightFieldWorkerBuild,
@@ -405,6 +406,9 @@ function parseCellKey(cellKey: string): GridCell | null {
 }
 
 export function createPrototypeDirtyHint(cells: GridCell[]): NonNullable<BakedFloorLightFieldBuildInput['dirtyHint']> {
+  const dirtyCellKeys = cells.map(getCellKey)
+  const dirtyChunkKeys = getFloorChunkKeysForCells(dirtyCellKeys)
+
   return {
     sequence: 1,
     dirtyCellRect: buildDirtyRectFromCells(cells.map((cell) => ({
@@ -414,6 +418,9 @@ export function createPrototypeDirtyHint(cells: GridCell[]): NonNullable<BakedFl
       chunkX: 0,
       chunkZ: 0,
     }))),
+    dirtyCellKeys,
+    dirtyChunkKeys,
+    dirtyLightChunkKeys: dirtyChunkKeys,
     dirtyWallKeys: [],
     affectedObjectIds: [],
     fullRefresh: false,

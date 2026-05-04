@@ -221,6 +221,52 @@ describe('TileGpuStream', () => {
     expect(stream.getDebugSnapshot('mount-1').pageCount).toBe(1)
   })
 
+  it('keeps untouched chunk pages mounted and upload-clean when another chunk changes', () => {
+    const stream = new TileGpuStream({ invalidate: vi.fn() })
+    const chunk0Group = createGroup([createEntry(0)])
+    const chunk1Group = createGroup([createEntry(9)], {
+      bucketKey: 'floor-1|1:0|/assets/floor.glb|default|floor|visible|shadow|unlit|single-direction|steady',
+      chunkKey: '1:0',
+    })
+
+    stream.setSourceRegistration('mount-1', 'static-floor', {
+      kind: 'static',
+      floorId: 'floor-1',
+      groups: [chunk0Group, chunk1Group],
+    })
+    stream.processTileUploadBudget({ maxMs: 5, maxPages: 4 })
+
+    const mountGroup = stream.getMountGroup('mount-1')
+    const initialSnapshot = stream.getDebugSnapshot('mount-1')
+    const untouchedPageKey = initialSnapshot.pages.find((page) => page.keys.includes('floor:9:0'))?.pageKey
+    const untouchedPageRoot = mountGroup.children.find((child) => child.name === untouchedPageKey)
+
+    expect(untouchedPageKey).toBeTruthy()
+    expect(untouchedPageRoot).toBeTruthy()
+
+    stream.setSourceRegistration('mount-1', 'static-floor', {
+      kind: 'static',
+      floorId: 'floor-1',
+      groups: [
+        createGroup([createEntry(0, { position: [4, 0, 0] })]),
+        createGroup([createEntry(9)], {
+          bucketKey: 'floor-1|1:0|/assets/floor.glb|default|floor|visible|shadow|unlit|single-direction|steady',
+          chunkKey: '1:0',
+        }),
+      ],
+    })
+
+    const updatedSnapshot = stream.getDebugSnapshot('mount-1')
+    const updatedUntouchedPage = updatedSnapshot.pages.find((page) => page.keys.includes('floor:9:0'))
+    const changedPage = updatedSnapshot.pages.find((page) => page.keys.includes('floor:0:0'))
+    const updatedUntouchedPageRoot = mountGroup.children.find((child) => child.name === untouchedPageKey)
+
+    expect(updatedUntouchedPage?.dirtyRanges).toEqual([])
+    expect(updatedUntouchedPage?.status).toBe('ready')
+    expect(changedPage?.dirtyRanges.length).toBeGreaterThan(0)
+    expect(updatedUntouchedPageRoot).toBe(untouchedPageRoot)
+  })
+
   it('keeps wall pillars unlit when no baked light field is supplied', () => {
     const stream = new TileGpuStream({ invalidate: vi.fn() })
     const applyBakedLightMock = vi.mocked(applyBakedLightToMaterial)

@@ -1830,18 +1830,109 @@ describe('useDungeonStore floor dirty domains', () => {
     const next = useDungeonStore.getState().floorDirtyDomains[floorId]
     expect(next.tilesVersion).toBeGreaterThan(initial.tilesVersion)
     expect(next.wallsVersion).toBeGreaterThan(initial.wallsVersion)
-    expect(next.openingsVersion).toBeGreaterThan(initial.openingsVersion)
-    expect(next.propsVersion).toBeGreaterThan(initial.propsVersion)
+    expect(next.openingsVersion).toBe(initial.openingsVersion)
     expect(next.lightingVersion).toBeGreaterThan(initial.lightingVersion)
     expect(next.renderPlanVersion).toBeGreaterThan(initial.renderPlanVersion)
-    expect(next.occupancyVersion).toBeGreaterThan(initial.occupancyVersion)
+    expect(next.propsVersion).toBe(initial.propsVersion)
+    expect(next.occupancyVersion).toBe(initial.occupancyVersion)
     expect(next.dirtyCellRect).toEqual({
       minCellX: 0,
       maxCellX: 1,
       minCellZ: 0,
       maxCellZ: 0,
     })
+    expect(next.dirtyCellKeys).toEqual(['0:0', '1:0'])
+    expect(next.dirtyChunkKeys).toEqual(['0:0'])
+    expect(next.dirtyRenderChunkKeys).toEqual(['-1:-1', '-1:0', '0:-1', '0:0'])
+    expect(next.dirtyLightChunkKeys).toEqual(['0:0'])
+    expect(next.dirtyWallKeys).toEqual([
+      '-1:0:east',
+      '0:-1:north',
+      '0:0:east',
+      '0:0:north',
+      '0:0:south',
+      '0:0:west',
+      '0:1:south',
+      '1:-1:north',
+      '1:0:east',
+      '1:0:north',
+      '1:0:south',
+      '1:0:west',
+      '1:1:south',
+      '2:0:west',
+    ])
     expect(next.fullRefresh).toBe(false)
+  })
+
+  it('publishes explicit render chunk keys for room paints at chunk boundaries', () => {
+    const floorId = useDungeonStore.getState().activeFloorId
+
+    useDungeonStore.getState().paintCells([[8, 0]])
+
+    const next = useDungeonStore.getState().floorDirtyDomains[floorId]
+    expect(next.dirtyChunkKeys).toEqual(['0:0'])
+    expect(next.dirtyRenderChunkKeys).toEqual(['0:-1', '0:0', '1:-1', '1:0'])
+    expect(next.dirtyLightChunkKeys).toEqual(['0:0'])
+  })
+
+  it('expands room paint render chunks to cover large floor surface halos', () => {
+    const floorId = useDungeonStore.getState().activeFloorId
+
+    useDungeonStore.getState().paintCells([
+      [0, 0], [1, 0], [2, 0], [3, 0],
+      [0, 1], [1, 1], [2, 1], [3, 1],
+      [0, 2], [1, 2], [2, 2], [3, 2],
+      [0, 3], [1, 3], [2, 3], [3, 3],
+    ])
+    expect(
+      useDungeonStore.getState().setFloorTileAsset('0:0', 'dungeon.floor_floor_tile_extralarge_grates'),
+    ).toBe(true)
+
+    useDungeonStore.getState().paintCells([[6, 0]])
+
+    const next = useDungeonStore.getState().floorDirtyDomains[floorId]
+    expect(next.dirtyChunkKeys).toEqual(['0:0'])
+    expect(next.dirtyRenderChunkKeys).toEqual(['0:-1', '0:0', '1:-1', '1:0'])
+    expect(next.dirtyLightChunkKeys).toEqual(['0:0'])
+  })
+
+  it('preserves distant openings, props, and surface overrides by reference during local room paints', () => {
+    useDungeonStore.getState().paintCells([[10, 0]])
+
+    const objectId = useDungeonStore.getState().placeObject({
+      type: 'prop',
+      assetId: 'core.props_wall_torch',
+      position: [21, 0, 1],
+      rotation: [0, 0, 0],
+      props: { connector: 'WALL', direction: 'north' },
+      cell: [10, 0],
+      cellKey: '10:0:north',
+    })
+    const openingId = useDungeonStore.getState().placeOpening({
+      assetId: 'core.opening_door_wall_1',
+      wallKey: '10:0:north',
+      width: 1,
+      flipped: false,
+    })
+
+    expect(objectId).toBeTruthy()
+    expect(openingId).toBeTruthy()
+    expect(useDungeonStore.getState().setFloorTileAsset('10:0', 'kaykit.floor_tile_small_broken_a')).toBe(true)
+    expect(useDungeonStore.getState().setWallSurfaceAsset('10:0:north', 'core.wall')).toBe(true)
+    expect(useDungeonStore.getState().setWallSurfaceProps('10:0:north', { open: true })).toBe(true)
+
+    const before = useDungeonStore.getState()
+
+    useDungeonStore.getState().paintCells([[0, 0]])
+
+    const after = useDungeonStore.getState()
+    expect(after.placedObjects).toBe(before.placedObjects)
+    expect(after.wallOpenings).toBe(before.wallOpenings)
+    expect(after.floorTileAssetIds).toBe(before.floorTileAssetIds)
+    expect(after.wallSurfaceAssetIds).toBe(before.wallSurfaceAssetIds)
+    expect(after.wallSurfaceProps).toBe(before.wallSurfaceProps)
+    expect(after.placedObjects[objectId!]).toBe(before.placedObjects[objectId!])
+    expect(after.wallOpenings[openingId!]).toBe(before.wallOpenings[openingId!])
   })
 
   it('tracks affected objects and local cells for prop placement', () => {

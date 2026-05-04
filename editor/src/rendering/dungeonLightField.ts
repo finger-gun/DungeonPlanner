@@ -142,7 +142,14 @@ export type BakedFloorLightFieldBuildInput = {
   occlusionInput?: BakedLightOcclusionInput | null
   dirtyHint?: Pick<
     FloorDirtyInfo,
-    'sequence' | 'dirtyCellRect' | 'dirtyWallKeys' | 'affectedObjectIds' | 'fullRefresh'
+    | 'sequence'
+    | 'dirtyCellRect'
+    | 'dirtyCellKeys'
+    | 'dirtyChunkKeys'
+    | 'dirtyLightChunkKeys'
+    | 'dirtyWallKeys'
+    | 'affectedObjectIds'
+    | 'fullRefresh'
   > | null
   chunkSize?: number
 }
@@ -1201,7 +1208,13 @@ function buildDirtyChunkKeysFromHint({
 
   const dirtyChunkKeys = new Set<string>()
 
-  addDirtyRectChunkKeys(dirtyChunkKeys, dirtyHint.dirtyCellRect, chunkSize)
+  dirtyHint.dirtyLightChunkKeys.forEach((chunkKey) => dirtyChunkKeys.add(chunkKey))
+  dirtyHint.dirtyChunkKeys.forEach((chunkKey) => dirtyChunkKeys.add(chunkKey))
+  if (dirtyHint.dirtyCellKeys.length > 0) {
+    addDirtyCellChunkKeys(dirtyChunkKeys, dirtyHint.dirtyCellKeys, chunkSize)
+  } else {
+    addDirtyRectChunkKeys(dirtyChunkKeys, dirtyHint.dirtyCellRect, chunkSize)
+  }
   dirtyHint.dirtyWallKeys.forEach((wallKey) => {
     for (const chunkKey of getChunkKeysForWallKey(wallKey, chunkSize)) {
       dirtyChunkKeys.add(chunkKey)
@@ -1211,6 +1224,23 @@ function buildDirtyChunkKeysFromHint({
   addAffectedLightChunkKeys(dirtyChunkKeys, dirtyHint.affectedObjectIds, cachedField?.staticLightSources ?? [], chunkSize)
 
   return dirtyChunkKeys.size > 0 ? dirtyChunkKeys : null
+}
+
+function addDirtyCellChunkKeys(
+  target: Set<string>,
+  dirtyCellKeys: string[],
+  chunkSize: number,
+) {
+  dirtyCellKeys.forEach((cellKey) => {
+    const [cellXPart, cellZPart] = cellKey.split(':')
+    const cellX = Number.parseInt(cellXPart ?? '', 10)
+    const cellZ = Number.parseInt(cellZPart ?? '', 10)
+    if (Number.isNaN(cellX) || Number.isNaN(cellZ)) {
+      return
+    }
+
+    target.add(getChunkKeyForCell(cellX, cellZ, chunkSize))
+  })
 }
 
 function addDirtyRectChunkKeys(

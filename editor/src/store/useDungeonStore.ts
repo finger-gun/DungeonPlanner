@@ -54,6 +54,7 @@ import {
 import {
   collectOverlappingFloorSurfaceAnchors,
   findFloorSurfaceAnchorAtCell,
+  getFloorTileSpan,
   getInheritedFloorAssetIdForCellKey,
   isFloorSurfacePlacementValid,
 } from './floorSurfaceLayout'
@@ -66,6 +67,7 @@ import {
   type FloorDirtyHint,
   type FloorDirtyState,
 } from './floorDirtyDomains'
+import { getFloorChunkKeysForCells } from './floorChunkKeys'
 import { createDungeonStoreEditorUiActions } from './domains/dungeonStoreEditorUiDomain'
 import { createDungeonStoreGeneratedCharacterActions } from './domains/dungeonStoreGeneratedCharactersDomain'
 import { createDungeonStoreLayerActions } from './domains/dungeonStoreLayerDomain'
@@ -1332,6 +1334,51 @@ function collectAffectedAnchorKeys(changedCells: GridCell[]) {
   return affectedKeys
 }
 
+function collectAffectedWallKeys(changedCells: GridCell[]) {
+  const affectedKeys = new Set<string>()
+
+  changedCells.forEach((cell) => {
+    const cellKey = getCellKey(cell)
+
+    CONNECTOR_DIRECTIONS.forEach(({ name, delta, opposite }) => {
+      affectedKeys.add(`${cellKey}:${name}`)
+
+      const neighbor: GridCell = [cell[0] + delta[0], cell[1] + delta[1]]
+      affectedKeys.add(`${getCellKey(neighbor)}:${opposite}`)
+    })
+  })
+
+  return affectedKeys
+}
+
+function getFloorRenderInvalidationHaloCells(floorTileAssetIds: Record<string, string>) {
+  return Math.max(
+    1,
+    ...Object.values(floorTileAssetIds).map((assetId) => {
+      const span = getFloorTileSpan(assetId)
+      return Math.max(span.gridWidth - 1, span.gridHeight - 1)
+    }),
+  )
+}
+
+function buildLocalizedRoomPaintDirtyHint(
+  current: Pick<DungeonSnapshot, 'floorTileAssetIds'>,
+  changedCells: GridCell[],
+): FloorDirtyHint {
+  const dirtyChunkKeys = getFloorChunkKeysForCells(changedCells)
+  const dirtyRenderChunkKeys = getFloorChunkKeysForCells(changedCells, {
+    haloCells: getFloorRenderInvalidationHaloCells(current.floorTileAssetIds),
+  })
+
+  return {
+    cells: changedCells,
+    chunkKeys: dirtyChunkKeys,
+    renderChunkKeys: dirtyRenderChunkKeys,
+    lightChunkKeys: dirtyChunkKeys,
+    wallKeys: collectAffectedWallKeys(changedCells),
+  }
+}
+
 function isAnchorDirection(value: unknown): value is AnchorDirection {
   return (
     value === 'north' ||
@@ -1492,11 +1539,21 @@ function pruneInvalidConnectedProps(
   changedCells: GridCell[],
 ) {
   const affectedAnchorKeys = collectAffectedAnchorKeys(changedCells)
+  const affectedWallKeys = collectAffectedWallKeys(changedCells)
   const changedCellKeys = new Set(changedCells.map((cell) => getCellKey(cell)))
-  const placedObjects = { ...current.placedObjects }
-  const occupancy = { ...current.occupancy }
+  let placedObjects = current.placedObjects
+  let occupancy = current.occupancy
   let selection = current.selection
   const invalidRootIds = new Set<string>()
+
+  const ensureMutableObjectMaps = () => {
+    if (placedObjects === current.placedObjects) {
+      placedObjects = { ...current.placedObjects }
+    }
+    if (occupancy === current.occupancy) {
+      occupancy = { ...current.occupancy }
+    }
+  }
 
   affectedAnchorKeys.forEach((anchorKey) => {
     const objectId = occupancy[anchorKey]
@@ -1525,18 +1582,8 @@ function pruneInvalidConnectedProps(
   })
 
   invalidRootIds.forEach((objectId) => {
+    ensureMutableObjectMaps()
     const removedIds = removeObjectHierarchy({ placedObjects, occupancy }, objectId)
-    if (selection && removedIds.has(selection)) {
-      selection = null
-    }
-  })
-
-  Object.values(placedObjects).forEach((object) => {
-    if (!object.parentObjectId || placedObjects[object.parentObjectId]) {
-      return
-    }
-
-    const removedIds = removeObjectHierarchy({ placedObjects, occupancy }, object.id)
     if (selection && removedIds.has(selection)) {
       selection = null
     }
@@ -1545,9 +1592,13 @@ function pruneInvalidConnectedProps(
   // Also prune openings whose wall segments are no longer valid boundaries.
   // A segment is valid if: the cell is painted AND the neighbour is either
   // unpainted (exterior wall) OR painted-but-different-room (inter-room wall).
-  const wallOpenings = { ...current.wallOpenings }
+  let wallOpenings = current.wallOpenings
   Object.values(wallOpenings).forEach((opening) => {
     const segments = getOpeningSegments(opening.wallKey, opening.width)
+    if (!segments.some((segment) => affectedWallKeys.has(segment))) {
+      return
+    }
+
     const stillValid = segments.every((segKey) => {
       const parts = segKey.split(':')
       const cell: GridCell = [parseInt(parts[0]), parseInt(parts[1])]
@@ -1561,12 +1612,25 @@ function pruneInvalidConnectedProps(
       return !neighborRecord ||
         (cellRecord.roomId ?? null) !== (neighborRecord.roomId ?? null)
     })
-    if (!stillValid) delete wallOpenings[opening.id]
+    if (!stillValid) {
+      if (wallOpenings === current.wallOpenings) {
+        wallOpenings = { ...current.wallOpenings }
+      }
+      delete wallOpenings[opening.id]
+    }
   })
 
-  const innerWalls = Object.fromEntries(
-    Object.entries(current.innerWalls).filter(([wallKey]) => Boolean(getCanonicalInnerWallKey(wallKey, paintedCells))),
-  )
+  let innerWalls = current.innerWalls
+  affectedWallKeys.forEach((wallKey) => {
+    if (!innerWalls[wallKey] || getCanonicalInnerWallKey(wallKey, paintedCells)) {
+      return
+    }
+
+    if (innerWalls === current.innerWalls) {
+      innerWalls = { ...current.innerWalls }
+    }
+    delete innerWalls[wallKey]
+  })
 
   return { placedObjects, occupancy, selection, wallOpenings, innerWalls }
 }
@@ -1574,17 +1638,47 @@ function pruneInvalidConnectedProps(
 function pruneInvalidSurfaceOverrides(
   current: Pick<DungeonSnapshot, 'floorTileAssetIds' | 'wallSurfaceAssetIds' | 'wallSurfaceProps'>,
   paintedCells: PaintedCells,
+  changedCells: GridCell[],
 ) {
-  const floorTileAssetIds = Object.fromEntries(
-    Object.entries(current.floorTileAssetIds).filter(([cellKey, assetId]) =>
-      isFloorSurfacePlacementValid(cellKey, assetId, paintedCells)),
-  )
-  const wallSurfaceAssetIds = Object.fromEntries(
-    Object.entries(current.wallSurfaceAssetIds).filter(([wallKey]) => getCanonicalWallKey(wallKey, paintedCells) === wallKey),
-  )
-  const wallSurfaceProps = Object.fromEntries(
-    Object.entries(current.wallSurfaceProps).filter(([wallKey]) => getCanonicalWallKey(wallKey, paintedCells) === wallKey),
-  )
+  const changedCellKeys = new Set(changedCells.map((cell) => getCellKey(cell)))
+  const affectedWallKeys = collectAffectedWallKeys(changedCells)
+  let floorTileAssetIds = current.floorTileAssetIds
+  let wallSurfaceAssetIds = current.wallSurfaceAssetIds
+  let wallSurfaceProps = current.wallSurfaceProps
+
+  changedCellKeys.forEach((cellKey) => {
+    const assetId = floorTileAssetIds[cellKey]
+    if (!assetId || isFloorSurfacePlacementValid(cellKey, assetId, paintedCells)) {
+      return
+    }
+
+    if (floorTileAssetIds === current.floorTileAssetIds) {
+      floorTileAssetIds = { ...current.floorTileAssetIds }
+    }
+    delete floorTileAssetIds[cellKey]
+  })
+
+  affectedWallKeys.forEach((wallKey) => {
+    if (
+      wallSurfaceAssetIds[wallKey]
+      && getCanonicalWallKey(wallKey, paintedCells) !== wallKey
+    ) {
+      if (wallSurfaceAssetIds === current.wallSurfaceAssetIds) {
+        wallSurfaceAssetIds = { ...current.wallSurfaceAssetIds }
+      }
+      delete wallSurfaceAssetIds[wallKey]
+    }
+
+    if (
+      wallSurfaceProps[wallKey]
+      && getCanonicalWallKey(wallKey, paintedCells) !== wallKey
+    ) {
+      if (wallSurfaceProps === current.wallSurfaceProps) {
+        wallSurfaceProps = { ...current.wallSurfaceProps }
+      }
+      delete wallSurfaceProps[wallKey]
+    }
+  })
 
   return { floorTileAssetIds, wallSurfaceAssetIds, wallSurfaceProps }
 }
@@ -1634,7 +1728,6 @@ function deriveChangedFloorDirtyDomains(
   if (previous.paintedCells !== next.paintedCells) {
     domains.add('tiles')
     domains.add('walls')
-    domains.add('openings')
     domains.add('lighting')
     domains.add('renderPlan')
   }
@@ -1651,7 +1744,6 @@ function deriveChangedFloorDirtyDomains(
   if (previous.rooms !== next.rooms) {
     domains.add('tiles')
     domains.add('walls')
-    domains.add('openings')
     domains.add('lighting')
     domains.add('renderPlan')
   }
@@ -1740,6 +1832,9 @@ function mergeFloorDirtyHints(
     floorId: nextHint.floorId ?? previousHint.floorId,
     domains: [...new Set([...(previousHint.domains ?? []), ...(nextHint.domains ?? [])])],
     cells: [...(previousHint.cells ?? []), ...(nextHint.cells ?? [])],
+    chunkKeys: [...(previousHint.chunkKeys ?? []), ...(nextHint.chunkKeys ?? [])],
+    renderChunkKeys: [...(previousHint.renderChunkKeys ?? []), ...(nextHint.renderChunkKeys ?? [])],
+    lightChunkKeys: [...(previousHint.lightChunkKeys ?? []), ...(nextHint.lightChunkKeys ?? [])],
     wallKeys: [...(previousHint.wallKeys ?? []), ...(nextHint.wallKeys ?? [])],
     objectIds: [...(previousHint.objectIds ?? []), ...(nextHint.objectIds ?? [])],
     fullRefresh: previousHint.fullRefresh || nextHint.fullRefresh,
@@ -1870,10 +1965,7 @@ export const useDungeonStore = create<DungeonState>()(
     }
 
     const previousSnapshot = cloneSnapshotForObjectPlacement(state)
-    queueFloorDirtyHint({
-      domains: ['tiles', 'walls', 'openings', 'props', 'lighting', 'renderPlan', 'occupancy'],
-      cells: nextCells,
-    })
+    queueFloorDirtyHint(buildLocalizedRoomPaintDirtyHint(state, nextCells))
 
     set((current) => {
       // Auto-create a room for the new cells
@@ -1910,6 +2002,7 @@ export const useDungeonStore = create<DungeonState>()(
       const { floorTileAssetIds, wallSurfaceAssetIds, wallSurfaceProps } = pruneInvalidSurfaceOverrides(
         current,
         paintedCells,
+        nextCells,
       )
 
       return {
@@ -2189,6 +2282,7 @@ export const useDungeonStore = create<DungeonState>()(
       const { floorTileAssetIds, wallSurfaceAssetIds, wallSurfaceProps } = pruneInvalidSurfaceOverrides(
         current,
         paintedCells,
+        removedCells,
       )
 
       return {
@@ -3410,6 +3504,7 @@ export const useDungeonStore = create<DungeonState>()(
       const { floorTileAssetIds, wallSurfaceAssetIds, wallSurfaceProps } = pruneInvalidSurfaceOverrides(
         current,
         paintedCells,
+        removedCells,
       )
 
       return {
@@ -3460,6 +3555,7 @@ export const useDungeonStore = create<DungeonState>()(
       const { floorTileAssetIds, wallSurfaceAssetIds, wallSurfaceProps } = pruneInvalidSurfaceOverrides(
         current,
         paintedCells,
+        changedCells,
       )
       return {
         ...current,
@@ -3566,6 +3662,7 @@ export const useDungeonStore = create<DungeonState>()(
       const { floorTileAssetIds, wallSurfaceAssetIds, wallSurfaceProps } = pruneInvalidSurfaceOverrides(
         current,
         paintedCells,
+        changedCells,
       )
 
       return {
@@ -3651,6 +3748,7 @@ export const useDungeonStore = create<DungeonState>()(
       const { floorTileAssetIds, wallSurfaceAssetIds, wallSurfaceProps } = pruneInvalidSurfaceOverrides(
         current,
         paintedCells,
+        changedCells,
       )
 
       return {

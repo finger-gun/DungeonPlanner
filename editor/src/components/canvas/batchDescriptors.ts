@@ -2,10 +2,14 @@ import { shouldRenderLineOfSightGeometry } from './losRendering'
 import type { StaticTileEntry } from './tileEntries'
 import { resolveBatchedTileAsset, type ResolvedBatchedTileAsset } from './tileAssetResolution'
 import type { BakedFloorLightField } from '../../rendering/dungeonLightField'
+import {
+  DEFAULT_FLOOR_RENDER_CHUNK_SIZE,
+  getFloorChunkKeyForCell,
+} from '../../store/floorChunkKeys'
 
 export type ResolvedStaticTileEntry = StaticTileEntry & ResolvedBatchedTileAsset
 
-export const DEFAULT_RENDER_BATCH_CHUNK_SIZE = 9
+export const DEFAULT_RENDER_BATCH_CHUNK_SIZE = DEFAULT_FLOOR_RENDER_CHUNK_SIZE
 
 export type BatchDescriptor = {
   floorId: string
@@ -75,7 +79,7 @@ export function getRenderBatchChunkKeyForCell(
   cell: readonly [number, number],
   chunkSize: number = DEFAULT_RENDER_BATCH_CHUNK_SIZE,
 ) {
-  return `${Math.floor(cell[0] / chunkSize)}:${Math.floor(cell[1] / chunkSize)}`
+  return getFloorChunkKeyForCell(cell, chunkSize)
 }
 
 export function getChunkKeyForStaticTileEntry(

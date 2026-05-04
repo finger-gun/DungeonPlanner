@@ -49,6 +49,7 @@ export function getOrBuildCachedFloorDerivedBundle({
   dirtyInfo?: FloorDirtyInfo | null
 }): FloorDerivedBundle {
   const cacheEntry = getFloorDerivedCacheEntry(data.floorId)
+  const previousData = cacheEntry.data?.value
   const cachedData = getOrBuildCachedValue(
     cacheEntry,
     'data',
@@ -62,7 +63,12 @@ export function getOrBuildCachedFloorDerivedBundle({
       buildVersionToken(dirtyInfo, 'tilesVersion', cachedData.paintedCells),
       buildVersionToken(dirtyInfo, 'layerVisibilityVersion', cachedData.layers),
     ].join('|'),
-    () => buildVisiblePaintedCells(cachedData),
+    () => buildVisiblePaintedCellsIncremental({
+      previous: cacheEntry.visiblePainted?.value,
+      previousData,
+      data: cachedData,
+      dirtyInfo,
+    }),
   )
   const visibleObjects = getOrBuildCachedValue(
     cacheEntry,
@@ -157,6 +163,7 @@ export function getOrBuildCachedFloorSceneDerivedBundle({
   dirtyInfo?: FloorDirtyInfo | null
 }): FloorSceneDerivedBundle {
   const cacheEntry = getFloorDerivedCacheEntry(data.floorId)
+  const previousData = cacheEntry.data?.value
   const cachedData = getOrBuildCachedValue(
     cacheEntry,
     'data',
@@ -170,7 +177,12 @@ export function getOrBuildCachedFloorSceneDerivedBundle({
       buildVersionToken(dirtyInfo, 'tilesVersion', cachedData.paintedCells),
       buildVersionToken(dirtyInfo, 'layerVisibilityVersion', cachedData.layers),
     ].join('|'),
-    () => buildVisiblePaintedCells(cachedData),
+    () => buildVisiblePaintedCellsIncremental({
+      previous: cacheEntry.visiblePainted?.value,
+      previousData,
+      data: cachedData,
+      dirtyInfo,
+    }),
   )
   const visibleObjects = getOrBuildCachedValue(
     cacheEntry,
@@ -305,10 +317,66 @@ function buildDirtyHintToken(dirtyInfo: FloorDirtyInfo | null | undefined) {
   return [
     `sequence:${dirtyInfo.sequence}`,
     `rect:${dirtyRect}`,
+    `cells:${dirtyInfo.dirtyCellKeys.join(',')}`,
+    `chunks:${dirtyInfo.dirtyChunkKeys.join(',')}`,
+    `light-chunks:${dirtyInfo.dirtyLightChunkKeys.join(',')}`,
     `walls:${dirtyInfo.dirtyWallKeys.join(',')}`,
     `objects:${dirtyInfo.affectedObjectIds.join(',')}`,
     `full:${dirtyInfo.fullRefresh ? 1 : 0}`,
   ].join('|')
+}
+
+function buildVisiblePaintedCellsIncremental({
+  previous,
+  previousData,
+  data,
+  dirtyInfo,
+}: {
+  previous: Pick<FloorDerivedBundle, 'visiblePaintedCells' | 'visiblePaintedCellRecords'> | undefined
+  previousData: DungeonRoomData | undefined
+  data: DungeonRoomData
+  dirtyInfo: FloorDirtyInfo | null | undefined
+}) {
+  if (
+    !previous
+    || !previousData
+    || previousData.layers !== data.layers
+    || dirtyInfo?.fullRefresh
+    || !dirtyInfo?.dirtyCellKeys.length
+  ) {
+    return buildVisiblePaintedCells(data)
+  }
+
+  const dirtyCellKeys = new Set(dirtyInfo.dirtyCellKeys)
+  const visiblePaintedCellRecords: FloorDerivedBundle['visiblePaintedCellRecords'] = {
+    ...previous.visiblePaintedCellRecords,
+  }
+  dirtyCellKeys.forEach((cellKey) => {
+    delete visiblePaintedCellRecords[cellKey]
+    const record = data.paintedCells[cellKey]
+    if (!record || data.layers[record.layerId]?.visible === false) {
+      return
+    }
+
+    visiblePaintedCellRecords[cellKey] = record
+  })
+
+  const visiblePaintedCells = previous.visiblePaintedCells.filter((cell) => {
+    const cellKey = `${cell[0]}:${cell[1]}`
+    return !dirtyCellKeys.has(cellKey) && Boolean(visiblePaintedCellRecords[cellKey])
+  })
+
+  dirtyInfo.dirtyCellKeys.forEach((cellKey) => {
+    const record = visiblePaintedCellRecords[cellKey]
+    if (record) {
+      visiblePaintedCells.push(record.cell)
+    }
+  })
+
+  return {
+    visiblePaintedCells,
+    visiblePaintedCellRecords,
+  }
 }
 
 function getDerivedIdentity(value: object) {

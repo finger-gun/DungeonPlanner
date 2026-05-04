@@ -109,7 +109,14 @@ export function buildBakedLightBuildInput(
   staticLightSources: ResolvedDungeonLightSource[],
   dirtyHint?: Pick<
     FloorDirtyInfo,
-    'sequence' | 'dirtyCellRect' | 'dirtyWallKeys' | 'affectedObjectIds' | 'fullRefresh'
+    | 'sequence'
+    | 'dirtyCellRect'
+    | 'dirtyCellKeys'
+    | 'dirtyChunkKeys'
+    | 'dirtyLightChunkKeys'
+    | 'dirtyWallKeys'
+    | 'affectedObjectIds'
+    | 'fullRefresh'
   > | null,
 ): BakedFloorLightFieldBuildInput {
   return {

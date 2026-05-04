@@ -4,6 +4,7 @@ import { buildFloorDerivedBundle, type DungeonRoomData } from '../../store/deriv
 import {
   buildChunkedFloorRenderDerivedCache,
   buildFloorRenderDerivedBundle,
+  getChunkKeysForDirtyInfo,
   getChunkKeysForDirtyRect,
 } from './floorRenderDerived'
 
@@ -156,6 +157,32 @@ describe('buildFloorRenderDerivedBundle', () => {
       minCellZ: 0,
       maxCellZ: 0,
     }, 1)).toEqual(['0:-1', '1:-1', '0:0', '1:0'])
+  })
+
+  it('uses exact dirty cell keys before falling back to dirty rectangles', () => {
+    expect(getChunkKeysForDirtyInfo({
+      ...createFloorDirtyInfo(),
+      sequence: 1,
+      dirtyCellRect: {
+        minCellX: 0,
+        maxCellX: 20,
+        minCellZ: 0,
+        maxCellZ: 0,
+      },
+      dirtyCellKeys: ['0:0', '20:0'],
+      dirtyChunkKeys: ['0:0', '2:0'],
+      dirtyRenderChunkKeys: ['0:0', '2:0'],
+    }, 0)).toEqual(['0:0', '2:0'])
+  })
+
+  it('prefers explicit dirty render chunk keys over recomputing chunk halos from cells', () => {
+    expect(getChunkKeysForDirtyInfo({
+      ...createFloorDirtyInfo(),
+      sequence: 1,
+      dirtyCellKeys: ['0:0'],
+      dirtyChunkKeys: ['0:0'],
+      dirtyRenderChunkKeys: ['0:0', '1:0'],
+    }, 1)).toEqual(['0:0', '1:0'])
   })
 
   it('keeps openings scoped to their owning chunk while preserving halo context', () => {

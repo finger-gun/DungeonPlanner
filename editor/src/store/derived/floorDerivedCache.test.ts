@@ -80,6 +80,64 @@ describe('floorDerivedCache', () => {
     expect('visiblePaintedCellRecords' in derivedB).toBe(false)
     expect('visibleOpenings' in derivedB).toBe(false)
   })
+
+  it('keeps opening-derived state stable across localized room paints without opening changes', () => {
+    const data = createFloorData()
+    const baseDirtyInfo = createFloorDirtyInfo()
+    const derivedA = getOrBuildCachedFloorDerivedBundle({
+      data,
+      dirtyInfo: baseDirtyInfo,
+    })
+
+    const paintedCells: DungeonRoomData['paintedCells'] = {
+      ...data.paintedCells,
+      '1:0': { cell: [1, 0], layerId: 'visible', roomId: 'room-b' },
+    }
+    const rooms = {
+      ...data.rooms,
+      'room-b': {
+        id: 'room-b',
+        name: 'Room B',
+        layerId: 'visible',
+        floorAssetId: null,
+        wallAssetId: null,
+      },
+    }
+
+    const derivedB = getOrBuildCachedFloorDerivedBundle({
+      data: {
+        ...data,
+        paintedCells,
+        rooms,
+      },
+      dirtyInfo: {
+        ...baseDirtyInfo,
+        sequence: 1,
+        tilesVersion: 1,
+        wallsVersion: 1,
+        lightingVersion: 1,
+        renderPlanVersion: 1,
+        dirtyCellRect: {
+          minCellX: 1,
+          maxCellX: 1,
+          minCellZ: 0,
+          maxCellZ: 0,
+        },
+        dirtyCellKeys: ['1:0'],
+        dirtyChunkKeys: ['0:0'],
+        dirtyRenderChunkKeys: ['0:0'],
+        dirtyLightChunkKeys: ['0:0'],
+        dirtyWallKeys: ['0:0:east', '1:0:west'],
+      },
+    })
+
+    expect(derivedB.visibleOpenings).toBe(derivedA.visibleOpenings)
+    expect(derivedB.wallOpeningDerivedState).toBe(derivedA.wallOpeningDerivedState)
+    expect(derivedB.visibleObjects).toBe(derivedA.visibleObjects)
+    expect(derivedB.topLevelObjects).toBe(derivedA.topLevelObjects)
+    expect(derivedB.childrenByParent).toBe(derivedA.childrenByParent)
+    expect(derivedB.bakedLightBuildInput).not.toBe(derivedA.bakedLightBuildInput)
+  })
 })
 
 function createFloorData(): DungeonRoomData {

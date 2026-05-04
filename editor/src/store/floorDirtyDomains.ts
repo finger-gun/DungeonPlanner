@@ -1,4 +1,5 @@
 import { getCellKey, type GridCell } from '../hooks/useSnapToGrid'
+import { getFloorChunkKeysForCells } from './floorChunkKeys'
 
 export type FloorDirtyDomainKey =
   | 'tiles'
@@ -23,6 +24,9 @@ export type FloorDirtyHint = {
   floorId?: string
   domains?: FloorDirtyDomainKey[]
   cells?: Iterable<GridCell | string>
+  chunkKeys?: Iterable<string>
+  renderChunkKeys?: Iterable<string>
+  lightChunkKeys?: Iterable<string>
   wallKeys?: Iterable<string>
   objectIds?: Iterable<string>
   fullRefresh?: boolean
@@ -41,6 +45,10 @@ export type FloorDirtyInfo = {
   occupancyVersion: number
   terrainVersion: number
   dirtyCellRect: FloorDirtyRect
+  dirtyCellKeys: string[]
+  dirtyChunkKeys: string[]
+  dirtyRenderChunkKeys: string[]
+  dirtyLightChunkKeys: string[]
   dirtyWallKeys: string[]
   affectedObjectIds: string[]
   fullRefresh: boolean
@@ -79,6 +87,10 @@ export function createFloorDirtyInfo(): FloorDirtyInfo {
     occupancyVersion: 0,
     terrainVersion: 0,
     dirtyCellRect: null,
+    dirtyCellKeys: [],
+    dirtyChunkKeys: [],
+    dirtyRenderChunkKeys: [],
+    dirtyLightChunkKeys: [],
     dirtyWallKeys: [],
     affectedObjectIds: [],
     fullRefresh: false,
@@ -119,16 +131,26 @@ export function applyFloorDirtyMutation({
     domainList.length === 0
     && !hint?.fullRefresh
     && !hint?.cells
+    && !hint?.chunkKeys
+    && !hint?.renderChunkKeys
+    && !hint?.lightChunkKeys
     && !hint?.wallKeys
     && !hint?.objectIds
   ) {
     return nextFloorDirtyState
   }
 
+  const dirtyCellKeys = buildDirtyCellKeys(hint?.cells)
+  const dirtyChunkKeys = dedupeStrings(hint?.chunkKeys ?? getFloorChunkKeysForCells(dirtyCellKeys))
+
   const nextInfo: FloorDirtyInfo = {
     ...previousInfo,
     sequence: previousInfo.sequence + 1,
-    dirtyCellRect: buildDirtyCellRect(hint?.cells),
+    dirtyCellRect: buildDirtyCellRect(dirtyCellKeys),
+    dirtyCellKeys,
+    dirtyChunkKeys,
+    dirtyRenderChunkKeys: dedupeStrings(hint?.renderChunkKeys ?? dirtyChunkKeys),
+    dirtyLightChunkKeys: dedupeStrings(hint?.lightChunkKeys ?? dirtyChunkKeys),
     dirtyWallKeys: dedupeStrings(hint?.wallKeys),
     affectedObjectIds: dedupeStrings(hint?.objectIds),
     fullRefresh: Boolean(hint?.fullRefresh),
@@ -143,6 +165,22 @@ export function applyFloorDirtyMutation({
   return nextFloorDirtyState
 }
 
+function buildDirtyCellKeys(cells: Iterable<GridCell | string> | undefined) {
+  if (!cells) {
+    return []
+  }
+
+  const cellKeys = new Set<string>()
+  for (const entry of cells) {
+    const cellKey = typeof entry === 'string' ? entry : getCellKey(entry)
+    if (parseCellKey(cellKey)) {
+      cellKeys.add(cellKey)
+    }
+  }
+
+  return [...cellKeys].sort()
+}
+
 function buildDirtyCellRect(cells: Iterable<GridCell | string> | undefined): FloorDirtyRect {
   if (!cells) {
     return null
@@ -155,17 +193,15 @@ function buildDirtyCellRect(cells: Iterable<GridCell | string> | undefined): Flo
 
   for (const entry of cells) {
     const cellKey = typeof entry === 'string' ? entry : getCellKey(entry)
-    const [cellXPart, cellZPart] = cellKey.split(':')
-    const cellX = Number.parseInt(cellXPart ?? '', 10)
-    const cellZ = Number.parseInt(cellZPart ?? '', 10)
-    if (Number.isNaN(cellX) || Number.isNaN(cellZ)) {
+    const parsed = parseCellKey(cellKey)
+    if (!parsed) {
       continue
     }
 
-    minCellX = Math.min(minCellX, cellX)
-    maxCellX = Math.max(maxCellX, cellX)
-    minCellZ = Math.min(minCellZ, cellZ)
-    maxCellZ = Math.max(maxCellZ, cellZ)
+    minCellX = Math.min(minCellX, parsed.cellX)
+    maxCellX = Math.max(maxCellX, parsed.cellX)
+    minCellZ = Math.min(minCellZ, parsed.cellZ)
+    maxCellZ = Math.max(maxCellZ, parsed.cellZ)
   }
 
   return Number.isFinite(minCellX)
@@ -178,6 +214,17 @@ function buildDirtyCellRect(cells: Iterable<GridCell | string> | undefined): Flo
     : null
 }
 
+function parseCellKey(cellKey: string) {
+  const [cellXPart, cellZPart] = cellKey.split(':')
+  const cellX = Number.parseInt(cellXPart ?? '', 10)
+  const cellZ = Number.parseInt(cellZPart ?? '', 10)
+  if (Number.isNaN(cellX) || Number.isNaN(cellZ)) {
+    return null
+  }
+
+  return { cellX, cellZ }
+}
+
 function dedupeStrings(values: Iterable<string> | undefined) {
-  return values ? [...new Set(values)] : []
+  return values ? [...new Set(values)].sort() : []
 }
