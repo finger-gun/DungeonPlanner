@@ -107,12 +107,13 @@ export type BakedFloorLightField = {
   chunks: BakedLightChunk[]
   dirtyChunkKeys: string[]
   dirtyChunkKeySet: ReadonlySet<string>
-  lightFieldTexture: THREE.DataTexture | null
+  lightFieldTexture: BakedLightFieldTexture | null
   flickerLightFieldTextures: [
-    THREE.DataTexture | null,
-    THREE.DataTexture | null,
-    THREE.DataTexture | null,
+    BakedLightFieldTexture | null,
+    BakedLightFieldTexture | null,
+    BakedLightFieldTexture | null,
   ]
+  gpuChunks: BakedFloorLightFieldGpuChunks | null
   lightFieldTextureSize: {
     width: number
     height: number
@@ -127,6 +128,31 @@ export type BakedFloorLightField = {
   sourceHash: string
 }
 
+export type BakedLightFieldTexture = THREE.DataTexture | THREE.DataArrayTexture
+
+export type BakedFloorLightFieldGpuChunks = {
+  lookupBounds: {
+    minChunkX: number
+    maxChunkX: number
+    minChunkZ: number
+    maxChunkZ: number
+  } | null
+  lookupTexture: THREE.DataTexture | null
+  lookupSize: {
+    width: number
+    height: number
+  }
+  textureSize: {
+    width: number
+    height: number
+  }
+  gridSize: {
+    widthCells: number
+    heightCells: number
+  }
+  layerByChunkKey: Record<string, number>
+}
+
 type BakedFloorLightFieldLayout = {
   bounds: BakedFloorLightField['bounds']
   chunks: Array<Omit<BakedLightChunk, 'dirty'>>
@@ -134,6 +160,13 @@ type BakedFloorLightFieldLayout = {
   uniqueCellKeys: Set<string>
   staticLightSourcesByChunkKey: Record<string, ResolvedDungeonLightSource[]>
   flickerStaticLightSources: ResolvedDungeonLightSource[]
+}
+
+type PreparedBakedLightFieldTextures = Pick<
+  BakedFloorLightField,
+  'lightFieldTexture' | 'flickerLightFieldTextures' | 'lightFieldTextureSize' | 'lightFieldGridSize' | 'gpuChunks'
+> & {
+  textureLayoutChanged: boolean
 }
 
 export type BakedFloorLightFieldBuildInput = {
@@ -219,6 +252,32 @@ export function clearBakedFloorLightFieldCache() {
   bakedLightSourceHashCache.clear()
 }
 
+export function createEmptyBakedFloorLightField(
+  floorId: string,
+  chunkSize = DEFAULT_BAKED_LIGHT_CHUNK_SIZE,
+): BakedFloorLightField {
+  return {
+    floorId,
+    chunkSize,
+    bounds: null,
+    staticLightSources: [],
+    staticLightSourcesByChunkKey: {},
+    occlusion: null,
+    chunks: [],
+    dirtyChunkKeys: [],
+    dirtyChunkKeySet: new Set<string>(),
+    lightFieldTexture: null,
+    flickerLightFieldTextures: [null, null, null],
+    gpuChunks: null,
+    lightFieldTextureSize: { width: 0, height: 0 },
+    lightFieldGridSize: { widthCells: 0, heightCells: 0 },
+    cornerSampleByKey: {},
+    sampleByCellKey: {},
+    previousSourceHash: null,
+    sourceHash: `empty:${floorId}:${chunkSize}`,
+  }
+}
+
 export function pruneBakedFloorLightFieldCache(retainedFloorIds: Iterable<string>) {
   const retainedFloorIdSet = new Set(retainedFloorIds)
   for (const [floorId, field] of floorLightFieldCache.entries()) {
@@ -250,6 +309,37 @@ export function getPropLightWorldPosition(
 function disposeBakedFloorLightField(field: BakedFloorLightField) {
   field.lightFieldTexture?.dispose()
   field.flickerLightFieldTextures.forEach((texture) => texture?.dispose())
+  field.gpuChunks?.lookupTexture?.dispose()
+}
+
+function disposeSupersededBakedFloorLightFieldResources(
+  previousFields: Array<BakedFloorLightField | null | undefined>,
+  nextField: BakedFloorLightField,
+) {
+  const disposedTextures = new Set<THREE.Texture>()
+  const disposeIfReplaced = (
+    texture: THREE.Texture | null | undefined,
+    nextTexture: THREE.Texture | null | undefined,
+  ) => {
+    if (!texture || texture === nextTexture || disposedTextures.has(texture)) {
+      return
+    }
+
+    disposedTextures.add(texture)
+    texture.dispose()
+  }
+
+  previousFields.forEach((field) => {
+    if (!field) {
+      return
+    }
+
+    disposeIfReplaced(field.lightFieldTexture, nextField.lightFieldTexture)
+    field.flickerLightFieldTextures.forEach((texture, index) => {
+      disposeIfReplaced(texture, nextField.flickerLightFieldTextures[index])
+    })
+    disposeIfReplaced(field.gpuChunks?.lookupTexture, nextField.gpuChunks?.lookupTexture)
+  })
 }
 
 export function resolveObjectLightSources(
@@ -368,16 +458,7 @@ export function getOrBuildBakedFloorLightField(input: BakedFloorLightFieldBuildI
     previousSourceHash: cached?.sourceHash ?? null,
     sourceHash,
   })
-  if (cached && cached !== next) {
-    if (cached.lightFieldTexture !== next.lightFieldTexture) {
-      cached.lightFieldTexture?.dispose()
-    }
-    cached.flickerLightFieldTextures.forEach((texture, index) => {
-      if (texture !== next.flickerLightFieldTextures[index]) {
-        texture?.dispose()
-      }
-    })
-  }
+  disposeSupersededBakedFloorLightFieldResources([cached], next)
   floorLightFieldCache.set(floorId, next)
   return next
 }
@@ -817,7 +898,7 @@ function buildBakedFloorLightField({
     staticLightSourcesByChunkKey,
     flickerStaticLightSources,
   } = layout
-  const sampleByCellKey: Record<string, BakedLightSample> = canReuseBakedLightLayout(cachedField, bounds)
+  const sampleByCellKey: Record<string, BakedLightSample> = canReuseCachedBakedLightSamples(cachedField, chunkSize)
     ? { ...cachedField!.sampleByCellKey }
     : {}
   Object.keys(sampleByCellKey).forEach((cellKey) => {
@@ -825,11 +906,20 @@ function buildBakedFloorLightField({
       delete sampleByCellKey[cellKey]
     }
   })
-  const cornerSampleByKey: Record<string, BakedLightCornerSample> = canReuseBakedLightLayout(cachedField, bounds)
-    ? { ...cachedField!.cornerSampleByKey }
+  const cornerSampleByKey: Record<string, BakedLightCornerSample> = canReuseCachedBakedLightSamples(cachedField, chunkSize)
+    ? cloneCornerSampleByKeyForBounds(cachedField!, bounds)
     : {}
-  const { lightFieldTexture, flickerLightFieldTextures, lightFieldTextureSize, lightFieldGridSize } = prepareLightFieldTextures({
+  const {
+    lightFieldTexture,
+    flickerLightFieldTextures,
+    gpuChunks,
+    lightFieldTextureSize,
+    lightFieldGridSize,
+    textureLayoutChanged,
+  } = prepareLightFieldTextures({
     bounds,
+    chunks,
+    chunkSize,
     cachedField,
     useFlickerTextures: flickerStaticLightSources.length > 0,
   })
@@ -848,12 +938,15 @@ function buildBakedFloorLightField({
   updateLightFieldTextureChunks({
     bounds,
     chunks: chunks.filter((chunk) => effectiveDirtyChunkKeys.has(chunk.key)),
+    chunkSize,
     staticLightSources,
     flickerStaticLightSources,
     occlusion,
     cornerSampleByKey,
     lightFieldTexture,
     flickerLightFieldTextures,
+    gpuChunks,
+    textureLayoutChanged,
   })
 
   return {
@@ -873,6 +966,7 @@ function buildBakedFloorLightField({
     dirtyChunkKeySet: effectiveDirtyChunkKeys,
     lightFieldTexture,
     flickerLightFieldTextures,
+    gpuChunks,
     lightFieldTextureSize,
     lightFieldGridSize,
     cornerSampleByKey,
@@ -952,7 +1046,7 @@ function buildBakedFloorLightFieldLayout({
     : null
   const chunks = [...chunkBuilders.values()]
   const chunkKeys = new Set(chunkBuilders.keys())
-  const needsFullChunkRebuild = !canReuseBakedLightLayout(cachedField, bounds)
+  const needsFullChunkRebuild = !canReuseCachedBakedLightSamples(cachedField, chunkSize)
     || hasFlickerTextureTopologyChanged(cachedField, flickerStaticLightSources.length > 0)
   const baseDirtyChunkKeys = needsFullChunkRebuild
     ? chunkKeys
@@ -1049,8 +1143,16 @@ export function createPendingBakedFloorLightField({
   layout: BakedFloorLightFieldLayout
 }) {
   const cachedField = prepared.cachedField
-  const { lightFieldTexture, flickerLightFieldTextures, lightFieldTextureSize, lightFieldGridSize } = prepareLightFieldTextures({
+  const {
+    lightFieldTexture,
+    flickerLightFieldTextures,
+    gpuChunks,
+    lightFieldTextureSize,
+    lightFieldGridSize,
+  } = prepareLightFieldTextures({
     bounds: layout.bounds,
+    chunks: layout.chunks,
+    chunkSize: prepared.chunkSize,
     cachedField,
     useFlickerTextures: layout.flickerStaticLightSources.length > 0,
   })
@@ -1074,6 +1176,7 @@ export function createPendingBakedFloorLightField({
     dirtyChunkKeySet: layout.effectiveDirtyChunkKeys,
     lightFieldTexture,
     flickerLightFieldTextures,
+    gpuChunks,
     lightFieldTextureSize,
     lightFieldGridSize,
     cornerSampleByKey,
@@ -1085,31 +1188,37 @@ export function createPendingBakedFloorLightField({
 
 export function shouldShowPendingBakedFloorLightField({
   cachedField,
-  bounds,
-  useFlickerTextures,
 }: {
   cachedField: BakedFloorLightField | null
   bounds: BakedFloorLightField['bounds']
   useFlickerTextures: boolean
 }) {
+  // Only show a dark pending field when there is no previous result to display.
+  // When a cached field exists — even if the layout has changed (e.g. the player
+  // extended the dungeon bounds) — keep it visible until the worker delivers the
+  // complete new result. Swapping in an empty pending field forces a pipeline-
+  // signature change → configureTilePage → full TSL/WebGPU pipeline recompilation
+  // for every tile page, causing a multi-frame GPU stutter. The one-shot swap on
+  // worker completion is imperceptible compared to that stall.
   return !cachedField
-    || !canReuseBakedLightLayout(cachedField, bounds)
-    || hasFlickerTextureTopologyChanged(cachedField, useFlickerTextures)
 }
 
 export function applyBakedFloorLightFieldWorkerResult({
   prepared,
   layout,
   result,
+  textureReuseField = null,
 }: {
   prepared: PreparedBakedFloorLightFieldBuild
   layout: BakedFloorLightFieldLayout
   result: BakedFloorLightFieldWorkerResult
+  textureReuseField?: BakedFloorLightField | null
 }) {
-  const cachedField = prepared.cachedField
-  const canReuseLayout = canReuseBakedLightLayout(cachedField, layout.bounds)
-  const sampleByCellKey: Record<string, BakedLightSample> = canReuseLayout && cachedField
-    ? { ...cachedField.sampleByCellKey }
+  const previousField = prepared.cachedField
+  const reusableTextureField = textureReuseField ?? previousField
+  const canReuseCachedSamples = canReuseCachedBakedLightSamples(previousField, prepared.chunkSize)
+  const sampleByCellKey: Record<string, BakedLightSample> = canReuseCachedSamples && previousField
+    ? { ...previousField.sampleByCellKey }
     : {}
   Object.keys(sampleByCellKey).forEach((cellKey) => {
     if (!layout.uniqueCellKeys.has(cellKey)) {
@@ -1119,23 +1228,35 @@ export function applyBakedFloorLightFieldWorkerResult({
   result.sampleUpdates.forEach(({ cellKey, sample }) => {
     sampleByCellKey[cellKey] = sample
   })
-  const cornerSampleByKey: Record<string, BakedLightCornerSample> = canReuseLayout && cachedField
-    ? { ...cachedField.cornerSampleByKey }
+  const cornerSampleByKey: Record<string, BakedLightCornerSample> = canReuseCachedSamples && previousField
+    ? cloneCornerSampleByKeyForBounds(previousField, layout.bounds)
     : {}
   result.cornerUpdates.forEach(({ key, sample }) => {
     cornerSampleByKey[key] = sample
   })
 
-  const { lightFieldTexture, flickerLightFieldTextures, lightFieldTextureSize, lightFieldGridSize } = prepareLightFieldTextures({
+  const {
+    lightFieldTexture,
+    flickerLightFieldTextures,
+    gpuChunks,
+    lightFieldTextureSize,
+    lightFieldGridSize,
+    textureLayoutChanged,
+  } = prepareLightFieldTextures({
     bounds: layout.bounds,
-    cachedField,
+    chunks: layout.chunks,
+    chunkSize: prepared.chunkSize,
+    cachedField: reusableTextureField,
     useFlickerTextures: layout.flickerStaticLightSources.length > 0,
   })
   applyWorkerCornerUpdatesToTextures({
     bounds: layout.bounds,
     cornerUpdates: result.cornerUpdates,
+    chunkSize: prepared.chunkSize,
     lightFieldTexture,
     flickerLightFieldTextures,
+    gpuChunks,
+    textureLayoutChanged,
   })
 
   const next = {
@@ -1155,24 +1276,21 @@ export function applyBakedFloorLightFieldWorkerResult({
     dirtyChunkKeySet: layout.effectiveDirtyChunkKeys,
     lightFieldTexture,
     flickerLightFieldTextures,
+    gpuChunks,
     lightFieldTextureSize,
     lightFieldGridSize,
     cornerSampleByKey,
     sampleByCellKey,
-    previousSourceHash: cachedField?.sourceHash ?? null,
+    previousSourceHash: previousField?.sourceHash ?? null,
     sourceHash: prepared.sourceHash,
   } satisfies BakedFloorLightField
 
-  if (cachedField && cachedField !== next) {
-    if (cachedField.lightFieldTexture !== next.lightFieldTexture) {
-      cachedField.lightFieldTexture?.dispose()
-    }
-    cachedField.flickerLightFieldTextures.forEach((texture, index) => {
-      if (texture !== next.flickerLightFieldTextures[index]) {
-        texture?.dispose()
-      }
-    })
-  }
+  disposeSupersededBakedFloorLightFieldResources(
+    reusableTextureField && reusableTextureField !== previousField
+      ? [previousField, reusableTextureField]
+      : [previousField],
+    next,
+  )
   floorLightFieldCache.set(prepared.floorId, next)
   return next
 }
@@ -1449,18 +1567,38 @@ function getChunkKeysForWorldBounds(bounds: THREE.Box3, chunkSize: number) {
   return [...chunkKeys]
 }
 
-function canReuseBakedLightLayout(
+function canReuseCachedBakedLightSamples(
   cachedField: BakedFloorLightField | null,
+  chunkSize: number,
+) {
+  return Boolean(cachedField && cachedField.chunkSize === chunkSize)
+}
+
+function cloneCornerSampleByKeyForBounds(
+  cachedField: BakedFloorLightField,
   bounds: BakedFloorLightField['bounds'],
 ) {
-  if (!cachedField?.bounds || !bounds) {
-    return cachedField?.bounds === bounds
+  if (!bounds) {
+    return {}
   }
 
-  return cachedField.bounds.minCellX === bounds.minCellX
-    && cachedField.bounds.maxCellX === bounds.maxCellX
-    && cachedField.bounds.minCellZ === bounds.minCellZ
-    && cachedField.bounds.maxCellZ === bounds.maxCellZ
+  const cornerSampleByKey: Record<string, BakedLightCornerSample> = {}
+  Object.entries(cachedField.cornerSampleByKey).forEach(([key, sample]) => {
+    const parsedCorner = parsePendingCellKey(key)
+    if (!parsedCorner) {
+      return
+    }
+    if (
+      parsedCorner[0] < bounds.minCellX
+      || parsedCorner[0] > bounds.maxCellX + 1
+      || parsedCorner[1] < bounds.minCellZ
+      || parsedCorner[1] > bounds.maxCellZ + 1
+    ) {
+      return
+    }
+    cornerSampleByKey[key] = sample
+  })
+  return cornerSampleByKey
 }
 
 function hasFlickerTextureTopologyChanged(
@@ -1578,6 +1716,111 @@ function createLightFieldTexture(data: Float32Array, width: number, height: numb
   return texture
 }
 
+function createLightFieldArrayTexture(data: Float32Array, width: number, height: number, depth: number) {
+  const texture = new THREE.DataArrayTexture(
+    data,
+    width,
+    height,
+    depth,
+  )
+  texture.format = THREE.RGBAFormat
+  texture.type = THREE.FloatType
+  texture.wrapS = THREE.ClampToEdgeWrapping
+  texture.wrapT = THREE.ClampToEdgeWrapping
+  texture.minFilter = THREE.NearestFilter
+  texture.magFilter = THREE.NearestFilter
+  texture.generateMipmaps = false
+  texture.needsUpdate = true
+  return texture
+}
+
+function isChunkedLightFieldTexture(
+  texture: BakedLightFieldTexture | null | undefined,
+): texture is THREE.DataArrayTexture {
+  return texture instanceof THREE.DataArrayTexture
+}
+
+function getChunkLayerTextureIndex({
+  chunkX,
+  chunkZ,
+  chunkSize,
+  cellX,
+  cellZ,
+  textureWidth,
+  textureHeight,
+  layerIndex,
+}: {
+  chunkX: number
+  chunkZ: number
+  chunkSize: number
+  cellX: number
+  cellZ: number
+  textureWidth: number
+  textureHeight: number
+  layerIndex: number
+}) {
+  const localX = THREE.MathUtils.clamp(cellX - chunkX * chunkSize, 0, textureWidth - 1)
+  const localZ = THREE.MathUtils.clamp(cellZ - chunkZ * chunkSize, 0, textureHeight - 1)
+  const layerStride = textureWidth * textureHeight * 4
+  return layerIndex * layerStride + (localZ * textureWidth + localX) * 4
+}
+
+function getChunkLayerTargetsForCorner({
+  cellX,
+  cellZ,
+  chunkSize,
+  gpuChunks,
+}: {
+  cellX: number
+  cellZ: number
+  chunkSize: number
+  gpuChunks: NonNullable<BakedFloorLightField['gpuChunks']>
+}) {
+  const primaryChunkX = Math.floor(cellX / chunkSize)
+  const primaryChunkZ = Math.floor(cellZ / chunkSize)
+  const candidateChunkXs = new Set<number>([primaryChunkX])
+  const candidateChunkZs = new Set<number>([primaryChunkZ])
+
+  if (cellX % chunkSize === 0) {
+    candidateChunkXs.add(primaryChunkX - 1)
+  }
+  if (cellZ % chunkSize === 0) {
+    candidateChunkZs.add(primaryChunkZ - 1)
+  }
+
+  const targets: Array<{ chunkX: number, chunkZ: number, layerIndex: number }> = []
+  candidateChunkXs.forEach((chunkX) => {
+    candidateChunkZs.forEach((chunkZ) => {
+      const layerIndex = gpuChunks.layerByChunkKey[`${chunkX}:${chunkZ}`]
+      if (layerIndex === undefined) {
+        return
+      }
+      targets.push({ chunkX, chunkZ, layerIndex })
+    })
+  })
+
+  return targets
+}
+
+function markChunkTextureUpdate(
+  texture: BakedLightFieldTexture,
+  dirtyLayerIndices: ReadonlySet<number>,
+  textureLayoutChanged: boolean,
+) {
+  if (!textureLayoutChanged && dirtyLayerIndices.size === 0) {
+    return
+  }
+
+  if (isChunkedLightFieldTexture(texture)) {
+    texture.clearLayerUpdates()
+    if (!textureLayoutChanged) {
+      dirtyLayerIndices.forEach((layerIndex) => texture.addLayerUpdate(layerIndex))
+    }
+  }
+
+  texture.needsUpdate = true
+}
+
 function clonePendingSampleByCellKey(
   cachedField: BakedFloorLightField | null,
   uniqueCellKeys: ReadonlySet<string>,
@@ -1623,66 +1866,27 @@ function clonePendingCornerSampleByKey(
   return cornerSampleByKey
 }
 
-function copyLightFieldTextureOverlap({
-  sourceTexture,
-  sourceBounds,
-  targetTexture,
-  targetBounds,
-}: {
-  sourceTexture: THREE.DataTexture | null
-  sourceBounds: BakedFloorLightField['bounds']
-  targetTexture: THREE.DataTexture | null
-  targetBounds: BakedFloorLightField['bounds']
-}) {
-  if (!sourceTexture || !targetTexture || !sourceBounds || !targetBounds) {
-    return
-  }
-
-  const sourceData = sourceTexture.image.data as Float32Array
-  const targetData = targetTexture.image.data as Float32Array
-  const sourceWidth = sourceBounds.maxCellX - sourceBounds.minCellX + 2
-  const targetWidth = targetBounds.maxCellX - targetBounds.minCellX + 2
-  const overlapMinX = Math.max(sourceBounds.minCellX, targetBounds.minCellX)
-  const overlapMaxX = Math.min(sourceBounds.maxCellX + 1, targetBounds.maxCellX + 1)
-  const overlapMinZ = Math.max(sourceBounds.minCellZ, targetBounds.minCellZ)
-  const overlapMaxZ = Math.min(sourceBounds.maxCellZ + 1, targetBounds.maxCellZ + 1)
-
-  if (overlapMinX > overlapMaxX || overlapMinZ > overlapMaxZ) {
-    return
-  }
-
-  for (let cellZ = overlapMinZ; cellZ <= overlapMaxZ; cellZ += 1) {
-    for (let cellX = overlapMinX; cellX <= overlapMaxX; cellX += 1) {
-      const sourceIndex = ((cellZ - sourceBounds.minCellZ) * sourceWidth + (cellX - sourceBounds.minCellX)) * 4
-      const targetIndex = ((cellZ - targetBounds.minCellZ) * targetWidth + (cellX - targetBounds.minCellX)) * 4
-      targetData[targetIndex] = sourceData[sourceIndex]
-      targetData[targetIndex + 1] = sourceData[sourceIndex + 1]
-      targetData[targetIndex + 2] = sourceData[sourceIndex + 2]
-      targetData[targetIndex + 3] = sourceData[sourceIndex + 3]
-    }
-  }
-
-  targetTexture.needsUpdate = true
-}
-
 function prepareLightFieldTextures({
   bounds,
+  chunks,
+  chunkSize,
   cachedField,
   useFlickerTextures,
 }: {
   bounds: BakedFloorLightField['bounds']
+  chunks: Array<Omit<BakedLightChunk, 'dirty'>>
+  chunkSize: number
   cachedField: BakedFloorLightField | null
   useFlickerTextures: boolean
-}): Pick<
-  BakedFloorLightField,
-  'lightFieldTexture' | 'flickerLightFieldTextures' | 'lightFieldTextureSize' | 'lightFieldGridSize'
-> {
+}): PreparedBakedLightFieldTextures {
   if (!bounds) {
     return {
       lightFieldTexture: null,
       flickerLightFieldTextures: [null, null, null] as [null, null, null],
+      gpuChunks: null,
       lightFieldTextureSize: { width: 0, height: 0 },
       lightFieldGridSize: { widthCells: 0, heightCells: 0 },
+      textureLayoutChanged: false,
     }
   }
 
@@ -1690,40 +1894,69 @@ function prepareLightFieldTextures({
   const heightCells = bounds.maxCellZ - bounds.minCellZ + 1
   const textureWidth = widthCells + 1
   const textureHeight = heightCells + 1
-  const canReuseLayout = canReuseBakedLightLayout(cachedField, bounds)
-  const lightFieldTexture = canReuseLayout && cachedField?.lightFieldTexture
+  const nextGpuChunks = buildGpuChunkTextureLayout(chunks, chunkSize)
+  const canReuseChunkLayout = canReuseChunkTextureLayout(cachedField, nextGpuChunks, useFlickerTextures)
+  const layerCount = Math.max(chunks.length, 1)
+  const layerDataSize = nextGpuChunks.textureSize.width * nextGpuChunks.textureSize.height * 4 * layerCount
+
+  const lightFieldTexture = canReuseChunkLayout && cachedField?.lightFieldTexture && isChunkedLightFieldTexture(cachedField.lightFieldTexture)
     ? cachedField.lightFieldTexture
-    : createLightFieldTexture(new Float32Array(textureWidth * textureHeight * 4), textureWidth, textureHeight)
+    : createLightFieldArrayTexture(
+      new Float32Array(layerDataSize),
+      nextGpuChunks.textureSize.width,
+      nextGpuChunks.textureSize.height,
+      layerCount,
+    )
   const flickerLightFieldTextures = useFlickerTextures
     ? ([
-      canReuseLayout && !hasFlickerTextureTopologyChanged(cachedField, true) && cachedField?.flickerLightFieldTextures[0]
+      canReuseChunkLayout && cachedField?.flickerLightFieldTextures[0] && isChunkedLightFieldTexture(cachedField.flickerLightFieldTextures[0])
         ? cachedField.flickerLightFieldTextures[0]
-        : createLightFieldTexture(new Float32Array(textureWidth * textureHeight * 4), textureWidth, textureHeight),
-      canReuseLayout && !hasFlickerTextureTopologyChanged(cachedField, true) && cachedField?.flickerLightFieldTextures[1]
+        : createLightFieldArrayTexture(
+          new Float32Array(layerDataSize),
+          nextGpuChunks.textureSize.width,
+          nextGpuChunks.textureSize.height,
+          layerCount,
+        ),
+      canReuseChunkLayout && cachedField?.flickerLightFieldTextures[1] && isChunkedLightFieldTexture(cachedField.flickerLightFieldTextures[1])
         ? cachedField.flickerLightFieldTextures[1]
-        : createLightFieldTexture(new Float32Array(textureWidth * textureHeight * 4), textureWidth, textureHeight),
-      canReuseLayout && !hasFlickerTextureTopologyChanged(cachedField, true) && cachedField?.flickerLightFieldTextures[2]
+        : createLightFieldArrayTexture(
+          new Float32Array(layerDataSize),
+          nextGpuChunks.textureSize.width,
+          nextGpuChunks.textureSize.height,
+          layerCount,
+        ),
+      canReuseChunkLayout && cachedField?.flickerLightFieldTextures[2] && isChunkedLightFieldTexture(cachedField.flickerLightFieldTextures[2])
         ? cachedField.flickerLightFieldTextures[2]
-        : createLightFieldTexture(new Float32Array(textureWidth * textureHeight * 4), textureWidth, textureHeight),
-    ] as [THREE.DataTexture, THREE.DataTexture, THREE.DataTexture])
+        : createLightFieldArrayTexture(
+          new Float32Array(layerDataSize),
+          nextGpuChunks.textureSize.width,
+          nextGpuChunks.textureSize.height,
+          layerCount,
+        ),
+    ] as [THREE.DataArrayTexture, THREE.DataArrayTexture, THREE.DataArrayTexture])
     : [null, null, null] as [null, null, null]
+  const lookupTexture = canReuseChunkLayout && cachedField?.gpuChunks?.lookupTexture
+    ? cachedField.gpuChunks.lookupTexture
+    : createChunkLayerLookupTexture(nextGpuChunks)
 
-  if (!canReuseLayout && cachedField?.bounds) {
-    copyLightFieldTextureOverlap({
+  if (!canReuseChunkLayout && cachedField?.gpuChunks) {
+    copyChunkTextureLayerOverlap({
       sourceTexture: cachedField.lightFieldTexture,
-      sourceBounds: cachedField.bounds,
+      sourceLayerByChunkKey: cachedField.gpuChunks.layerByChunkKey,
       targetTexture: lightFieldTexture,
-      targetBounds: bounds,
+      targetLayerByChunkKey: nextGpuChunks.layerByChunkKey,
+      textureSize: nextGpuChunks.textureSize,
     })
     flickerLightFieldTextures.forEach((texture, index) => {
       if (!texture) {
         return
       }
-      copyLightFieldTextureOverlap({
+      copyChunkTextureLayerOverlap({
         sourceTexture: cachedField.flickerLightFieldTextures[index],
-        sourceBounds: cachedField.bounds,
+        sourceLayerByChunkKey: cachedField.gpuChunks?.layerByChunkKey ?? {},
         targetTexture: texture,
-        targetBounds: bounds,
+        targetLayerByChunkKey: nextGpuChunks.layerByChunkKey,
+        textureSize: nextGpuChunks.textureSize,
       })
     })
   }
@@ -1731,6 +1964,10 @@ function prepareLightFieldTextures({
   return {
     lightFieldTexture,
     flickerLightFieldTextures,
+    gpuChunks: {
+      ...nextGpuChunks,
+      lookupTexture,
+    },
     lightFieldTextureSize: {
       width: textureWidth,
       height: textureHeight,
@@ -1739,36 +1976,204 @@ function prepareLightFieldTextures({
       widthCells,
       heightCells,
     },
+    textureLayoutChanged: !canReuseChunkLayout,
   }
+}
+
+function buildGpuChunkTextureLayout(
+  chunks: Array<Omit<BakedLightChunk, 'dirty'>>,
+  chunkSize: number,
+): Omit<BakedFloorLightFieldGpuChunks, 'lookupTexture'> {
+  const sortedChunks = [...chunks].sort((left, right) => left.chunkZ - right.chunkZ || left.chunkX - right.chunkX)
+  if (sortedChunks.length === 0) {
+    return {
+      lookupBounds: null,
+      lookupSize: { width: 0, height: 0 },
+      textureSize: { width: chunkSize + 1, height: chunkSize + 1 },
+      gridSize: { widthCells: chunkSize, heightCells: chunkSize },
+      layerByChunkKey: {},
+    }
+  }
+
+  const lookupBounds = {
+    minChunkX: Math.min(...sortedChunks.map((chunk) => chunk.chunkX)),
+    maxChunkX: Math.max(...sortedChunks.map((chunk) => chunk.chunkX)),
+    minChunkZ: Math.min(...sortedChunks.map((chunk) => chunk.chunkZ)),
+    maxChunkZ: Math.max(...sortedChunks.map((chunk) => chunk.chunkZ)),
+  }
+
+  return {
+    lookupBounds,
+    lookupSize: {
+      width: lookupBounds.maxChunkX - lookupBounds.minChunkX + 1,
+      height: lookupBounds.maxChunkZ - lookupBounds.minChunkZ + 1,
+    },
+    textureSize: { width: chunkSize + 1, height: chunkSize + 1 },
+    gridSize: { widthCells: chunkSize, heightCells: chunkSize },
+    layerByChunkKey: Object.fromEntries(
+      sortedChunks.map((chunk, index) => [chunk.key, index]),
+    ),
+  }
+}
+
+function canReuseChunkTextureLayout(
+  cachedField: BakedFloorLightField | null,
+  nextGpuChunks: Omit<BakedFloorLightFieldGpuChunks, 'lookupTexture'>,
+  useFlickerTextures: boolean,
+) {
+  if (
+    !cachedField?.gpuChunks
+    || !cachedField.lightFieldTexture
+    || !isChunkedLightFieldTexture(cachedField.lightFieldTexture)
+    || hasFlickerTextureTopologyChanged(cachedField, useFlickerTextures)
+  ) {
+    return false
+  }
+
+  const cachedGpuChunks = cachedField.gpuChunks
+  if (!cachedGpuChunks.lookupTexture || !areChunkLookupBoundsEqual(cachedGpuChunks.lookupBounds, nextGpuChunks.lookupBounds)) {
+    return false
+  }
+
+  if (
+    cachedGpuChunks.lookupSize.width !== nextGpuChunks.lookupSize.width
+    || cachedGpuChunks.lookupSize.height !== nextGpuChunks.lookupSize.height
+    || cachedGpuChunks.textureSize.width !== nextGpuChunks.textureSize.width
+    || cachedGpuChunks.textureSize.height !== nextGpuChunks.textureSize.height
+    || cachedGpuChunks.gridSize.widthCells !== nextGpuChunks.gridSize.widthCells
+    || cachedGpuChunks.gridSize.heightCells !== nextGpuChunks.gridSize.heightCells
+  ) {
+    return false
+  }
+
+  const cachedLayerEntries = Object.entries(cachedGpuChunks.layerByChunkKey).sort(([left], [right]) => left.localeCompare(right))
+  const nextLayerEntries = Object.entries(nextGpuChunks.layerByChunkKey).sort(([left], [right]) => left.localeCompare(right))
+  if (cachedLayerEntries.length !== nextLayerEntries.length) {
+    return false
+  }
+
+  return cachedLayerEntries.every(([cachedKey, cachedLayer], index) => {
+    const [nextKey, nextLayer] = nextLayerEntries[index]!
+    return cachedKey === nextKey && cachedLayer === nextLayer
+  })
+}
+
+function areChunkLookupBoundsEqual(
+  left: BakedFloorLightFieldGpuChunks['lookupBounds'],
+  right: BakedFloorLightFieldGpuChunks['lookupBounds'],
+) {
+  if (!left || !right) {
+    return left === right
+  }
+
+  return left.minChunkX === right.minChunkX
+    && left.maxChunkX === right.maxChunkX
+    && left.minChunkZ === right.minChunkZ
+    && left.maxChunkZ === right.maxChunkZ
+}
+
+function createChunkLayerLookupTexture(
+  gpuChunks: Omit<BakedFloorLightFieldGpuChunks, 'lookupTexture'>,
+) {
+  if (!gpuChunks.lookupBounds) {
+    return null
+  }
+
+  const data = new Float32Array(gpuChunks.lookupSize.width * gpuChunks.lookupSize.height * 4)
+  Object.entries(gpuChunks.layerByChunkKey).forEach(([chunkKey, layerIndex]) => {
+    const [chunkX, chunkZ] = chunkKey.split(':').map((value) => Number.parseInt(value, 10))
+    const textureIndex = (
+      (chunkZ - gpuChunks.lookupBounds!.minChunkZ) * gpuChunks.lookupSize.width
+      + (chunkX - gpuChunks.lookupBounds!.minChunkX)
+    ) * 4
+    data[textureIndex] = layerIndex + 1
+    data[textureIndex + 3] = 1
+  })
+
+  return createLightFieldTexture(data, gpuChunks.lookupSize.width, gpuChunks.lookupSize.height)
+}
+
+function copyChunkTextureLayerOverlap({
+  sourceTexture,
+  sourceLayerByChunkKey,
+  targetTexture,
+  targetLayerByChunkKey,
+  textureSize,
+}: {
+  sourceTexture: BakedLightFieldTexture | null
+  sourceLayerByChunkKey: Record<string, number>
+  targetTexture: BakedLightFieldTexture | null
+  targetLayerByChunkKey: Record<string, number>
+  textureSize: BakedFloorLightFieldGpuChunks['textureSize']
+}) {
+  if (!isChunkedLightFieldTexture(sourceTexture) || !isChunkedLightFieldTexture(targetTexture)) {
+    return
+  }
+
+  if (
+    sourceTexture.image.width !== textureSize.width
+    || sourceTexture.image.height !== textureSize.height
+    || targetTexture.image.width !== textureSize.width
+    || targetTexture.image.height !== textureSize.height
+  ) {
+    return
+  }
+
+  const layerStride = textureSize.width * textureSize.height * 4
+  const sourceData = sourceTexture.image.data as Float32Array
+  const targetData = targetTexture.image.data as Float32Array
+
+  Object.entries(targetLayerByChunkKey).forEach(([chunkKey, targetLayerIndex]) => {
+    const sourceLayerIndex = sourceLayerByChunkKey[chunkKey]
+    if (sourceLayerIndex === undefined) {
+      return
+    }
+
+    const sourceOffset = sourceLayerIndex * layerStride
+    const targetOffset = targetLayerIndex * layerStride
+    targetData.set(sourceData.subarray(sourceOffset, sourceOffset + layerStride), targetOffset)
+  })
 }
 
 function updateLightFieldTextureChunks({
   bounds,
   chunks,
+  chunkSize,
   staticLightSources,
   flickerStaticLightSources,
   occlusion,
   cornerSampleByKey,
   lightFieldTexture,
   flickerLightFieldTextures,
+  gpuChunks,
+  textureLayoutChanged,
 }: {
   bounds: BakedFloorLightField['bounds']
   chunks: Array<Omit<BakedLightChunk, 'dirty'>>
+  chunkSize: number
   staticLightSources: ResolvedDungeonLightSource[]
   flickerStaticLightSources: ResolvedDungeonLightSource[]
   occlusion: BakedLightOcclusion | null
   cornerSampleByKey: Record<string, BakedLightCornerSample>
-  lightFieldTexture: THREE.DataTexture | null
+  lightFieldTexture: BakedLightFieldTexture | null
   flickerLightFieldTextures: BakedFloorLightField['flickerLightFieldTextures']
+  gpuChunks: BakedFloorLightField['gpuChunks']
+  textureLayoutChanged: boolean
 }) {
-  if (!bounds || !lightFieldTexture) {
+  if (!bounds || !lightFieldTexture || !gpuChunks) {
     return
   }
 
   const textureData = lightFieldTexture.image.data as Float32Array
-  const textureWidth = bounds.maxCellX - bounds.minCellX + 2
+  const textureWidth = gpuChunks.textureSize.width
+  const dirtyLayerIndices = new Set<number>()
 
   chunks.forEach((chunk) => {
+    const layerIndex = gpuChunks.layerByChunkKey[chunk.key]
+    if (layerIndex === undefined) {
+      return
+    }
+
     for (let cellZ = chunk.minCellZ; cellZ <= chunk.maxCellZ + 1; cellZ += 1) {
       for (let cellX = chunk.minCellX; cellX <= chunk.maxCellX + 1; cellX += 1) {
         const sample = occlusion && isCornerBlockedBySolidWall(cellX, cellZ, occlusion.cornerBlockingWalls)
@@ -1780,7 +2185,16 @@ function updateLightFieldTextureChunks({
           )
         cornerSampleByKey[`${cellX}:${cellZ}`] = sample
 
-        const textureIndex = ((cellZ - bounds.minCellZ) * textureWidth + (cellX - bounds.minCellX)) * 4
+        const textureIndex = getChunkLayerTextureIndex({
+          chunkX: chunk.chunkX,
+          chunkZ: chunk.chunkZ,
+          chunkSize,
+          cellX,
+          cellZ,
+          textureWidth,
+          layerIndex,
+          textureHeight: gpuChunks.textureSize.height,
+        })
         textureData[textureIndex] = sample[0]
         textureData[textureIndex + 1] = sample[1]
         textureData[textureIndex + 2] = sample[2]
@@ -1810,12 +2224,14 @@ function updateLightFieldTextureChunks({
         })
       }
     }
+
+    dirtyLayerIndices.add(layerIndex)
   })
 
-  lightFieldTexture.needsUpdate = true
+  markChunkTextureUpdate(lightFieldTexture, dirtyLayerIndices, textureLayoutChanged)
   flickerLightFieldTextures.forEach((texture) => {
     if (texture) {
-      texture.needsUpdate = true
+      markChunkTextureUpdate(texture, dirtyLayerIndices, textureLayoutChanged)
     }
   })
 }
@@ -1823,60 +2239,90 @@ function updateLightFieldTextureChunks({
 function applyWorkerCornerUpdatesToTextures({
   bounds,
   cornerUpdates,
+  chunkSize,
   lightFieldTexture,
   flickerLightFieldTextures,
+  gpuChunks,
+  textureLayoutChanged,
 }: {
   bounds: BakedFloorLightField['bounds']
   cornerUpdates: BakedFloorLightFieldWorkerResult['cornerUpdates']
-  lightFieldTexture: THREE.DataTexture | null
+  chunkSize: number
+  lightFieldTexture: BakedLightFieldTexture | null
   flickerLightFieldTextures: BakedFloorLightField['flickerLightFieldTextures']
+  gpuChunks: BakedFloorLightField['gpuChunks']
+  textureLayoutChanged: boolean
 }) {
-  if (!bounds || !lightFieldTexture) {
+  if (!bounds || !lightFieldTexture || !gpuChunks) {
     return
   }
 
   const textureData = lightFieldTexture.image.data as Float32Array
-  const textureWidth = bounds.maxCellX - bounds.minCellX + 2
+  const textureWidth = gpuChunks.textureSize.width
+  const dirtyLayerIndices = new Set<number>()
 
   cornerUpdates.forEach(({ cellX, cellZ, sample, flickerBand0, flickerBand1, flickerBand2 }) => {
-    const textureIndex = ((cellZ - bounds.minCellZ) * textureWidth + (cellX - bounds.minCellX)) * 4
-    textureData[textureIndex] = sample[0]
-    textureData[textureIndex + 1] = sample[1]
-    textureData[textureIndex + 2] = sample[2]
-    textureData[textureIndex + 3] = 1
-
-    const flickerBand0Texture = flickerLightFieldTextures[0]
-    if (flickerBand0Texture && flickerBand0) {
-      const flickerBand0Data = flickerBand0Texture.image.data as Float32Array
-      flickerBand0Data[textureIndex] = flickerBand0[0]
-      flickerBand0Data[textureIndex + 1] = flickerBand0[1]
-      flickerBand0Data[textureIndex + 2] = flickerBand0[2]
-      flickerBand0Data[textureIndex + 3] = 1
+    const cornerTargets = getChunkLayerTargetsForCorner({
+      cellX,
+      cellZ,
+      chunkSize,
+      gpuChunks,
+    })
+    if (cornerTargets.length === 0) {
+      return
     }
 
-    const flickerBand1Texture = flickerLightFieldTextures[1]
-    if (flickerBand1Texture && flickerBand1) {
-      const flickerBand1Data = flickerBand1Texture.image.data as Float32Array
-      flickerBand1Data[textureIndex] = flickerBand1[0]
-      flickerBand1Data[textureIndex + 1] = flickerBand1[1]
-      flickerBand1Data[textureIndex + 2] = flickerBand1[2]
-      flickerBand1Data[textureIndex + 3] = 1
-    }
+    cornerTargets.forEach(({ chunkX, chunkZ, layerIndex }) => {
+      const textureIndex = getChunkLayerTextureIndex({
+        chunkX,
+        chunkZ,
+        chunkSize,
+        cellX,
+        cellZ,
+        textureWidth,
+        layerIndex,
+        textureHeight: gpuChunks.textureSize.height,
+      })
+      textureData[textureIndex] = sample[0]
+      textureData[textureIndex + 1] = sample[1]
+      textureData[textureIndex + 2] = sample[2]
+      textureData[textureIndex + 3] = 1
 
-    const flickerBand2Texture = flickerLightFieldTextures[2]
-    if (flickerBand2Texture && flickerBand2) {
-      const flickerBand2Data = flickerBand2Texture.image.data as Float32Array
-      flickerBand2Data[textureIndex] = flickerBand2[0]
-      flickerBand2Data[textureIndex + 1] = flickerBand2[1]
-      flickerBand2Data[textureIndex + 2] = flickerBand2[2]
-      flickerBand2Data[textureIndex + 3] = 1
-    }
+      const flickerBand0Texture = flickerLightFieldTextures[0]
+      if (flickerBand0Texture && flickerBand0) {
+        const flickerBand0Data = flickerBand0Texture.image.data as Float32Array
+        flickerBand0Data[textureIndex] = flickerBand0[0]
+        flickerBand0Data[textureIndex + 1] = flickerBand0[1]
+        flickerBand0Data[textureIndex + 2] = flickerBand0[2]
+        flickerBand0Data[textureIndex + 3] = 1
+      }
+
+      const flickerBand1Texture = flickerLightFieldTextures[1]
+      if (flickerBand1Texture && flickerBand1) {
+        const flickerBand1Data = flickerBand1Texture.image.data as Float32Array
+        flickerBand1Data[textureIndex] = flickerBand1[0]
+        flickerBand1Data[textureIndex + 1] = flickerBand1[1]
+        flickerBand1Data[textureIndex + 2] = flickerBand1[2]
+        flickerBand1Data[textureIndex + 3] = 1
+      }
+
+      const flickerBand2Texture = flickerLightFieldTextures[2]
+      if (flickerBand2Texture && flickerBand2) {
+        const flickerBand2Data = flickerBand2Texture.image.data as Float32Array
+        flickerBand2Data[textureIndex] = flickerBand2[0]
+        flickerBand2Data[textureIndex + 1] = flickerBand2[1]
+        flickerBand2Data[textureIndex + 2] = flickerBand2[2]
+        flickerBand2Data[textureIndex + 3] = 1
+      }
+
+      dirtyLayerIndices.add(layerIndex)
+    })
   })
 
-  lightFieldTexture.needsUpdate = true
+  markChunkTextureUpdate(lightFieldTexture, dirtyLayerIndices, textureLayoutChanged)
   flickerLightFieldTextures.forEach((texture) => {
     if (texture) {
-      texture.needsUpdate = true
+      markChunkTextureUpdate(texture, dirtyLayerIndices, textureLayoutChanged)
     }
   })
 }

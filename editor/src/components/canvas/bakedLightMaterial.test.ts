@@ -44,6 +44,7 @@ function createTestLightField(): BakedFloorLightField {
     dirtyChunkKeySet: new Set<string>(),
     lightFieldTexture,
     flickerLightFieldTextures: [null, null, null],
+    gpuChunks: null,
     lightFieldTextureSize: {
       width: 2,
       height: 2,

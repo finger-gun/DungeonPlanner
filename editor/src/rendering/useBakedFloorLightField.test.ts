@@ -77,6 +77,41 @@ describe('useBakedFloorLightField', () => {
     })
   })
 
+  it('does not build or cache baked lighting until enabled', () => {
+    const getOrBuildSpy = vi.spyOn(dungeonLightField, 'getOrBuildBakedFloorLightField')
+    const input = {
+      floorId: 'floor-hydration-gate',
+      floorCells: [[0, 0]] as [number, number][],
+      staticLightSources: [createResolvedLightSource('torch', [1, 1.5, 1])],
+    }
+
+    const { result, rerender } = renderHook(
+      ({ enabled }: { enabled: boolean }) =>
+        useBakedFloorLightField(input, { enabled }),
+      {
+        initialProps: {
+          enabled: false,
+        },
+      },
+    )
+
+    expect(getOrBuildSpy).not.toHaveBeenCalled()
+    expect(result.current.bounds).toBeNull()
+    expect(result.current.lightFieldTexture).toBeNull()
+    expect(result.current.staticLightSources).toEqual([])
+
+    rerender({ enabled: true })
+
+    expect(getOrBuildSpy).toHaveBeenCalledTimes(1)
+    expect(result.current.bounds).toEqual({
+      minCellX: 0,
+      maxCellX: 0,
+      minCellZ: 0,
+      maxCellZ: 0,
+    })
+    expect(result.current.staticLightSources.map((lightSource) => lightSource.key)).toEqual(['torch'])
+  })
+
   it('uses the worker-backed pending field for the first lit build when Worker is available', async () => {
     class FakeWorker {
       private listeners = new Set<(event: MessageEvent<{ requestId: number, result: dungeonLightField.BakedFloorLightFieldWorkerResult }>) => void>()
@@ -132,6 +167,115 @@ describe('useBakedFloorLightField', () => {
     })
     expect(result.current.lightFieldTexture).not.toBeNull()
     expect(result.current.staticLightSources.map((lightSource) => lightSource.key)).toEqual(['torch'])
+  })
+
+  it('keeps the first pending field bound and fills its textures in place when the worker completes', async () => {
+    const workerInstances: FakeResultWorker[] = []
+
+    class FakeResultWorker {
+      postMessage = vi.fn((message: {
+        requestId: number
+        input: dungeonLightField.BakedFloorLightFieldWorkerInput
+      }) => {
+        this.lastPostedMessage = message
+      })
+      lastPostedMessage: {
+        requestId: number
+        input: dungeonLightField.BakedFloorLightFieldWorkerInput
+      } | null = null
+      private listeners = new Set<(event: MessageEvent<{ requestId: number, result: dungeonLightField.BakedFloorLightFieldWorkerResult }>) => void>()
+
+      constructor() {
+        workerInstances.push(this)
+      }
+
+      addEventListener(
+        type: string,
+        listener: (event: MessageEvent<{ requestId: number, result: dungeonLightField.BakedFloorLightFieldWorkerResult }>) => void,
+      ) {
+        if (type === 'message') {
+          this.listeners.add(listener)
+        }
+      }
+
+      removeEventListener(
+        type: string,
+        listener: (event: MessageEvent<{ requestId: number, result: dungeonLightField.BakedFloorLightFieldWorkerResult }>) => void,
+      ) {
+        if (type === 'message') {
+          this.listeners.delete(listener)
+        }
+      }
+
+      emit(result: dungeonLightField.BakedFloorLightFieldWorkerResult) {
+        const requestId = this.lastPostedMessage?.requestId ?? 0
+        const event = {
+          data: {
+            requestId,
+            result,
+          },
+        } as MessageEvent<{ requestId: number, result: dungeonLightField.BakedFloorLightFieldWorkerResult }>
+        this.listeners.forEach((listener) => listener(event))
+      }
+
+      terminate() {
+        this.listeners.clear()
+      }
+    }
+
+    Object.defineProperty(globalThis, 'Worker', {
+      configurable: true,
+      writable: true,
+      value: FakeResultWorker,
+    })
+
+    const input = {
+      floorId: 'floor-worker-pending-reuse',
+      floorCells: [[0, 0]] as [number, number][],
+      staticLightSources: [createResolvedLightSource('torch', [1, 1.5, 1])],
+    }
+
+    const { result } = renderHook(() => useBakedFloorLightField(input))
+    const pendingField = result.current
+
+    expect(pendingField.lightFieldTexture).not.toBeNull()
+
+    await act(async () => {})
+
+    expect(result.current).toBe(pendingField)
+    expect(workerInstances).toHaveLength(1)
+
+    const worker = workerInstances[0]!
+    const workerInput = worker.lastPostedMessage?.input
+    expect(workerInput).not.toBeNull()
+
+    const firstChunk = workerInput!.chunks[0]!
+    const firstCellKey = firstChunk.cellKeys[0]!
+    const [cellX, cellZ] = firstCellKey.split(':').map((value) => Number.parseInt(value, 10))
+
+    await act(async () => {
+      worker.emit({
+        floorId: input.floorId,
+        sourceHash: workerInput!.sourceHash,
+        sampleUpdates: [{
+          cellKey: firstCellKey,
+          sample: [0.16, 0.08, 0.04],
+        }],
+        cornerUpdates: [{
+          key: `${cellX}:${cellZ}`,
+          cellX,
+          cellZ,
+          sample: [0.2, 0.1, 0.05],
+          flickerBand0: null,
+          flickerBand1: null,
+          flickerBand2: null,
+        }],
+      })
+    })
+
+    expect(result.current.lightFieldTexture).toBe(pendingField.lightFieldTexture)
+    expect(result.current.gpuChunks?.lookupTexture).toBe(pendingField.gpuChunks?.lookupTexture)
+    expect(result.current.previousSourceHash).toBeNull()
   })
 
   it('keeps the current lit field active while an async rebuild is pending', async () => {

@@ -29,6 +29,7 @@ import { createWebGpuRenderer } from '../../rendering/createWebGpuRenderer'
 import { FogOfWarProvider } from './fogOfWar'
 import { registerDebugCameraPoseReader, registerDebugWorldProjector } from './debugCameraBridge'
 import {
+  createEmptyBakedFloorLightField,
   getOrBuildBakedFloorLightField,
   pruneBakedFloorLightFieldCache,
   type BakedFloorLightField,
@@ -133,6 +134,23 @@ export function Scene() {
       </Suspense>
     </Canvas>
   )
+}
+
+function useDungeonStoreHydrated() {
+  const [hydrated, setHydrated] = useState(() => useDungeonStore.persist.hasHydrated())
+
+  useEffect(() => {
+    if (useDungeonStore.persist.hasHydrated()) {
+      setHydrated(true)
+      return
+    }
+
+    return useDungeonStore.persist.onFinishHydration(() => {
+      setHydrated(true)
+    })
+  }, [])
+
+  return hydrated
 }
 
 export default Scene
@@ -275,6 +293,7 @@ type FloorRenderEntry = {
 }
 
 function SceneOverviewContent() {
+  const hasHydrated = useDungeonStoreHydrated()
   const floors = useDungeonStore((state) => state.floors)
   const floorOrder = useDungeonStore((state) => state.floorOrder)
   const postProcessingEnabled = useDungeonStore((state) =>
@@ -342,7 +361,9 @@ function SceneOverviewContent() {
           id: floorId,
           level: floor.level,
           derived,
-          bakedLightField: getOrBuildBakedFloorLightField(derived.bakedLightBuildInput),
+          bakedLightField: hasHydrated
+            ? getOrBuildBakedFloorLightField(derived.bakedLightBuildInput)
+            : createEmptyBakedFloorLightField(floorId),
         }]
       }
 
@@ -369,11 +390,14 @@ function SceneOverviewContent() {
         id: floorId,
         level: floor.level,
         derived,
-        bakedLightField: getOrBuildBakedFloorLightField(derived.bakedLightBuildInput),
+        bakedLightField: hasHydrated
+          ? getOrBuildBakedFloorLightField(derived.bakedLightBuildInput)
+          : createEmptyBakedFloorLightField(floorId),
       }]
     })
   }, [
     activeFloorId,
+    hasHydrated,
     floorOrder,
     floorDirtyInfo,
     floors,
@@ -427,6 +451,7 @@ function SceneOverviewContent() {
 
 /** Dungeon room tiles and props — remounts on floor switch for clean state. */
 function FloorContent({ startY = 0 }: { startY?: number }) {
+  const hasHydrated = useDungeonStoreHydrated()
   const {
     activeFloorId,
     placedObjects,
@@ -516,9 +541,15 @@ function FloorContent({ startY = 0 }: { startY?: number }) {
   const dragCleanupRef = useRef<(() => void) | null>(null)
   const { camera, gl, invalidate, controls } = useThree()
   const bakedFloorLightField = useBakedFloorLightField(floorDerived.bakedLightBuildInput, {
+    enabled: hasHydrated,
     deferPreparation: tool !== 'play',
     renderer: gl,
   })
+
+  useEffect(() => {
+    invalidate()
+  }, [bakedFloorLightField, invalidate])
+
   const showPostProcessing = shouldEnableActiveFloorPostProcessing({
     activeCameraMode,
     lensEnabled,

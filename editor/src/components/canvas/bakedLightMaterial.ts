@@ -19,7 +19,7 @@ import {
   vec3,
   vec4,
 } from 'three/tsl'
-import type { BakedFloorLightField } from '../../rendering/dungeonLightField'
+import type { BakedFloorLightField, BakedLightFieldTexture } from '../../rendering/dungeonLightField'
 import type { PropBakedLightProbe } from '../../rendering/dungeonLightField'
 import { GRID_SIZE } from '../../hooks/useSnapToGrid'
 import { buildBakedLightFieldPipelineSignature } from './batchDescriptors'
@@ -418,10 +418,14 @@ function buildSmoothedBakedFlickerNode(
 }
 
 function buildSmoothedBakedTextureSampleNode(
-  lightTexture: THREE.DataTexture | null,
+  lightTexture: BakedLightFieldTexture | null,
   lightField: BakedFloorLightField,
   sampleOffsetWorldXZ: ShaderNodeLike | null = null,
 ) {
+  if (lightField.gpuChunks && lightTexture instanceof THREE.DataArrayTexture) {
+    return buildSmoothedChunkedBakedTextureSampleNode(lightTexture, lightField, sampleOffsetWorldXZ)
+  }
+
   if (!lightTexture || !lightField.bounds) {
     return vec4(0, 0, 0, 0)
   }
@@ -452,6 +456,80 @@ function buildSmoothedBakedTextureSampleNode(
       sampleCornerPosition.y.add(float(0.5)).div(float(textureHeight)),
     )
     return texture(lightTexture, sampleUv)
+  }
+
+  const c00 = sampleCorner(0, 0)
+  const c10 = sampleCorner(1, 0)
+  const c01 = sampleCorner(0, 1)
+  const c11 = sampleCorner(1, 1)
+  const horizontalBottom = mix(c00, c10, blend.x)
+  const horizontalTop = mix(c01, c11, blend.x)
+  return vec4(mix(horizontalBottom, horizontalTop, blend.y) as never)
+}
+
+function buildSmoothedChunkedBakedTextureSampleNode(
+  lightTexture: THREE.DataArrayTexture,
+  lightField: BakedFloorLightField,
+  sampleOffsetWorldXZ: ShaderNodeLike | null = null,
+) {
+  const gpuChunks = lightField.gpuChunks
+  if (!gpuChunks?.lookupTexture || !gpuChunks.lookupBounds) {
+    return vec4(0, 0, 0, 0)
+  }
+
+  const lookupTexture = gpuChunks.lookupTexture
+  const layerTextureWidth = Math.max(gpuChunks.textureSize.width, 1)
+  const layerTextureHeight = Math.max(gpuChunks.textureSize.height, 1)
+  const widthCells = Math.max(gpuChunks.gridSize.widthCells, 1)
+  const heightCells = Math.max(gpuChunks.gridSize.heightCells, 1)
+  const lookupWidth = Math.max(gpuChunks.lookupSize.width, 1)
+  const lookupHeight = Math.max(gpuChunks.lookupSize.height, 1)
+  const lookupWidthSpan = Math.max(lookupWidth - 1, 1)
+  const lookupHeightSpan = Math.max(lookupHeight - 1, 1)
+  const minChunk = vec2(gpuChunks.lookupBounds.minChunkX, gpuChunks.lookupBounds.minChunkZ)
+  const sampleWorldXZ = sampleOffsetWorldXZ
+    ? positionWorld.xz.add(sampleOffsetWorldXZ)
+    : positionWorld.xz
+  const sampleGridPosition = sampleWorldXZ.div(float(GRID_SIZE))
+  const sampleChunkCoordinate = floor(sampleGridPosition.div(float(lightField.chunkSize)))
+  const localGridPosition = sampleGridPosition.sub(sampleChunkCoordinate.mul(float(lightField.chunkSize)))
+  const clampedGridPosition = vec2(
+    saturate(localGridPosition.x.div(float(widthCells))).mul(float(widthCells)),
+    saturate(localGridPosition.y.div(float(heightCells))).mul(float(heightCells)),
+  )
+  const cellOrigin = floor(clampedGridPosition)
+  const blend = fract(clampedGridPosition)
+  const worldCellOrigin = sampleChunkCoordinate.mul(float(lightField.chunkSize)).add(cellOrigin)
+
+  const sampleCorner = (offsetX: number, offsetY: number) => {
+    const worldCornerGridPosition = vec2(
+      worldCellOrigin.x.add(float(offsetX)),
+      worldCellOrigin.y.add(float(offsetY)),
+    )
+    const cornerChunkCoordinate = floor(worldCornerGridPosition.div(float(lightField.chunkSize)))
+    const clampedChunkOffset = vec2(
+      saturate(cornerChunkCoordinate.x.sub(minChunk.x).div(float(lookupWidthSpan))).mul(float(lookupWidthSpan)),
+      saturate(cornerChunkCoordinate.y.sub(minChunk.y).div(float(lookupHeightSpan))).mul(float(lookupHeightSpan)),
+    )
+    const lookupUv = vec2(
+      clampedChunkOffset.x.add(float(0.5)).div(float(lookupWidth)),
+      clampedChunkOffset.y.add(float(0.5)).div(float(lookupHeight)),
+    )
+    const layerValue = texture(lookupTexture, lookupUv).r
+    const layerMask = saturate(layerValue)
+    const layerIndex = max(layerValue.sub(float(1)), float(0))
+    const clampedChunkCoordinate = minChunk.add(clampedChunkOffset)
+    const localCornerGridPosition = worldCornerGridPosition.sub(clampedChunkCoordinate.mul(float(lightField.chunkSize)))
+    const sampleCornerPosition = vec2(
+      saturate(localCornerGridPosition.x.div(float(widthCells))).mul(float(widthCells)),
+      saturate(localCornerGridPosition.y.div(float(heightCells))).mul(float(heightCells)),
+    )
+    const sampleUv = vec2(
+      sampleCornerPosition.x.add(float(0.5)).div(float(layerTextureWidth)),
+      sampleCornerPosition.y.add(float(0.5)).div(float(layerTextureHeight)),
+    )
+    const textureNode = texture(lightTexture) as ShaderNodeLike
+    return textureNode.sample(sampleUv).depth(layerIndex).mul(layerMask)
   }
 
   const c00 = sampleCorner(0, 0)

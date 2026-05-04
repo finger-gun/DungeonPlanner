@@ -221,11 +221,11 @@ function ResolvedBatchedTileEntries({
       transactionId,
       groups: resolvedGroups,
     })
-
-    return () => {
-      stream.clearSourceRegistration(mountId, sourceId)
-    }
   }, [floorId, mountId, resolvedGroups, sourceId, sourceKind, stream, transactionId])
+
+  useLayoutEffect(() => () => {
+    stream.clearSourceRegistration(mountId, sourceId)
+  }, [mountId, sourceId, stream])
 
   const unresolvedEntries = useMemo(
     () => descriptors.batched.flatMap((descriptor) => {

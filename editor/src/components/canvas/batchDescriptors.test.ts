@@ -410,6 +410,41 @@ describe('buildBatchDescriptors', () => {
     expect(result.batched[0]?.bucketKey).not.toContain('static-build')
   })
 
+  it('keeps render signatures stable when build animation state changes', () => {
+    const resolveSpy = vi.spyOn(tileAssetResolution, 'resolveBatchedTileAsset')
+    resolveSpy.mockImplementation(() => ({
+      assetUrl: '/assets/floor.glb',
+      transformKey: 'default',
+      receiveShadow: true,
+    }))
+
+    const staticResult = buildBatchDescriptors([
+      {
+        key: 'floor:0:0',
+        assetId: 'floor-tile',
+        position: [0, 0, 0],
+        rotation: [0, 0, 0],
+        variant: 'floor',
+        visibility: 'visible',
+      },
+    ], false)
+    const animatedResult = buildBatchDescriptors([
+      {
+        key: 'floor:0:0',
+        assetId: 'floor-tile',
+        position: [0, 0, 0],
+        rotation: [0, 0, 0],
+        variant: 'floor',
+        visibility: 'visible',
+        buildAnimationStart: 1000,
+        buildAnimationDelay: 80,
+      },
+    ], false)
+
+    expect(staticResult.batched[0]?.bucketKey).toBe(animatedResult.batched[0]?.bucketKey)
+    expect(staticResult.batched[0]?.renderSignature).toBe(animatedResult.batched[0]?.renderSignature)
+  })
+
   it('should handle empty input', () => {
     const result = buildBatchDescriptors([], false)
 
@@ -507,6 +542,7 @@ function createBakedLightField(
     dirtyChunkKeySet: new Set(),
     lightFieldTexture,
     flickerLightFieldTextures: [null, null, null],
+    gpuChunks: null,
     lightFieldTextureSize: { width: 1, height: 1 },
     lightFieldGridSize: { widthCells: 1, heightCells: 1 },
     cornerSampleByKey: {},

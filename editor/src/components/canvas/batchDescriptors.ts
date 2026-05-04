@@ -130,12 +130,34 @@ export function buildBakedLightFieldPipelineSignature(field: BakedFloorLightFiel
     return 'no-light-field'
   }
 
+  if (field.gpuChunks) {
+    if (!field.lightFieldTexture || !field.gpuChunks.lookupTexture || !field.gpuChunks.lookupBounds) {
+      return 'pending-light-field'
+    }
+
+    return [
+      'chunked-layout-v1',
+      field.chunkSize,
+      field.gpuChunks.lookupBounds.minChunkX,
+      field.gpuChunks.lookupBounds.maxChunkX,
+      field.gpuChunks.lookupBounds.minChunkZ,
+      field.gpuChunks.lookupBounds.maxChunkZ,
+      field.gpuChunks.lookupSize.width,
+      field.gpuChunks.lookupSize.height,
+      field.gpuChunks.textureSize.width,
+      field.gpuChunks.textureSize.height,
+      field.gpuChunks.gridSize.widthCells,
+      field.gpuChunks.gridSize.heightCells,
+      field.flickerLightFieldTextures.every((texture) => texture) ? 'flicker' : 'steady',
+    ].join('|')
+  }
+
   if (!field.lightFieldTexture || !field.bounds) {
     return 'pending-light-field'
   }
 
   return [
-    'layout',
+    'atlas-layout',
     field.bounds.minCellX,
     field.bounds.maxCellX,
     field.bounds.minCellZ,
@@ -172,7 +194,6 @@ function buildRenderSignature(
     usesGpuFog ? 'gpu-fog' : 'no-fog',
     buildBakedLightFieldPipelineSignature(entry.bakedLightField),
     useLineOfSightPostMask ? 'post-mask' : 'no-post-mask',
-    entry.buildAnimationStart === undefined ? 'static' : 'animated',
   ].join('|')).join(';')
 }
 

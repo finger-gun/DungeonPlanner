@@ -509,12 +509,13 @@ export class TileGpuStream {
 
   private configureTilePage(page: TilePage, descriptor: ResolvedTileStreamGroup) {
     page.root.clear()
-    page.depthMaterials.forEach((material) => material.dispose())
-    page.depthMaterials.clear()
 
     const visibility = descriptor.visibility
     const overlayOpacity = visibility === 'explored' ? 0.6 : 0
-    const useBuildAnimation = descriptor.useBuildAnimation
+    // Keep streamed page materials pipeline-stable. Build animation stays installed
+    // for every streamed page and per-instance sentinels (-1 / 0) disable it when
+    // an entry is not actively animating.
+    const useBuildAnimation = true
     const bakedLightField = descriptor.entries[0]?.bakedLightField ?? null
     const clipMinY = getBelowGroundClipMinY(descriptor.variant)
 
@@ -543,14 +544,12 @@ export class TileGpuStream {
         },
       )
 
-      const depthMaterial = new THREE.MeshDepthMaterial()
-      depthMaterial.depthPacking = THREE.RGBADepthPacking
+      const depthMaterial = getOrCreatePageDepthMaterial(page, entry.meshKey)
       applyBelowGroundClipToMaterial(depthMaterial, useBuildAnimation, clipMinY)
-      page.depthMaterials.set(entry.meshKey, depthMaterial)
 
-      entry.instancedMesh.castShadow = !useBuildAnimation
+      entry.instancedMesh.castShadow = true
       entry.instancedMesh.receiveShadow = descriptor.receiveShadow
-      entry.instancedMesh.customDepthMaterial = entry.instancedMesh.castShadow ? depthMaterial : undefined
+      entry.instancedMesh.customDepthMaterial = depthMaterial
       entry.tintMesh.visible = visibility === 'explored'
       setTintOpacity(entry.tintMesh, overlayOpacity)
 
@@ -710,6 +709,18 @@ function getInstancedMaterial(entry: InstancedMeshEntry) {
   return Array.isArray(material) ? material[0]! : material
 }
 
+function getOrCreatePageDepthMaterial(page: TilePage, meshKey: string) {
+  const existing = page.depthMaterials.get(meshKey)
+  if (existing) {
+    return existing
+  }
+
+  const created = new THREE.MeshDepthMaterial()
+  created.depthPacking = THREE.RGBADepthPacking
+  page.depthMaterials.set(meshKey, created)
+  return created
+}
+
 function setTintOpacity(mesh: THREE.InstancedMesh, opacity: number) {
   const material = mesh.material
   if (Array.isArray(material)) {
@@ -768,7 +779,6 @@ function buildResolvedTileStreamGroupSignature(group: ResolvedTileStreamGroup) {
     group.variant,
     group.visibility,
     group.receiveShadow ? 'shadow' : 'flat',
-    group.useBuildAnimation ? 'animated' : 'static',
     group.useBakedLight ? 'baked' : 'unlit',
     group.useBakedFlicker ? 'flicker' : 'steady',
     group.useSecondaryDirectionAttribute ? 'double-direction' : 'single-direction',

@@ -49,8 +49,14 @@ function createGroup(entries: ResolvedStaticTileEntry[], overrides: Partial<Reso
     entries,
     assetUrl: '/assets/floor.glb',
     usesGpuFog: false,
-    geometrySignature: entries.map((entry) => entry.key).join(';'),
-    renderSignature: entries.map((entry) => `${entry.key}:${entry.buildAnimationStart === undefined ? 'static' : 'animated'}`).join(';'),
+    geometrySignature: entries.map((entry) => [
+      entry.key,
+      entry.position.join(','),
+      entry.rotation.join(','),
+      entry.buildAnimationStart ?? '',
+      entry.buildAnimationDelay ?? '',
+    ].join('|')).join(';'),
+    renderSignature: entries.map((entry) => `${entry.key}:${entry.visibility}`).join(';'),
     variant: 'floor',
     visibility: 'visible',
     receiveShadow: true,
@@ -108,6 +114,49 @@ describe('TileGpuStream', () => {
     stream.processTileUploadBudget({ maxMs: 5, maxPages: 2 })
 
     expect(instancedMesh.instanceMatrix.updateRanges[0]?.count).toBe(16)
+  })
+
+  it('keeps streamed page material configuration stable when build animation entries appear', () => {
+    const stream = new TileGpuStream({ invalidate: vi.fn() })
+    const applyBakedLightMock = vi.mocked(applyBakedLightToMaterial)
+    applyBakedLightMock.mockClear()
+
+    stream.setSourceRegistration('mount-1', 'static-floor', {
+      kind: 'static',
+      floorId: 'floor-1',
+      groups: [createGroup([createEntry(0)])],
+    })
+
+    const mountGroup = stream.getMountGroup('mount-1')
+    const pageRoot = mountGroup.children[0] as THREE.Group
+    const instancedMesh = pageRoot.children[0] as THREE.InstancedMesh
+    const initialMaterial = instancedMesh.material
+    const initialDepthMaterial = instancedMesh.customDepthMaterial
+    const configureCalls = applyBakedLightMock.mock.calls.length
+
+    expect(instancedMesh.castShadow).toBe(true)
+    expect(initialDepthMaterial).toBeTruthy()
+
+    stream.setSourceRegistration('mount-1', 'static-floor', {
+      kind: 'static',
+      floorId: 'floor-1',
+      groups: [createGroup([
+        createEntry(0, {
+          buildAnimationStart: 1000,
+          buildAnimationDelay: 25,
+        }),
+      ], {
+        useBuildAnimation: true,
+      })],
+    })
+
+    const updatedPageRoot = mountGroup.children[0] as THREE.Group
+    const updatedInstancedMesh = updatedPageRoot.children[0] as THREE.InstancedMesh
+
+    expect(updatedInstancedMesh.material).toBe(initialMaterial)
+    expect(updatedInstancedMesh.customDepthMaterial).toBe(initialDepthMaterial)
+    expect(updatedInstancedMesh.castShadow).toBe(true)
+    expect(applyBakedLightMock).toHaveBeenCalledTimes(configureCalls)
   })
 
   it('tracks committed transaction progress and disposes pages after source removal', () => {
