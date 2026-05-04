@@ -57,6 +57,7 @@ DungeonPlanner is built for fast encounter prep: paint rooms, place interactive 
 
 - Node.js 24+
 - pnpm 10+
+- Python 3.11+ for `tools/character-generator`
 
 ### Run locally
 
@@ -127,6 +128,7 @@ editor/
 app/                    # authenticated workspace app
 shared/                 # shared contracts and helpers
 server/                 # multiplayer/backend package
+tools/character-generator/ # Python batch portrait generator
 ```
 
 ## Tech Stack
