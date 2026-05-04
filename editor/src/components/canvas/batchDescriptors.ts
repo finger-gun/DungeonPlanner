@@ -56,7 +56,6 @@ function buildBucketKey(
   usesGpuFog: boolean,
   lightFlickerEnabled: boolean,
 ): string {
-  const bakedLightFieldHash = entry.bakedLightField?.sourceHash ?? 'no-light-field'
   const useBakedFlicker =
     lightFlickerEnabled
     && Boolean(entry.bakedLightField?.flickerLightFieldTextures.some((texture) => texture))
@@ -69,7 +68,9 @@ function buildBucketKey(
     entry.variant,
     usesGpuFog ? `gpu-los:${entry.variant}` : entry.visibility,
     entry.receiveShadow ? 'shadow' : 'flat',
-    entry.bakedLight || entry.bakedLightField ? `baked:${bakedLightFieldHash}` : 'unlit',
+    entry.bakedLight || entry.bakedLightField
+      ? `baked:${buildBakedLightFieldPipelineSignature(entry.bakedLightField)}`
+      : 'unlit',
     entry.bakedLightDirectionSecondary ? 'double-direction' : 'single-direction',
     useBakedFlicker ? 'flicker' : 'steady',
   ].join('|')
@@ -124,15 +125,26 @@ function serializeOptionalVector(value: readonly number[] | undefined) {
   return value ? value.join(',') : ''
 }
 
-function buildBakedLightFieldRenderSignature(field: BakedFloorLightField | undefined) {
+export function buildBakedLightFieldPipelineSignature(field: BakedFloorLightField | undefined | null) {
   if (!field) {
     return 'no-light-field'
   }
 
+  if (!field.lightFieldTexture || !field.bounds) {
+    return 'pending-light-field'
+  }
+
   return [
-    field.sourceHash,
-    field.lightFieldTexture?.uuid ?? 'pending-light-field',
-    field.flickerLightFieldTextures.map((texture) => texture?.uuid ?? 'no-flicker').join(','),
+    'layout',
+    field.bounds.minCellX,
+    field.bounds.maxCellX,
+    field.bounds.minCellZ,
+    field.bounds.maxCellZ,
+    field.lightFieldTextureSize.width,
+    field.lightFieldTextureSize.height,
+    field.lightFieldGridSize.widthCells,
+    field.lightFieldGridSize.heightCells,
+    field.flickerLightFieldTextures.every((texture) => texture) ? 'flicker' : 'steady',
   ].join('|')
 }
 
@@ -158,7 +170,7 @@ function buildRenderSignature(
     entry.key,
     entry.visibility,
     usesGpuFog ? 'gpu-fog' : 'no-fog',
-    buildBakedLightFieldRenderSignature(entry.bakedLightField),
+    buildBakedLightFieldPipelineSignature(entry.bakedLightField),
     useLineOfSightPostMask ? 'post-mask' : 'no-post-mask',
     entry.buildAnimationStart === undefined ? 'static' : 'animated',
   ].join('|')).join(';')

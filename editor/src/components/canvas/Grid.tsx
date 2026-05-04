@@ -812,22 +812,24 @@ export function Grid({ size = 120, playMode = false, bakedLightField = null }: G
   const roomStreamTransactionId = roomStreamTransactionIdRef.current
   const roomStreamTransactionStartedAt = roomStreamTransactionStartedAtRef.current
   const roomStreamMountId = getTileGpuStreamMountId(activeFloorId, 'active')
+  const shouldStreamRoomTransactionPreview = shouldRenderRoomStreamPreview({
+    roomStreamTransactionId,
+    roomStreamTransactionStartedAt,
+    previewStrokeMode,
+    mapMode,
+    previewCells,
+    strokeMode,
+  })
   const previewStreamEntries = useMemo(
     () => {
-      if (
-        !roomStreamTransactionId
-        || roomStreamTransactionStartedAt === null
-        || previewStrokeMode !== 'paint'
-        || mapMode === 'outdoor'
-        || previewCells.length === 0
-      ) {
+      if (!shouldStreamRoomTransactionPreview) {
         return []
       }
 
       return buildSpeculativeRoomTileEntries({
         activeLayerId,
         bakedLightField,
-        buildStartedAt: roomStreamTransactionStartedAt,
+        buildStartedAt: roomStreamTransactionStartedAt!,
         cells: previewCells,
         floorTileAssetIds,
         globalFloorAssetId,
@@ -848,13 +850,11 @@ export function Grid({ size = 120, playMode = false, bakedLightField = null }: G
       globalFloorAssetId,
       globalWallAssetId,
       innerWalls,
-      mapMode,
       paintedCells,
       previewCells,
-      previewStrokeMode,
-      roomStreamTransactionId,
       roomStreamTransactionStartedAt,
       rooms,
+      shouldStreamRoomTransactionPreview,
       strokeStartCell,
       wallOpenings,
       wallSurfaceAssetIds,
@@ -1766,6 +1766,32 @@ export function Grid({ size = 120, playMode = false, bakedLightField = null }: G
          />
        )}
     </group>
+  )
+}
+
+export function shouldRenderRoomStreamPreview({
+  roomStreamTransactionId,
+  roomStreamTransactionStartedAt,
+  previewStrokeMode,
+  mapMode,
+  previewCells,
+  strokeMode,
+}: {
+  roomStreamTransactionId: string | null
+  roomStreamTransactionStartedAt: number | null
+  previewStrokeMode: 'paint' | 'erase' | null
+  mapMode: 'indoor' | 'outdoor'
+  previewCells: GridCell[]
+  strokeMode: 'paint' | 'erase' | null
+}) {
+  return Boolean(
+    roomStreamTransactionId
+    && roomStreamTransactionStartedAt !== null
+    && previewStrokeMode === 'paint'
+    && mapMode !== 'outdoor'
+    && previewCells.length > 0
+    // HoverPreview already covers live feedback while the pointer is down.
+    && strokeMode === null,
   )
 }
 

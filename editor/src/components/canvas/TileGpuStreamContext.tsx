@@ -1,19 +1,40 @@
 import { createContext, useContext, useEffect, useRef, useSyncExternalStore, type ReactNode } from 'react'
 import { useFrame, useThree } from '@react-three/fiber'
 import { TileGpuStream, getTileGpuStreamMountId } from '../../rendering/gpu/TileGpuStream'
+import { useDungeonStore } from '../../store/useDungeonStore'
+import type { TileUploadBudget } from '../../rendering/gpu/TileGpuUploadScheduler'
 
 const TileGpuStreamContext = createContext<TileGpuStream | null>(null)
 
+export function getTileStreamUploadBudget(isInteractionActive: boolean): TileUploadBudget {
+  return isInteractionActive
+    ? { maxMs: 0.5, maxPages: 1 }
+    : { maxMs: 2, maxPages: 1 }
+}
+
 export function TileGpuStreamProvider({ children }: { children: ReactNode }) {
   const invalidate = useThree((state) => state.invalidate)
+  const isPaintingStrokeActive = useDungeonStore((state) => state.isPaintingStrokeActive)
+  const isObjectDragActive = useDungeonStore((state) => state.isObjectDragActive)
+  const isRoomResizeHandleActive = useDungeonStore((state) => state.isRoomResizeHandleActive)
   const streamRef = useRef<TileGpuStream | null>(null)
 
   if (!streamRef.current) {
     streamRef.current = new TileGpuStream({ invalidate })
   }
 
+  const isInteractionActive =
+    isPaintingStrokeActive
+    || isObjectDragActive
+    || isRoomResizeHandleActive
+
   useFrame(() => {
-    streamRef.current?.processTileUploadBudget({ maxMs: 2, maxPages: 2 })
+    const stream = streamRef.current
+    if (!stream?.hasPendingTileUploads()) {
+      return
+    }
+
+    stream.processTileUploadBudget(getTileStreamUploadBudget(isInteractionActive))
   })
 
   useEffect(() => () => {

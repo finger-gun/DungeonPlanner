@@ -77,7 +77,8 @@ describe('bakedLightMaterial', () => {
       direction: [1, 0, 0],
     })
 
-    expect(material.userData.bakedLightSignature).toContain(lightField.lightFieldTexture!.uuid)
+    expect(material.userData.bakedLightSignature).toContain('layout')
+    expect(material.userData.bakedLightSignature).not.toContain(lightField.lightFieldTexture!.uuid)
     expect(material.userData.bakedLightSignature).toContain('directed-constant')
     expect(material.colorNode).toBeDefined()
     expect(material.emissiveNode).toBeDefined()
@@ -103,7 +104,8 @@ describe('bakedLightMaterial', () => {
       lightField,
     })
 
-    expect(material.userData.propBakedLightSignature).toContain(lightField.lightFieldTexture!.uuid)
+    expect(material.userData.propBakedLightSignature).toContain('layout')
+    expect(material.userData.propBakedLightSignature).not.toContain(lightField.lightFieldTexture!.uuid)
     expect(material.userData.propBakedLightSignature).not.toBe('off')
     expect(Object.prototype.hasOwnProperty.call(material.userData, 'propBakedLightBaseColorNode')).toBe(true)
     expect(material.colorNode).toBeDefined()
@@ -139,7 +141,8 @@ describe('bakedLightMaterial', () => {
       probe,
     })
 
-    expect(material.userData.propBakedLightSignature).toContain(lightField.lightFieldTexture!.uuid)
+    expect(material.userData.propBakedLightSignature).toContain('layout')
+    expect(material.userData.propBakedLightSignature).not.toContain(lightField.lightFieldTexture!.uuid)
     expect(material.userData.propBakedLightSignature).toContain('probe-uniforms-v1')
     expect(material.userData.propBakedLightSignature).not.toContain('0.16,0.08,0.04')
     const uniformState = material.userData.propBakedLightUniformState as {
@@ -173,5 +176,41 @@ describe('bakedLightMaterial', () => {
     expect(material.emissiveNode).toBe(previousEmissiveNode)
     expect(uniformState.baseLight.value.toArray()).toEqual([0.09, 0.04, 0.02])
     expect(uniformState.directionalStrength.value).toBeCloseTo(0.22)
+  })
+
+  it('keeps baked material signatures stable across light texture content updates with the same layout', () => {
+    const material = createStandardCompatibleMaterial({
+      color: '#ffffff',
+      roughness: 0.4,
+      metalness: 0.1,
+    }) as TestNodeMaterial
+    const lightField = createTestLightField()
+    const updatedLightField = {
+      ...createTestLightField(),
+      previousSourceHash: lightField.sourceHash,
+      sourceHash: 'field-hash-2',
+    }
+
+    material.isNodeMaterial = true
+
+    applyBakedLightToMaterial(material, {
+      useLightAttribute: true,
+      useTopSurfaceMask: true,
+      lightField,
+    })
+
+    const previousSignature = material.userData.bakedLightSignature
+    const previousColorNode = material.colorNode
+    material.needsUpdate = false
+
+    applyBakedLightToMaterial(material, {
+      useLightAttribute: true,
+      useTopSurfaceMask: true,
+      lightField: updatedLightField,
+    })
+
+    expect(material.userData.bakedLightSignature).toBe(previousSignature)
+    expect(material.colorNode).toBe(previousColorNode)
+    expect(material.needsUpdate).not.toBe(true)
   })
 })

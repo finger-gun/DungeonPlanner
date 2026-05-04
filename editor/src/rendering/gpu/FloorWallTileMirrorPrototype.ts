@@ -4,8 +4,9 @@ import type {
   OpeningRecord,
   PaintedCells,
 } from '../../store/useDungeonStore'
+import { DEFAULT_FLOOR_CHUNK_SIZE } from '../../store/floorChunkKeys'
 
-export const DEFAULT_FLOOR_WALL_TILE_MIRROR_CHUNK_SIZE = 8
+export const DEFAULT_FLOOR_WALL_TILE_MIRROR_CHUNK_SIZE = DEFAULT_FLOOR_CHUNK_SIZE
 export const FLOOR_TILE_MIRROR_STRIDE = 4
 export const FLOOR_OPENING_MIRROR_STRIDE = 4
 export const FLOOR_INNER_WALL_MIRROR_STRIDE = 4

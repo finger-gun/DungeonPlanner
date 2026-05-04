@@ -57,9 +57,10 @@ describe('buildBatchDescriptors', () => {
 
   it('should derive chunk keys from cell coordinates using the shared chunk helper', () => {
     expect(getRenderBatchChunkKeyForCell([0, 0])).toBe('0:0')
-    expect(getRenderBatchChunkKeyForCell([8, 8])).toBe('0:0')
-    expect(getRenderBatchChunkKeyForCell([9, 0])).toBe('1:0')
-    expect(getRenderBatchChunkKeyForCell([16, 0])).toBe('1:0')
+    expect(getRenderBatchChunkKeyForCell([7, 7])).toBe('0:0')
+    expect(getRenderBatchChunkKeyForCell([8, 8])).toBe('1:1')
+    expect(getRenderBatchChunkKeyForCell([15, 0])).toBe('1:0')
+    expect(getRenderBatchChunkKeyForCell([16, 0])).toBe('2:0')
   })
 
   it('derives static entry chunk keys from variant keys before falling back to position', () => {
@@ -67,7 +68,7 @@ describe('buildBatchDescriptors', () => {
       key: 'wall:0:0:north',
       variantKey: '16:0:north',
       position: [0.5, 0, 0],
-    })).toBe('1:0')
+    })).toBe('2:0')
   })
 
   it('should group entries by compatibility bucket', () => {
@@ -159,7 +160,7 @@ describe('buildBatchDescriptors', () => {
     const result = buildBatchDescriptors(entries, false)
 
     expect(result.batched).toHaveLength(2)
-    expect(result.batched.map((descriptor) => descriptor.chunkKey).sort()).toEqual(['0:0', '1:0'])
+    expect(result.batched.map((descriptor) => descriptor.chunkKey).sort()).toEqual(['0:0', '2:0'])
   })
 
   it('should respect GPU fog for floor variant', () => {
@@ -416,7 +417,7 @@ describe('buildBatchDescriptors', () => {
     expect(result.fallback).toHaveLength(0)
   })
 
-  it('changes render signatures when a baked light field becomes ready without changing source hash', () => {
+  it('changes batch signatures when a baked light field becomes ready without changing source hash', () => {
     const resolveSpy = vi.spyOn(tileAssetResolution, 'resolveBatchedTileAsset')
     resolveSpy.mockImplementation(() => ({
       assetUrl: '/assets/floor.glb',
@@ -434,16 +435,46 @@ describe('buildBatchDescriptors', () => {
       createLitFloorEntry(readyField),
     ], false)
 
-    expect(pendingResult.batched[0]?.bucketKey).toBe(readyResult.batched[0]?.bucketKey)
+    expect(pendingResult.batched[0]?.bucketKey).not.toBe(readyResult.batched[0]?.bucketKey)
     expect(pendingResult.batched[0]?.renderSignature).not.toBe(readyResult.batched[0]?.renderSignature)
   })
 
-  it('changes chunk entry signatures when baked light textures change without geometry edits', () => {
-    const pendingField = createBakedLightField('light-hash', null)
-    const readyField = createBakedLightField('light-hash', new THREE.DataTexture())
+  it('keeps batch signatures stable when baked light contents change without layout edits', () => {
+    const firstField = createBakedLightField('light-hash-a', new THREE.DataTexture())
+    const secondField = createBakedLightField('light-hash-b', new THREE.DataTexture())
 
-    expect(buildChunkEntrySignature([createLitFloorEntry(pendingField)])).not.toBe(
-      buildChunkEntrySignature([createLitFloorEntry(readyField)]),
+    const resolveSpy = vi.spyOn(tileAssetResolution, 'resolveBatchedTileAsset')
+    resolveSpy.mockImplementation(() => ({
+      assetUrl: '/assets/floor.glb',
+      transformKey: 'default',
+      receiveShadow: true,
+    }))
+
+    const firstResult = buildBatchDescriptors([
+      createLitFloorEntry(firstField),
+    ], false)
+    const secondResult = buildBatchDescriptors([
+      createLitFloorEntry(secondField),
+    ], false)
+
+    expect(firstResult.batched[0]?.bucketKey).toBe(secondResult.batched[0]?.bucketKey)
+    expect(firstResult.batched[0]?.renderSignature).toBe(secondResult.batched[0]?.renderSignature)
+    expect(buildChunkEntrySignature([createLitFloorEntry(firstField)])).toBe(
+      buildChunkEntrySignature([createLitFloorEntry(secondField)]),
+    )
+  })
+
+  it('changes chunk entry signatures when baked light layout changes', () => {
+    const firstField = createBakedLightField('light-hash-a', new THREE.DataTexture())
+    const secondField = {
+      ...createBakedLightField('light-hash-b', new THREE.DataTexture()),
+      bounds: { minCellX: 0, maxCellX: 1, minCellZ: 0, maxCellZ: 0 },
+      lightFieldTextureSize: { width: 2, height: 1 },
+      lightFieldGridSize: { widthCells: 2, heightCells: 1 },
+    }
+
+    expect(buildChunkEntrySignature([createLitFloorEntry(firstField)])).not.toBe(
+      buildChunkEntrySignature([createLitFloorEntry(secondField)]),
     )
   })
 })

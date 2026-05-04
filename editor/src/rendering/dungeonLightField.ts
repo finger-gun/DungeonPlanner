@@ -12,6 +12,7 @@ import type {
 import type { FloorDirtyInfo, FloorDirtyRect } from '../store/floorDirtyDomains'
 import type { ObjectLightOverrides } from '../store/lightOverrides'
 import { getObjectLightOverrides, mergePropLightWithOverrides } from '../store/lightOverrides'
+import { DEFAULT_FLOOR_CHUNK_SIZE } from '../store/floorChunkKeys'
 import { buildOpenWallSegmentSet } from '../store/openWallSegments'
 import { getMirroredWallKey } from '../store/manualWalls'
 import { collectBoundaryWallSegments } from '../store/wallSegments'
@@ -21,7 +22,7 @@ import {
   getStableLightFlickerCoefficients,
 } from './lightFlickerMath'
 
-export const DEFAULT_BAKED_LIGHT_CHUNK_SIZE = 8
+export const DEFAULT_BAKED_LIGHT_CHUNK_SIZE = DEFAULT_FLOOR_CHUNK_SIZE
 export const DEFAULT_DYNAMIC_LIGHT_POOL_SIZE = 32
 export const DEFAULT_BAKED_LIGHT_CHANNEL_CAP = 0.9
 const BAKED_LIGHT_FIELD_SIGNATURE_VERSION = 'multi-basis-flicker-v2'

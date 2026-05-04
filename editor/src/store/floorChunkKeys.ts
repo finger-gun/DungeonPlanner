@@ -1,7 +1,8 @@
 import { getCellKey, type GridCell } from '../hooks/useSnapToGrid'
 import type { FloorDirtyRect } from './floorDirtyDomains'
 
-export const DEFAULT_FLOOR_RENDER_CHUNK_SIZE = 9
+export const DEFAULT_FLOOR_CHUNK_SIZE = 8
+export const DEFAULT_FLOOR_RENDER_CHUNK_SIZE = DEFAULT_FLOOR_CHUNK_SIZE
 
 export function getFloorChunkKeyForCell(
   cell: readonly [number, number],

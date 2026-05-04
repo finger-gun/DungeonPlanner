@@ -6,7 +6,11 @@ import { useGLTF } from '../../rendering/useGLTF'
 import { useFogOfWarRuntime } from './fogOfWar'
 import { useDungeonStore } from '../../store/useDungeonStore'
 import { getBuildYOffsetForAnimation, type BuildAnimationState } from '../../store/buildAnimations'
-import { buildBatchDescriptors, getChunkKeyForStaticTileEntry } from './batchDescriptors'
+import {
+  buildBatchDescriptors,
+  buildBakedLightFieldPipelineSignature,
+  getChunkKeyForStaticTileEntry,
+} from './batchDescriptors'
 import { recordBuildPerfEvent } from '../../performance/runtimeBuildTrace'
 import { useTileGpuStream } from './TileGpuStreamContext'
 import type { StaticTileEntry } from './tileEntries'
@@ -349,9 +353,7 @@ export function buildChunkEntrySignature(entries: readonly StaticTileEntry[]) {
     entry.buildAnimationStart ?? '',
     entry.buildAnimationDelay ?? '',
     entry.fogCell?.join(',') ?? '',
-    entry.bakedLightField?.sourceHash ?? 'no-light-field',
-    entry.bakedLightField?.lightFieldTexture?.uuid ?? 'pending-light-field',
-    entry.bakedLightField?.flickerLightFieldTextures.map((texture) => texture?.uuid ?? 'no-flicker').join(',') ?? '',
+    buildBakedLightFieldPipelineSignature(entry.bakedLightField),
     entry.bakedLightDirection?.join(',') ?? '',
     entry.bakedLightDirectionSecondary?.join(',') ?? '',
     JSON.stringify(entry.objectProps ?? null),

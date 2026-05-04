@@ -662,6 +662,17 @@ describe('useDungeonStore history', () => {
     expect(useDungeonStore.getState().floorTileAssetIds).toEqual({})
   })
 
+  it('removes multi-tile floor variants when a covered non-anchor cell is erased', () => {
+    const state = useDungeonStore.getState()
+    state.paintCells([[0, 0], [1, 0], [0, 1], [1, 1]])
+
+    expect(state.setFloorTileAsset('0:0', 'dungeon.floor_floor_tile_large')).toBe(true)
+
+    state.eraseCells([[1, 1]])
+
+    expect(useDungeonStore.getState().floorTileAssetIds).toEqual({})
+  })
+
   it('reanchors overlapping multi-tile floor variants to the latest stamp', () => {
     const state = useDungeonStore.getState()
     state.paintCells([
@@ -1870,9 +1881,9 @@ describe('useDungeonStore floor dirty domains', () => {
     useDungeonStore.getState().paintCells([[8, 0]])
 
     const next = useDungeonStore.getState().floorDirtyDomains[floorId]
-    expect(next.dirtyChunkKeys).toEqual(['0:0'])
+    expect(next.dirtyChunkKeys).toEqual(['1:0'])
     expect(next.dirtyRenderChunkKeys).toEqual(['0:-1', '0:0', '1:-1', '1:0'])
-    expect(next.dirtyLightChunkKeys).toEqual(['0:0'])
+    expect(next.dirtyLightChunkKeys).toEqual(['1:0'])
   })
 
   it('expands room paint render chunks to cover large floor surface halos', () => {

@@ -53,6 +53,7 @@ import {
 } from './outdoorTerrain'
 import {
   collectOverlappingFloorSurfaceAnchors,
+  createFloorSurfacePlacement,
   findFloorSurfaceAnchorAtCell,
   getFloorTileSpan,
   getInheritedFloorAssetIdForCellKey,
@@ -1647,15 +1648,22 @@ function pruneInvalidSurfaceOverrides(
   let wallSurfaceProps = current.wallSurfaceProps
 
   changedCellKeys.forEach((cellKey) => {
-    const assetId = floorTileAssetIds[cellKey]
-    if (!assetId || isFloorSurfacePlacementValid(cellKey, assetId, paintedCells)) {
-      return
-    }
+    const affectedAnchorKeys = collectFloorSurfaceAnchorsForCellChange(
+      cellKey,
+      floorTileAssetIds,
+    )
 
-    if (floorTileAssetIds === current.floorTileAssetIds) {
-      floorTileAssetIds = { ...current.floorTileAssetIds }
-    }
-    delete floorTileAssetIds[cellKey]
+    affectedAnchorKeys.forEach((anchorCellKey) => {
+      const assetId = floorTileAssetIds[anchorCellKey]
+      if (!assetId || isFloorSurfacePlacementValid(anchorCellKey, assetId, paintedCells)) {
+        return
+      }
+
+      if (floorTileAssetIds === current.floorTileAssetIds) {
+        floorTileAssetIds = { ...current.floorTileAssetIds }
+      }
+      delete floorTileAssetIds[anchorCellKey]
+    })
   })
 
   affectedWallKeys.forEach((wallKey) => {
@@ -1681,6 +1689,24 @@ function pruneInvalidSurfaceOverrides(
   })
 
   return { floorTileAssetIds, wallSurfaceAssetIds, wallSurfaceProps }
+}
+
+function collectFloorSurfaceAnchorsForCellChange(
+  cellKey: string,
+  floorTileAssetIds: Record<string, string>,
+) {
+  const affectedAnchorKeys = new Set<string>()
+
+  Object.entries(floorTileAssetIds).forEach(([anchorCellKey, assetId]) => {
+    const placement = createFloorSurfacePlacement(anchorCellKey, assetId)
+    if (!placement?.coveredCellKeys.includes(cellKey)) {
+      return
+    }
+
+    affectedAnchorKeys.add(anchorCellKey)
+  })
+
+  return affectedAnchorKeys
 }
 
 const FALLBACK_PERSIST_STORAGE: Storage = {
