@@ -77,15 +77,6 @@ export function createDungeonStoreEditorUiActions({
         ...current,
         tool: normalizedTool,
         isRoomResizeHandleActive: normalizedTool === 'room' ? current.isRoomResizeHandleActive : false,
-        previousCameraPreset: normalizedTool === 'room'
-          ? current.activeCameraMode
-          : current.previousCameraPreset,
-        cameraPreset: normalizedTool === 'room'
-          ? 'top-down'
-          : (current.previousCameraPreset ? current.previousCameraPreset : current.cameraPreset),
-        activeCameraMode: normalizedTool === 'room'
-          ? 'top-down'
-          : (current.previousCameraPreset ? current.previousCameraPreset : current.activeCameraMode),
         roomEditMode: normalizedTool === 'room' ? 'rooms' : current.roomEditMode,
         history: [...current.history, previousSnapshot],
         future: [],

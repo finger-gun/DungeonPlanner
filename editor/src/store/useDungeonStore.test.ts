@@ -1086,13 +1086,15 @@ describe('useDungeonStore history', () => {
     expect(useDungeonStore.getState().pickedUpObject).toBeNull()
   })
 
-  it('switches to top-down view when entering room mode', () => {
+  it('keeps the current camera mode when entering room mode', () => {
+    useDungeonStore.getState().setCameraPreset('classic')
+    useDungeonStore.getState().clearCameraPreset()
     useDungeonStore.getState().setTool('room')
 
     const state = useDungeonStore.getState()
     expect(state.tool).toBe('room')
-    expect(state.cameraPreset).toBe('top-down')
-    expect(state.activeCameraMode).toBe('top-down')
+    expect(state.cameraPreset).toBeNull()
+    expect(state.activeCameraMode).toBe('classic')
   })
 
   it('resizes a selected room footprint on the grid', () => {
