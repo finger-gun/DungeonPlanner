@@ -157,6 +157,45 @@ describe('App sidebar drawer', () => {
     expect(useDungeonStore.getState().showPropProbeDebug).toBe(true)
   })
 
+  it('toggles chunk bounds visualization from the debug panel', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+
+    fireEvent.keyDown(window, { key: 'F12', ctrlKey: true, shiftKey: true })
+
+    expect(useDungeonStore.getState().showChunkDebugOverlay).toBe(false)
+
+    await user.click(screen.getByRole('button', { name: /visualize chunk bounds/i }))
+
+    expect(useDungeonStore.getState().showChunkDebugOverlay).toBe(true)
+  })
+
+  it('toggles x10 build animation slow mode from the debug panel', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+
+    fireEvent.keyDown(window, { key: 'F12', ctrlKey: true, shiftKey: true })
+
+    expect(useDungeonStore.getState().slowBuildAnimationDebug).toBe(false)
+
+    await user.click(screen.getByRole('button', { name: /slow build animation x10/i }))
+
+    expect(useDungeonStore.getState().slowBuildAnimationDebug).toBe(true)
+  })
+
+  it('toggles build performance tracing from the debug panel', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+
+    fireEvent.keyDown(window, { key: 'F12', ctrlKey: true, shiftKey: true })
+
+    expect(useDungeonStore.getState().buildPerformanceTracingEnabled).toBe(false)
+
+    await user.click(screen.getByRole('button', { name: /trace build performance/i }))
+
+    expect(useDungeonStore.getState().buildPerformanceTracingEnabled).toBe(true)
+  })
+
   it('keeps the sidebar off-canvas in play mode without rendering the drawer tab', () => {
     useDungeonStore.getState().setTool('play')
     render(<App />)

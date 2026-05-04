@@ -8,19 +8,12 @@ export type WallCornerInstance = {
   objectProps?: Record<string, unknown>
 }
 
-type CornerHeading = 'east' | 'west' | 'north' | 'south'
-
-const CORNER_ROTATION_BY_HEADINGS: Record<string, [number, number, number]> = {
-  'south|west': [0, 0, 0],
-  'north|west': [0, Math.PI / 2, 0],
-  'east|north': [0, Math.PI, 0],
-  'east|south': [0, -Math.PI / 2, 0],
-}
+type CornerAxis = 'horizontal' | 'vertical'
 
 export function deriveWallCornersFromSegments(
   wallSegments: Array<{ key: string }>,
 ): WallCornerInstance[] {
-  const cornersByVertex = new Map<string, Array<{ heading: CornerHeading; wallKey: string }>>()
+  const cornersByVertex = new Map<string, Array<{ axis: CornerAxis; wallKey: string }>>()
 
   wallSegments.forEach((segment) => {
     getWallCornerEndpoints(segment.key).forEach((endpoint) => {
@@ -28,7 +21,7 @@ export function deriveWallCornersFromSegments(
         cornersByVertex.set(endpoint.vertexKey, [])
       }
       cornersByVertex.get(endpoint.vertexKey)!.push({
-        heading: endpoint.heading,
+        axis: endpoint.axis,
         wallKey: segment.key,
       })
     })
@@ -37,13 +30,9 @@ export function deriveWallCornersFromSegments(
   const corners: WallCornerInstance[] = []
 
   cornersByVertex.forEach((entries, vertexKey) => {
-    if (entries.length !== 2) {
-      return
-    }
-
-    const headings = entries.map((entry) => entry.heading).sort().join('|')
-    const rotation = CORNER_ROTATION_BY_HEADINGS[headings]
-    if (!rotation) {
+    const hasHorizontal = entries.some((entry) => entry.axis === 'horizontal')
+    const hasVertical = entries.some((entry) => entry.axis === 'vertical')
+    if (!hasHorizontal || !hasVertical) {
       return
     }
 
@@ -56,17 +45,16 @@ export function deriveWallCornersFromSegments(
 
     corners.push({
       key: `${vertexKey}:corner`,
-      wallKeys: entries.map((entry) => entry.wallKey),
+      wallKeys: [...new Set(entries.map((entry) => entry.wallKey))],
       position: [vertexX * GRID_SIZE, 0, vertexZ * GRID_SIZE],
-      rotation,
-      objectProps: { kind: 'corner' },
+      rotation: [0, 0, 0],
     })
   })
 
   return corners
 }
 
-function getWallCornerEndpoints(wallKey: string): Array<{ vertexKey: string; heading: CornerHeading }> {
+function getWallCornerEndpoints(wallKey: string): Array<{ vertexKey: string; axis: CornerAxis }> {
   const parts = wallKey.split(':')
   if (parts.length !== 3) {
     return []
@@ -82,23 +70,23 @@ function getWallCornerEndpoints(wallKey: string): Array<{ vertexKey: string; hea
   switch (direction) {
     case 'north':
       return [
-        { vertexKey: `${x}:${z + 1}`, heading: 'east' },
-        { vertexKey: `${x + 1}:${z + 1}`, heading: 'west' },
+        { vertexKey: `${x}:${z + 1}`, axis: 'horizontal' },
+        { vertexKey: `${x + 1}:${z + 1}`, axis: 'horizontal' },
       ]
     case 'south':
       return [
-        { vertexKey: `${x}:${z}`, heading: 'east' },
-        { vertexKey: `${x + 1}:${z}`, heading: 'west' },
+        { vertexKey: `${x}:${z}`, axis: 'horizontal' },
+        { vertexKey: `${x + 1}:${z}`, axis: 'horizontal' },
       ]
     case 'east':
       return [
-        { vertexKey: `${x + 1}:${z}`, heading: 'north' },
-        { vertexKey: `${x + 1}:${z + 1}`, heading: 'south' },
+        { vertexKey: `${x + 1}:${z}`, axis: 'vertical' },
+        { vertexKey: `${x + 1}:${z + 1}`, axis: 'vertical' },
       ]
     case 'west':
       return [
-        { vertexKey: `${x}:${z}`, heading: 'north' },
-        { vertexKey: `${x}:${z + 1}`, heading: 'south' },
+        { vertexKey: `${x}:${z}`, axis: 'vertical' },
+        { vertexKey: `${x}:${z + 1}`, axis: 'vertical' },
       ]
     default:
       return []

@@ -1,5 +1,6 @@
 import { useFrame, useThree } from '@react-three/fiber'
 import { useDungeonStore } from '../../store/useDungeonStore'
+import { releaseContinuousRender } from '../../rendering/renderActivity'
 import { transition, overlayDomRef } from './floorTransition'
 import type { OrbitControls as OrbitControlsImpl } from 'three-stdlib'
 
@@ -15,7 +16,7 @@ const CAMERA_SPRING_K = 6   // stiffness for the camera Y spring
  *              FloorContent has already remounted with a small startY offset.
  */
 export function FloorTransitionController() {
-  const { camera, invalidate } = useThree()
+  const { camera } = useThree()
 
   useFrame((state, delta) => {
     const t = transition
@@ -35,6 +36,7 @@ export function FloorTransitionController() {
       t.progress = Math.max(0, t.progress - delta * t.fadeInRate)
       if (t.progress <= 0) {
         t.phase = 'idle'
+        releaseContinuousRender('floor-transition')
       }
     }
 
@@ -65,7 +67,7 @@ export function FloorTransitionController() {
       overlayDomRef.current.style.opacity = String(t.progress)
     }
 
-    invalidate()
+    // Invalidate handled by 'floor-transition' continuous render request
   })
 
   return null

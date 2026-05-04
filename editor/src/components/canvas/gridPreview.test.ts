@@ -41,4 +41,21 @@ describe('getRoomPreviewCells', () => {
       tool: 'room',
     })).toEqual([])
   })
+
+  it('keeps a latched preview visible after commit when no active stroke remains', () => {
+    expect(getRoomPreviewCells({
+      hoveredCell: {
+        cell: [2, 3],
+        key: '2:3',
+        position: [5, 0, 7],
+      },
+      latchedPreviewCells: [[4, 4], [5, 4]],
+      paintedCells: {},
+      strokeCurrentCell: null,
+      strokeMode: null,
+      strokeStartCell: null,
+      suppressRoomPreview: false,
+      tool: 'room',
+    })).toEqual([[4, 4], [5, 4]])
+  })
 })

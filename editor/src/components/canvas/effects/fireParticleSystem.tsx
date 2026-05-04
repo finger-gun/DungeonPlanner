@@ -25,6 +25,9 @@ import { createParticleSeeds } from './ObjectEffect'
 import { getCameraFrustum, hasCameraChanged } from '../propLightPool'
 import type { RegisteredEffectSource } from '../objectSourceRegistry'
 import { useRegisteredEffectSources } from '../objectSourceRegistry'
+import { releaseContinuousRender, requestContinuousRender } from '../../../rendering/renderActivity'
+import { hasActiveBuildAnimations, useBuildAnimationVersion } from '../../../store/buildAnimations'
+import { shouldRunContinuousFireParticles } from '../effectAnimationMode'
 
 /**
  * Maximum number of simultaneously visible fire emitters.
@@ -83,6 +86,8 @@ export function FireParticleSystem({
   const effectSources = useRegisteredEffectSources(scopeKey)
   const lastCameraMatrixElementsRef = useRef<Float32Array | null>(null)
   const lastProjectionMatrixElementsRef = useRef<Float32Array | null>(null)
+  const buildAnimationVersion = useBuildAnimationVersion()
+  const runContinuousEffects = shouldRunContinuousFireParticles(hasActiveBuildAnimations())
 
   const [activeEmitters, setActiveEmitters] = useState<ActiveFireEmitter[]>([])
 
@@ -109,6 +114,18 @@ export function FireParticleSystem({
   useEffect(() => {
     publishEmitters()
   }, [publishEmitters])
+
+  useEffect(() => {
+    void buildAnimationVersion
+
+    if (runContinuousEffects && activeEmitters.length > 0) {
+      requestContinuousRender('fire-particles')
+      return () => releaseContinuousRender('fire-particles')
+    }
+
+    releaseContinuousRender('fire-particles')
+    return undefined
+  }, [activeEmitters.length, buildAnimationVersion, runContinuousEffects])
 
   useFrame(() => {
     if (!hasCameraChanged(camera, lastCameraMatrixElementsRef, lastProjectionMatrixElementsRef)) {

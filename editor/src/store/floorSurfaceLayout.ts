@@ -21,6 +21,7 @@ export type FloorSurfacePlacement = {
 }
 
 export type FloorRenderGroup = {
+  groupKey: string
   floorAssetId: string | null
   cells: GridCell[]
 }
@@ -216,6 +217,7 @@ export function buildFloorRenderPlan(
     const groupKey = floorAssetId ?? 'none'
     if (!baseGroups.has(groupKey)) {
       baseGroups.set(groupKey, {
+        groupKey,
         floorAssetId,
         cells: [],
       })

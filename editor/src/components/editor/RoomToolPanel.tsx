@@ -14,7 +14,6 @@ import {
 } from '../../store/outdoorTerrainStyles'
 import { AssetCatalog } from './AssetCatalog'
 import { CompactPillButton } from './CompactPillButton'
-import { RoomPanel } from './RoomPanel'
 
 const floorAssets = getContentPackAssetsByCategory('floor')
 const wallAssets = getContentPackAssetsByCategory('wall')
@@ -351,7 +350,6 @@ export function RoomToolPanel() {
         </>
       )}
 
-      {mapMode !== 'outdoor' && <RoomPanel />}
     </div>
   )
 }

@@ -88,6 +88,7 @@ class DungeonPlannerTiledLightsNode extends LightsNode {
     const lightsTexture = this._lightsTexture
     const data = lightsTexture.image.data
     const lineSize = lightsTexture.image.width * 4
+    let textureDirty = this._lightsCount.value !== this.tiledLights.length
 
     this._lightsCount.value = this.tiledLights.length
 
@@ -97,18 +98,20 @@ class DungeonPlannerTiledLightsNode extends LightsNode {
       vector3Scratch.setFromMatrixPosition(light.matrixWorld)
 
       const offset = index * 4
-      data[offset + 0] = vector3Scratch.x
-      data[offset + 1] = vector3Scratch.y
-      data[offset + 2] = vector3Scratch.z
-      data[offset + 3] = light.distance
+      textureDirty = writePackedLightValue(data, offset + 0, vector3Scratch.x) || textureDirty
+      textureDirty = writePackedLightValue(data, offset + 1, vector3Scratch.y) || textureDirty
+      textureDirty = writePackedLightValue(data, offset + 2, vector3Scratch.z) || textureDirty
+      textureDirty = writePackedLightValue(data, offset + 3, light.distance) || textureDirty
 
-      data[lineSize + offset + 0] = light.color.r * light.intensity
-      data[lineSize + offset + 1] = light.color.g * light.intensity
-      data[lineSize + offset + 2] = light.color.b * light.intensity
-      data[lineSize + offset + 3] = light.decay
+      textureDirty = writePackedLightValue(data, lineSize + offset + 0, light.color.r * light.intensity) || textureDirty
+      textureDirty = writePackedLightValue(data, lineSize + offset + 1, light.color.g * light.intensity) || textureDirty
+      textureDirty = writePackedLightValue(data, lineSize + offset + 2, light.color.b * light.intensity) || textureDirty
+      textureDirty = writePackedLightValue(data, lineSize + offset + 3, light.decay) || textureDirty
     }
 
-    lightsTexture.needsUpdate = true
+    if (textureDirty) {
+      lightsTexture.needsUpdate = true
+    }
   }
 
   override updateBefore(frame) {
@@ -249,6 +252,7 @@ class DungeonPlannerTiledLightsNode extends LightsNode {
 
     const lightsData = new Float32Array(maxLights * 4 * 2)
     const lightsTexture = new DataTexture(lightsData, lightsData.length / 8, 2, RGBAFormat, FloatType)
+    lightsTexture.needsUpdate = true
 
     const lightIndexesArray = new Int32Array(count * 4 * 2)
     const lightIndexes = attributeArray(lightIndexesArray, 'ivec4').setName('lightIndexes')
@@ -318,6 +322,15 @@ class DungeonPlannerTiledLightsNode extends LightsNode {
   override get hasLights() {
     return super.hasLights || this.tiledLights.length > 0
   }
+}
+
+function writePackedLightValue(data, index, nextValue) {
+  if (data[index] === nextValue) {
+    return false
+  }
+
+  data[index] = nextValue
+  return true
 }
 
 export default DungeonPlannerTiledLightsNode

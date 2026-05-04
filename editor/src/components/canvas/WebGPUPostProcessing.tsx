@@ -30,6 +30,7 @@ import { useDungeonStore } from '../../store/useDungeonStore'
 import { getRegisteredObject, useObjectRegistryVersion } from './objectRegistry'
 import { getAutofocusDistance, resolveAutofocusTarget } from './autofocusTarget'
 import { getWebGpuPostProcessingPipeline } from './webgpuPostProcessingMode'
+import { traceBuildPerf } from '../../performance/runtimeBuildTrace'
 
 export function WebGPUPostProcessing() {
   const { gl: renderer, scene, camera, invalidate } = useThree()
@@ -64,7 +65,8 @@ export function WebGPUPostProcessing() {
   const focusTargetPointRef = useRef(new THREE.Vector3())
   const focusPointInitializedRef = useRef(false)
 
-  const showSelectionOutline = tool === 'select' && Boolean(selection)
+  const enableSelectionOutlinePass = tool === 'select'
+  const showSelectionOutline = enableSelectionOutlinePass && Boolean(selection)
 
   useEffect(() => {
     const clearOutlineProxy = () => {
@@ -101,7 +103,12 @@ export function WebGPUPostProcessing() {
   // Build / rebuild the TSL pipeline when renderer / scene / camera / settings change.
   // NOTE: `size` is intentionally omitted — DepthOfFieldNode.updateBefore() calls setSize()
   // automatically each frame from texture dimensions, so resize is handled without a rebuild.
-  useLayoutEffect(() => {
+  useLayoutEffect(() => traceBuildPerf('postprocess-pipeline-build', {
+    activeCameraMode,
+    lensEnabled: settings.enabled,
+    pixelateEnabled: settings.pixelateEnabled,
+    outlinePassEnabled: enableSelectionOutlinePass,
+  }, () => {
     if (!renderer || !scene || !camera) return
 
     // Single shared scene pass — tiltShift, LoS, and outline all read from
@@ -140,7 +147,7 @@ export function WebGPUPostProcessing() {
      const outlineCamera = (camera as any).clone() as THREE.Camera
      outlineCameraRef.current = outlineCamera
 
-     if (showSelectionOutline) {
+     if (enableSelectionOutlinePass) {
        outputNode = alphaOver(outputNode, selectionOutline(outlineSceneRef.current, outlineCamera))
      }
 
@@ -158,11 +165,11 @@ export function WebGPUPostProcessing() {
       ;(postProcessing as unknown as { dispose?: () => void }).dispose?.()
       postProcessingRef.current = null
       pipelineReadyRef.current = false
-      outlineCameraRef.current  = null
+      outlineCameraRef.current = null
       visibleLosCameraRef.current = null
       exploredLosCameraRef.current = null
     }
-  }, [camera, renderer, scene, settings.enabled, settings.pixelateEnabled, settings.pixelSize, activeCameraMode, showSelectionOutline])
+  }), [camera, renderer, scene, settings.enabled, settings.pixelateEnabled, settings.pixelSize, activeCameraMode, enableSelectionOutlinePass])
 
   // Multi-frame delay after each pipeline rebuild — lets Three.js begin WebGPU
   // shader compilation (especially for complex scenes with many lights) before
@@ -186,7 +193,7 @@ export function WebGPUPostProcessing() {
       cancelAnimationFrame(rafId)
       pipelineReadyRef.current = false
     }
-  }, [camera, renderer, scene, settings.enabled, settings.pixelateEnabled, settings.pixelSize, activeCameraMode, showSelectionOutline, invalidate])
+  }, [camera, renderer, scene, settings.enabled, settings.pixelateEnabled, settings.pixelSize, activeCameraMode, enableSelectionOutlinePass, invalidate])
 
   // Update shader uniforms only when settings actually change — not every frame.
   useEffect(() => {

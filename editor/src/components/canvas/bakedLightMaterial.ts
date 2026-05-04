@@ -19,9 +19,10 @@ import {
   vec3,
   vec4,
 } from 'three/tsl'
-import type { BakedFloorLightField } from '../../rendering/dungeonLightField'
+import type { BakedFloorLightField, BakedLightFieldTexture } from '../../rendering/dungeonLightField'
 import type { PropBakedLightProbe } from '../../rendering/dungeonLightField'
 import { GRID_SIZE } from '../../hooks/useSnapToGrid'
+import { buildBakedLightFieldPipelineSignature } from './batchDescriptors'
 import {
   BILLBOARD_BAKED_LIGHT_RESPONSE,
   type BakedLightResponseProfile,
@@ -134,11 +135,12 @@ export function applyBakedLightToMaterial(
             : options.useSecondaryDirectionAttribute ? 'double-directed' : 'directed'
           : options.useTopSurfaceMask ? 'top-only' : 'all-faces',
         options.useFlicker ? 'flicker' : 'steady',
-        options.lightField?.lightFieldTexture?.uuid ?? 'no-field',
+        buildBakedLightFieldPipelineSignature(options.lightField),
         SURFACE_BAKED_SIGNATURE_VERSION,
       ].join(':')
     : 'off'
   const previousSignature = bakedMaterial.userData.bakedLightSignature ?? null
+  const shouldRebuildNodeGraph = previousSignature !== nextSignature
 
   if (options?.useLightAttribute) {
     if (!Object.prototype.hasOwnProperty.call(bakedMaterial.userData, 'bakedLightBaseColorNode')) {
@@ -146,72 +148,74 @@ export function applyBakedLightToMaterial(
       bakedMaterial.userData.bakedLightBaseEmissiveNode = bakedMaterial.emissiveNode ?? null
     }
 
-    const usesWallTextureSampling = Boolean(options.useDirectionAttribute && options.lightField?.lightFieldTexture)
-    const bakedSampleOffset = usesWallTextureSampling
-      ? buildWallInteriorSampleOffsetNode({
-        useSecondaryDirection: Boolean(options.useSecondaryDirectionAttribute),
-        direction: options.direction,
-        directionSecondary: options.directionSecondary,
-      })
-      : null
-    const bakedLight = options.lightField?.lightFieldTexture
-      ? buildSmoothedBakedLightNode(options.lightField, bakedSampleOffset)
-      : vec3(attribute('bakedLight', 'vec3') as never)
-    const bakedFlicker = options.useFlicker && options.lightField?.flickerLightFieldTextures.some((texture) => texture)
-      ? buildSmoothedBakedFlickerNode(options.lightField, bakedSampleOffset)
-      : vec3(0, 0, 0)
-    const directionalFaceAlignment = options.useDirectionAttribute
-      ? options.useSecondaryDirectionAttribute
-        ? max(
-          saturate(dot(
+    if (shouldRebuildNodeGraph) {
+      const usesWallTextureSampling = Boolean(options.useDirectionAttribute && options.lightField?.lightFieldTexture)
+      const bakedSampleOffset = usesWallTextureSampling
+        ? buildWallInteriorSampleOffsetNode({
+          useSecondaryDirection: Boolean(options.useSecondaryDirectionAttribute),
+          direction: options.direction,
+          directionSecondary: options.directionSecondary,
+        })
+        : null
+      const bakedLight = options.lightField?.lightFieldTexture
+        ? buildSmoothedBakedLightNode(options.lightField, bakedSampleOffset)
+        : vec3(0, 0, 0)
+      const bakedFlicker = options.useFlicker && options.lightField?.flickerLightFieldTextures.some((texture) => texture)
+        ? buildSmoothedBakedFlickerNode(options.lightField, bakedSampleOffset)
+        : vec3(0, 0, 0)
+      const directionalFaceAlignment = options.useDirectionAttribute
+        ? options.useSecondaryDirectionAttribute
+          ? max(
+            saturate(dot(
+              normalWorld,
+              buildSurfaceDirectionNode(options.direction, 'bakedLightDirection'),
+            )),
+            saturate(dot(
+              normalWorld,
+              buildSurfaceDirectionNode(options.directionSecondary, 'bakedLightDirectionSecondary'),
+            )),
+          )
+          : saturate(dot(
             normalWorld,
             buildSurfaceDirectionNode(options.direction, 'bakedLightDirection'),
-          )),
-          saturate(dot(
-            normalWorld,
-            buildSurfaceDirectionNode(options.directionSecondary, 'bakedLightDirectionSecondary'),
-          )),
-        )
-        : saturate(dot(
-          normalWorld,
-          buildSurfaceDirectionNode(options.direction, 'bakedLightDirection'),
-        ))
-      : float(1)
-    const directionalFaceFactor = options.useDirectionAttribute
-      ? buildDirectionalFaceWeightNode(directionalFaceAlignment, 0.18, 0)
-      : float(1)
-    const topSurfaceFactor = options.useTopSurfaceMask
-      ? saturate(normalWorld.y)
-      : float(1)
-    const faceFactor = directionalFaceFactor.mul(topSurfaceFactor as never)
-    const effectiveBakedLight = buildShapedBakedLightNode(
-      bakedLight
-      .add(bakedFlicker as never)
-      .mul(faceFactor as never),
-      SURFACE_BAKED_LIGHT_RESPONSE,
-    )
-    const baseColor = vec3((bakedMaterial.userData.bakedLightBaseColorNode ?? materialColor) as never)
-    const baseEmissive = vec3(
-      (bakedMaterial.userData.bakedLightBaseEmissiveNode
-        ?? vec3(
-          bakedMaterial.emissive?.r ?? 0,
-          bakedMaterial.emissive?.g ?? 0,
-          bakedMaterial.emissive?.b ?? 0,
-        )) as never,
-    )
-    const albedoBoost = vec3(1, 1, 1).add(
-      effectiveBakedLight.mul(float(SURFACE_BAKED_LIGHT_RESPONSE.albedoBoost)) as never,
-    )
-    const litAlbedoEmissive = baseColor.mul(
-      effectiveBakedLight.mul(float(SURFACE_BAKED_ALBEDO_EMISSIVE_SCALE)) as never,
-    )
+          ))
+        : float(1)
+      const directionalFaceFactor = options.useDirectionAttribute
+        ? buildDirectionalFaceWeightNode(directionalFaceAlignment, 0.18, 0)
+        : float(1)
+      const topSurfaceFactor = options.useTopSurfaceMask
+        ? saturate(normalWorld.y)
+        : float(1)
+      const faceFactor = directionalFaceFactor.mul(topSurfaceFactor as never)
+      const effectiveBakedLight = buildShapedBakedLightNode(
+        bakedLight
+        .add(bakedFlicker as never)
+        .mul(faceFactor as never),
+        SURFACE_BAKED_LIGHT_RESPONSE,
+      )
+      const baseColor = vec3((bakedMaterial.userData.bakedLightBaseColorNode ?? materialColor) as never)
+      const baseEmissive = vec3(
+        (bakedMaterial.userData.bakedLightBaseEmissiveNode
+          ?? vec3(
+            bakedMaterial.emissive?.r ?? 0,
+            bakedMaterial.emissive?.g ?? 0,
+            bakedMaterial.emissive?.b ?? 0,
+          )) as never,
+      )
+      const albedoBoost = vec3(1, 1, 1).add(
+        effectiveBakedLight.mul(float(SURFACE_BAKED_LIGHT_RESPONSE.albedoBoost)) as never,
+      )
+      const litAlbedoEmissive = baseColor.mul(
+        effectiveBakedLight.mul(float(SURFACE_BAKED_ALBEDO_EMISSIVE_SCALE)) as never,
+      )
 
-    bakedMaterial.colorNode = baseColor.mul(albedoBoost as never)
-    bakedMaterial.emissiveNode = baseEmissive.add(
-      litAlbedoEmissive.add(
-        effectiveBakedLight.mul(float(SURFACE_BAKED_LIGHT_RESPONSE.emissiveBoost)) as never,
-      ) as never,
-    )
+      bakedMaterial.colorNode = baseColor.mul(albedoBoost as never)
+      bakedMaterial.emissiveNode = baseEmissive.add(
+        litAlbedoEmissive.add(
+          effectiveBakedLight.mul(float(SURFACE_BAKED_LIGHT_RESPONSE.emissiveBoost)) as never,
+        ) as never,
+      )
+    }
   } else if (Object.prototype.hasOwnProperty.call(bakedMaterial.userData, 'bakedLightBaseColorNode')) {
     bakedMaterial.colorNode = bakedMaterial.userData.bakedLightBaseColorNode
     bakedMaterial.emissiveNode = bakedMaterial.userData.bakedLightBaseEmissiveNode ?? null
@@ -259,7 +263,7 @@ export function applyPropBakedLightToMaterial(
   const hasPropLighting = hasFieldLighting || Boolean(probe)
   const nextSignature = hasPropLighting
     ? [
-      hasFieldLighting ? lightField?.lightFieldTexture?.uuid ?? 'field' : 'no-field',
+      hasFieldLighting ? buildBakedLightFieldPipelineSignature(lightField) : 'no-field',
       PROP_BAKED_UNIFORM_SIGNATURE_VERSION,
       isBillboardSurface ? BILLBOARD_BAKED_SIGNATURE_VERSION : PROP_BAKED_SIGNATURE_VERSION,
     ].join(':')
@@ -300,7 +304,12 @@ export function applyPropBakedLightToMaterial(
           buildSmoothedBakedLightNode(lightField as BakedFloorLightField),
           responseProfile,
         )
-        : probeHeightLight
+        : vec3(0, 0, 0)
+      const combinedProbeLight = mix(
+        sampledFieldLight,
+        sampledFieldLight.add(probeHeightLight as never),
+        float(probeUniformState.probeEnabled),
+      )
       const directionalFaceAlignment = saturate(dot(
         normalWorld,
         vec3(probeUniformState.lightDirection as never),
@@ -315,7 +324,7 @@ export function applyPropBakedLightToMaterial(
           ),
           float(probeUniformState.probeEnabled),
         )
-      const propLight = sampledFieldLight.mul(propLightFactor as never)
+      const propLight = combinedProbeLight.mul(propLightFactor as never)
       const albedoBoost = vec3(1, 1, 1).add(
         propLight.mul(float(
           isBillboardSurface
@@ -409,10 +418,14 @@ function buildSmoothedBakedFlickerNode(
 }
 
 function buildSmoothedBakedTextureSampleNode(
-  lightTexture: THREE.DataTexture | null,
+  lightTexture: BakedLightFieldTexture | null,
   lightField: BakedFloorLightField,
   sampleOffsetWorldXZ: ShaderNodeLike | null = null,
 ) {
+  if (lightField.gpuChunks && lightTexture instanceof THREE.DataArrayTexture) {
+    return buildSmoothedChunkedBakedTextureSampleNode(lightTexture, lightField, sampleOffsetWorldXZ)
+  }
+
   if (!lightTexture || !lightField.bounds) {
     return vec4(0, 0, 0, 0)
   }
@@ -443,6 +456,80 @@ function buildSmoothedBakedTextureSampleNode(
       sampleCornerPosition.y.add(float(0.5)).div(float(textureHeight)),
     )
     return texture(lightTexture, sampleUv)
+  }
+
+  const c00 = sampleCorner(0, 0)
+  const c10 = sampleCorner(1, 0)
+  const c01 = sampleCorner(0, 1)
+  const c11 = sampleCorner(1, 1)
+  const horizontalBottom = mix(c00, c10, blend.x)
+  const horizontalTop = mix(c01, c11, blend.x)
+  return vec4(mix(horizontalBottom, horizontalTop, blend.y) as never)
+}
+
+function buildSmoothedChunkedBakedTextureSampleNode(
+  lightTexture: THREE.DataArrayTexture,
+  lightField: BakedFloorLightField,
+  sampleOffsetWorldXZ: ShaderNodeLike | null = null,
+) {
+  const gpuChunks = lightField.gpuChunks
+  if (!gpuChunks?.lookupTexture || !gpuChunks.lookupBounds) {
+    return vec4(0, 0, 0, 0)
+  }
+
+  const lookupTexture = gpuChunks.lookupTexture
+  const layerTextureWidth = Math.max(gpuChunks.textureSize.width, 1)
+  const layerTextureHeight = Math.max(gpuChunks.textureSize.height, 1)
+  const widthCells = Math.max(gpuChunks.gridSize.widthCells, 1)
+  const heightCells = Math.max(gpuChunks.gridSize.heightCells, 1)
+  const lookupWidth = Math.max(gpuChunks.lookupSize.width, 1)
+  const lookupHeight = Math.max(gpuChunks.lookupSize.height, 1)
+  const lookupWidthSpan = Math.max(lookupWidth - 1, 1)
+  const lookupHeightSpan = Math.max(lookupHeight - 1, 1)
+  const minChunk = vec2(gpuChunks.lookupBounds.minChunkX, gpuChunks.lookupBounds.minChunkZ)
+  const sampleWorldXZ = sampleOffsetWorldXZ
+    ? positionWorld.xz.add(sampleOffsetWorldXZ)
+    : positionWorld.xz
+  const sampleGridPosition = sampleWorldXZ.div(float(GRID_SIZE))
+  const sampleChunkCoordinate = floor(sampleGridPosition.div(float(lightField.chunkSize)))
+  const localGridPosition = sampleGridPosition.sub(sampleChunkCoordinate.mul(float(lightField.chunkSize)))
+  const clampedGridPosition = vec2(
+    saturate(localGridPosition.x.div(float(widthCells))).mul(float(widthCells)),
+    saturate(localGridPosition.y.div(float(heightCells))).mul(float(heightCells)),
+  )
+  const cellOrigin = floor(clampedGridPosition)
+  const blend = fract(clampedGridPosition)
+  const worldCellOrigin = sampleChunkCoordinate.mul(float(lightField.chunkSize)).add(cellOrigin)
+
+  const sampleCorner = (offsetX: number, offsetY: number) => {
+    const worldCornerGridPosition = vec2(
+      worldCellOrigin.x.add(float(offsetX)),
+      worldCellOrigin.y.add(float(offsetY)),
+    )
+    const cornerChunkCoordinate = floor(worldCornerGridPosition.div(float(lightField.chunkSize)))
+    const clampedChunkOffset = vec2(
+      saturate(cornerChunkCoordinate.x.sub(minChunk.x).div(float(lookupWidthSpan))).mul(float(lookupWidthSpan)),
+      saturate(cornerChunkCoordinate.y.sub(minChunk.y).div(float(lookupHeightSpan))).mul(float(lookupHeightSpan)),
+    )
+    const lookupUv = vec2(
+      clampedChunkOffset.x.add(float(0.5)).div(float(lookupWidth)),
+      clampedChunkOffset.y.add(float(0.5)).div(float(lookupHeight)),
+    )
+    const layerValue = texture(lookupTexture, lookupUv).r
+    const layerMask = saturate(layerValue)
+    const layerIndex = max(layerValue.sub(float(1)), float(0))
+    const clampedChunkCoordinate = minChunk.add(clampedChunkOffset)
+    const localCornerGridPosition = worldCornerGridPosition.sub(clampedChunkCoordinate.mul(float(lightField.chunkSize)))
+    const sampleCornerPosition = vec2(
+      saturate(localCornerGridPosition.x.div(float(widthCells))).mul(float(widthCells)),
+      saturate(localCornerGridPosition.y.div(float(heightCells))).mul(float(heightCells)),
+    )
+    const sampleUv = vec2(
+      sampleCornerPosition.x.add(float(0.5)).div(float(layerTextureWidth)),
+      sampleCornerPosition.y.add(float(0.5)).div(float(layerTextureHeight)),
+    )
+    const textureNode = texture(lightTexture) as ShaderNodeLike
+    return textureNode.sample(sampleUv).depth(layerIndex).mul(layerMask)
   }
 
   const c00 = sampleCorner(0, 0)

@@ -100,7 +100,7 @@ export function ProjectedGroundDecal({
     lastPositionRef.current.copy(worldPosition)
     lastQuaternionRef.current.copy(worldQuaternion)
     lastReceiverVersionRef.current = receiverVersion
-  })
+  }, -1)
 
   return (
     <group ref={anchorRef}>

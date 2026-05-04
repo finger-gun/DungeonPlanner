@@ -1,12 +1,25 @@
 import * as THREE from 'three'
 
+const webGpuGeometryTemplateCache = new WeakMap<THREE.BufferGeometry, THREE.BufferGeometry>()
+
 export function createWebGpuCompatibleGeometry(
   sourceGeometry: THREE.BufferGeometry,
   transform: THREE.Matrix4,
 ) {
+  const geometry = getWebGpuCompatibleGeometryTemplate(sourceGeometry).clone()
+  geometry.applyMatrix4(transform)
+  return geometry
+}
+
+export function getWebGpuCompatibleGeometryTemplate(sourceGeometry: THREE.BufferGeometry) {
+  const cached = webGpuGeometryTemplateCache.get(sourceGeometry)
+  if (cached) {
+    return cached
+  }
+
   const geometry = sourceGeometry.clone()
   normalizeGeometryAttributesForWebGpu(geometry)
-  geometry.applyMatrix4(transform)
+  webGpuGeometryTemplateCache.set(sourceGeometry, geometry)
   return geometry
 }
 
