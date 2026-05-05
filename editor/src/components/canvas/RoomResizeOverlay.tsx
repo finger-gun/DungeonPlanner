@@ -132,6 +132,7 @@ export function RoomResizeOverlay() {
     gl.domElement.style.cursor = ''
     setRoomResizeHandleActive(false)
     // Ensure controls are re-enabled on unmount
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const orbitControls = controls as any
     if (orbitControls && 'enabled' in orbitControls) {
       orbitControls.enabled = true
@@ -151,6 +152,7 @@ export function RoomResizeOverlay() {
     setRoomResizeHandleActive(false)
     
     // Ensure controls are re-enabled when overlay is hidden
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const orbitControls = controls as any
     if (orbitControls && 'enabled' in orbitControls) {
       orbitControls.enabled = true
