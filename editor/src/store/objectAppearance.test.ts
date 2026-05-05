@@ -2,8 +2,10 @@ import { describe, expect, it } from 'vitest'
 import {
   MAX_OBJECT_INSTANCE_SCALE,
   MIN_OBJECT_INSTANCE_SCALE,
+  getObjectAtlasColorVariant,
   getObjectInstanceScale,
   getObjectTintColor,
+  withObjectAtlasColorVariant,
   withObjectInstanceScale,
   withObjectTintColor,
 } from './objectAppearance'
@@ -30,5 +32,17 @@ describe('objectAppearance', () => {
     expect(withObjectTintColor({ foo: 'bar', tintColor: '#aabbcc' }, null)).toEqual({ foo: 'bar' })
     expect(getObjectTintColor({ tintColor: '#aabbcc' })).toBe('#aabbcc')
     expect(getObjectTintColor({ tintColor: 'not-a-color' })).toBeNull()
+  })
+
+  it('stores and clears atlas color variant ids', () => {
+    expect(withObjectAtlasColorVariant({ foo: 'bar' }, 'atlasColorVariant', '  moss-green  ')).toEqual({
+      foo: 'bar',
+      atlasColorVariant: 'moss-green',
+    })
+    expect(withObjectAtlasColorVariant({ foo: 'bar', atlasColorVariant: 'moss-green' }, 'atlasColorVariant', null)).toEqual({
+      foo: 'bar',
+    })
+    expect(getObjectAtlasColorVariant({ atlasColorVariant: 'moss-green' }, 'atlasColorVariant')).toBe('moss-green')
+    expect(getObjectAtlasColorVariant({ atlasColorVariant: '   ' }, 'atlasColorVariant')).toBeNull()
   })
 })

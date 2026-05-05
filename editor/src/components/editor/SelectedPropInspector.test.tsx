@@ -4,10 +4,15 @@ import type { DungeonObjectRecord } from '../../store/useDungeonStore'
 import { SelectedPropInspector } from './SelectedPropInspector'
 
 const setObjectPropsMock = vi.hoisted(() => vi.fn())
+const setObjectLightPreviewMock = vi.hoisted(() => vi.fn())
 
 vi.mock('../../store/useDungeonStore', () => ({
-  useDungeonStore: (selector: (state: { setObjectProps: typeof setObjectPropsMock }) => unknown) => selector({
+  useDungeonStore: (selector: (state: {
+    setObjectProps: typeof setObjectPropsMock
+    setObjectLightPreview: typeof setObjectLightPreviewMock
+  }) => unknown) => selector({
     setObjectProps: setObjectPropsMock,
+    setObjectLightPreview: setObjectLightPreviewMock,
   }),
 }))
 
@@ -33,6 +38,7 @@ describe('SelectedPropInspector appearance controls', () => {
 
   beforeEach(() => {
     setObjectPropsMock.mockReset()
+    setObjectLightPreviewMock.mockReset()
   })
 
   it('increments the selected object size', () => {
@@ -72,6 +78,37 @@ describe('SelectedPropInspector appearance controls', () => {
     expect(setObjectPropsMock).toHaveBeenCalledWith('prop-1', { tintColor: '#112233' })
 
     fireEvent.click(screen.getByRole('button', { name: 'Clear' }))
+    expect(setObjectPropsMock).toHaveBeenCalledWith('prop-1', {})
+  })
+
+  it('shows atlas color variant controls for opted-in props', () => {
+    render(
+      <SelectedPropInspector
+        object={createObject({ props: { bannerColor: 'blue' } })}
+        asset={{
+          id: 'prop-asset',
+          slug: 'prop-asset',
+          name: 'Banner',
+          category: 'prop',
+          Component: (() => null),
+          metadata: {
+            atlasColorVariants: {
+              propKey: 'bannerColor',
+              variants: [
+                { id: 'red', label: 'Red', swatchColor: '#ef4444', uvOffset: [0, 0] },
+                { id: 'blue', label: 'Blue', swatchColor: '#3b82f6', uvOffset: [0.5, 0] },
+              ],
+            },
+          },
+        }}
+        onDelete={() => {}}
+      />,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'Red' }))
+    expect(setObjectPropsMock).toHaveBeenCalledWith('prop-1', { bannerColor: 'red' })
+
+    fireEvent.click(screen.getAllByRole('button', { name: 'Clear' })[1]!)
     expect(setObjectPropsMock).toHaveBeenCalledWith('prop-1', {})
   })
 })

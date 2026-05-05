@@ -1,13 +1,27 @@
 import { Html } from '@react-three/drei'
 import { useThree } from '@react-three/fiber'
 import { Maximize2, Move, RotateCw, Trash2 } from 'lucide-react'
-import { useCallback, useEffect, useMemo, useRef, type PointerEvent as ReactPointerEvent } from 'react'
-import * as THREE from 'three'
 import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type PointerEvent as ReactPointerEvent,
+} from 'react'
+import * as THREE from 'three'
+import { getContentPackAssetById } from '../../content-packs/registry'
+import type { AtlasColorVariantDefinition } from '../../content-packs/types'
+import { getDungeonAtlasSwatchColor } from '../../content-packs/dungeon/shared/dungeonColorAtlas'
+import { hasAtlasColorVariants } from '../../rendering/atlasColorVariants'
+import {
+  getObjectAtlasColorVariant,
   getObjectInstanceScale,
+  withObjectAtlasColorVariant,
   withObjectInstanceScale,
 } from '../../store/objectAppearance'
 import { useDungeonStore } from '../../store/useDungeonStore'
+import { AtlasColorVariantPicker } from '../editor/AtlasColorVariantPicker'
 import { getRegisteredObject, useObjectRegistryVersion } from './objectRegistry'
 
 const UNDER_MODEL_OFFSET = 0.28
@@ -47,6 +61,7 @@ export function SelectionContextualUi() {
   const transformDragStateRef = useRef<TransformDragState | null>(null)
   const transformCleanupRef = useRef<(() => void) | null>(null)
   const moveDragCleanupRef = useRef<(() => void) | null>(null)
+  const [isColorPickerOpen, setIsColorPickerOpen] = useState(false)
 
   const anchorPosition = useMemo(() => {
     if (!selection || !selectedObject) {
@@ -60,6 +75,23 @@ export function SelectionContextualUi() {
       objectRegistryVersion,
     )
   }, [objectRegistryVersion, selectedObject, selection])
+  const selectedAsset = useMemo(
+    () => (selectedObject?.assetId ? getContentPackAssetById(selectedObject.assetId) : null),
+    [selectedObject?.assetId],
+  )
+  const atlasColorVariants = hasAtlasColorVariants(selectedAsset?.metadata)
+    ? selectedAsset.metadata.atlasColorVariants
+    : null
+  const currentAtlasVariant = atlasColorVariants && selectedObject
+    ? (
+      getObjectAtlasColorVariant(selectedObject.props, atlasColorVariants.propKey)
+      ?? atlasColorVariants.defaultVariantId
+      ?? null
+    )
+    : null
+  const currentAtlasVariantDefinition = atlasColorVariants?.variants.find(
+    (variant) => variant.id === currentAtlasVariant,
+  ) ?? null
 
   const stopTransformDrag = useCallback((commit: boolean) => {
     const dragState = transformDragStateRef.current
@@ -133,6 +165,10 @@ export function SelectionContextualUi() {
     moveDragCleanupRef.current = null
     stopTransformDrag(false)
   }, [stopTransformDrag])
+
+  useEffect(() => {
+    setIsColorPickerOpen(false)
+  }, [selection, selectedObject?.assetId])
 
   const startTransformDrag = useCallback((
     kind: TransformDragState['kind'],
@@ -311,6 +347,32 @@ export function SelectionContextualUi() {
     invalidate()
   }, [invalidate, removeSelectedObject])
 
+  const updateAtlasVariant = useCallback((variantId: string | null) => {
+    if (!selectedObject || !atlasColorVariants) {
+      return
+    }
+
+    setObjectProps(
+      selectedObject.id,
+      withObjectAtlasColorVariant(selectedObject.props, atlasColorVariants.propKey, variantId),
+    )
+    invalidate()
+  }, [atlasColorVariants, invalidate, selectedObject, setObjectProps])
+
+  const getVariantColor = useCallback((variant: AtlasColorVariantDefinition) => {
+    if (variant.swatchColor) {
+      return variant.swatchColor
+    }
+    if (variant.cell && selectedAsset?.id.startsWith('dungeon.')) {
+      return getDungeonAtlasSwatchColor(variant.cell)
+    }
+    return '#9ca3af'
+  }, [selectedAsset?.id])
+
+  const currentColor = currentAtlasVariantDefinition
+    ? getVariantColor(currentAtlasVariantDefinition)
+    : '#9ca3af'
+
   if (
     tool !== 'select' ||
     !selection ||
@@ -332,42 +394,84 @@ export function SelectionContextualUi() {
       zIndexRange={[120, 0]}
     >
       <div
-        className="pointer-events-auto -translate-x-1/2 translate-y-3 flex items-center gap-2 rounded-full border border-stone-700/80 bg-stone-950/90 px-2 py-2 shadow-lg shadow-black/40 backdrop-blur"
+        className="pointer-events-auto -translate-x-1/2 translate-y-3 flex flex-col items-center gap-2"
         data-testid="selection-contextual-ui"
       >
-        <button
-          type="button"
-          aria-label="Scale selected object"
-          className="rounded-full border border-stone-700 bg-stone-900/90 p-2 text-stone-100 transition hover:border-sky-400/70 hover:text-sky-200"
-          onPointerDown={handleScalePointerDown}
-        >
-          <Maximize2 size={14} strokeWidth={1.8} />
-        </button>
-        <button
-          type="button"
-          aria-label="Rotate selected object"
-          className="rounded-full border border-stone-700 bg-stone-900/90 p-2 text-stone-100 transition hover:border-violet-400/70 hover:text-violet-200"
-          onPointerDown={handleRotatePointerDown}
-        >
-          <RotateCw size={14} strokeWidth={1.8} />
-        </button>
-        <button
-          type="button"
-          aria-label="Move selected object"
-          className="rounded-full border border-stone-700 bg-stone-900/90 p-2 text-stone-100 transition hover:border-amber-400/70 hover:text-amber-200 disabled:cursor-not-allowed disabled:opacity-45"
-          onPointerDown={handleMovePointerDown}
-          disabled={!selectedObject.assetId}
-        >
-          <Move size={14} strokeWidth={1.8} />
-        </button>
-        <button
-          type="button"
-          aria-label="Delete selected object"
-          className="rounded-full border border-stone-700 bg-stone-900/90 p-2 text-stone-100 transition hover:border-rose-400/70 hover:text-rose-200"
-          onPointerDown={handleDeletePointerDown}
-        >
-          <Trash2 size={14} strokeWidth={1.8} />
-        </button>
+        <div className="relative flex items-center gap-2 rounded-full border border-stone-700/80 bg-stone-950/90 px-2 py-2 shadow-lg shadow-black/40 backdrop-blur">
+          <button
+            type="button"
+            aria-label="Scale selected object"
+            className="rounded-full border border-stone-700 bg-stone-900/90 p-2 text-stone-100 transition hover:border-sky-400/70 hover:text-sky-200"
+            onPointerDown={handleScalePointerDown}
+          >
+            <Maximize2 size={14} strokeWidth={1.8} />
+          </button>
+          <button
+            type="button"
+            aria-label="Rotate selected object"
+            className="rounded-full border border-stone-700 bg-stone-900/90 p-2 text-stone-100 transition hover:border-violet-400/70 hover:text-violet-200"
+            onPointerDown={handleRotatePointerDown}
+          >
+            <RotateCw size={14} strokeWidth={1.8} />
+          </button>
+          <button
+            type="button"
+            aria-label="Move selected object"
+            className="rounded-full border border-stone-700 bg-stone-900/90 p-2 text-stone-100 transition hover:border-amber-400/70 hover:text-amber-200 disabled:cursor-not-allowed disabled:opacity-45"
+            onPointerDown={handleMovePointerDown}
+            disabled={!selectedObject.assetId}
+          >
+            <Move size={14} strokeWidth={1.8} />
+          </button>
+          {atlasColorVariants ? (
+            <div className="relative">
+              <button
+                type="button"
+                aria-label="Open color variants"
+                title="Open color variants"
+                className="flex h-[34px] w-[34px] items-center justify-center rounded-full border border-stone-700 bg-stone-900/90 transition hover:border-amber-400/70"
+                onClick={(event) => {
+                  event.preventDefault()
+                  event.stopPropagation()
+                  setIsColorPickerOpen((open) => !open)
+                }}
+              >
+                <span
+                  aria-hidden="true"
+                  className="h-4.5 w-4.5 rounded-full border border-black/20"
+                  style={{ backgroundColor: currentColor }}
+                />
+              </button>
+              {isColorPickerOpen ? (
+                <div className="absolute right-0 top-[calc(100%+6px)] z-10 rounded-[1.75rem] border border-stone-700/80 bg-stone-950/95 p-1.5 shadow-xl shadow-black/40 backdrop-blur">
+                  <AtlasColorVariantPicker
+                    config={atlasColorVariants}
+                    currentVariantId={currentAtlasVariant}
+                    onSelect={(variantId) => {
+                      updateAtlasVariant(variantId)
+                      setIsColorPickerOpen(false)
+                    }}
+                    onClear={currentAtlasVariant ? () => {
+                      updateAtlasVariant(null)
+                      setIsColorPickerOpen(false)
+                    } : undefined}
+                    mode="grid"
+                    getVariantColor={getVariantColor}
+                    className="overflow-hidden"
+                  />
+                </div>
+              ) : null}
+            </div>
+          ) : null}
+          <button
+            type="button"
+            aria-label="Delete selected object"
+            className="rounded-full border border-stone-700 bg-stone-900/90 p-2 text-stone-100 transition hover:border-rose-400/70 hover:text-rose-200"
+            onPointerDown={handleDeletePointerDown}
+          >
+            <Trash2 size={14} strokeWidth={1.8} />
+          </button>
+        </div>
       </div>
     </Html>
   )

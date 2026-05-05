@@ -49,6 +49,28 @@ export function withObjectTintColor(props: Record<string, unknown>, color: strin
   return nextProps
 }
 
+export function getObjectAtlasColorVariant(props: Record<string, unknown>, propKey: string) {
+  const raw = props[propKey]
+  return typeof raw === 'string' && raw.trim().length > 0 ? raw.trim() : null
+}
+
+export function withObjectAtlasColorVariant(
+  props: Record<string, unknown>,
+  propKey: string,
+  variantId: string | null,
+) {
+  const nextProps = { ...props }
+  const normalizedVariantId = normalizeAtlasColorVariantId(variantId)
+
+  if (normalizedVariantId === null) {
+    delete nextProps[propKey]
+    return nextProps
+  }
+
+  nextProps[propKey] = normalizedVariantId
+  return nextProps
+}
+
 function clampObjectInstanceScale(scale: number) {
   return Math.round(Math.min(MAX_OBJECT_INSTANCE_SCALE, Math.max(MIN_OBJECT_INSTANCE_SCALE, scale)) * 100) / 100
 }
@@ -60,4 +82,13 @@ function normalizeTintColor(color: string | null) {
 
   const normalized = color.trim()
   return HEX_COLOR_PATTERN.test(normalized) ? normalized.toLowerCase() : null
+}
+
+function normalizeAtlasColorVariantId(variantId: string | null) {
+  if (typeof variantId !== 'string') {
+    return null
+  }
+
+  const normalized = variantId.trim()
+  return normalized.length > 0 ? normalized : null
 }

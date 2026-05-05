@@ -226,7 +226,7 @@ describe('serializeDungeon / deserializeDungeon roundtrip', () => {
       assetId: 'dungeon.props_torch',
       position: [1, 0, 1],
       rotation: [0, 0, 0],
-      props: {},
+      props: { atlasColorVariant: 'moss-green' },
       cell: [0, 0],
       cellKey: '0:0:floor',
       layerId: 'default',
@@ -235,7 +235,10 @@ describe('serializeDungeon / deserializeDungeon roundtrip', () => {
     const result = deserializeDungeon(serializeDungeon(state))
     expect(result).not.toBeNull()
     const objects = result!.placedObjects ?? result!.floors?.['floor-1']?.snapshot?.placedObjects
-    expect(objects?.['obj-1']).toMatchObject({ assetId: 'dungeon.props_torch' })
+    expect(objects?.['obj-1']).toMatchObject({
+      assetId: 'dungeon.props_torch',
+      props: { atlasColorVariant: 'moss-green' },
+    })
   })
 
   it('preserves player objects', () => {
