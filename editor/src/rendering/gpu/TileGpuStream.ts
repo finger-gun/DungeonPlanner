@@ -12,7 +12,7 @@ import {
 import type { BatchDescriptor, ResolvedStaticTileEntry } from '../../components/canvas/batchDescriptors'
 import { getBelowGroundClipMinY, applyBuildAnimationToMaterial, applyBelowGroundClipToMaterial } from '../../components/canvas/buildAnimationMaterial'
 import { applyBakedLightToMaterial } from '../../components/canvas/bakedLightMaterial'
-import { applyFogOfWarToMaterial } from '../../components/canvas/fogOfWar'
+import { applyFogOfWarToMaterial } from '../../components/canvas/fogOfWarShared'
 import { requestContinuousRender, releaseContinuousRender } from '../renderActivity'
 import { recordBuildPerfEvent, traceBuildPerf } from '../../performance/runtimeBuildTrace'
 import { TileGpuUploadScheduler, type TileUploadBudget, type TileUploadBudgetResult } from './TileGpuUploadScheduler'

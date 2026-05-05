@@ -1,7 +1,8 @@
 import { getContentPackAssetById } from '../../content-packs/registry'
 import { useDungeonStore } from '../../store/useDungeonStore'
 import { SelectedPropInspector } from './SelectedPropInspector'
-import { getSelectedWallAsset, SelectedWallInspector } from './SelectedWallInspector'
+import { SelectedWallInspector } from './SelectedWallInspector'
+import { getSelectedWallAsset } from './SelectedWallInspectorShared'
 
 const EMPTY_WALL_PROPS: Record<string, unknown> = {}
 

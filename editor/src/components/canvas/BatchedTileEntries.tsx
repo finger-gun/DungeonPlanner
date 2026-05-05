@@ -3,16 +3,16 @@ import { useFrame } from '@react-three/fiber'
 import * as THREE from 'three'
 import { ContentPackInstance } from './ContentPackInstance'
 import { useGLTF } from '../../rendering/useGLTF'
-import { useFogOfWarRuntime } from './fogOfWar'
+import { useFogOfWarRuntime } from './fogOfWarHooks'
 import { useDungeonStore } from '../../store/useDungeonStore'
+import { buildChunkEntrySignature } from './BatchedTileEntriesShared'
 import { getBuildYOffsetForAnimation, type BuildAnimationState } from '../../store/buildAnimations'
 import {
   buildBatchDescriptors,
-  buildBakedLightFieldPipelineSignature,
   getChunkKeyForStaticTileEntry,
 } from './batchDescriptors'
 import { recordBuildPerfEvent } from '../../performance/runtimeBuildTrace'
-import { useTileGpuStream } from './TileGpuStreamContext'
+import { useTileGpuStream } from './TileGpuStreamHooks'
 import type { StaticTileEntry } from './tileEntries'
 
 export type { StaticTileEntry } from './tileEntries'
@@ -339,23 +339,4 @@ function partitionTileEntriesByChunk(entries: readonly StaticTileEntry[]): Batch
         signature: buildChunkEntrySignature(sortedEntries),
       }
     })
-}
-
-export function buildChunkEntrySignature(entries: readonly StaticTileEntry[]) {
-  return entries.map((entry) => [
-    entry.key,
-    entry.assetId,
-    entry.position.join(','),
-    entry.rotation.join(','),
-    entry.variant,
-    entry.variantKey ?? '',
-    entry.visibility,
-    entry.buildAnimationStart ?? '',
-    entry.buildAnimationDelay ?? '',
-    entry.fogCell?.join(',') ?? '',
-    buildBakedLightFieldPipelineSignature(entry.bakedLightField),
-    entry.bakedLightDirection?.join(',') ?? '',
-    entry.bakedLightDirectionSecondary?.join(',') ?? '',
-    JSON.stringify(entry.objectProps ?? null),
-  ].join('|')).join(';')
 }

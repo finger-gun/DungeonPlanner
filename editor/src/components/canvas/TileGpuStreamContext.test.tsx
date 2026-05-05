@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { getTileStreamUploadBudget } from './TileGpuStreamContext'
+import { getTileStreamUploadBudget } from './TileGpuStreamContextShared'
 
 describe('getTileStreamUploadBudget', () => {
   it('uses a smaller upload budget while editing interactions are active', () => {

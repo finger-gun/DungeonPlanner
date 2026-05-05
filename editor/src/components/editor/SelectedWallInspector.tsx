@@ -1,6 +1,4 @@
-import { getContentPackAssetById } from '../../content-packs/registry'
 import type { ContentPackAsset } from '../../content-packs/types'
-import { getInheritedWallAssetIdForWallKey } from '../../store/wallSegments'
 import { useDungeonStore } from '../../store/useDungeonStore'
 import { CompactPillButton } from './CompactPillButton'
 
@@ -74,38 +72,4 @@ function getStateToggleLabel(nextStateProps: Record<string, unknown>) {
   }
 
   return 'Toggle State'
-}
-
-export function getSelectedWallAssetId(
-  selection: string | null,
-  state: Pick<
-    ReturnType<typeof useDungeonStore.getState>,
-    'placedObjects' | 'wallOpenings' | 'wallSurfaceAssetIds' | 'paintedCells' | 'rooms' | 'selectedAssetIds'
-  >,
-) {
-  if (!selection || state.placedObjects[selection] || state.wallOpenings[selection]) {
-    return null
-  }
-
-  return (
-    state.wallSurfaceAssetIds[selection]
-    ?? getInheritedWallAssetId(selection, state.paintedCells, state.rooms, state.selectedAssetIds.wall)
-  )
-}
-
-function getInheritedWallAssetId(
-  wallKey: string,
-  paintedCells: ReturnType<typeof useDungeonStore.getState>['paintedCells'],
-  rooms: ReturnType<typeof useDungeonStore.getState>['rooms'],
-  globalWallAssetId: string | null,
-) {
-  return getInheritedWallAssetIdForWallKey(wallKey, paintedCells, rooms, globalWallAssetId)
-}
-
-export function getSelectedWallAsset(selection: string | null, state: Pick<
-  ReturnType<typeof useDungeonStore.getState>,
-  'placedObjects' | 'wallOpenings' | 'wallSurfaceAssetIds' | 'paintedCells' | 'rooms' | 'selectedAssetIds'
->) {
-  const assetId = getSelectedWallAssetId(selection, state)
-  return assetId ? getContentPackAssetById(assetId) : null
 }

@@ -19,15 +19,18 @@ import {
 } from 'three/tsl'
 import { useDungeonStore } from '../../../store/useDungeonStore'
 import type { PlayVisibility } from '../playVisibility'
-import { shouldRenderLineOfSightLight } from '../losRendering'
 import { FIRE_LAYERS, type ParticleLayerDefinition } from './presets'
 import { createParticleSeeds } from './ObjectEffect'
-import { getCameraFrustum, hasCameraChanged } from '../propLightPool'
-import type { RegisteredEffectSource } from '../objectSourceRegistry'
+import { getCameraFrustum, hasCameraChanged } from '../propLightPoolShared'
 import { useRegisteredEffectSources } from '../objectSourceRegistry'
 import { releaseContinuousRender, requestContinuousRender } from '../../../rendering/renderActivity'
 import { hasActiveBuildAnimations, useBuildAnimationVersion } from '../../../store/buildAnimations'
 import { shouldRunContinuousFireParticles } from '../effectAnimationMode'
+import {
+  MAX_FIRE_EMITTERS,
+  buildActiveFireEmitters,
+  type ActiveFireEmitter,
+} from './fireParticleSystemShared'
 
 /**
  * Maximum number of simultaneously visible fire emitters.
@@ -43,20 +46,6 @@ import { shouldRunContinuousFireParticles } from '../effectAnimationMode'
  * per-particle seed buffers and per-emitter data, eliminating CPU sin/cos/lerp
  * work and JS→GPU matrix uploads.
  */
-const MAX_FIRE_EMITTERS = 256
-const FIRE_EMITTER_FRUSTUM_MARGIN = 1.5
-const frustumSphereScratch = new THREE.Sphere()
-
-type ActiveFireEmitter = {
-  id: string
-  worldX: number
-  worldY: number
-  worldZ: number
-  scale: number
-  intensity: number
-  color: string
-}
-
 type EmitterBuffers = {
   posScaleBuf: ReturnType<typeof instancedArray>
   intensBuf: ReturnType<typeof instancedArray>
@@ -186,59 +175,6 @@ export function FireParticleSystem({
       ))}
     </>
   )
-}
-
-export function buildActiveFireEmitters({
-  effectSources,
-  visibility,
-  useLineOfSightPostMask,
-  cameraFrustum,
-  maxEmitters = MAX_FIRE_EMITTERS,
-}: {
-  effectSources: RegisteredEffectSource[]
-  visibility: Pick<PlayVisibility, 'getObjectVisibility'>
-  useLineOfSightPostMask: boolean
-  cameraFrustum?: THREE.Frustum
-  maxEmitters?: number
-}) {
-  const result: ActiveFireEmitter[] = []
-
-  for (const source of effectSources) {
-    if (!shouldRenderLineOfSightLight(visibility.getObjectVisibility(source.object), useLineOfSightPostMask)) {
-      continue
-    }
-
-    const [px, py, pz] = source.object.position
-    const emitters = source.effect.emitters?.length ? source.effect.emitters : [{}]
-    for (let emIdx = 0; emIdx < emitters.length && result.length < maxEmitters; emIdx += 1) {
-      const em = emitters[emIdx]
-      const [ox, oy, oz] = (em.offset ?? [0, 0, 0]) as [number, number, number]
-      const worldX = px + ox
-      const worldY = py + oy
-      const worldZ = pz + oz
-      const scale = em.scale ?? 1
-
-      if (cameraFrustum) {
-        frustumSphereScratch.center.set(worldX, worldY, worldZ)
-        frustumSphereScratch.radius = scale + FIRE_EMITTER_FRUSTUM_MARGIN
-        if (!cameraFrustum.intersectsSphere(frustumSphereScratch)) {
-          continue
-        }
-      }
-
-      result.push({
-        id: `${source.object.id}:${emIdx}`,
-        worldX,
-        worldY,
-        worldZ,
-        scale,
-        intensity: em.intensity ?? 1,
-        color: em.color ?? '#ff9944',
-      })
-    }
-  }
-
-  return result
 }
 
 function areActiveEmittersEqual(left: ActiveFireEmitter[], right: ActiveFireEmitter[]) {

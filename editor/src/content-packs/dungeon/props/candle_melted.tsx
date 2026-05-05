@@ -28,14 +28,14 @@ export const dungeonCandleMeltedAsset = createGenericColorSwatch({
   getLight: createDungeonFlameLightGetter({
     defaultLit: false,
     light: {
-      intensity: 0.75,
-      distance: 4,
-      offset: [0, 0.42, 0],
+      intensity: 0.5,
+      distance: 2.5,
+      offset: [0, 0.58, 0],
     },
   }),
   getEffect: createDungeonFlameEffectGetter({
     defaultLit: false,
-    emitters: [{ offset: [0, 0.3, 0], scale: 0.35, intensity: 0.6 }],
+    emitters: [{ offset: [0, 0.35, 0], scale: 0.15, intensity: 0.5 }],
   }),
   getPlayModeNextProps: (objectProps) => {
     const lit = objectProps.lit !== false

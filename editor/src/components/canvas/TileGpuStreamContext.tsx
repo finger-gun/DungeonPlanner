@@ -1,16 +1,9 @@
-import { createContext, useContext, useEffect, useRef, useSyncExternalStore, type ReactNode } from 'react'
+import { useEffect, useRef, type ReactNode } from 'react'
 import { useFrame, useThree } from '@react-three/fiber'
-import { TileGpuStream, getTileGpuStreamMountId } from '../../rendering/gpu/TileGpuStream'
+import { TileGpuStream } from '../../rendering/gpu/TileGpuStream'
 import { useDungeonStore } from '../../store/useDungeonStore'
-import type { TileUploadBudget } from '../../rendering/gpu/TileGpuUploadScheduler'
-
-const TileGpuStreamContext = createContext<TileGpuStream | null>(null)
-
-export function getTileStreamUploadBudget(isInteractionActive: boolean): TileUploadBudget {
-  return isInteractionActive
-    ? { maxMs: 0.5, maxPages: 1 }
-    : { maxMs: 2, maxPages: 1 }
-}
+import { getTileStreamUploadBudget } from './TileGpuStreamContextShared'
+import { TileGpuStreamContext, useTileGpuStream } from './TileGpuStreamHooks'
 
 export function TileGpuStreamProvider({ children }: { children: ReactNode }) {
   const invalidate = useThree((state) => state.invalidate)
@@ -49,23 +42,8 @@ export function TileGpuStreamProvider({ children }: { children: ReactNode }) {
   )
 }
 
-export function useTileGpuStream() {
-  const stream = useContext(TileGpuStreamContext)
-  if (!stream) {
-    throw new Error('TileGpuStreamContext is missing a provider.')
-  }
-  return stream
-}
-
-export function useTileGpuStreamVersion() {
-  const stream = useTileGpuStream()
-  return useSyncExternalStore(stream.subscribe, stream.getVersion)
-}
-
 export function TileGpuStreamMount({ mountId }: { mountId: string }) {
   const stream = useTileGpuStream()
   const group = stream.getMountGroup(mountId)
   return <primitive object={group} />
 }
-
-export { getTileGpuStreamMountId }
