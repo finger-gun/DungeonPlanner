@@ -129,6 +129,7 @@ describe('content pack registry', () => {
       'dungeon.props_banners_banner_patternB_blue',
       'dungeon.props_banners_banner_patternC_blue',
       'dungeon.props_banners_banner_shield_blue',
+      'dungeon.props_banners_banner_triple_blue',
     ]) {
       const asset = getContentPackAssetById(assetId)
 
@@ -142,6 +143,55 @@ describe('content pack registry', () => {
         defaultVariantId: 'blue',
       })
       expect(asset.metadata?.atlasColorVariants?.variants).toHaveLength(31)
+    }
+  })
+
+  it('does not register redundant color sibling assets for swatch-enabled families', () => {
+    for (const assetId of [
+      'dungeon.props_banners_banner_brown',
+      'dungeon.props_banners_banner_green',
+      'dungeon.props_banners_banner_red',
+      'dungeon.props_banners_banner_white',
+      'dungeon.props_banners_banner_yellow',
+      'dungeon.props_banners_banner_patternA_brown',
+      'dungeon.props_banners_banner_patternA_green',
+      'dungeon.props_banners_banner_patternA_red',
+      'dungeon.props_banners_banner_patternA_white',
+      'dungeon.props_banners_banner_patternA_yellow',
+      'dungeon.props_banners_banner_patternB_brown',
+      'dungeon.props_banners_banner_patternB_green',
+      'dungeon.props_banners_banner_patternB_red',
+      'dungeon.props_banners_banner_patternB_white',
+      'dungeon.props_banners_banner_patternB_yellow',
+      'dungeon.props_banners_banner_patternC_brown',
+      'dungeon.props_banners_banner_patternC_green',
+      'dungeon.props_banners_banner_patternC_red',
+      'dungeon.props_banners_banner_patternC_white',
+      'dungeon.props_banners_banner_patternC_yellow',
+      'dungeon.props_banners_banner_shield_brown',
+      'dungeon.props_banners_banner_shield_green',
+      'dungeon.props_banners_banner_shield_red',
+      'dungeon.props_banners_banner_shield_white',
+      'dungeon.props_banners_banner_shield_yellow',
+      'dungeon.props_banners_banner_triple_brown',
+      'dungeon.props_banners_banner_triple_green',
+      'dungeon.props_banners_banner_triple_red',
+      'dungeon.props_banners_banner_triple_white',
+      'dungeon.props_banners_banner_triple_yellow',
+      'dungeon.props_bottle_A_green',
+      'dungeon.props_bottle_B_green',
+      'dungeon.props_bottle_A_labeled_green',
+      'dungeon.props_bottle_C_green',
+      'dungeon.props_trunk_large_B',
+      'dungeon.props_trunk_large_C',
+      'dungeon.props_trunk_medium_B',
+      'dungeon.props_trunk_medium_C',
+      'dungeon.props_trunk_small_B',
+      'dungeon.props_trunk_small_C',
+      'dungeon.props_chest_gold',
+      'dungeon.props_chest_large_gold',
+    ]) {
+      expect(getContentPackAssetById(assetId)).toBeNull()
     }
   })
 
