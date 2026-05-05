@@ -1,5 +1,5 @@
 import { Canvas, useFrame, useThree, type ThreeEvent } from '@react-three/fiber'
-import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { lazy, memo, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import * as THREE from 'three'
 import { FpsMeterNode } from './FpsCounter'
 import { Grid } from './Grid'
@@ -80,7 +80,7 @@ const ALWAYS_VISIBLE: ReturnType<typeof usePlayVisibility> = {
   playerOrigins: [],
 }
 
-export function Scene() {
+export const Scene = memo(function Scene() {
   const activeFloorId = useDungeonStore((state) => state.activeFloorId)
   const floorOrder    = useDungeonStore((state) => state.floorOrder)
   const floors        = useDungeonStore((state) => state.floors)
@@ -134,7 +134,7 @@ export function Scene() {
       </Suspense>
     </Canvas>
   )
-}
+})
 
 function useDungeonStoreHydrated() {
   const [hydrated, setHydrated] = useState(() => useDungeonStore.persist.hasHydrated())

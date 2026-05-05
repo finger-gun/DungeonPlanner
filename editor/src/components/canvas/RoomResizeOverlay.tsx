@@ -51,12 +51,13 @@ type DragState =
 
 export function RoomResizeOverlay() {
   const tool = useDungeonStore((state) => state.tool)
+  const roomPaintMode = useDungeonStore((state) => state.roomPaintMode)
   const paintedCells = useDungeonStore((state) => state.paintedCells)
   const selectedRoomId = useDungeonStore((state) => state.selectedRoomId)
   const resizeRoom = useDungeonStore((state) => state.resizeRoom)
   const resizeRoomByBoundaryRun = useDungeonStore((state) => state.resizeRoomByBoundaryRun)
   const setRoomResizeHandleActive = useDungeonStore((state) => state.setRoomResizeHandleActive)
-  const { camera, gl, invalidate } = useThree()
+  const { camera, gl, invalidate, controls } = useThree()
 
   const [dragState, setDragState] = useState<DragState | null>(null)
   const dragStateRef = useRef<DragState | null>(null)
@@ -64,6 +65,23 @@ export function RoomResizeOverlay() {
   useEffect(() => {
     dragStateRef.current = dragState
   }, [dragState])
+
+  // Lock/unlock camera controls during resize drag
+  useEffect(() => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const orbitControls = controls as any
+    if (!orbitControls || !('enabled' in orbitControls)) {
+      return
+    }
+
+    if (dragState) {
+      // Disable orbit controls when dragging
+      orbitControls.enabled = false
+    } else {
+      // Re-enable orbit controls when not dragging
+      orbitControls.enabled = true
+    }
+  }, [dragState, controls])
 
   const baseBounds = useMemo(
     () => selectedRoomId ? getRoomBounds(selectedRoomId, paintedCells) : null,
@@ -113,9 +131,14 @@ export function RoomResizeOverlay() {
   useEffect(() => () => {
     gl.domElement.style.cursor = ''
     setRoomResizeHandleActive(false)
-  }, [gl, setRoomResizeHandleActive])
+    // Ensure controls are re-enabled on unmount
+    const orbitControls = controls as any
+    if (orbitControls && 'enabled' in orbitControls) {
+      orbitControls.enabled = true
+    }
+  }, [gl, setRoomResizeHandleActive, controls])
 
-  const showOverlay = tool === 'room' && Boolean(selectedRoomId)
+  const showOverlay = tool === 'room' && roomPaintMode === 'resize' && Boolean(selectedRoomId)
 
   useEffect(() => {
     if (showOverlay) {
@@ -126,7 +149,13 @@ export function RoomResizeOverlay() {
     dragStateRef.current = null
     setDragState(null)
     setRoomResizeHandleActive(false)
-  }, [gl, setRoomResizeHandleActive, showOverlay])
+    
+    // Ensure controls are re-enabled when overlay is hidden
+    const orbitControls = controls as any
+    if (orbitControls && 'enabled' in orbitControls) {
+      orbitControls.enabled = true
+    }
+  }, [gl, setRoomResizeHandleActive, showOverlay, controls])
 
   useEffect(() => {
      if (!dragState || !selectedRoomId) {

@@ -21,8 +21,10 @@ describe('getRoomPreviewCells', () => {
       strokeCurrentCell: null,
       strokeMode: null,
       strokeStartCell: null,
+      strokePaintedCells: [],
       suppressRoomPreview: false,
       tool: 'room',
+      roomPaintMode: 'area',
     })).toEqual([[2, 3]])
   })
 
@@ -37,8 +39,10 @@ describe('getRoomPreviewCells', () => {
       strokeCurrentCell: null,
       strokeMode: null,
       strokeStartCell: null,
+      strokePaintedCells: [],
       suppressRoomPreview: true,
       tool: 'room',
+      roomPaintMode: 'area',
     })).toEqual([])
   })
 
@@ -54,8 +58,10 @@ describe('getRoomPreviewCells', () => {
       strokeCurrentCell: null,
       strokeMode: null,
       strokeStartCell: null,
+      strokePaintedCells: [],
       suppressRoomPreview: false,
       tool: 'room',
+      roomPaintMode: 'area',
     })).toEqual([[4, 4], [5, 4]])
   })
 })
