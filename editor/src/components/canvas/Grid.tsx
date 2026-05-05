@@ -153,6 +153,7 @@ export function Grid({ size = 120, playMode = false, bakedLightField = null }: G
   const setInnerWallSegments = useDungeonStore((state) => state.setInnerWallSegments)
   const removeOpening = useDungeonStore((state) => state.removeOpening)
   const roomEditMode = useDungeonStore((state) => state.roomEditMode)
+  const roomPaintMode = useDungeonStore((state) => state.roomPaintMode)
   const assetBrowser = useDungeonStore((state) => state.assetBrowser)
   const outdoorOverpaintRegenerate = useDungeonStore((state) => state.outdoorOverpaintRegenerate)
   const activeLayerId = useDungeonStore((state) => state.activeLayerId)
@@ -226,9 +227,11 @@ export function Grid({ size = 120, playMode = false, bakedLightField = null }: G
   const [hoveredRoomWallEditTarget, setHoveredRoomWallEditTarget] = useState<RoomWallEditTarget | null>(null)
   const [roomWallBrushTargets, setRoomWallBrushTargets] = useState<RoomWallEditTarget[]>([])
   const [roomWallBrushMode, setRoomWallBrushMode] = useState<'paint' | 'erase' | null>(null)
+  const [strokePaintedCells, setStrokePaintedCells] = useState<GridCell[]>([])
   const strokeModeRef = useRef<'paint' | 'erase' | null>(null)
   const strokeStartRef = useRef<GridCell | null>(null)
   const strokeCurrentRef = useRef<GridCell | null>(null)
+  const strokePaintedCellsRef = useRef<Set<string>>(new Set())
   const openPassageBrushActiveRef = useRef(false)
   const openPassageBrushWallKeysRef = useRef<string[]>([])
   const roomWallBrushActiveRef = useRef(false)
@@ -576,6 +579,8 @@ export function Grid({ size = 120, playMode = false, bakedLightField = null }: G
 
   const cancelRoomStrokeStream = useCallback(() => {
     updateStrokeState(null, null, null)
+    setStrokePaintedCells([])
+    strokePaintedCellsRef.current.clear()
     setLatchedRoomPreview(null)
     const transactionId = roomStreamTransactionIdRef.current
     if (transactionId) {
@@ -774,8 +779,10 @@ export function Grid({ size = 120, playMode = false, bakedLightField = null }: G
       strokeCurrentCell,
       strokeMode,
       strokeStartCell,
+      strokePaintedCells,
       suppressRoomPreview: isRoomResizeHandleActive,
       tool,
+      roomPaintMode,
     })
   }, [
     hoveredCell,
@@ -784,12 +791,14 @@ export function Grid({ size = 120, playMode = false, bakedLightField = null }: G
     roomEditMode,
     isRoomResizeHandleActive,
     roomBrushCells,
-      strokeCurrentCell,
-      strokeMode,
-      strokeStartCell,
-      latchedRoomPreview,
-      tool,
-    ])
+    strokeCurrentCell,
+    strokeMode,
+    strokeStartCell,
+    strokePaintedCells,
+    latchedRoomPreview,
+    tool,
+    roomPaintMode,
+  ])
   const previewStrokeMode = strokeMode ?? latchedRoomPreview?.mode ?? null
 
   useEffect(() => {
@@ -875,17 +884,23 @@ export function Grid({ size = 120, playMode = false, bakedLightField = null }: G
       return
     }
 
-    const cells =
-      mapMode === 'outdoor' && outdoorBrushMode === 'terrain-sculpt'
-        ? getRectangleCells(startCell, currentCell)
-        : filterStrokeCells(
-            getRectangleCells(startCell, currentCell),
-            roomBrushCells,
-            mode,
-            mapMode === 'outdoor' &&
-              mode === 'paint' &&
-              (outdoorBrushMode === 'terrain-style' || outdoorOverpaintRegenerate),
-          )
+    // In paint mode, use the tracked painted cells for both paint and erase
+    let cells: GridCell[]
+    if (roomPaintMode === 'paint' && mapMode !== 'outdoor') {
+      cells = strokePaintedCells
+    } else {
+      cells =
+        mapMode === 'outdoor' && outdoorBrushMode === 'terrain-sculpt'
+          ? getRectangleCells(startCell, currentCell)
+          : filterStrokeCells(
+              getRectangleCells(startCell, currentCell),
+              roomBrushCells,
+              mode,
+              mapMode === 'outdoor' &&
+                mode === 'paint' &&
+                (outdoorBrushMode === 'terrain-style' || outdoorOverpaintRegenerate),
+            )
+    }
 
     if (cells.length > 0) {
       const chunkKeys = Array.from(new Set(cells.map((cell) => getRenderBatchChunkKeyForCell(cell)))).sort()
@@ -971,6 +986,8 @@ export function Grid({ size = 120, playMode = false, bakedLightField = null }: G
     }
 
     updateStrokeState(null, null, null)
+    setStrokePaintedCells([])
+    strokePaintedCellsRef.current.clear()
   })
 
   const endOpenPassageBrush = useEffectEvent(() => {
@@ -1133,6 +1150,19 @@ export function Grid({ size = 120, playMode = false, bakedLightField = null }: G
         strokeStartRef.current,
         snapped.cell,
       )
+
+      // In paint mode, track cells that will be painted or erased (but don't paint/erase yet)
+      if (roomPaintMode === 'paint' && mapMode !== 'outdoor') {
+        const cellKey = getCellKey(snapped.cell)
+        if (!strokePaintedCellsRef.current.has(cellKey)) {
+          strokePaintedCellsRef.current.add(cellKey)
+          const newPaintedCells = Array.from(strokePaintedCellsRef.current).map((key) => {
+            const [x, z] = key.split(':').map(Number) as [number, number]
+            return [x, z] as GridCell
+          })
+          setStrokePaintedCells(newPaintedCells)
+        }
+      }
     }
 
   }
@@ -1480,12 +1510,21 @@ export function Grid({ size = 120, playMode = false, bakedLightField = null }: G
       if (mapMode !== 'outdoor') {
         const hoveredRoomId = paintedCells[getCellKey(snapped.cell)]?.roomId ?? null
 
-        if (event.button === 0 && hoveredRoomId) {
-          selectRoom(hoveredRoomId)
+        // In resize mode, clicking on a room selects it for resizing
+        if (roomPaintMode === 'resize') {
+          if (event.button === 0 && hoveredRoomId) {
+            selectRoom(hoveredRoomId)
+            return
+          }
+
+          if (event.button === 0 && !hoveredRoomId) {
+            selectRoom(null)
+          }
           return
         }
 
-        if (event.button === 0 && !hoveredRoomId) {
+        // In area and paint modes, clicking deselects any selected room
+        if (event.button === 0) {
           selectRoom(null)
         }
       }
@@ -1495,7 +1534,7 @@ export function Grid({ size = 120, playMode = false, bakedLightField = null }: G
       return
     }
 
-    if (event.button === 0 && tool === 'room' && roomEditMode === 'rooms' && mapMode !== 'outdoor') {
+    if (event.button === 0 && tool === 'room' && roomEditMode === 'rooms' && roomPaintMode !== 'resize' && mapMode !== 'outdoor') {
       const transactionId = `tile-stream:${performance.now()}:${Math.random().toString(36).slice(2, 8)}`
       const transactionStartedAt = performance.now()
       roomStreamTransactionIdRef.current = transactionId
@@ -1510,6 +1549,11 @@ export function Grid({ size = 120, playMode = false, bakedLightField = null }: G
           assetId: globalFloorAssetId,
         },
       )
+    }
+
+    // Don't start a stroke in resize mode
+    if (tool === 'room' && roomEditMode === 'rooms' && roomPaintMode === 'resize') {
+      return
     }
 
     updateStrokeState(

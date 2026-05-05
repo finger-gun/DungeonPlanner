@@ -11,6 +11,7 @@ import { EditorToolbar } from './components/editor/EditorToolbar'
 import { CameraDropdown } from './components/editor/CameraDropdown'
 import { MoveToolPanel } from './components/editor/MoveToolPanel'
 import { RoomToolPanel } from './components/editor/RoomToolPanel'
+import { RoomPaintModePanel } from './components/editor/RoomPaintModePanel'
 import { PropToolPanel } from './components/editor/PropToolPanel'
 import { CharacterToolPanel } from './components/editor/CharacterToolPanel'
 import { SelectToolPanel } from './components/editor/SelectToolPanel'
@@ -280,16 +281,6 @@ function App() {
     selection ? state.wallOpenings[selection] : null,
   )
   const selectedWallAssetId = useDungeonStore((state) => getSelectedWallAssetId(selection, state))
-  const propCount = useDungeonStore(
-    (state) => Object.keys(state.placedObjects).length,
-  )
-  const paintedCellCount = useDungeonStore(
-    (state) => Object.keys(state.paintedCells).length,
-  )
-  const exploredCellCount = useDungeonStore(
-    (state) => Object.keys(state.exploredCells).length,
-  )
-  const clearExploredCells = useDungeonStore((state) => state.clearExploredCells)
   const showLosDebugMask = useDungeonStore((state) => state.showLosDebugMask)
   const showLosDebugRays = useDungeonStore((state) => state.showLosDebugRays)
   const showLensFocusDebugPoint = useDungeonStore((state) => state.showLensFocusDebugPoint)
@@ -821,8 +812,6 @@ function App() {
             <DebugVisibilityPanel
               rightOffset={cameraRightOffset}
               sidebarVisible={sidebarVisible}
-              exploredCellCount={exploredCellCount}
-              clearExploredCells={clearExploredCells}
               showLosDebugMask={showLosDebugMask}
               showLosDebugRays={showLosDebugRays}
               showLensFocusDebugPoint={showLensFocusDebugPoint}
@@ -845,14 +834,6 @@ function App() {
             />
           )}
 
-          {/* Stats counter */}
-          <div
-            data-testid="placement-counter"
-            className="pointer-events-none absolute bottom-4 left-4 rounded-full border border-teal-300/20 bg-stone-950/75 px-4 py-2 text-xs uppercase tracking-[0.25em] text-teal-200/85 backdrop-blur"
-          >
-            {formatCount(paintedCellCount, 'room cell')} •{' '}
-            {formatCount(propCount, 'prop')}
-          </div>
 
           {!isPlayMode && (
             <div
@@ -916,6 +897,9 @@ function App() {
             </div>
           )}
         </section>
+        
+        {/* Paint tools widget - positioned absolutely on canvas */}
+        <RoomPaintModePanel sidebarVisible={sidebarVisible} />
       </div>
       {editorLibraryOpen ? (
         <RemoteDungeonLibraryModal
@@ -985,15 +969,10 @@ function GeneratedCharacterMigrationBootstrap() {
   return null
 }
 
-function formatCount(count: number, singular: string) {
-  return `${count} ${count === 1 ? singular : `${singular}s`}`
-}
 
 function DebugVisibilityPanel({
   rightOffset,
   sidebarVisible,
-  exploredCellCount,
-  clearExploredCells,
   showLosDebugMask,
   showLosDebugRays,
   showLensFocusDebugPoint,
@@ -1016,8 +995,6 @@ function DebugVisibilityPanel({
 }: {
   rightOffset: number
   sidebarVisible: boolean
-  exploredCellCount: number
-  clearExploredCells: () => void
   showLosDebugMask: boolean
   showLosDebugRays: boolean
   showLensFocusDebugPoint: boolean
@@ -1038,6 +1015,8 @@ function DebugVisibilityPanel({
   debugAssetSourcePath: string | null
   debugAssetSourceLink: string | null
 }) {
+  const exploredCellCount = useDungeonStore((state) => Object.keys(state.exploredCells).length)
+  const clearExploredCells = useDungeonStore((state) => state.clearExploredCells)
   const traceEntries = useBuildTraceEntries()
   const renderReasons = useContinuousRenderReasons()
   const recentTraceEntries = [...traceEntries].reverse().slice(0, 6)

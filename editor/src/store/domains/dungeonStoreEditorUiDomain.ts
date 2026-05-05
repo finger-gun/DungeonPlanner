@@ -13,6 +13,7 @@ type EditorUiActionKeys =
   | 'selectRoom'
   | 'setRoomResizeHandleActive'
   | 'setRoomEditMode'
+  | 'setRoomPaintMode'
   | 'setWallConnectionMode'
   | 'setWallConnectionWidth'
   | 'setSelectedAsset'
@@ -78,6 +79,7 @@ export function createDungeonStoreEditorUiActions({
         tool: normalizedTool,
         isRoomResizeHandleActive: normalizedTool === 'room' ? current.isRoomResizeHandleActive : false,
         roomEditMode: normalizedTool === 'room' ? 'rooms' : current.roomEditMode,
+        roomPaintMode: normalizedTool === 'room' ? 'area' : current.roomPaintMode,
         history: [...current.history, previousSnapshot],
         future: [],
       }))
@@ -113,6 +115,14 @@ export function createDungeonStoreEditorUiActions({
         : {
             ...current,
             roomEditMode: mode,
+          })
+    },
+    setRoomPaintMode: (mode) => {
+      set((current) => current.roomPaintMode === mode
+        ? current
+        : {
+            ...current,
+            roomPaintMode: mode,
           })
     },
     setWallConnectionMode: (mode) => {

@@ -82,6 +82,7 @@ export type DungeonTool = 'move' | 'room' | 'prop' | 'character' | 'opening' | '
 export type CameraMode = 'orbit'
 export type CameraPreset = 'perspective' | 'isometric' | 'top-down' | 'classic'
 export type RoomEditMode = 'rooms' | 'walls' | 'floor-variants' | 'wall-variants'
+export type RoomPaintMode = 'area' | 'paint' | 'resize'
 export type SelectedAssetIds = Record<ContentPackCategory, string | null>
 export type SurfaceBrushAssetIds = {
   floor: string | null
@@ -295,6 +296,7 @@ export type DungeonState = DungeonSnapshot & {
   isObjectDragActive: boolean
   isRoomResizeHandleActive: boolean
   roomEditMode: RoomEditMode
+  roomPaintMode: RoomPaintMode
   wallConnectionMode: WallConnectionMode
   wallConnectionWidth: 1 | 2 | 3
   selectedRoomId: string | null
@@ -356,6 +358,7 @@ export type DungeonState = DungeonSnapshot & {
   selectRoom: (id: string | null) => void
   setRoomResizeHandleActive: (active: boolean) => void
   setRoomEditMode: (mode: RoomEditMode) => void
+  setRoomPaintMode: (mode: RoomPaintMode) => void
   setWallConnectionMode: (mode: WallConnectionMode) => void
   setWallConnectionWidth: (width: 1 | 2 | 3) => void
   setInnerWallSegments: (wallKeys: string[], present: boolean) => number
@@ -1928,6 +1931,7 @@ export const useDungeonStore = create<DungeonState>()(
   isObjectDragActive: false,
   isRoomResizeHandleActive: false,
   roomEditMode: 'rooms' as RoomEditMode,
+  roomPaintMode: 'area' as RoomPaintMode,
   wallConnectionMode: 'door' as WallConnectionMode,
   wallConnectionWidth: 1 as 1 | 2 | 3,
   selectedRoomId: null,
