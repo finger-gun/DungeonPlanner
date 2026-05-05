@@ -443,7 +443,7 @@ export function SelectionContextualUi() {
                 />
               </button>
               {isColorPickerOpen ? (
-                <div className="absolute right-0 top-[calc(100%+6px)] z-10 rounded-[1.75rem] border border-stone-700/80 bg-stone-950/95 p-1.5 shadow-xl shadow-black/40 backdrop-blur">
+                <div className="absolute right-0 top-[calc(100%+6px)] z-10 w-max rounded-[1.75rem] border border-stone-700/80 bg-stone-950/95 p-1.5 shadow-xl shadow-black/40 backdrop-blur">
                   <AtlasColorVariantPicker
                     config={atlasColorVariants}
                     currentVariantId={currentAtlasVariant}

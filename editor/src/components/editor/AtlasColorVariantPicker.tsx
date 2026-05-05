@@ -30,7 +30,7 @@ export function AtlasColorVariantPicker({
     return (
       <div
         className={joinClasses(
-          'grid grid-cols-6 gap-px rounded-2xl bg-stone-700/80 p-px',
+          'inline-grid w-max grid-cols-6 gap-px rounded-2xl bg-stone-700/80 p-px',
           className,
         )}
       >
