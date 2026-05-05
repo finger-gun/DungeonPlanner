@@ -2,20 +2,39 @@ import { useMemo } from 'react'
 import type { ContentPackComponentProps } from '../../types'
 import { useGLTF } from '../../../rendering/useGLTF'
 import { cloneSceneWithNodeMaterials } from '../../../rendering/nodeMaterialUtils'
+import { remapSceneUvCells, resolveAtlasColorSwatchVariant } from '../../shared/atlasColorVariants'
 import { createDungeonAsset, resolveDungeonModelAssetUrl } from '../shared/createDungeonAsset'
 import { createDungeonFlameEffectGetter, createDungeonFlameLightGetter } from '../shared/flame'
 import { DUNGEON_PROP_TRANSFORM } from '../shared/dungeonConstants'
+import {
+  DUNGEON_COLOR_ATLAS_COLUMNS,
+  DUNGEON_COLOR_ATLAS_ROWS,
+  DUNGEON_COLOR_SWATCHES,
+} from '../shared/dungeonColorAtlas'
 
 const UNLIT_MODEL_NAME = 'candle'
 const LIT_MODEL_NAME = 'candle_lit'
+const CANDLE_COLOR_SOURCE_CELLS = [[0, 3]] as const
 const unlitAssetUrl = resolveDungeonModelAssetUrl(UNLIT_MODEL_NAME)
 const litAssetUrl = resolveDungeonModelAssetUrl(LIT_MODEL_NAME)
 
 function DungeonCandleVariant({ objectProps, ...props }: ContentPackComponentProps) {
   const lit = objectProps?.lit !== false
   const modelUrl = lit ? litAssetUrl : unlitAssetUrl
+  const selectedCell = resolveAtlasColorSwatchVariant(
+    objectProps?.colorVariant,
+    'ivory',
+    DUNGEON_COLOR_SWATCHES,
+  ).cell
   const gltf = useGLTF(modelUrl)
-  const scene = useMemo(() => cloneSceneWithNodeMaterials(gltf.scene), [gltf.scene])
+  const scene = useMemo(() => {
+    const clone = cloneSceneWithNodeMaterials(gltf.scene)
+    remapSceneUvCells(clone, [...CANDLE_COLOR_SOURCE_CELLS], selectedCell, {
+      columns: DUNGEON_COLOR_ATLAS_COLUMNS,
+      rows: DUNGEON_COLOR_ATLAS_ROWS,
+    })
+    return clone
+  }, [gltf.scene, selectedCell])
 
   return (
     <group {...props}>
@@ -42,6 +61,11 @@ export const dungeonCandleAsset = createDungeonAsset({
   transform: DUNGEON_PROP_TRANSFORM,
   Component: DungeonCandleVariant,
   metadata: {
+    atlasColorVariants: {
+      propKey: 'colorVariant',
+      defaultVariantId: 'ivory',
+      variants: DUNGEON_COLOR_SWATCHES,
+    },
     snapsTo: 'FREE',
     connectors: [
       {

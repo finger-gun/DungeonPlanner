@@ -138,6 +138,38 @@ describe('content pack registry', () => {
     expect(asset.metadata?.atlasColorVariants?.variants).toHaveLength(32)
   })
 
+  it('registers requested dungeon props with color variant metadata', () => {
+    for (const assetId of [
+      'dungeon.props_chest',
+      'dungeon.props_trunk_large_A',
+      'dungeon.props_trunk_medium_A',
+      'dungeon.props_trunk_small_A',
+      'dungeon.props_box_small',
+      'dungeon.props_box_large',
+      'dungeon.props_book_brown',
+      'dungeon.props_candle',
+      'dungeon.props_candle_lit',
+      'dungeon.props_candle_thin',
+      'dungeon.props_candle_thin_lit',
+      'dungeon.props_bottle_A_brown',
+      'dungeon.props_bottle_B_brown',
+      'dungeon.props_bottle_A_labeled_brown',
+      'dungeon.props_bottle_C_brown',
+    ]) {
+      const asset = getContentPackAssetById(assetId)
+
+      if (!asset) {
+        expect(asset).toBeNull()
+        continue
+      }
+
+      expect(asset.metadata?.atlasColorVariants).toMatchObject({
+        propKey: 'colorVariant',
+      })
+      expect(asset.metadata?.atlasColorVariants?.variants).toHaveLength(32)
+    }
+  })
+
   it('registers the small dungeon chests as play-toggleable props', () => {
     for (const assetId of [
       'dungeon.props_chest',

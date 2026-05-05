@@ -70,7 +70,7 @@ export function createAtlasColorVariantModelComponent({
   useGLTF.preload(assetUrl)
 
   function AtlasColorVariantModel(props: ContentPackComponentProps) {
-    const selectedVariant = getAtlasVariantDefinition(
+    const selectedVariant = resolveAtlasColorSwatchVariant(
       props.objectProps?.[propKey],
       defaultVariantId,
       variants,
@@ -171,7 +171,7 @@ export function remapUvCells(
   }
 }
 
-function getAtlasVariantDefinition(
+export function resolveAtlasColorSwatchVariant(
   rawValue: unknown,
   defaultVariantId: string,
   variants: AtlasColorSwatchVariant[],

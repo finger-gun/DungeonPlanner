@@ -1,7 +1,13 @@
-import type { ContentPackAsset, ContentPackAssetMetadata } from '../../types'
+import type {
+  ContentPackAsset,
+  ContentPackAssetMetadata,
+  ContentPackEffect,
+  PropLight,
+} from '../../types'
 import {
   buildAtlasColorVariants,
   createAtlasColorVariantModelComponent,
+  getAtlasCellKey,
   type AtlasCell,
   type AtlasColorSwatchVariant,
 } from '../../shared/atlasColorVariants'
@@ -17,6 +23,17 @@ const DUNGEON_COLOR_ATLAS_SWATCH_COLOR_MATRIX_TOP_ORIGIN = [
   ['#38a48d', '#53ab47', '#f3737f', '#d1272e', '#f9aa4f', '#eac254', '#63a0d0', '#f99f3a'],
   ['#ddd0c4', '#d19846', '#257ebc', '#38a48d', '#008454', '#8e8e8d', '#8e8e8d', '#8e8e8d'],
 ] as const
+
+const DUNGEON_KNOWN_COLOR_VARIANTS_BY_CELL = {
+  [getAtlasCellKey([4, 0])]: { id: 'orange', label: 'Orange' },
+  [getAtlasCellKey([6, 0])]: { id: 'brown', label: 'Brown' },
+  [getAtlasCellKey([0, 2])]: { id: 'green', label: 'Green' },
+  [getAtlasCellKey([0, 3])]: { id: 'ivory', label: 'Ivory' },
+} satisfies Record<string, { id: string; label: string }>
+
+export const DUNGEON_COLOR_SWATCHES = buildDungeonColorVariants({
+  namedVariantsByCell: DUNGEON_KNOWN_COLOR_VARIANTS_BY_CELL,
+})
 
 export function getDungeonAtlasSwatchColor(cell: AtlasCell) {
   return DUNGEON_COLOR_ATLAS_SWATCH_COLOR_MATRIX_TOP_ORIGIN[cell[1]]?.[cell[0]] ?? '#9ca3af'
@@ -49,6 +66,9 @@ export function createGenericColorSwatch({
   metadata,
   propKey = 'colorVariant',
   transform = DUNGEON_PROP_TRANSFORM,
+  getLight,
+  getEffect,
+  getPlayModeNextProps,
 }: {
   id: string
   slug: string
@@ -60,6 +80,9 @@ export function createGenericColorSwatch({
   metadata?: ContentPackAssetMetadata
   propKey?: string
   transform?: DungeonTransform
+  getLight?: (objectProps: Record<string, unknown>) => PropLight | null
+  getEffect?: (objectProps: Record<string, unknown>) => ContentPackEffect | null
+  getPlayModeNextProps?: (objectProps: Record<string, unknown>) => Record<string, unknown> | null
 }): ContentPackAsset {
   const assetUrl = resolveDungeonModelAssetUrl(modelName)
 
@@ -94,6 +117,9 @@ export function createGenericColorSwatch({
         variants,
       },
     },
+    ...(getLight ? { getLight } : {}),
+    ...(getEffect ? { getEffect } : {}),
+    ...(getPlayModeNextProps ? { getPlayModeNextProps } : {}),
   })
 }
 

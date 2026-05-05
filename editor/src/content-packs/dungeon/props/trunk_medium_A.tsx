@@ -1,13 +1,13 @@
-import { createDungeonAsset } from '../shared/createDungeonAsset'
-import { DUNGEON_PROP_TRANSFORM } from '../shared/dungeonConstants'
+import { createGenericColorSwatch, DUNGEON_COLOR_SWATCHES } from '../shared/dungeonColorAtlas'
 
-export const dungeonTrunkMediumAAsset = createDungeonAsset({
+export const dungeonTrunkMediumAAsset = createGenericColorSwatch({
   id: 'dungeon.props_trunk_medium_A',
   slug: 'dungeon-props-trunk-medium-A',
   name: 'Dungeon Trunk Medium A',
-  category: 'prop',
   modelName: 'trunk_medium_A',
-  transform: DUNGEON_PROP_TRANSFORM,
+  sourceCells: [[4, 0]],
+  variants: DUNGEON_COLOR_SWATCHES,
+  defaultVariantId: 'orange',
   metadata: {
     connectors: [
       {
