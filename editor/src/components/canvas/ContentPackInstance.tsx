@@ -14,7 +14,8 @@ import {
   upgradeStandardMaterialsToNodeMaterials,
 } from '../../rendering/nodeMaterialUtils'
 import { useGLTF } from '../../rendering/useGLTF'
-import { applyFogOfWarToMaterial, applyFogOfWarToObject, useFogOfWarRuntime } from './fogOfWar'
+import { useFogOfWarRuntime } from './fogOfWarHooks'
+import { applyFogOfWarToMaterial, applyFogOfWarToObject } from './fogOfWarShared'
 import {
   applyBakedLightToMaterial,
   applyBakedLightToObject,
@@ -32,6 +33,12 @@ import {
 } from '../../rendering/propLightingCache'
 import { useDungeonStore } from '../../store/useDungeonStore'
 import { shouldUseRuntimePropProbe } from './runtimePropProbeMode'
+import {
+  applyAtlasColorVariantToObject,
+  resolveAtlasColorVariant,
+  type ResolvedAtlasColorVariant,
+} from '../../rendering/atlasColorVariants'
+import { buildPropDescriptorKey } from './ContentPackInstanceShared'
 
 function shouldUseGpuFog(variant: ContentPackInstanceVariant, fogOfWar: ReturnType<typeof useFogOfWarRuntime>) {
   return fogOfWar !== null && variant === 'floor'
@@ -124,10 +131,14 @@ export function ContentPackInstance({
   ...groupProps
 }: ContentPackInstanceProps) {
   const asset = assetId ? getContentPackAssetById(assetId) : null
-  const assetPath = asset?.assetUrl
+  const assetPath = asset?.batchRender?.getAssetUrl?.(variantKey, objectProps) ?? asset?.assetUrl
   const AssetComponent = asset?.Component ?? null
   const castShadow = castShadowOverride ?? (asset?.metadata?.castShadow !== false)
   const receiveShadow = asset?.metadata?.receiveShadow !== false
+  const atlasColorVariant = useMemo(
+    () => resolveAtlasColorVariant(asset?.metadata, objectProps),
+    [asset?.metadata, objectProps],
+  )
   const tool = useDungeonStore((state) => state.tool)
   const showPropProbeDebug = useDungeonStore((state) => state.showPropProbeDebug)
   const useRuntimePropProbe = shouldUseRuntimePropProbe({
@@ -235,12 +246,13 @@ export function ContentPackInstance({
           variant={variant}
           bakedLightField={bakedLightField}
            bakedLightDirection={bakedLightDirection}
-           bakedLightDirectionSecondary={bakedLightDirectionSecondary}
-           disableBakedLight={disableBakedLight}
-           clipBelowGround={clipBelowGround}
-           propDescriptorKey={propDescriptorKey}
-           propInstanceKey={propInstanceKey}
-           useRuntimePropProbe={useRuntimePropProbe}
+          bakedLightDirectionSecondary={bakedLightDirectionSecondary}
+          disableBakedLight={disableBakedLight}
+          clipBelowGround={clipBelowGround}
+          atlasColorVariant={atlasColorVariant}
+          propDescriptorKey={propDescriptorKey}
+          propInstanceKey={propInstanceKey}
+          useRuntimePropProbe={useRuntimePropProbe}
           {...groupProps}
         />
       ) : (
@@ -258,12 +270,13 @@ export function ContentPackInstance({
           variant={variant}
           bakedLightField={bakedLightField}
            bakedLightDirection={bakedLightDirection}
-           bakedLightDirectionSecondary={bakedLightDirectionSecondary}
-           disableBakedLight={disableBakedLight}
-           clipBelowGround={clipBelowGround}
-           propDescriptorKey={propDescriptorKey}
-           propInstanceKey={propInstanceKey}
-           useRuntimePropProbe={useRuntimePropProbe}
+          bakedLightDirectionSecondary={bakedLightDirectionSecondary}
+          disableBakedLight={disableBakedLight}
+          clipBelowGround={clipBelowGround}
+          atlasColorVariant={atlasColorVariant}
+          propDescriptorKey={propDescriptorKey}
+          propInstanceKey={propInstanceKey}
+          useRuntimePropProbe={useRuntimePropProbe}
           {...groupProps}
         />
       )}
@@ -283,58 +296,6 @@ function getComponentProps(
     ...(poseSelected ? { poseSelected } : {}),
     ...(playerAnimationState ? { playerAnimationState } : {}),
   }
-}
-
-export function buildPropDescriptorKey({
-  assetId,
-  assetPath,
-  hasComponent,
-  objectProps,
-  variant,
-  variantKey,
-}: {
-  assetId: string | null
-  assetPath?: string
-  hasComponent: boolean
-  objectProps?: Record<string, unknown>
-  variant: ContentPackInstanceVariant
-  variantKey?: string
-}) {
-  if (variant !== 'prop') {
-    return null
-  }
-
-  if (hasComponent) {
-    return [
-      'component',
-      assetId ?? 'unknown',
-      variantKey ?? 'default',
-      stableSerializeDescriptorProps(objectProps),
-    ].join(':')
-  }
-
-  if (assetPath) {
-    return `gltf:${assetPath}`
-  }
-
-  return [
-    'fallback',
-    assetId ?? 'unknown',
-    variantKey ?? 'default',
-  ].join(':')
-}
-
-function stableSerializeDescriptorProps(objectProps?: Record<string, unknown>) {
-  return JSON.stringify(objectProps ?? null, (_key, value) => {
-    if (!value || Array.isArray(value) || typeof value !== 'object') {
-      return value
-    }
-
-    return Object.fromEntries(
-      Object.entries(value as Record<string, unknown>)
-        .sort(([leftKey], [rightKey]) => leftKey.localeCompare(rightKey)),
-    )
-  })
 }
 
 function getSurfaceBakedLightOptions(
@@ -378,6 +339,7 @@ function GLTFModel({
   bakedLightDirectionSecondary,
   disableBakedLight = false,
   clipBelowGround = false,
+  atlasColorVariant,
   propDescriptorKey,
   propInstanceKey,
   useRuntimePropProbe,
@@ -399,6 +361,7 @@ function GLTFModel({
   bakedLightDirectionSecondary?: SurfaceBakedLightDirection
   disableBakedLight?: boolean
   clipBelowGround?: boolean
+  atlasColorVariant?: ResolvedAtlasColorVariant | null
   propDescriptorKey?: string | null
   propInstanceKey?: string
   useRuntimePropProbe: boolean
@@ -498,6 +461,10 @@ function GLTFModel({
     applyBelowGroundClipToObject(scene, clipBelowGround, clipMinY)
   }, [clipBelowGround, clipMinY, scene])
 
+  useLayoutEffect(() => {
+    applyAtlasColorVariantToObject(scene, atlasColorVariant ?? null)
+  }, [atlasColorVariant, scene])
+
   return (
     <group {...groupProps}>
       {shouldRenderBase && <primitive object={scene} />}
@@ -537,6 +504,7 @@ function ComponentAsset({
   bakedLightDirectionSecondary,
   disableBakedLight = false,
   clipBelowGround = false,
+  atlasColorVariant,
   propDescriptorKey,
   propInstanceKey,
   useRuntimePropProbe,
@@ -558,6 +526,7 @@ function ComponentAsset({
   bakedLightDirectionSecondary?: SurfaceBakedLightDirection
   disableBakedLight?: boolean
   clipBelowGround?: boolean
+  atlasColorVariant?: ResolvedAtlasColorVariant | null
   propDescriptorKey?: string | null
   propInstanceKey?: string
   useRuntimePropProbe: boolean
@@ -679,6 +648,14 @@ function ComponentAsset({
 
     applyBelowGroundClipToObject(contentRef.current, clipBelowGround, clipMinY)
   }, [clipBelowGround, clipMinY])
+
+  useLayoutEffect(() => {
+    if (!contentRef.current) {
+      return
+    }
+
+    applyAtlasColorVariantToObject(contentRef.current, atlasColorVariant ?? null)
+  }, [atlasColorVariant, componentProps, Component])
 
   return (
     <group {...groupProps}>

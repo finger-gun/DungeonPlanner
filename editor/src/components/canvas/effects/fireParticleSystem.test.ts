@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import * as THREE from 'three'
 import type { RegisteredEffectSource } from '../objectSourceRegistry'
-import { buildActiveFireEmitters } from './fireParticleSystem'
+import { buildActiveFireEmitters } from './fireParticleSystemShared'
 
 describe('fireParticleSystem', () => {
   it('culls fire emitters outside the camera frustum', () => {

@@ -5,7 +5,8 @@ import {
   getChunkKeyForStaticTileEntry,
   getRenderBatchChunkKeyForCell,
 } from './batchDescriptors'
-import { buildChunkEntrySignature, type StaticTileEntry } from './BatchedTileEntries'
+import type { StaticTileEntry } from './BatchedTileEntries'
+import { buildChunkEntrySignature } from './BatchedTileEntriesShared'
 import * as tileAssetResolution from './tileAssetResolution'
 import type { BakedFloorLightField } from '../../rendering/dungeonLightField'
 

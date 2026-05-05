@@ -108,6 +108,146 @@ describe('content pack registry', () => {
     }
   })
 
+  it('registers banner props with color variant metadata', () => {
+    const asset = getContentPackAssetById('dungeon.props_banners_banner_blue')
+
+    if (!asset) {
+      expect(asset).toBeNull()
+      return
+    }
+
+    expect(asset.metadata?.atlasColorVariants).toMatchObject({
+      propKey: 'colorVariant',
+      defaultVariantId: 'blue',
+    })
+    expect(asset.metadata?.atlasColorVariants?.variants).toHaveLength(31)
+  })
+
+  it('registers patterned and shield banner props with color variant metadata', () => {
+    for (const assetId of [
+      'dungeon.props_banners_banner_patternA_blue',
+      'dungeon.props_banners_banner_patternB_blue',
+      'dungeon.props_banners_banner_patternC_blue',
+      'dungeon.props_banners_banner_shield_blue',
+      'dungeon.props_banners_banner_thin_blue',
+      'dungeon.props_banners_banner_triple_blue',
+    ]) {
+      const asset = getContentPackAssetById(assetId)
+
+      if (!asset) {
+        expect(asset).toBeNull()
+        continue
+      }
+
+      expect(asset.metadata?.atlasColorVariants).toMatchObject({
+        propKey: 'colorVariant',
+        defaultVariantId: 'blue',
+      })
+      expect(asset.metadata?.atlasColorVariants?.variants).toHaveLength(31)
+    }
+  })
+
+  it('does not register redundant color sibling assets for swatch-enabled families', () => {
+    for (const assetId of [
+      'dungeon.props_banners_banner_brown',
+      'dungeon.props_banners_banner_green',
+      'dungeon.props_banners_banner_red',
+      'dungeon.props_banners_banner_white',
+      'dungeon.props_banners_banner_yellow',
+      'dungeon.props_banners_banner_patternA_brown',
+      'dungeon.props_banners_banner_patternA_green',
+      'dungeon.props_banners_banner_patternA_red',
+      'dungeon.props_banners_banner_patternA_white',
+      'dungeon.props_banners_banner_patternA_yellow',
+      'dungeon.props_banners_banner_patternB_brown',
+      'dungeon.props_banners_banner_patternB_green',
+      'dungeon.props_banners_banner_patternB_red',
+      'dungeon.props_banners_banner_patternB_white',
+      'dungeon.props_banners_banner_patternB_yellow',
+      'dungeon.props_banners_banner_patternC_brown',
+      'dungeon.props_banners_banner_patternC_green',
+      'dungeon.props_banners_banner_patternC_red',
+      'dungeon.props_banners_banner_patternC_white',
+      'dungeon.props_banners_banner_patternC_yellow',
+      'dungeon.props_banners_banner_shield_brown',
+      'dungeon.props_banners_banner_shield_green',
+      'dungeon.props_banners_banner_shield_red',
+      'dungeon.props_banners_banner_shield_white',
+      'dungeon.props_banners_banner_shield_yellow',
+      'dungeon.props_banners_banner_thin_brown',
+      'dungeon.props_banners_banner_thin_green',
+      'dungeon.props_banners_banner_thin_red',
+      'dungeon.props_banners_banner_thin_white',
+      'dungeon.props_banners_banner_thin_yellow',
+      'dungeon.props_banners_banner_triple_brown',
+      'dungeon.props_banners_banner_triple_green',
+      'dungeon.props_banners_banner_triple_red',
+      'dungeon.props_banners_banner_triple_white',
+      'dungeon.props_banners_banner_triple_yellow',
+      'dungeon.props_bottle_A_green',
+      'dungeon.props_bottle_B_green',
+      'dungeon.props_bottle_A_labeled_green',
+      'dungeon.props_bottle_C_green',
+      'dungeon.props_trunk_large_B',
+      'dungeon.props_trunk_large_C',
+      'dungeon.props_trunk_medium_B',
+      'dungeon.props_trunk_medium_C',
+      'dungeon.props_trunk_small_B',
+      'dungeon.props_trunk_small_C',
+      'dungeon.props_chest_gold',
+      'dungeon.props_chest_large_gold',
+    ]) {
+      expect(getContentPackAssetById(assetId)).toBeNull()
+    }
+  })
+
+  it('registers the dungeon chair with color variant metadata', () => {
+    const asset = getContentPackAssetById('dungeon.props_chair')
+
+    if (!asset) {
+      expect(asset).toBeNull()
+      return
+    }
+
+    expect(asset.metadata?.atlasColorVariants).toMatchObject({
+      propKey: 'colorVariant',
+      defaultVariantId: 'default',
+    })
+    expect(asset.metadata?.atlasColorVariants?.variants).toHaveLength(32)
+  })
+
+  it('registers requested dungeon props with color variant metadata', () => {
+    for (const assetId of [
+      'dungeon.props_chest',
+      'dungeon.props_trunk_large_A',
+      'dungeon.props_trunk_medium_A',
+      'dungeon.props_trunk_small_A',
+      'dungeon.props_box_small',
+      'dungeon.props_box_large',
+      'dungeon.props_book_brown',
+      'dungeon.props_candle',
+      'dungeon.props_candle_lit',
+      'dungeon.props_candle_thin',
+      'dungeon.props_candle_thin_lit',
+      'dungeon.props_bottle_A_brown',
+      'dungeon.props_bottle_B_brown',
+      'dungeon.props_bottle_A_labeled_brown',
+      'dungeon.props_bottle_C_brown',
+    ]) {
+      const asset = getContentPackAssetById(assetId)
+
+      if (!asset) {
+        expect(asset).toBeNull()
+        continue
+      }
+
+      expect(asset.metadata?.atlasColorVariants).toMatchObject({
+        propKey: 'colorVariant',
+      })
+      expect(asset.metadata?.atlasColorVariants?.variants).toHaveLength(32)
+    }
+  })
+
   it('registers the small dungeon chests as play-toggleable props', () => {
     for (const assetId of [
       'dungeon.props_chest',

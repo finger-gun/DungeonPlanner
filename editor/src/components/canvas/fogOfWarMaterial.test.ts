@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import * as THREE from 'three'
 import { int, uniform, vec4 } from 'three/tsl'
 import { createStandardCompatibleMaterial } from '../../rendering/nodeMaterialUtils'
-import { applyFogOfWarToMaterial } from './fogOfWar'
+import { applyFogOfWarToMaterial } from './fogOfWarShared'
 
 type TestNodeMaterial = THREE.Material & {
   isNodeMaterial?: boolean

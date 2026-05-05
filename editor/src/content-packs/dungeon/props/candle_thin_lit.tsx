@@ -1,14 +1,14 @@
-import { createDungeonAsset } from '../shared/createDungeonAsset'
-import { DUNGEON_PROP_TRANSFORM } from '../shared/dungeonConstants'
+import { createGenericColorSwatch, DUNGEON_COLOR_SWATCHES } from '../shared/dungeonColorAtlas'
 import { createDungeonFlameEffectGetter, createDungeonFlameLightGetter } from '../shared/flame'
 
-export const dungeonCandleThinLitAsset = createDungeonAsset({
+export const dungeonCandleThinLitAsset = createGenericColorSwatch({
   id: 'dungeon.props_candle_thin_lit',
   slug: 'dungeon-props-candle-thin-lit',
   name: 'Dungeon Candle Thin Lit',
-  category: 'prop',
   modelName: 'candle_thin_lit',
-  transform: DUNGEON_PROP_TRANSFORM,
+  sourceCells: [[0, 3]],
+  variants: DUNGEON_COLOR_SWATCHES,
+  defaultVariantId: 'ivory',
   metadata: {
     connectors: [
       {

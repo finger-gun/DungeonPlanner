@@ -4,7 +4,6 @@ import { useFrame } from '@react-three/fiber'
 import type { ThreeEvent } from '@react-three/fiber'
 import * as THREE from 'three'
 import {
-  GRID_SIZE,
   cellToWorldPosition,
   getCellKey,
 } from '../../hooks/useSnapToGrid'
@@ -54,9 +53,14 @@ import {
   type BakedFloorLightField,
 } from '../../rendering/dungeonLightField'
 import { setBuildAnimationTime } from './buildAnimationMaterial'
-import { TileGpuStreamMount, getTileGpuStreamMountId } from './TileGpuStreamContext'
+import { TileGpuStreamMount } from './TileGpuStreamContext'
+import {
+  WALL_EXTRA_DELAY_MS,
+  getBuildAnimationCellKeyFromWallKeys,
+  getOpeningHitboxSize,
+} from './DungeonRoomShared'
+import { getTileGpuStreamMountId } from './TileGpuStreamContextShared'
 
-export const WALL_EXTRA_DELAY_MS = 70
 const ZERO_ROTATION = [0, 0, 0] as const
 
 function useIsBuildAnimationActive(buildAnimationVersion: number) {
@@ -64,34 +68,6 @@ function useIsBuildAnimationActive(buildAnimationVersion: number) {
     void buildAnimationVersion
     return isAnimationActive(cellKey)
   }, [buildAnimationVersion])
-}
-
-function getWallCellKey(wallKey: string) {
-  const [x, z] = wallKey.split(':')
-  if (x === undefined || z === undefined) {
-    return null
-  }
-
-  return `${x}:${z}`
-}
-
-export function getBuildAnimationCellKeyFromWallKeys(
-  wallKeys: string[],
-  isBuildAnimationCurrentlyActive?: (cellKey: string) => boolean,
-) {
-  const cellKeys = [...new Set(
-    wallKeys
-      .map(getWallCellKey)
-      .filter((cellKey): cellKey is string => cellKey !== null),
-  )]
-
-  if (cellKeys.length === 0) {
-    return null
-  }
-
-  return isBuildAnimationCurrentlyActive
-    ? (cellKeys.find((cellKey) => isBuildAnimationCurrentlyActive(cellKey)) ?? cellKeys[0])
-    : cellKeys[0]
 }
 
 type ResolvedFloorReceiverCellInput = FloorReceiverCellInput & {
@@ -945,10 +921,6 @@ function OpeningRenderer({
       </group>
     </AnimatedTileGroup>
   )
-}
-
-export function getOpeningHitboxSize(width: number): [number, number, number] {
-  return [width * GRID_SIZE * 0.95, 2.2, 0.1]
 }
 
 function getWallSpanVisibilityState(

@@ -109,6 +109,22 @@ export type TileSpan = {
   gridHeight: 1 | 2 | 4
 }
 
+export type AtlasColorVariantDefinition = {
+  id: string
+  label: string
+  swatchColor?: string
+  cell?: readonly [number, number]
+  uvOffset: readonly [number, number]
+  uvScale?: readonly [number, number]
+}
+
+export type AtlasColorVariantsConfig = {
+  propKey: string
+  defaultVariantId?: string
+  materialNames?: string[]
+  variants: AtlasColorVariantDefinition[]
+}
+
 export type ContentPackAssetMetadata = {
   /**
    * @deprecated Use `connectors` instead so placement behavior is defined per connector.
@@ -146,6 +162,8 @@ export type ContentPackAssetMetadata = {
   browserSubcategory?: AssetBrowserSubcategory
   /** Optional filter tags exposed by the asset browser. */
   browserTags?: string[]
+  /** Optional per-prop atlas-backed color variants exposed as named swatches. */
+  atlasColorVariants?: AtlasColorVariantsConfig
 }
 
 export type ContentPackAsset = {

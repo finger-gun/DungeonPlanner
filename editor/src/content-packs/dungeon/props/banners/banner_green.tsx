@@ -1,21 +1,21 @@
-import { createDungeonAsset } from '../../shared/createDungeonAsset'
-import { DUNGEON_PROP_TRANSFORM } from '../../shared/dungeonConstants'
+import { createGenericColorSwatch } from '../../shared/dungeonColorAtlas'
+import {
+  ALL_PLAIN_BANNER_SWATCHES,
+  BANNER_WALL_CONNECTORS,
+  PLAIN_BANNER_DEFAULT_SOURCE_CELLS,
+} from './bannerColorVariants'
 
-export const dungeonBannerGreenAsset = createDungeonAsset({
+export const dungeonBannerGreenAsset = createGenericColorSwatch({
   id: 'dungeon.props_banners_banner_green',
   slug: 'dungeon-props-banners-banner-green',
   name: 'Dungeon Banner Green',
-  category: 'prop',
   modelName: 'banner_green',
-  transform: DUNGEON_PROP_TRANSFORM,
+  sourceCells: [PLAIN_BANNER_DEFAULT_SOURCE_CELLS.green],
+  variants: ALL_PLAIN_BANNER_SWATCHES,
+  defaultVariantId: 'green',
   metadata: {
     snapsTo: 'GRID',
-    connectors: [
-      {
-        point: [0, 0, 0.5],
-        type: 'WALL',
-      },
-    ],
+    connectors: BANNER_WALL_CONNECTORS,
     blocksLineOfSight: false,
   },
 })

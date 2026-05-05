@@ -10,7 +10,7 @@ const mocked = vi.hoisted(() => ({
   },
 }))
 
-vi.mock('./TileGpuStreamContext', () => ({
+vi.mock('./TileGpuStreamHooks', () => ({
   useTileGpuStream: () => mocked.stream,
 }))
 
@@ -23,7 +23,7 @@ vi.mock('../../rendering/useGLTF', () => ({
   ),
 }))
 
-vi.mock('./fogOfWar', () => ({
+vi.mock('./fogOfWarHooks', () => ({
   useFogOfWarRuntime: () => null,
 }))
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { buildPropDescriptorKey } from './ContentPackInstance'
+import { buildPropDescriptorKey } from './ContentPackInstanceShared'
 import { shouldUseRuntimePropProbe } from './runtimePropProbeMode'
 
 describe('buildPropDescriptorKey', () => {

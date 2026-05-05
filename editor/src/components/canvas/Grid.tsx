@@ -56,7 +56,7 @@ import { traceBuildPerf } from '../../performance/runtimeBuildTrace'
 import { FloorGridOverlay } from './FloorGridOverlay'
 import { DEFAULT_RENDER_BATCH_CHUNK_SIZE, getRenderBatchChunkKeyForCell } from './batchDescriptors'
 import { BatchedTileEntries, type StaticTileEntry } from './BatchedTileEntries'
-import { WALL_EXTRA_DELAY_MS } from './DungeonRoom'
+import { WALL_EXTRA_DELAY_MS } from './DungeonRoomShared'
 import { ContentPackInstance } from './ContentPackInstance'
 import { buildFloorRenderDerivedBundleFromInput } from './floorRenderDerived'
 import { getRoomPreviewCells } from './gridPreview'
@@ -79,10 +79,11 @@ import {
   type RoomWallEditTarget,
 } from './roomWallBrush'
 import {
-  getTileGpuStreamMountId,
   useTileGpuStream,
   useTileGpuStreamVersion,
-} from './TileGpuStreamContext'
+} from './TileGpuStreamHooks'
+import { getTileGpuStreamMountId } from './TileGpuStreamContextShared'
+import { shouldRenderRoomStreamPreview } from './GridShared'
 
 type GridProps = {
   size?: number
@@ -1813,32 +1814,6 @@ export function Grid({ size = 120, playMode = false, bakedLightField = null }: G
   )
 }
 
-export function shouldRenderRoomStreamPreview({
-  roomStreamTransactionId,
-  roomStreamTransactionStartedAt,
-  previewStrokeMode,
-  mapMode,
-  previewCells,
-  strokeMode,
-}: {
-  roomStreamTransactionId: string | null
-  roomStreamTransactionStartedAt: number | null
-  previewStrokeMode: 'paint' | 'erase' | null
-  mapMode: 'indoor' | 'outdoor'
-  previewCells: GridCell[]
-  strokeMode: 'paint' | 'erase' | null
-}) {
-  return Boolean(
-    roomStreamTransactionId
-    && roomStreamTransactionStartedAt !== null
-    && previewStrokeMode === 'paint'
-    && mapMode !== 'outdoor'
-    && previewCells.length > 0
-    // HoverPreview already covers live feedback while the pointer is down.
-    && strokeMode === null,
-  )
-}
-
 function buildSpeculativeRoomTileEntries({
   activeLayerId,
   bakedLightField,
@@ -2656,7 +2631,7 @@ function raycastObjectId(object: THREE.Object3D | null) {
   return null
 }
 
-export function getPropPlacement(
+function getPropPlacement(
   asset: ContentPackAsset,
   point: { x: number; y: number; z: number },
   paintedCells: Record<string, PaintedCellRecord>,

@@ -7,7 +7,7 @@ import {
   FOG_VISIBILITY_MASK_ORIGIN_CAPACITY,
   FOG_VISIBILITY_MASK_SIZE,
   getFogOfWarDdaMaxSteps,
-} from './fogOfWar'
+} from './fogOfWarShared'
 import { GRID_SIZE } from '../../hooks/useSnapToGrid'
 
 describe('buildFogOfWarLayout', () => {

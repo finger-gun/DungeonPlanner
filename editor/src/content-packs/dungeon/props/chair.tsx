@@ -1,13 +1,25 @@
-import { createDungeonAsset } from '../shared/createDungeonAsset'
-import { DUNGEON_PROP_TRANSFORM } from '../shared/dungeonConstants'
+import { getAtlasCellKey } from '../../shared/atlasColorVariants'
+import { buildDungeonColorVariants, createGenericColorSwatch } from '../shared/dungeonColorAtlas'
 
-export const dungeonChairAsset = createDungeonAsset({
+const CHAIR_COLOR_SOURCE_CELL = [4, 0] as const
+
+const CHAIR_COLOR_VARIANTS = buildDungeonColorVariants({
+  namedVariantsByCell: {
+    [getAtlasCellKey(CHAIR_COLOR_SOURCE_CELL)]: {
+      id: 'default',
+      label: 'Default',
+    },
+  },
+})
+
+export const dungeonChairAsset = createGenericColorSwatch({
   id: 'dungeon.props_chair',
   slug: 'dungeon-props-chair',
   name: 'Dungeon Chair',
-  category: 'prop',
   modelName: 'chair',
-  transform: DUNGEON_PROP_TRANSFORM,
+  sourceCells: [CHAIR_COLOR_SOURCE_CELL],
+  variants: CHAIR_COLOR_VARIANTS,
+  defaultVariantId: 'default',
   metadata: {
     snapsTo: 'FREE',
     connectors: [

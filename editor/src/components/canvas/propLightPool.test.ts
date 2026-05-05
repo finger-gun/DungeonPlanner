@@ -13,7 +13,7 @@ import {
   MAX_DYNAMIC_PROP_LIGHTS,
   precomputeLightSources,
   type PropLightSource,
-} from './propLightPool'
+} from './propLightPoolShared'
 
 const CANDLE_LIGHT: PropLight = {
   color: '#ff9040',

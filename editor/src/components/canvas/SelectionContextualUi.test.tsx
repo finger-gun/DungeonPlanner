@@ -38,6 +38,9 @@ const storeState = vi.hoisted(() => ({
 }))
 
 const getRegisteredObjectMock = vi.hoisted(() => vi.fn((_id: string) => null))
+const getContentPackAssetByIdMock = vi.hoisted(
+  () => vi.fn<(id: string) => unknown>(() => null),
+)
 const useDungeonStoreMock = vi.hoisted(() => {
   const store = ((selector: (state: typeof storeState) => unknown) => selector(storeState)) as
     ((selector: (state: typeof storeState) => unknown) => unknown) & { getState: () => typeof storeState }
@@ -74,6 +77,10 @@ vi.mock('@react-three/fiber', () => ({
 
 vi.mock('../../store/useDungeonStore', () => ({
   useDungeonStore: useDungeonStoreMock,
+}))
+
+vi.mock('../../content-packs/registry', () => ({
+  getContentPackAssetById: (id: string) => getContentPackAssetByIdMock(id),
 }))
 
 vi.mock('./objectRegistry', () => ({
@@ -120,6 +127,8 @@ describe('SelectionContextualUi', () => {
     storeState.pickUpObject.mockReset()
     storeState.pickUpObject.mockReturnValue(true)
     getRegisteredObjectMock.mockReturnValue(null)
+    getContentPackAssetByIdMock.mockReset()
+    getContentPackAssetByIdMock.mockReturnValue(null)
   })
 
   it('renders the lowered icon controls for a selected object in select mode', () => {
@@ -132,6 +141,25 @@ describe('SelectionContextualUi', () => {
     expect(screen.getByLabelText('Delete selected object')).toBeInTheDocument()
     expect(screen.getByTestId('html-anchor')).toHaveAttribute('data-position', JSON.stringify([2, 0.28, 4]))
     expect(screen.getByTestId('html-anchor')).toHaveAttribute('data-occlude', 'false')
+  })
+
+  it('hides rotate for wall-mounted props', () => {
+    getContentPackAssetByIdMock.mockReturnValue({
+      id: 'prop-asset',
+      slug: 'prop-asset',
+      name: 'Wall Banner',
+      category: 'prop',
+      Component: () => null,
+      metadata: {
+        connectors: [{ point: [0, 0, 0.5], type: 'WALL' }],
+      },
+    })
+
+    render(<SelectionContextualUi />)
+
+    expect(screen.queryByLabelText('Rotate selected object')).toBeNull()
+    expect(screen.getByLabelText('Move selected object')).toBeInTheDocument()
+    expect(screen.getByLabelText('Delete selected object')).toBeInTheDocument()
   })
 
   it('starts a scale drag that previews and commits instance scale changes', () => {
@@ -237,6 +265,37 @@ describe('SelectionContextualUi', () => {
     })
 
     expect(storeState.removeSelectedObject).toHaveBeenCalled()
+  })
+
+  it('shows color swatches for selected props with atlas color variants', () => {
+    getContentPackAssetByIdMock.mockReturnValue({
+      id: 'prop-asset',
+      slug: 'prop-asset',
+      name: 'Banner',
+      category: 'prop',
+      Component: () => null,
+      metadata: {
+        atlasColorVariants: {
+          propKey: 'bannerColor',
+          defaultVariantId: 'blue',
+          variants: [
+            { id: 'red', label: 'Red', swatchColor: '#ef4444', uvOffset: [0, 0] },
+            { id: 'blue', label: 'Blue', swatchColor: '#3b82f6', uvOffset: [0.5, 0] },
+          ],
+        },
+      },
+    })
+
+    render(<SelectionContextualUi />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Open color variants' }))
+
+    fireEvent.click(screen.getByRole('button', { name: 'Red' }))
+    expect(storeState.setObjectProps).toHaveBeenCalledWith('object-1', { bannerColor: 'red' })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Open color variants' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Clear color variant' }))
+    expect(storeState.setObjectProps).toHaveBeenCalledWith('object-1', {})
   })
 
   it('hides the overlay when the selection is not a placed object', () => {

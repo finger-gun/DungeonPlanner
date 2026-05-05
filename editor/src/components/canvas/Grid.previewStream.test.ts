@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { shouldRenderRoomStreamPreview } from './Grid'
+import { shouldRenderRoomStreamPreview } from './GridShared'
 
 describe('shouldRenderRoomStreamPreview', () => {
   it('suppresses speculative tile streaming while a paint stroke is still active', () => {
