@@ -143,6 +143,25 @@ describe('SelectionContextualUi', () => {
     expect(screen.getByTestId('html-anchor')).toHaveAttribute('data-occlude', 'false')
   })
 
+  it('hides rotate for wall-mounted props', () => {
+    getContentPackAssetByIdMock.mockReturnValue({
+      id: 'prop-asset',
+      slug: 'prop-asset',
+      name: 'Wall Banner',
+      category: 'prop',
+      Component: () => null,
+      metadata: {
+        connectors: [{ point: [0, 0, 0.5], type: 'WALL' }],
+      },
+    })
+
+    render(<SelectionContextualUi />)
+
+    expect(screen.queryByLabelText('Rotate selected object')).toBeNull()
+    expect(screen.getByLabelText('Move selected object')).toBeInTheDocument()
+    expect(screen.getByLabelText('Delete selected object')).toBeInTheDocument()
+  })
+
   it('starts a scale drag that previews and commits instance scale changes', () => {
     render(<SelectionContextualUi />)
 

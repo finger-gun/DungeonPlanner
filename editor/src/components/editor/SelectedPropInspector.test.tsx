@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { cleanup, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { DungeonObjectRecord } from '../../store/useDungeonStore'
 import { SelectedPropInspector } from './SelectedPropInspector'
@@ -31,7 +31,7 @@ function createObject(overrides: Partial<DungeonObjectRecord> = {}): DungeonObje
   }
 }
 
-describe('SelectedPropInspector appearance controls', () => {
+describe('SelectedPropInspector', () => {
   afterEach(() => {
     cleanup()
   })
@@ -41,50 +41,12 @@ describe('SelectedPropInspector appearance controls', () => {
     setObjectLightPreviewMock.mockReset()
   })
 
-  it('increments the selected object size', () => {
-    render(<SelectedPropInspector object={createObject()} asset={null} onDelete={() => {}} />)
-
-    fireEvent.click(screen.getByRole('button', { name: 'Larger' }))
-
-    expect(setObjectPropsMock).toHaveBeenCalledWith('prop-1', { instanceScale: 1.25 })
-  })
-
-  it('resets object size back to normal by removing the override', () => {
+  it('does not render appearance controls in the sidebar', () => {
     render(
       <SelectedPropInspector
-        object={createObject({ props: { instanceScale: 1.5 } })}
-        asset={null}
-        onDelete={() => {}}
-      />,
-    )
-
-    fireEvent.click(screen.getByRole('button', { name: 'Normal' }))
-
-    expect(setObjectPropsMock).toHaveBeenCalledWith('prop-1', {})
-  })
-
-  it('stores and clears tint colors', () => {
-    render(
-      <SelectedPropInspector
-        object={createObject({ props: { tintColor: '#aabbcc' } })}
-        asset={null}
-        onDelete={() => {}}
-      />,
-    )
-
-    fireEvent.change(screen.getByLabelText('Tint Color'), {
-      target: { value: '#112233' },
-    })
-    expect(setObjectPropsMock).toHaveBeenCalledWith('prop-1', { tintColor: '#112233' })
-
-    fireEvent.click(screen.getByRole('button', { name: 'Clear' }))
-    expect(setObjectPropsMock).toHaveBeenCalledWith('prop-1', {})
-  })
-
-  it('shows atlas color variant controls for opted-in props', () => {
-    render(
-      <SelectedPropInspector
-        object={createObject({ props: { bannerColor: 'blue' } })}
+        object={createObject({
+          props: { instanceScale: 1.5, tintColor: '#aabbcc', bannerColor: 'blue' },
+        })}
         asset={{
           id: 'prop-asset',
           slug: 'prop-asset',
@@ -105,10 +67,12 @@ describe('SelectedPropInspector appearance controls', () => {
       />,
     )
 
-    fireEvent.click(screen.getByRole('button', { name: 'Red' }))
-    expect(setObjectPropsMock).toHaveBeenCalledWith('prop-1', { bannerColor: 'red' })
-
-    fireEvent.click(screen.getAllByRole('button', { name: 'Clear' })[1]!)
-    expect(setObjectPropsMock).toHaveBeenCalledWith('prop-1', {})
+    expect(screen.queryByText('Appearance')).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Smaller' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Normal' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Larger' })).toBeNull()
+    expect(screen.queryByLabelText('Tint Color')).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Red' })).toBeNull()
+    expect(setObjectPropsMock).not.toHaveBeenCalled()
   })
 })

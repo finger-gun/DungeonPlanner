@@ -1,16 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { ContentPackAsset } from '../../content-packs/types'
-import {
-  MAX_OBJECT_INSTANCE_SCALE,
-  MIN_OBJECT_INSTANCE_SCALE,
-  OBJECT_INSTANCE_SCALE_STEP,
-  getObjectAtlasColorVariant,
-  getObjectInstanceScale,
-  getObjectTintColor,
-  withObjectAtlasColorVariant,
-  withObjectInstanceScale,
-  withObjectTintColor,
-} from '../../store/objectAppearance'
 import type { DungeonObjectRecord } from '../../store/useDungeonStore'
 import { useDungeonStore } from '../../store/useDungeonStore'
 import {
@@ -20,8 +9,6 @@ import {
   withObjectLightOverrides,
   type EditablePropLightSettings,
 } from '../../store/lightOverrides'
-import { hasAtlasColorVariants } from '../../rendering/atlasColorVariants'
-import { AtlasColorVariantPicker } from './AtlasColorVariantPicker'
 import { CompactPillButton } from './CompactPillButton'
 
 type SelectedPropInspectorProps = {
@@ -69,7 +56,6 @@ export function SelectedPropInspector({
           <InfoRow label="Rotation" value={object.rotation.map((v) => v.toFixed(2)).join(', ')} />
           <InfoRow label="Cell" value={object.cellKey} />
         </div>
-        <SelectedPropAppearanceSection object={object} asset={asset} />
         {nextStateProps ? (
           <div className="mt-4 border-t border-stone-800 pt-4">
             <p className="mb-3 text-xs font-semibold uppercase tracking-[0.24em] text-amber-200/70">
@@ -112,139 +98,6 @@ function getStateToggleLabel(nextStateProps: Record<string, unknown>) {
   }
 
   return 'Toggle State'
-}
-
-function SelectedPropAppearanceSection({
-  object,
-  asset,
-}: {
-  object: DungeonObjectRecord
-  asset: ContentPackAsset | null
-}) {
-  const setObjectProps = useDungeonStore((state) => state.setObjectProps)
-  const currentScale = getObjectInstanceScale(object.props)
-  const currentTint = getObjectTintColor(object.props)
-  const atlasColorVariants = hasAtlasColorVariants(asset?.metadata)
-    ? asset.metadata.atlasColorVariants
-    : null
-  const currentAtlasVariant = atlasColorVariants
-    ? (
-      getObjectAtlasColorVariant(object.props, atlasColorVariants.propKey)
-      ?? atlasColorVariants.defaultVariantId
-      ?? null
-    )
-    : null
-
-  const updateScale = (nextScale: number) => {
-    setObjectProps(object.id, withObjectInstanceScale(object.props, nextScale))
-  }
-
-  const updateTint = (nextTint: string | null) => {
-    setObjectProps(object.id, withObjectTintColor(object.props, nextTint))
-  }
-
-  const updateAtlasVariant = (variantId: string | null) => {
-    if (!atlasColorVariants) {
-      return
-    }
-
-    setObjectProps(
-      object.id,
-      withObjectAtlasColorVariant(object.props, atlasColorVariants.propKey, variantId),
-    )
-  }
-
-  return (
-    <div className="mt-4 border-t border-stone-800 pt-4">
-      <p className="mb-3 text-xs font-semibold uppercase tracking-[0.24em] text-amber-200/70">
-        Appearance
-      </p>
-
-      <div className="grid gap-3">
-        <div className="rounded-xl border border-stone-800 bg-stone-950/60 px-3 py-3">
-          <div className="mb-2 flex items-center justify-between gap-3">
-            <label className="text-xs uppercase tracking-[0.2em] text-stone-500">
-              Size
-            </label>
-            <span className="text-xs tabular-nums text-stone-300">{currentScale.toFixed(2)}x</span>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <CompactPillButton
-              type="button"
-              tone="sky"
-              size="sm"
-              onClick={() => updateScale(currentScale - OBJECT_INSTANCE_SCALE_STEP)}
-              disabled={currentScale <= MIN_OBJECT_INSTANCE_SCALE}
-            >
-              Smaller
-            </CompactPillButton>
-            <CompactPillButton
-              type="button"
-              tone="sky"
-              size="sm"
-              active={Math.abs(currentScale - 1) < 0.001}
-              onClick={() => updateScale(1)}
-            >
-              Normal
-            </CompactPillButton>
-            <CompactPillButton
-              type="button"
-              tone="sky"
-              size="sm"
-              onClick={() => updateScale(currentScale + OBJECT_INSTANCE_SCALE_STEP)}
-              disabled={currentScale >= MAX_OBJECT_INSTANCE_SCALE}
-            >
-              Larger
-            </CompactPillButton>
-          </div>
-        </div>
-
-        <div className="rounded-xl border border-stone-800 bg-stone-950/60 px-3 py-3">
-          <div className="mb-2 flex items-center justify-between gap-3">
-            <label htmlFor={`tint-color-${object.id}`} className="text-xs uppercase tracking-[0.2em] text-stone-500">
-              Tint
-            </label>
-            <CompactPillButton
-              type="button"
-              tone="stone"
-              size="xs"
-              onClick={() => updateTint(null)}
-              disabled={!currentTint}
-            >
-              Clear
-            </CompactPillButton>
-          </div>
-          <div className="flex items-center justify-between gap-3">
-            <input
-              id={`tint-color-${object.id}`}
-              type="color"
-              aria-label="Tint Color"
-              value={currentTint ?? '#ffffff'}
-              onChange={(event) => updateTint(event.target.value)}
-              className="h-8 w-12 cursor-pointer rounded border border-stone-700 bg-transparent p-1"
-            />
-            <p className="text-[11px] text-stone-500">{currentTint ?? 'No tint'}</p>
-          </div>
-        </div>
-
-        {atlasColorVariants ? (
-          <div className="rounded-xl border border-stone-800 bg-stone-950/60 px-3 py-3">
-            <div className="mb-2 flex items-center justify-between gap-3">
-              <label className="text-xs uppercase tracking-[0.2em] text-stone-500">
-                Color Variant
-              </label>
-            </div>
-            <AtlasColorVariantPicker
-              config={atlasColorVariants}
-              currentVariantId={currentAtlasVariant}
-              onSelect={updateAtlasVariant}
-              onClear={currentAtlasVariant ? () => updateAtlasVariant(null) : undefined}
-            />
-          </div>
-        ) : null}
-      </div>
-    </div>
-  )
 }
 
 function SelectedPropLightSection({

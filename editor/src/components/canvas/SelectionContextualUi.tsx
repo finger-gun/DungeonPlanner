@@ -10,6 +10,7 @@ import {
   type PointerEvent as ReactPointerEvent,
 } from 'react'
 import * as THREE from 'three'
+import { metadataSupportsConnectorType } from '../../content-packs/connectors'
 import { getContentPackAssetById } from '../../content-packs/registry'
 import type { AtlasColorVariantDefinition } from '../../content-packs/types'
 import { getDungeonAtlasSwatchColor } from '../../content-packs/dungeon/shared/dungeonColorAtlas'
@@ -82,6 +83,7 @@ export function SelectionContextualUi() {
   const atlasColorVariants = hasAtlasColorVariants(selectedAsset?.metadata)
     ? selectedAsset.metadata.atlasColorVariants
     : null
+  const canRotateSelectedObject = !metadataSupportsConnectorType(selectedAsset?.metadata, 'WALL')
   const currentAtlasVariant = atlasColorVariants && selectedObject
     ? (
       getObjectAtlasColorVariant(selectedObject.props, atlasColorVariants.propKey)
@@ -406,14 +408,16 @@ export function SelectionContextualUi() {
           >
             <Maximize2 size={14} strokeWidth={1.8} />
           </button>
-          <button
-            type="button"
-            aria-label="Rotate selected object"
-            className="rounded-full border border-stone-700 bg-stone-900/90 p-2 text-stone-100 transition hover:border-violet-400/70 hover:text-violet-200"
-            onPointerDown={handleRotatePointerDown}
-          >
-            <RotateCw size={14} strokeWidth={1.8} />
-          </button>
+          {canRotateSelectedObject ? (
+            <button
+              type="button"
+              aria-label="Rotate selected object"
+              className="rounded-full border border-stone-700 bg-stone-900/90 p-2 text-stone-100 transition hover:border-violet-400/70 hover:text-violet-200"
+              onPointerDown={handleRotatePointerDown}
+            >
+              <RotateCw size={14} strokeWidth={1.8} />
+            </button>
+          ) : null}
           <button
             type="button"
             aria-label="Move selected object"

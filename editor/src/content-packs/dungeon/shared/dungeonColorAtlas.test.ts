@@ -37,6 +37,16 @@ describe('dungeonColorAtlas', () => {
       metadata: {
         snapsTo: 'GRID',
       },
+      getLight: () => ({
+        color: '#ffffff',
+        intensity: 1,
+        distance: 3,
+      }),
+      getEffect: () => ({
+        preset: 'fire',
+        emitters: [{ offset: [0, 0, 0], scale: 1, intensity: 1 }],
+      }),
+      getPlayModeNextProps: () => ({ lit: true }),
     })
 
     expect(asset.metadata?.atlasColorVariants).toMatchObject({
@@ -44,5 +54,14 @@ describe('dungeonColorAtlas', () => {
       defaultVariantId: 'blue',
       variants,
     })
+    expect(asset.getLight?.({})).toMatchObject({
+      color: '#ffffff',
+      intensity: 1,
+      distance: 3,
+    })
+    expect(asset.getEffect?.({})).toMatchObject({
+      preset: 'fire',
+    })
+    expect(asset.getPlayModeNextProps?.({})).toEqual({ lit: true })
   })
 })
