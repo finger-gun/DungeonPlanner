@@ -1,6 +1,6 @@
+import { createGenericColorSwatch, type AtlasCell } from '../../shared/dungeonColorAtlas'
 import {
   buildDungeonColorVariants,
-  type AtlasCell,
 } from '../../shared/dungeonColorAtlas'
 import { getAtlasCellKey } from '../../../shared/atlasColorVariants'
 
@@ -31,6 +31,37 @@ export const BANNER_WALL_CONNECTORS = [
     type: 'WALL' as const,
   },
 ]
+
+export function createDungeonBannerColorSwatchAsset({
+  id,
+  slug,
+  name,
+  modelName,
+  sourceCells,
+  defaultVariantId,
+}: {
+  id: string
+  slug: string
+  name: string
+  modelName: string
+  sourceCells: AtlasCell[]
+  defaultVariantId: string
+}) {
+  return createGenericColorSwatch({
+    id,
+    slug,
+    name,
+    modelName,
+    sourceCells,
+    variants: ALL_PLAIN_BANNER_SWATCHES,
+    defaultVariantId,
+    metadata: {
+      snapsTo: 'GRID',
+      connectors: BANNER_WALL_CONNECTORS,
+      blocksLineOfSight: false,
+    },
+  })
+}
 
 function capitalize(value: string) {
   return value.charAt(0).toUpperCase() + value.slice(1)

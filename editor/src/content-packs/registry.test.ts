@@ -123,6 +123,28 @@ describe('content pack registry', () => {
     expect(asset.metadata?.atlasColorVariants?.variants).toHaveLength(31)
   })
 
+  it('registers patterned and shield banner props with color variant metadata', () => {
+    for (const assetId of [
+      'dungeon.props_banners_banner_patternA_blue',
+      'dungeon.props_banners_banner_patternB_blue',
+      'dungeon.props_banners_banner_patternC_blue',
+      'dungeon.props_banners_banner_shield_blue',
+    ]) {
+      const asset = getContentPackAssetById(assetId)
+
+      if (!asset) {
+        expect(asset).toBeNull()
+        continue
+      }
+
+      expect(asset.metadata?.atlasColorVariants).toMatchObject({
+        propKey: 'colorVariant',
+        defaultVariantId: 'blue',
+      })
+      expect(asset.metadata?.atlasColorVariants?.variants).toHaveLength(31)
+    }
+  })
+
   it('registers the dungeon chair with color variant metadata', () => {
     const asset = getContentPackAssetById('dungeon.props_chair')
 
