@@ -129,6 +129,7 @@ describe('content pack registry', () => {
       'dungeon.props_banners_banner_patternB_blue',
       'dungeon.props_banners_banner_patternC_blue',
       'dungeon.props_banners_banner_shield_blue',
+      'dungeon.props_banners_banner_thin_blue',
       'dungeon.props_banners_banner_triple_blue',
     ]) {
       const asset = getContentPackAssetById(assetId)
@@ -173,6 +174,11 @@ describe('content pack registry', () => {
       'dungeon.props_banners_banner_shield_red',
       'dungeon.props_banners_banner_shield_white',
       'dungeon.props_banners_banner_shield_yellow',
+      'dungeon.props_banners_banner_thin_brown',
+      'dungeon.props_banners_banner_thin_green',
+      'dungeon.props_banners_banner_thin_red',
+      'dungeon.props_banners_banner_thin_white',
+      'dungeon.props_banners_banner_thin_yellow',
       'dungeon.props_banners_banner_triple_brown',
       'dungeon.props_banners_banner_triple_green',
       'dungeon.props_banners_banner_triple_red',
