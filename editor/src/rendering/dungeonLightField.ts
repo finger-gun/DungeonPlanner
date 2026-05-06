@@ -663,11 +663,33 @@ export function buildPropBakedLightProbe(
   const topY = minY + spanY * 0.85
   const lateralProbeOffsetX = Math.max(spanX * 0.45, GRID_SIZE * 0.12)
   const lateralProbeOffsetZ = Math.max(spanZ * 0.45, GRID_SIZE * 0.12)
-  const centerLight = samplePropProbeBaseLightAtWorldPosition(lightField, [probeX, baseY, probeZ])
-  const eastLight = sampleBakedLightFieldAtWorldPosition(lightField, [probeX + lateralProbeOffsetX, baseY, probeZ])
-  const westLight = sampleBakedLightFieldAtWorldPosition(lightField, [probeX - lateralProbeOffsetX, baseY, probeZ])
-  const southLight = sampleBakedLightFieldAtWorldPosition(lightField, [probeX, baseY, probeZ + lateralProbeOffsetZ])
-  const northLight = sampleBakedLightFieldAtWorldPosition(lightField, [probeX, baseY, probeZ - lateralProbeOffsetZ])
+  const relevantLightSources = getStaticLightSourcesForBounds(lightField, bounds)
+  const centerLight = sampleOccludedPropProbeLightAtWorldPosition(
+    lightField,
+    relevantLightSources,
+    [probeX, baseY, probeZ],
+    true,
+  )
+  const eastLight = sampleOccludedPropProbeLightAtWorldPosition(
+    lightField,
+    relevantLightSources,
+    [probeX + lateralProbeOffsetX, baseY, probeZ],
+  )
+  const westLight = sampleOccludedPropProbeLightAtWorldPosition(
+    lightField,
+    relevantLightSources,
+    [probeX - lateralProbeOffsetX, baseY, probeZ],
+  )
+  const southLight = sampleOccludedPropProbeLightAtWorldPosition(
+    lightField,
+    relevantLightSources,
+    [probeX, baseY, probeZ + lateralProbeOffsetZ],
+  )
+  const northLight = sampleOccludedPropProbeLightAtWorldPosition(
+    lightField,
+    relevantLightSources,
+    [probeX, baseY, probeZ - lateralProbeOffsetZ],
+  )
   const averageLuminance = (
     getBakedLightLuminance(centerLight)
     + getBakedLightLuminance(eastLight)
@@ -681,7 +703,12 @@ export function buildPropBakedLightProbe(
 
   const baseLight = scaleBakedLightSample(centerLight, PROP_BAKED_LIGHT_MULTIPLIER)
   const topLight = scaleBakedLightSample(centerLight, PROP_BAKED_TOP_LIGHT_MULTIPLIER)
-  const staticLightDirection = buildPropDirectionalLightFromStaticSources(lightField, bounds, [probeX, (baseY + topY) * 0.5, probeZ])
+  const staticLightDirection = buildPropDirectionalLightFromStaticSources(
+    lightField,
+    bounds,
+    [probeX, (baseY + topY) * 0.5, probeZ],
+    relevantLightSources,
+  )
   const fallbackDirectionalVector = new THREE.Vector3(
     getBakedLightLuminance(eastLight) - getBakedLightLuminance(westLight),
     averageLuminance * 0.18,
@@ -713,8 +740,8 @@ function buildPropDirectionalLightFromStaticSources(
   lightField: BakedFloorLightField,
   bounds: THREE.Box3,
   worldPosition: readonly [number, number, number],
+  relevantLightSources: ResolvedDungeonLightSource[] = getStaticLightSourcesForBounds(lightField, bounds),
 ) {
-  const relevantLightSources = getStaticLightSourcesForBounds(lightField, bounds)
   if (relevantLightSources.length === 0) {
     return null
   }
@@ -774,6 +801,37 @@ function samplePropProbeBaseLightAtWorldPosition(
   return getBakedLightLuminance(discreteSample) >= getBakedLightLuminance(smoothedSample)
     ? discreteSample
     : smoothedSample
+}
+
+function sampleOccludedPropProbeLightAtWorldPosition(
+  lightField: BakedFloorLightField,
+  relevantLightSources: ResolvedDungeonLightSource[],
+  worldPosition: readonly [number, number, number],
+  preferDiscreteSample: boolean = false,
+): BakedLightSample {
+  const sampledLight = preferDiscreteSample
+    ? samplePropProbeBaseLightAtWorldPosition(lightField, worldPosition)
+    : sampleBakedLightFieldAtWorldPosition(lightField, worldPosition)
+
+  if (!lightField.occlusion || relevantLightSources.length === 0) {
+    return sampledLight
+  }
+
+  const rawStaticLight = sampleStaticLightAtWorldPosition(relevantLightSources, worldPosition)
+  const rawStaticLuminance = getBakedLightLuminance(rawStaticLight)
+  if (rawStaticLuminance <= 1e-4) {
+    return sampledLight
+  }
+
+  const visibleStaticLight = sampleStaticLightAtWorldPosition(
+    relevantLightSources,
+    worldPosition,
+    lightField.occlusion,
+  )
+  const visibilityFactor = clamp01(
+    getBakedLightLuminance(visibleStaticLight) / rawStaticLuminance,
+  )
+  return scaleBakedLightSample(sampledLight, visibilityFactor)
 }
 
 function getBakedLightLuminance(sample: BakedLightSample) {
