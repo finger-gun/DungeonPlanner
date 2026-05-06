@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   buildTransientRoomEntrySignature,
   expandRoomMutationCells,
+  getBuildAnimationTargetsForWallKeys,
   getCellsForWallKeys,
 } from './roomMutationAnimations'
 
@@ -43,6 +44,13 @@ describe('roomMutationAnimations', () => {
         [4, 6],
       ]),
     )
+  })
+
+  it('builds wall animation targets keyed by the wall segments themselves', () => {
+    expect(getBuildAnimationTargetsForWallKeys(['4:7:east', '4:7:east', '4:7:north'])).toEqual([
+      { key: '4:7:east', cell: [4, 7] },
+      { key: '4:7:north', cell: [4, 7] },
+    ])
   })
 
   it('distinguishes corner ghosts that reuse a vertex with different supporting walls', () => {

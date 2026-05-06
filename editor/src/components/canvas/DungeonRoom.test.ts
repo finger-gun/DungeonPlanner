@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { getBuildAnimationCellKeyFromWallKeys, getOpeningHitboxSize } from './DungeonRoomShared'
+import { getBuildAnimationKeyFromWallKeys, getOpeningHitboxSize } from './DungeonRoomShared'
 import { deriveWallCornersFromSegments } from './wallCornerLayout'
 import { shouldActivateFloorReceiver } from './floorReceiverMode'
 
@@ -70,22 +70,28 @@ describe('deriveWallCornersFromSegments', () => {
   })
 
   it('resolves build animation cell keys from adjacent wall keys instead of corner vertex keys', () => {
-    expect(getBuildAnimationCellKeyFromWallKeys(['0:0:north', '0:0:west'])).toBe('0:0')
-    expect(getBuildAnimationCellKeyFromWallKeys(['2:0:north', '3:0:west'])).toBe('2:0')
+    expect(getBuildAnimationKeyFromWallKeys(['0:0:north', '0:0:west'])).toBe('0:0')
+    expect(getBuildAnimationKeyFromWallKeys(['2:0:north', '3:0:west'])).toBe('2:0')
   })
 
   it('prefers an active adjacent wall cell when choosing build animation timing', () => {
     expect(
-      getBuildAnimationCellKeyFromWallKeys(['2:0:north', '3:0:west'], (cellKey) => cellKey === '3:0'),
+      getBuildAnimationKeyFromWallKeys(['2:0:north', '3:0:west'], (cellKey) => cellKey === '3:0'),
     ).toBe('3:0')
   })
 
   it('considers opposite-side cells for east and south wall animation lookups', () => {
     expect(
-      getBuildAnimationCellKeyFromWallKeys(['2:0:east'], (cellKey) => cellKey === '3:0'),
+      getBuildAnimationKeyFromWallKeys(['2:0:east'], (cellKey) => cellKey === '3:0'),
     ).toBe('3:0')
     expect(
-      getBuildAnimationCellKeyFromWallKeys(['2:0:south'], (cellKey) => cellKey === '2:-1'),
+      getBuildAnimationKeyFromWallKeys(['2:0:south'], (cellKey) => cellKey === '2:-1'),
     ).toBe('2:-1')
+  })
+
+  it('prefers active wall-segment build keys before falling back to adjacent cells', () => {
+    expect(
+      getBuildAnimationKeyFromWallKeys(['2:0:east'], (key) => key === '2:0:east'),
+    ).toBe('2:0:east')
   })
 })

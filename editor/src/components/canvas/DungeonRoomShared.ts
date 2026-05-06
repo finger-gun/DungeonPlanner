@@ -24,10 +24,17 @@ function getWallCellKey(wallKey: string) {
   return cellKeys
 }
 
-export function getBuildAnimationCellKeyFromWallKeys(
+export function getBuildAnimationKeyFromWallKeys(
   wallKeys: string[],
   isBuildAnimationCurrentlyActive?: (cellKey: string) => boolean,
 ) {
+  if (isBuildAnimationCurrentlyActive) {
+    const activeWallKey = wallKeys.find((wallKey) => isBuildAnimationCurrentlyActive(wallKey))
+    if (activeWallKey) {
+      return activeWallKey
+    }
+  }
+
   const cellKeys = [...new Set(
     wallKeys
       .flatMap(getWallCellKey),

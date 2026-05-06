@@ -130,6 +130,21 @@ export function buildRemovedRoomTileEntries({
   return previousEntries.filter((entry) => !nextSignatures.has(buildTransientRoomEntrySignature(entry)))
 }
 
+export function getBuildAnimationTargetsForWallKeys(wallKeys: readonly string[]) {
+  const targets = new Map<string, { key: string; cell: GridCell }>()
+  wallKeys.forEach((wallKey) => {
+    const cell = getWallPreviewCells(wallKey)[0]
+    if (!cell) {
+      return
+    }
+    targets.set(wallKey, {
+      key: wallKey,
+      cell,
+    })
+  })
+  return [...targets.values()]
+}
+
 export function expandRoomMutationCells(cells: readonly GridCell[]) {
   const expanded = new Map<string, GridCell>()
   cells.forEach((cell) => {

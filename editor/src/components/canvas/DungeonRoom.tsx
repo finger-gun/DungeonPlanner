@@ -56,7 +56,7 @@ import { setBuildAnimationTime } from './buildAnimationMaterial'
 import { TileGpuStreamMount } from './TileGpuStreamContext'
 import {
   WALL_EXTRA_DELAY_MS,
-  getBuildAnimationCellKeyFromWallKeys,
+  getBuildAnimationKeyFromWallKeys,
   getOpeningHitboxSize,
 } from './DungeonRoomShared'
 import { getTileGpuStreamMountId } from './TileGpuStreamContextShared'
@@ -244,7 +244,7 @@ function FloorRenderChunkRenderer({
   const useLineOfSightPostMask = visibility.active
   const staticWallEntries = useMemo<StaticTileEntry[]>(
     () => bundle.walls.flatMap((wall) => {
-      const floorKey = getBuildAnimationCellKeyFromWallKeys(wall.segmentKeys, isBuildAnimationCurrentlyActive) ?? wall.key
+      const floorKey = getBuildAnimationKeyFromWallKeys(wall.segmentKeys, isBuildAnimationCurrentlyActive) ?? wall.key
       if (isInteractiveWallAsset(wall.assetId)) {
         return []
       }
@@ -272,21 +272,21 @@ function FloorRenderChunkRenderer({
   )
   const staticInteractiveWalls = useMemo(
     () => bundle.walls.filter((wall) => {
-      const floorKey = getBuildAnimationCellKeyFromWallKeys(wall.segmentKeys, isBuildAnimationCurrentlyActive) ?? wall.key
+      const floorKey = getBuildAnimationKeyFromWallKeys(wall.segmentKeys, isBuildAnimationCurrentlyActive) ?? wall.key
       return !(enableBuildAnimation && isBuildAnimationCurrentlyActive(floorKey)) && isInteractiveWallAsset(wall.assetId)
     }),
     [bundle.walls, enableBuildAnimation, isBuildAnimationCurrentlyActive],
   )
   const animatedInteractiveWalls = useMemo(
     () => bundle.walls.filter((wall) => {
-      const floorKey = getBuildAnimationCellKeyFromWallKeys(wall.segmentKeys, isBuildAnimationCurrentlyActive) ?? wall.key
+      const floorKey = getBuildAnimationKeyFromWallKeys(wall.segmentKeys, isBuildAnimationCurrentlyActive) ?? wall.key
       return enableBuildAnimation && isBuildAnimationCurrentlyActive(floorKey) && isInteractiveWallAsset(wall.assetId)
     }),
     [bundle.walls, enableBuildAnimation, isBuildAnimationCurrentlyActive],
   )
   const staticCornerEntries = useMemo<StaticTileEntry[]>(
     () => bundle.corners.map((corner) => {
-      const cellKey = getBuildAnimationCellKeyFromWallKeys(corner.wallKeys, isBuildAnimationCurrentlyActive) ?? corner.key
+      const cellKey = getBuildAnimationKeyFromWallKeys(corner.wallKeys, isBuildAnimationCurrentlyActive) ?? corner.key
       const buildAnimation = enableBuildAnimation
         ? getBuildAnimationState(cellKey, WALL_EXTRA_DELAY_MS)
         : null
@@ -359,7 +359,7 @@ function FloorRenderChunkRenderer({
         />
       ))}
       {animatedInteractiveWalls.map((wall) => {
-        const floorKey = getBuildAnimationCellKeyFromWallKeys(wall.segmentKeys, isBuildAnimationCurrentlyActive) ?? wall.key
+        const floorKey = getBuildAnimationKeyFromWallKeys(wall.segmentKeys, isBuildAnimationCurrentlyActive) ?? wall.key
         return (
           <AnimatedTileGroup
             key={wall.key}
@@ -849,7 +849,7 @@ function OpeningRenderer({
   const wallVisibility = getWallSpanVisibilityState(visibility, openingSegmentKeys)
   const interiorDirections = getWallSpanInteriorLightDirections(openingSegmentKeys, paintedCells)
   const openingAnimationCellKey =
-    getBuildAnimationCellKeyFromWallKeys(openingSegmentKeys, isBuildAnimationCurrentlyActive)
+    getBuildAnimationKeyFromWallKeys(openingSegmentKeys, isBuildAnimationCurrentlyActive)
     ?? opening.wallKey.split(':').slice(0, 2).join(':')
   const clipBelowGround = enableBuildAnimation && isBuildAnimationCurrentlyActive(openingAnimationCellKey)
 

@@ -14,6 +14,7 @@ import {
   releaseHeldBuildAnimations,
   resetBuildAnimations,
   triggerBuild,
+  triggerBuildTargets,
   useBuildAnimationVersion,
 } from './buildAnimations'
 import {
@@ -133,5 +134,17 @@ describe('buildAnimations', () => {
       delay: 0,
       direction: 'fall',
     }, 1000 + BUILD_ANIMATION_RISE_DURATION_MS)).toBe(-BUILD_ANIMATION_DEPTH)
+  })
+
+  it('can animate non-floor build targets without reusing cell keys', () => {
+    act(() => {
+      triggerBuildTargets([
+        { key: '0:0:east', cell: [0, 0] },
+      ], [0, 0])
+    })
+
+    expect(isAnimationActive('0:0:east')).toBe(true)
+    expect(getBuildAnimationState('0:0:east')).toEqual({ delay: 0, startedAt: 1000 })
+    expect(getBuildAnimationState('0:0')).toBeNull()
   })
 })

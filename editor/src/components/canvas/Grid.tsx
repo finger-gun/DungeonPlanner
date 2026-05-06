@@ -48,6 +48,7 @@ import {
   hasHeldBuildAnimations,
   releaseHeldBuildAnimations,
   triggerBuild,
+  triggerBuildTargets,
   useBuildAnimationVersion,
 } from '../../store/buildAnimations'
 import { traceBuildPerf } from '../../performance/runtimeBuildTrace'
@@ -61,6 +62,12 @@ import { getEligibleOpenPassageWallKey } from './openPassageInteraction'
 import { extendOpenPassageBrush } from './openPassageBrush'
 import { getOpeningToolMode } from './openingToolMode'
 import { calculatePropSnapPosition } from './propPlacement'
+import {
+  shouldUpdateGridHoverInteractionState,
+  shouldUpdateGridStrokeState,
+  shouldUpdateOpenPassageBrushState,
+  shouldUpdateRoomWallBrushState,
+} from './gridFastState'
 import { supportsPlacementRotationShortcut } from '../../rotationShortcuts'
 import { getObjectInstanceScale, getObjectTintColor } from '../../store/objectAppearance'
 import type { BakedFloorLightField } from '../../rendering/dungeonLightField'
@@ -84,6 +91,7 @@ import {
   buildRemovedRoomTileEntries,
   buildSpeculativeRoomTileEntries,
   expandRoomMutationCells,
+  getBuildAnimationTargetsForWallKeys,
   getCellsForWallKeys,
   getOriginCellForCells,
   type RoomAnimationStateInput,
@@ -267,6 +275,13 @@ export function Grid({ size = 120, playMode = false, bakedLightField = null }: G
     hoveredTerrainCell: null,
     hoveredSurfaceHit: null,
   })
+  const hoverInteractionStateRef = useRef<{
+    hoveredOpenWallKey: string | null
+    hoveredRoomWallEditTarget: RoomWallEditTarget | null
+  }>({
+    hoveredOpenWallKey: null,
+    hoveredRoomWallEditTarget: null,
+  })
   const placementOrientationKey = pickedUpObject
     ? `pickup:${pickedUpObject.objectId}:${pickedUpObject.assetId}:${wallConnectionMode}`
     : `${selectedPropAssetId ?? ''}:${selectedCharacterAssetId ?? ''}:${selectedOpeningAssetId ?? ''}:${wallConnectionMode}`
@@ -294,6 +309,13 @@ export function Grid({ size = 120, playMode = false, bakedLightField = null }: G
       hoveredSurfaceHit,
     }
   }, [hoveredCell, hoveredPoint, hoveredRay, hoveredSurfaceHit, hoveredTerrainCell])
+
+  useEffect(() => {
+    hoverInteractionStateRef.current = {
+      hoveredOpenWallKey,
+      hoveredRoomWallEditTarget,
+    }
+  }, [hoveredOpenWallKey, hoveredRoomWallEditTarget])
 
   useEffect(() => {
     void buildAnimationVersion
@@ -447,7 +469,7 @@ export function Grid({ size = 120, playMode = false, bakedLightField = null }: G
       areGridCellsEqual(current.hoveredTerrainCell, nextHoveredTerrainCell) &&
       arePlacementSurfaceHitsEqual(current.hoveredSurfaceHit, nextHoveredSurfaceHit)
     ) {
-      return
+      return false
     }
 
     hoverPreviewStateRef.current = {
@@ -463,6 +485,7 @@ export function Grid({ size = 120, playMode = false, bakedLightField = null }: G
     setHoveredRay(nextHoveredRay)
     setHoveredTerrainCell(nextHoveredTerrainCell)
     setHoveredSurfaceHit(nextHoveredSurfaceHit)
+    return true
   }, [
     setHoveredCell,
     setHoveredPoint,
@@ -551,6 +574,19 @@ export function Grid({ size = 120, playMode = false, bakedLightField = null }: G
     startCell: GridCell | null,
     currentCell: GridCell | null,
   ) => {
+    const nextState = {
+      mode,
+      startCell,
+      currentCell,
+    }
+    const currentState = {
+      mode: strokeModeRef.current,
+      startCell: strokeStartRef.current,
+      currentCell: strokeCurrentRef.current,
+    }
+    if (!shouldUpdateGridStrokeState(currentState, nextState)) {
+      return false
+    }
     setPaintingStrokeActive(Boolean(mode))
     strokeModeRef.current = mode
     strokeStartRef.current = startCell
@@ -558,6 +594,7 @@ export function Grid({ size = 120, playMode = false, bakedLightField = null }: G
     setStrokeMode(mode)
     setStrokeStartCell(startCell)
     setStrokeCurrentCell(currentCell)
+    return true
   }, [
     setPaintingStrokeActive,
     setStrokeCurrentCell,
@@ -566,10 +603,22 @@ export function Grid({ size = 120, playMode = false, bakedLightField = null }: G
   ])
 
   const updateOpenPassageBrushState = useCallback((active: boolean, wallKeys: string[]) => {
+    const currentState = {
+      active: openPassageBrushActiveRef.current,
+      wallKeys: openPassageBrushWallKeysRef.current,
+    }
+    const nextState = {
+      active,
+      wallKeys,
+    }
+    if (!shouldUpdateOpenPassageBrushState(currentState, nextState)) {
+      return false
+    }
     openPassageBrushActiveRef.current = active
     openPassageBrushWallKeysRef.current = wallKeys
     setOpenPassageBrushWallKeys(wallKeys)
     setPaintingStrokeActive(active || roomWallBrushActiveRef.current || Boolean(strokeModeRef.current))
+    return true
   }, [setOpenPassageBrushWallKeys, setPaintingStrokeActive])
 
   const updateRoomWallBrushState = useCallback((
@@ -577,12 +626,26 @@ export function Grid({ size = 120, playMode = false, bakedLightField = null }: G
     mode: 'paint' | 'erase' | null,
     targets: RoomWallEditTarget[],
   ) => {
+    const currentState = {
+      active: roomWallBrushActiveRef.current,
+      mode: roomWallBrushModeRef.current,
+      targets: roomWallBrushTargetsRef.current,
+    }
+    const nextState = {
+      active,
+      mode,
+      targets,
+    }
+    if (!shouldUpdateRoomWallBrushState(currentState, nextState)) {
+      return false
+    }
     roomWallBrushActiveRef.current = active
     roomWallBrushModeRef.current = mode
     roomWallBrushTargetsRef.current = targets
     setRoomWallBrushTargets(targets)
     setRoomWallBrushMode(mode)
     setPaintingStrokeActive(active || openPassageBrushActiveRef.current || Boolean(strokeModeRef.current))
+    return true
   }, [setPaintingStrokeActive, setRoomWallBrushMode, setRoomWallBrushTargets])
 
   const cancelRoomStrokeStream = useCallback(() => {
@@ -1127,7 +1190,10 @@ export function Grid({ size = 120, playMode = false, bakedLightField = null }: G
     if (previousRoomAnimationState && affectedWallKeys.length > 0) {
       const nextState = useDungeonStore.getState()
       if (nextState.activeFloorId === activeFloorId) {
-        const affectedCells = getCellsForWallKeys(affectedWallKeys)
+        const affectedCells = expandRoomMutationCells(getCellsForWallKeys(affectedWallKeys))
+        const originCell = getOriginCellForCells(affectedCells)
+        const wallBuildTargets = getBuildAnimationTargetsForWallKeys(affectedWallKeys)
+        const mutationStartedAt = performance.now()
         const removalEntries = buildRemovedRoomTileEntries({
           before: previousRoomAnimationState,
           after: {
@@ -1143,11 +1209,20 @@ export function Grid({ size = 120, playMode = false, bakedLightField = null }: G
             wallSurfaceAssetIds: nextState.wallSurfaceAssetIds,
             wallSurfaceProps: nextState.wallSurfaceProps,
           },
-          buildStartedAt: performance.now(),
+          buildStartedAt: mutationStartedAt,
           cells: affectedCells,
-          originCell: getOriginCellForCells(affectedCells),
+          originCell,
         })
         queueRemovalAnimationBatch(removalEntries, activeFloorId)
+
+        if (mode === 'paint' && wallBuildTargets.length > 0 && BUILD_ANIMATIONS_ENABLED) {
+          const scheduledBuildStartedAt = removalEntries.length > 0
+            ? mutationStartedAt + getBuildAnimationPlaybackDurationMs(WALL_EXTRA_DELAY_MS)
+            : mutationStartedAt
+          triggerBuildTargets(wallBuildTargets, originCell, {
+            startedAt: scheduledBuildStartedAt,
+          })
+        }
         invalidate()
       }
     }
@@ -1238,31 +1313,47 @@ export function Grid({ size = 120, playMode = false, bakedLightField = null }: G
           roomWallBrushModeRef.current ?? 'paint',
         )
       : null
-    setHoveredCell(snapped)
-    setHoveredPoint(point)
-    setHoveredRay({
-      origin: [event.ray.origin.x, event.ray.origin.y, event.ray.origin.z],
-      direction: [event.ray.direction.x, event.ray.direction.y, event.ray.direction.z],
+    const hoverPreviewChanged = applyResolvedHoverState({
+      point,
+      snapped,
+      terrainCell: terrainHit?.cell ?? null,
+      ray: {
+        origin: [event.ray.origin.x, event.ray.origin.y, event.ray.origin.z],
+        direction: [event.ray.direction.x, event.ray.direction.y, event.ray.direction.z],
+      },
+      surfaceHit: resolvePlacementSurfaceHit(event.nativeEvent),
     })
-    setHoveredTerrainCell(terrainHit?.cell ?? null)
-    setHoveredSurfaceHit(resolvePlacementSurfaceHit(event.nativeEvent))
-    setHoveredOpenWallKey(hoveredOpenWallKey)
-    setHoveredRoomWallEditTarget(hoveredRoomWallEditTarget)
+    const nextHoverInteraction = {
+      hoveredOpenWallKey,
+      hoveredRoomWallEditTarget,
+    }
+    const hoverInteractionChanged = shouldUpdateGridHoverInteractionState(
+      hoverInteractionStateRef.current,
+      nextHoverInteraction,
+    )
+    if (hoverInteractionChanged) {
+      hoverInteractionStateRef.current = nextHoverInteraction
+      setHoveredOpenWallKey(hoveredOpenWallKey)
+      setHoveredRoomWallEditTarget(hoveredRoomWallEditTarget)
+    }
 
+    let shouldInvalidate = hoverPreviewChanged || hoverInteractionChanged
     if (openPassageBrushActiveRef.current && hoveredOpenWallKey) {
       placeOpenPassageWall(hoveredOpenWallKey)
+      shouldInvalidate = true
     }
-    invalidate()
     if (roomWallBrushActiveRef.current) {
       extendRoomWallBrush(point)
+      shouldInvalidate = true
     }
 
     if (tool === 'room' && roomEditMode === 'rooms' && strokeModeRef.current) {
-      updateStrokeState(
+      const strokeChanged = updateStrokeState(
         strokeModeRef.current,
         strokeStartRef.current,
         snapped.cell,
       )
+      shouldInvalidate = shouldInvalidate || strokeChanged
 
       // In paint mode, track cells that will be painted or erased (but don't paint/erase yet)
       if (roomPaintMode === 'paint' && mapMode !== 'outdoor') {
@@ -1274,10 +1365,14 @@ export function Grid({ size = 120, playMode = false, bakedLightField = null }: G
             return [x, z] as GridCell
           })
           setStrokePaintedCells(newPaintedCells)
+          shouldInvalidate = true
         }
       }
     }
 
+    if (shouldInvalidate) {
+      invalidate()
+    }
   }
 
   function updateCursorPosOnly() {}

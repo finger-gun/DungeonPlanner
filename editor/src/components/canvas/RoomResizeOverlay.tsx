@@ -33,6 +33,10 @@ import {
   expandRoomMutationCells,
   type RoomAnimationStateInput,
 } from './roomMutationAnimations'
+import {
+  shouldUpdateRoomResizeDragState,
+  type RoomResizeDragState,
+} from './roomResizeDragState'
 import { useRemovalAnimationBatches } from './useRemovalAnimationBatches'
 
 const OVERLAY_Y = 0.3
@@ -43,20 +47,7 @@ type DragHandle =
   | { kind: 'corner'; corner: RoomResizeCorner }
   | { kind: 'edge'; edge: RoomResizeEdge }
 
-type DragState =
-  | {
-      kind: 'rect'
-      handle: DragHandle
-      bounds: RoomBounds
-      valid: boolean
-    }
-  | {
-      kind: 'run'
-      run: RoomBoundaryRun
-      boundary: number
-      cells: GridCell[]
-      valid: boolean
-    }
+type DragState = RoomResizeDragState
 
 type RoomResizeOverlayProps = {
   bakedLightField?: BakedFloorLightField | null
@@ -77,6 +68,7 @@ export function RoomResizeOverlay({ bakedLightField = null }: RoomResizeOverlayP
   const globalFloorAssetId = useDungeonStore((state) => state.selectedAssetIds.floor)
   const globalWallAssetId = useDungeonStore((state) => state.selectedAssetIds.wall)
   const selectedRoomId = useDungeonStore((state) => state.selectedRoomId)
+  const removeRoom = useDungeonStore((state) => state.removeRoom)
   const resizeRoom = useDungeonStore((state) => state.resizeRoom)
   const resizeRoomByBoundaryRun = useDungeonStore((state) => state.resizeRoomByBoundaryRun)
   const setRoomResizeHandleActive = useDungeonStore((state) => state.setRoomResizeHandleActive)
@@ -85,6 +77,7 @@ export function RoomResizeOverlay({ bakedLightField = null }: RoomResizeOverlayP
   const [dragState, setDragState] = useState<DragState | null>(null)
   const dragStateRef = useRef<DragState | null>(null)
   const { removalAnimationBatches, queueRemovalAnimationBatch } = useRemovalAnimationBatches()
+  const isDragging = dragState !== null
 
   useEffect(() => {
     dragStateRef.current = dragState
@@ -150,6 +143,74 @@ export function RoomResizeOverlay({ bakedLightField = null }: RoomResizeOverlayP
     invalidate()
   }, [gl, invalidate, setRoomResizeHandleActive])
 
+  const deleteSelectedRoomWithAnimation = useCallback(() => {
+    if (!selectedRoomId || roomCells.length === 0) {
+      return
+    }
+
+    const previousRoomAnimationState = {
+      activeLayerId,
+      bakedLightField,
+      floorTileAssetIds,
+      globalFloorAssetId,
+      globalWallAssetId,
+      innerWalls,
+      paintedCells,
+      rooms,
+      wallOpenings,
+      wallSurfaceAssetIds,
+      wallSurfaceProps,
+    } satisfies RoomAnimationStateInput
+
+    removeRoom(selectedRoomId)
+
+    const nextState = useDungeonStore.getState()
+    if (nextState.activeFloorId !== activeFloorId) {
+      return
+    }
+
+    const affectedCells = expandRoomMutationCells(roomCells)
+    const removalEntries = buildRemovedRoomTileEntries({
+      before: previousRoomAnimationState,
+      after: {
+        activeLayerId,
+        bakedLightField,
+        floorTileAssetIds: nextState.floorTileAssetIds,
+        globalFloorAssetId: nextState.selectedAssetIds.floor,
+        globalWallAssetId: nextState.selectedAssetIds.wall,
+        innerWalls: nextState.innerWalls,
+        paintedCells: nextState.paintedCells,
+        rooms: nextState.rooms,
+        wallOpenings: nextState.wallOpenings,
+        wallSurfaceAssetIds: nextState.wallSurfaceAssetIds,
+        wallSurfaceProps: nextState.wallSurfaceProps,
+      },
+      buildStartedAt: performance.now(),
+      cells: affectedCells,
+      originCell: affectedCells[0] ?? roomCells[0] ?? [0, 0],
+    })
+    queueRemovalAnimationBatch(removalEntries, activeFloorId)
+    invalidate()
+  }, [
+    activeFloorId,
+    activeLayerId,
+    bakedLightField,
+    floorTileAssetIds,
+    globalFloorAssetId,
+    globalWallAssetId,
+    innerWalls,
+    invalidate,
+    paintedCells,
+    queueRemovalAnimationBatch,
+    removeRoom,
+    roomCells,
+    rooms,
+    selectedRoomId,
+    wallOpenings,
+    wallSurfaceAssetIds,
+    wallSurfaceProps,
+  ])
+
   const unitBoxGeometry = useMemo(() => new THREE.BoxGeometry(1, 1, 1), [])
 
   useEffect(() => () => {
@@ -184,9 +245,36 @@ export function RoomResizeOverlay({ bakedLightField = null }: RoomResizeOverlayP
   }, [gl, setRoomResizeHandleActive, showOverlay, controls])
 
   useEffect(() => {
-     if (!dragState || !selectedRoomId) {
-       return
-     }
+    if (!showOverlay) {
+      return
+    }
+
+    function handleKeyDown(event: KeyboardEvent) {
+      if ((event.key !== 'Delete' && event.key !== 'Backspace') || dragStateRef.current) {
+        return
+      }
+
+      const activeElement = document.activeElement
+      if (
+        activeElement instanceof HTMLInputElement ||
+        activeElement instanceof HTMLTextAreaElement ||
+        (activeElement instanceof HTMLElement && activeElement.isContentEditable)
+      ) {
+        return
+      }
+
+      event.preventDefault()
+      deleteSelectedRoomWithAnimation()
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [deleteSelectedRoomWithAnimation, showOverlay])
+
+  useEffect(() => {
+      if (!isDragging || !selectedRoomId) {
+        return
+      }
 
      const roomId = selectedRoomId
      const originBounds = baseBounds
@@ -196,11 +284,11 @@ export function RoomResizeOverlay({ bakedLightField = null }: RoomResizeOverlayP
     const ndc = new THREE.Vector2()
     const point = new THREE.Vector3()
 
-    function updateDrag(clientX: number, clientY: number) {
-      const rect = gl.domElement.getBoundingClientRect()
-      if (rect.width === 0 || rect.height === 0) {
-        return
-      }
+      function updateDrag(clientX: number, clientY: number) {
+       const rect = gl.domElement.getBoundingClientRect()
+       if (rect.width === 0 || rect.height === 0) {
+         return
+       }
 
       ndc.set(
         ((clientX - rect.left) / rect.width) * 2 - 1,
@@ -212,10 +300,11 @@ export function RoomResizeOverlay({ bakedLightField = null }: RoomResizeOverlayP
         return
       }
 
-      setDragState((current) => {
-        if (!current) {
-          return current
-        }
+       let didChange = false
+       setDragState((current) => {
+         if (!current) {
+           return current
+         }
 
          if (current.kind === 'rect') {
            if (!originBounds) {
@@ -237,27 +326,39 @@ export function RoomResizeOverlay({ bakedLightField = null }: RoomResizeOverlayP
                    : snapWorldToBoundary(point.x),
                )
 
-           return {
-             ...current,
-             bounds: nextBounds,
-             valid: canResizeRoomToBounds(roomId, nextBounds, paintedCells),
+           const nextState = {
+              ...current,
+              bounds: nextBounds,
+              valid: canResizeRoomToBounds(roomId, nextBounds, paintedCells),
+            }
+           if (!shouldUpdateRoomResizeDragState(current, nextState)) {
+             return current
            }
+           didChange = true
+           return nextState
          }
 
-         const boundary = current.run.direction === 'north' || current.run.direction === 'south'
-           ? snapWorldToBoundary(point.z)
-           : snapWorldToBoundary(point.x)
-         const nextCells = getResizedRoomCellsForRun(roomId, paintedCells, current.run, boundary)
+          const boundary = current.run.direction === 'north' || current.run.direction === 'south'
+            ? snapWorldToBoundary(point.z)
+            : snapWorldToBoundary(point.x)
+          const nextCells = getResizedRoomCellsForRun(roomId, paintedCells, current.run, boundary)
 
-         return {
-           ...current,
-           boundary,
-           cells: nextCells ?? originCells,
-           valid: nextCells !== null,
-         }
-       })
-       invalidate()
-     }
+          const nextState = {
+            ...current,
+            boundary,
+            cells: nextCells ?? originCells,
+            valid: nextCells !== null,
+          }
+          if (!shouldUpdateRoomResizeDragState(current, nextState)) {
+            return current
+          }
+          didChange = true
+          return nextState
+        })
+        if (didChange) {
+          invalidate()
+        }
+      }
 
     function handlePointerMove(event: PointerEvent) {
       updateDrag(event.clientX, event.clientY)
@@ -327,7 +428,7 @@ export function RoomResizeOverlay({ bakedLightField = null }: RoomResizeOverlayP
       window.removeEventListener('pointermove', handlePointerMove)
       window.removeEventListener('pointerup', handlePointerUp)
     }
-    }, [activeFloorId, activeLayerId, bakedLightField, baseBounds, camera, dragState, floorTileAssetIds, gl, globalFloorAssetId, globalWallAssetId, innerWalls, invalidate, paintedCells, queueRemovalAnimationBatch, resizeRoom, resizeRoomByBoundaryRun, roomCells, rooms, selectedRoomId, stopDrag, wallOpenings, wallSurfaceAssetIds, wallSurfaceProps])
+    }, [activeFloorId, activeLayerId, bakedLightField, baseBounds, camera, floorTileAssetIds, gl, globalFloorAssetId, globalWallAssetId, innerWalls, invalidate, isDragging, paintedCells, queueRemovalAnimationBatch, resizeRoom, resizeRoomByBoundaryRun, roomCells, rooms, selectedRoomId, stopDrag, wallOpenings, wallSurfaceAssetIds, wallSurfaceProps])
 
   if (tool !== 'room' || !selectedRoomId || !baseBounds) {
     return null

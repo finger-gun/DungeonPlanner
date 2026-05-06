@@ -24,6 +24,10 @@ export type BuildAnimationState = {
   direction?: BuildAnimationDirection
 }
 export type TriggerBuildOptions = { holdUntilReleased?: boolean; startedAt?: number }
+export type BuildAnimationTarget = {
+  key: string
+  cell: GridCell
+}
 export type HeldBuildBatchState = {
   startedAt: number
   effectiveReleaseAt: number
@@ -60,7 +64,22 @@ export function triggerBuild(
   originCell: GridCell,
   options: TriggerBuildOptions = {},
 ): number | null {
-  if (cells.length === 0) {
+  return triggerBuildTargets(
+    cells.map((cell) => ({
+      key: getCellKey(cell),
+      cell,
+    })),
+    originCell,
+    options,
+  )
+}
+
+export function triggerBuildTargets(
+  targets: BuildAnimationTarget[],
+  originCell: GridCell,
+  options: TriggerBuildOptions = {},
+): number | null {
+  if (targets.length === 0) {
     return null
   }
   const now = options.startedAt ?? performance.now()
@@ -72,15 +91,17 @@ export function triggerBuild(
   }
 
   // Normalise: find the max Manhattan distance from the origin so delays scale to [0, MAX_STAGGER_MS]
-  const maxDist = cells.reduce((max, cell) => {
+  const maxDist = targets.reduce((max, target) => {
+    const cell = target.cell
     const d = Math.abs(cell[0] - originCell[0]) + Math.abs(cell[1] - originCell[1])
     return Math.max(max, d)
   }, 1)
 
-  cells.forEach((cell) => {
+  targets.forEach((target) => {
+    const cell = target.cell
     const d     = Math.abs(cell[0] - originCell[0]) + Math.abs(cell[1] - originCell[1])
     const delay = (d / maxDist) * MAX_BUILD_STAGGER_MS
-    const key = getCellKey(cell)
+    const key = target.key
     const previous = registry.get(key)
     if (!previous?.active) {
       activeAnimationCount += 1
