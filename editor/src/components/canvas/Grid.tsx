@@ -47,7 +47,6 @@ import {
   BUILD_ANIMATIONS_ENABLED,
   MAX_BUILD_STAGGER_MS,
   hasHeldBuildAnimations,
-  hasOutstandingHeldBuildBatch,
   releaseHeldBuildAnimations,
   triggerBuild,
   useBuildAnimationVersion,
@@ -83,7 +82,7 @@ import {
   useTileGpuStreamVersion,
 } from './TileGpuStreamHooks'
 import { getTileGpuStreamMountId } from './TileGpuStreamContextShared'
-import { shouldRenderRoomStreamPreview } from './GridShared'
+import { shouldBlockRoomStrokeStart, shouldRenderRoomStreamPreview } from './GridShared'
 
 type GridProps = {
   size?: number
@@ -1483,7 +1482,7 @@ export function Grid({ size = 120, playMode = false, bakedLightField = null }: G
         return
       }
 
-      if (latchedRoomPreview || hasOutstandingHeldBuildBatch()) {
+      if (shouldBlockRoomStrokeStart({ latchedRoomPreview })) {
         return
       }
 
