@@ -79,4 +79,13 @@ describe('deriveWallCornersFromSegments', () => {
       getBuildAnimationCellKeyFromWallKeys(['2:0:north', '3:0:west'], (cellKey) => cellKey === '3:0'),
     ).toBe('3:0')
   })
+
+  it('considers opposite-side cells for east and south wall animation lookups', () => {
+    expect(
+      getBuildAnimationCellKeyFromWallKeys(['2:0:east'], (cellKey) => cellKey === '3:0'),
+    ).toBe('3:0')
+    expect(
+      getBuildAnimationCellKeyFromWallKeys(['2:0:south'], (cellKey) => cellKey === '2:-1'),
+    ).toBe('2:-1')
+  })
 })

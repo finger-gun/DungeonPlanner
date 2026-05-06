@@ -862,7 +862,7 @@ function FloorContent({ startY = 0 }: { startY?: number }) {
             )
           ))}
         </WorldRaycastAcceleration>
-        <RoomResizeOverlay />
+        <RoomResizeOverlay bakedLightField={bakedFloorLightField} />
         {showPropProbeDebug && (
           <PropProbeDebugOverlay floorId={activeFloorId} />
         )}

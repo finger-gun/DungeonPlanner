@@ -17,7 +17,12 @@ const BUILD_ANIMATION_RENDER_ACTIVITY = 'build-animations'
 const NO_HELD_BUILD_BATCH_START = Number.MAX_SAFE_INTEGER
 
 type AnimEntry = { delay: number; startedAt: number; active: boolean }
-export type BuildAnimationState = { delay: number; startedAt: number }
+export type BuildAnimationDirection = 'rise' | 'fall'
+export type BuildAnimationState = {
+  delay: number
+  startedAt: number
+  direction?: BuildAnimationDirection
+}
 export type TriggerBuildOptions = { holdUntilReleased?: boolean; startedAt?: number }
 export type HeldBuildBatchState = {
   startedAt: number
@@ -110,14 +115,18 @@ export function getBuildYOffsetForAnimation(animation: BuildAnimationState, now:
     / getBuildAnimationTimeScale()
     - animation.delay
   if (elapsed < 0) {
-    return -BUILD_ANIMATION_DEPTH
+    return animation.direction === 'fall' ? 0 : -BUILD_ANIMATION_DEPTH
   }
 
   if (elapsed >= BUILD_ANIMATION_RISE_DURATION_MS) {
-    return 0
+    return animation.direction === 'fall' ? -BUILD_ANIMATION_DEPTH : 0
   }
 
   const t = elapsed / BUILD_ANIMATION_RISE_DURATION_MS
+  if (animation.direction === 'fall') {
+    return -BUILD_ANIMATION_DEPTH * Math.pow(t, 3)
+  }
+
   return -BUILD_ANIMATION_DEPTH * Math.pow(1 - t, 3)
 }
 
@@ -248,6 +257,10 @@ export function resetBuildAnimations() {
   heldBuildBatch = null
   releaseContinuousRender(BUILD_ANIMATION_RENDER_ACTIVITY)
   notifyBuildAnimationsChanged()
+}
+
+export function getBuildAnimationPlaybackDurationMs(extraDelay = 0) {
+  return BUILD_ANIMATION_WARMUP_MS + BUILD_ANIMATION_RISE_DURATION_MS + MAX_BUILD_STAGGER_MS + extraDelay
 }
 
 function subscribeToBuildAnimations(listener: () => void) {

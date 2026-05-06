@@ -14,12 +14,16 @@ type SharedBoundaryUnit = {
   wallKey: string
   index: number
   roomIds: readonly [string, string]
+  roomSides: readonly [RoomSideKey, RoomSideKey]
   layerId: string
 }
+
+type RoomSideKey = `${string}:${string}:${string}:${string}`
 
 export type SharedBoundaryRun = {
   wallKeys: string[]
   roomIds: readonly [string, string]
+  roomSideKeys: readonly [RoomSideKey, RoomSideKey]
   layerId: string
 }
 
@@ -80,6 +84,10 @@ export function buildSharedBoundaryRuns(
       const index = axis === 'x' ? cell[0] : cell[1]
       const groupKey = `${roomIds[0]}:${roomIds[1]}:${axis}:${line}:${record.layerId}`
       const wallKey = `${cellKey}:${directionEntry.direction}`
+      const roomSides = [
+        buildRoomSideKey(roomId, directionEntry.direction, line, record.layerId),
+        buildRoomSideKey(neighborRoomId, getOppositeWallDirection(directionEntry.direction), line, record.layerId),
+      ] as const
       const existing = groupedUnits.get(groupKey)
 
       if (existing) {
@@ -87,6 +95,7 @@ export function buildSharedBoundaryRuns(
           wallKey,
           index,
           roomIds,
+          roomSides,
           layerId: record.layerId,
         })
       } else {
@@ -94,6 +103,7 @@ export function buildSharedBoundaryRuns(
           wallKey,
           index,
           roomIds,
+          roomSides,
           layerId: record.layerId,
         }])
       }
@@ -201,6 +211,7 @@ function makeSharedBoundaryRun(units: SharedBoundaryUnit[]): SharedBoundaryRun {
   return {
     wallKeys: units.map((unit) => unit.wallKey),
     roomIds: units[0]?.roomIds ?? ['', ''],
+    roomSideKeys: units[0]?.roomSides ?? ['', ''],
     layerId: units[0]?.layerId ?? 'default',
   }
 }
@@ -213,8 +224,7 @@ function buildGeneratedConnectorIntents(
   const manualOpeningSegments = manualOpenings.map((opening) =>
     new Set(getOpeningSegments(opening.wallKey, opening.width)),
   )
-
-  const intents: GeneratedConnectorIntent[] = []
+  const occupiedRoomSides = new Set<RoomSideKey>()
 
   buildSharedBoundaryRuns(paintedCells).forEach((run) => {
     const runSegments = new Set(run.wallKeys)
@@ -223,46 +233,99 @@ function buildGeneratedConnectorIntents(
     )
 
     if (hasManualOverlap) {
-      return
+      run.roomSideKeys.forEach((roomSideKey) => occupiedRoomSides.add(roomSideKey))
     }
-
-    if (run.wallKeys.length === 1) {
-      intents.push({
-        opening: {
-          assetId: null,
-          wallKey: run.wallKeys[0],
-          width: 1,
-          flipped: false,
-          layerId: run.layerId,
-          source: 'generated' satisfies OpeningSource,
-        },
-      })
-      return
-    }
-
-    if (!generatedDoorAssetId) {
-      return
-    }
-
-    const centerIndex = Math.floor((run.wallKeys.length - 1) / 2)
-    const wallKey = run.wallKeys[centerIndex]
-    if (!wallKey) {
-      return
-    }
-
-    intents.push({
-      opening: {
-        assetId: generatedDoorAssetId,
-        wallKey,
-        width: 1,
-        flipped: false,
-        layerId: run.layerId,
-        source: 'generated' satisfies OpeningSource,
-      },
-    })
   })
 
+  const intents: GeneratedConnectorIntent[] = []
+
+  buildSharedBoundaryRuns(paintedCells)
+    .filter((run) => {
+      const runSegments = new Set(run.wallKeys)
+      return !manualOpeningSegments.some((segments) =>
+        [...segments].some((segment) => runSegments.has(segment)),
+      )
+    })
+    .sort((left, right) => {
+      if (right.wallKeys.length !== left.wallKeys.length) {
+        return right.wallKeys.length - left.wallKeys.length
+      }
+      return (left.wallKeys[0] ?? '').localeCompare(right.wallKeys[0] ?? '')
+    })
+    .forEach((run) => {
+      if (run.roomSideKeys.some((roomSideKey) => occupiedRoomSides.has(roomSideKey))) {
+        return
+      }
+
+      const opening = buildGeneratedConnectorOpening(run, generatedDoorAssetId)
+      if (!opening) {
+        return
+      }
+
+      run.roomSideKeys.forEach((roomSideKey) => occupiedRoomSides.add(roomSideKey))
+      intents.push({ opening })
+    })
+
   return intents
+}
+
+function buildGeneratedConnectorOpening(
+  run: SharedBoundaryRun,
+  generatedDoorAssetId: string | undefined,
+): Omit<OpeningRecord, 'id'> | null {
+  if (run.wallKeys.length === 1) {
+    const wallKey = run.wallKeys[0]
+    if (!wallKey) {
+      return null
+    }
+
+    return {
+      assetId: null,
+      wallKey,
+      width: 1,
+      flipped: false,
+      layerId: run.layerId,
+      source: 'generated' satisfies OpeningSource,
+    }
+  }
+
+  if (!generatedDoorAssetId) {
+    return null
+  }
+
+  const centerIndex = Math.floor((run.wallKeys.length - 1) / 2)
+  const wallKey = run.wallKeys[centerIndex]
+  if (!wallKey) {
+    return null
+  }
+
+  return {
+    assetId: generatedDoorAssetId,
+    wallKey,
+    width: 1,
+    flipped: false,
+    layerId: run.layerId,
+    source: 'generated' satisfies OpeningSource,
+  }
+}
+
+function buildRoomSideKey(roomId: string, direction: string, line: number, layerId: string): RoomSideKey {
+  return `${roomId}:${direction}:${line}:${layerId}`
+}
+
+function getOppositeWallDirection(direction: string) {
+  switch (direction) {
+    case 'north':
+      return 'south'
+    case 'south':
+      return 'north'
+    case 'east':
+      return 'west'
+    case 'west':
+      return 'east'
+    default:
+      return direction
+  }
 }
 
 function buildOpeningSignature(opening: Omit<OpeningRecord, 'id'> | OpeningRecord) {

@@ -2,11 +2,13 @@ import { act, renderHook } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   BUILD_ANIMATION_DEBUG_SLOW_MULTIPLIER,
+  BUILD_ANIMATION_DEPTH,
   BUILD_ANIMATION_RISE_DURATION_MS,
   BUILD_ANIMATION_WARMUP_MS,
   getHeldBuildBatchState,
   getBuildAnimationState,
   getBuildYOffset,
+  getBuildYOffsetForAnimation,
   hasHeldBuildAnimations,
   isAnimationActive,
   releaseHeldBuildAnimations,
@@ -111,5 +113,25 @@ describe('buildAnimations', () => {
     expect(getBuildYOffset('0:0', 1450)).toBeLessThan(0)
     expect(getBuildYOffset('0:0', 1450 + BUILD_ANIMATION_RISE_DURATION_MS / 2)).toBeLessThan(0)
     expect(getBuildYOffset('0:0', 1450 + BUILD_ANIMATION_RISE_DURATION_MS)).toBe(0)
+  })
+
+  it('supports reverse build playback for removal ghosts', () => {
+    expect(getBuildYOffsetForAnimation({
+      startedAt: 1000,
+      delay: 0,
+      direction: 'fall',
+    }, 999)).toBe(0)
+
+    expect(getBuildYOffsetForAnimation({
+      startedAt: 1000,
+      delay: 0,
+      direction: 'fall',
+    }, 1000 + BUILD_ANIMATION_RISE_DURATION_MS / 2)).toBeLessThan(0)
+
+    expect(getBuildYOffsetForAnimation({
+      startedAt: 1000,
+      delay: 0,
+      direction: 'fall',
+    }, 1000 + BUILD_ANIMATION_RISE_DURATION_MS)).toBe(-BUILD_ANIMATION_DEPTH)
   })
 })

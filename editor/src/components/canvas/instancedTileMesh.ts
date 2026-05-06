@@ -19,6 +19,8 @@ export type InstancedMeshEntry = {
   buildStartAttr: THREE.InstancedBufferAttribute
   /** Per-instance float delay (ms). */
   buildDelayAttr: THREE.InstancedBufferAttribute
+  /** Per-instance float direction (0 = rise, 1 = fall). */
+  buildDirectionAttr: THREE.InstancedBufferAttribute
   /** Per-instance vec3 baked light direction (zeros = no directional light). */
   bakedLightDirAttr: THREE.InstancedBufferAttribute
   /** Per-instance vec3 secondary baked light direction. */
@@ -123,17 +125,20 @@ export function makeInstancedMeshEntries(
     // sets meshPerAttribute > 1, which Three.js maps to step mode 'instance' in WebGPU.
     const buildStartAttr = new THREE.InstancedBufferAttribute(new Float32Array(capacity).fill(-1), 1)
     const buildDelayAttr = new THREE.InstancedBufferAttribute(new Float32Array(capacity).fill(0), 1)
+    const buildDirectionAttr = new THREE.InstancedBufferAttribute(new Float32Array(capacity).fill(0), 1)
     const bakedLightDirAttr = new THREE.InstancedBufferAttribute(new Float32Array(capacity * 3).fill(0), 3)
     const bakedLightDirSecAttr = new THREE.InstancedBufferAttribute(new Float32Array(capacity * 3).fill(0), 3)
     const fogCellAttr = new THREE.InstancedBufferAttribute(new Float32Array(capacity * 2).fill(0), 2)
     buildStartAttr.setUsage(THREE.DynamicDrawUsage)
     buildDelayAttr.setUsage(THREE.DynamicDrawUsage)
+    buildDirectionAttr.setUsage(THREE.DynamicDrawUsage)
     bakedLightDirAttr.setUsage(THREE.DynamicDrawUsage)
     bakedLightDirSecAttr.setUsage(THREE.DynamicDrawUsage)
     fogCellAttr.setUsage(THREE.DynamicDrawUsage)
 
     geometry.setAttribute('buildAnimationStart', buildStartAttr)
     geometry.setAttribute('buildAnimationDelay', buildDelayAttr)
+    geometry.setAttribute('buildAnimationDirection', buildDirectionAttr)
     geometry.setAttribute('bakedLightDirection', bakedLightDirAttr)
     geometry.setAttribute('bakedLightDirectionSecondary', bakedLightDirSecAttr)
     geometry.setAttribute('fogCell', fogCellAttr)
@@ -174,6 +179,7 @@ export function makeInstancedMeshEntries(
       tintMesh,
       buildStartAttr,
       buildDelayAttr,
+      buildDirectionAttr,
       bakedLightDirAttr,
       bakedLightDirSecAttr,
       fogCellAttr,
@@ -201,6 +207,7 @@ export function writeInstancedMeshSlot(
       tintMesh,
       buildStartAttr,
       buildDelayAttr,
+      buildDirectionAttr,
       bakedLightDirAttr,
       bakedLightDirSecAttr,
       fogCellAttr,
@@ -219,6 +226,7 @@ export function writeInstancedMeshSlot(
 
       buildStartAttr.array[slotIndex] = placement.buildAnimationStart ?? -1
       buildDelayAttr.array[slotIndex] = placement.buildAnimationDelay ?? 0
+      buildDirectionAttr.array[slotIndex] = placement.buildAnimationDirection === 'fall' ? 1 : 0
 
       const lightDirection = placement.bakedLightDirection
       bakedLightDirAttr.array[slotIndex * 3] = lightDirection?.[0] ?? 0
@@ -245,6 +253,7 @@ export function writeInstancedMeshSlot(
     tintMesh.setMatrixAt(slotIndex, _instanceMat)
     buildStartAttr.array[slotIndex] = -1
     buildDelayAttr.array[slotIndex] = 0
+    buildDirectionAttr.array[slotIndex] = 0
     bakedLightDirAttr.array[slotIndex * 3] = 0
     bakedLightDirAttr.array[slotIndex * 3 + 1] = 0
     bakedLightDirAttr.array[slotIndex * 3 + 2] = 0

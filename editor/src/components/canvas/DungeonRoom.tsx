@@ -848,7 +848,9 @@ function OpeningRenderer({
   const openingSegmentKeys = getOpeningSegments(opening.wallKey, opening.width)
   const wallVisibility = getWallSpanVisibilityState(visibility, openingSegmentKeys)
   const interiorDirections = getWallSpanInteriorLightDirections(openingSegmentKeys, paintedCells)
-  const openingAnimationCellKey = opening.wallKey.split(':').slice(0, 2).join(':')
+  const openingAnimationCellKey =
+    getBuildAnimationCellKeyFromWallKeys(openingSegmentKeys, isBuildAnimationCurrentlyActive)
+    ?? opening.wallKey.split(':').slice(0, 2).join(':')
   const clipBelowGround = enableBuildAnimation && isBuildAnimationCurrentlyActive(openingAnimationCellKey)
 
   const groupRef = useRef<THREE.Group>(null)

@@ -177,6 +177,7 @@ function buildGeometrySignature(entries: ResolvedStaticTileEntry[]) {
     entry.rotation.join(','),
     entry.buildAnimationStart ?? '',
     entry.buildAnimationDelay ?? '',
+    entry.buildAnimationDirection ?? '',
     serializeOptionalVector(entry.bakedLightDirection),
     serializeOptionalVector(entry.bakedLightDirectionSecondary),
     entry.fogCell?.join(',') ?? '',

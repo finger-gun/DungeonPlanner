@@ -55,6 +55,7 @@ function createGroup(entries: ResolvedStaticTileEntry[], overrides: Partial<Reso
       entry.rotation.join(','),
       entry.buildAnimationStart ?? '',
       entry.buildAnimationDelay ?? '',
+      entry.buildAnimationDirection ?? '',
     ].join('|')).join(';'),
     renderSignature: entries.map((entry) => `${entry.key}:${entry.visibility}`).join(';'),
     variant: 'floor',
