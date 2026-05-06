@@ -37,7 +37,7 @@ import {
   OUTDOOR_TERRAIN_STYLES,
 } from './outdoorTerrainStyles'
 
-const CURRENT_VERSION = 17
+const CURRENT_VERSION = 18
 
 // ── Serialized shapes (compact, no redundant keys) ────────────────────────────
 
@@ -67,6 +67,7 @@ type SerializedOpening = {
   width: 1 | 2 | 3
   flipped: boolean
   layerId: string
+  source?: 'manual' | 'generated'
 }
 
 type SerializedFloor = {
@@ -233,7 +234,7 @@ function serializeFloorData(
     })),
     openings: Object.values(snapshot.wallOpenings).map((o) => ({
       id: o.id, assetId: o.assetId, wallKey: o.wallKey, width: o.width,
-      flipped: o.flipped ?? false, layerId: o.layerId,
+      flipped: o.flipped ?? false, layerId: o.layerId, source: o.source ?? 'manual',
     })),
     innerWalls: Object.values(snapshot.innerWalls).map((innerWall) => innerWall.wallKey),
     nextRoomNumber: snapshot.nextRoomNumber,
@@ -512,6 +513,27 @@ export function deserializeDungeon(json: string): SerializableState | null {
     }
   }
 
+  if (version < 18 && Array.isArray((raw as Record<string, unknown>).floors)) {
+    const r = raw as Record<string, unknown>
+    raw = {
+      ...r,
+      floors: (r.floors as unknown[]).map((floor) =>
+        isObject(floor)
+          ? {
+              ...floor,
+              openings: Array.isArray(floor.openings)
+                ? floor.openings.map((opening) =>
+                    isObject(opening) && opening.source !== 'generated'
+                      ? { ...opening, source: 'manual' }
+                      : opening,
+                  )
+                : [],
+            }
+          : floor,
+      ),
+    }
+  }
+
   return parseFile(raw as Record<string, unknown>)
 }
 
@@ -693,6 +715,7 @@ function parseFloorData(raw: Record<string, unknown>): {
       wallKey, width,
       flipped: o.flipped === true,
       layerId: typeof o.layerId === 'string' && layers[o.layerId] ? o.layerId : 'default',
+      source: o.source === 'generated' ? 'generated' : 'manual',
     }
   }
 

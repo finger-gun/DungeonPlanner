@@ -298,6 +298,24 @@ describe('serializeDungeon / deserializeDungeon roundtrip', () => {
     expect(openings?.['op-1']).toMatchObject({ flipped: true, wallKey: '0:0:north' })
   })
 
+  it('preserves opening provenance during roundtrip', () => {
+    const state = baseState()
+    state.floors!['floor-1'].snapshot.wallOpenings['op-generated'] = {
+      id: 'op-generated',
+      assetId: null,
+      wallKey: '0:0:east',
+      width: 1,
+      flipped: false,
+      layerId: 'default',
+      source: 'generated',
+    }
+
+    const result = deserializeDungeon(serializeDungeon(state))
+    expect(result).not.toBeNull()
+    const openings = result!.wallOpenings ?? result!.floors?.['floor-1']?.snapshot?.wallOpenings
+    expect(openings?.['op-generated']).toMatchObject({ source: 'generated' })
+  })
+
   it('roundtrips a multi-floor dungeon', () => {
     const state = baseState()
     const upperId = 'floor-2'

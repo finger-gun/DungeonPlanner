@@ -29,7 +29,7 @@ export const dungeonTorchMountedAsset = createDungeonAsset({
   getLight: createDungeonFlameLightGetter({ defaultLit: true }),
   getEffect: createDungeonFlameEffectGetter({
     defaultLit: true,
-    emitters: [{ offset: [0, 1.2, 0], scale: 1.1, intensity: 1.1 }],
+    emitters: [{ offset: [-0.1, 1.2, 0], scale: 0.8, intensity: 1.1 }],
   }),
   getPlayModeNextProps: (objectProps) => {
     const lit = objectProps.lit !== false

@@ -4,6 +4,7 @@ import { dungeonTorchAsset } from './props/torch'
 import { dungeonFloorTileSmallAsset } from './tiles/floors/floor_tile_small'
 import { dungeonWallAsset } from './tiles/walls/wall'
 import { dungeonFloorAssets } from './tiles/floors'
+import { dungeonDoorWall1Asset } from './openings/door_wall_1'
 import { dungeonWallAssets } from './tiles/walls'
 import { dungeonStairAssets } from './openings/stairs'
 import { dungeonPropAssets } from './props'
@@ -14,6 +15,7 @@ export const dungeonContentPack: ContentPack = {
   assets: [
     ...dungeonFloorAssets,
     ...dungeonWallAssets,
+    dungeonDoorWall1Asset,
     ...dungeonStairAssets,
     ...dungeonPropAssets,
   ],

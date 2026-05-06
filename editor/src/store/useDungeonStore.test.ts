@@ -1638,6 +1638,7 @@ describe('useDungeonStore wall openings', () => {
     let state = useDungeonStore.getState()
     expect(Object.values(state.wallOpenings)).toHaveLength(2)
     expect(Object.values(state.wallOpenings).every((opening) => opening.assetId === null)).toBe(true)
+    expect(Object.values(state.wallOpenings).every((opening) => opening.source === 'manual')).toBe(true)
 
     state.undo()
     state = useDungeonStore.getState()
@@ -1668,6 +1669,85 @@ describe('useDungeonStore wall openings', () => {
     state.redo()
     state = useDungeonStore.getState()
     expect(Object.keys(state.wallOpenings)).toHaveLength(1)
+  })
+
+  it('auto-generates an open passage when two rooms share a single wall segment', () => {
+    const state = useDungeonStore.getState()
+    state.paintCells([[0, 0]])
+    state.paintCells([[1, 0]])
+
+    const openings = Object.values(useDungeonStore.getState().wallOpenings)
+    expect(openings).toHaveLength(1)
+    expect(openings[0]).toMatchObject({
+      assetId: null,
+      wallKey: '0:0:east',
+      width: 1,
+      source: 'generated',
+    })
+  })
+
+  it('auto-generates a centered one-wide door when two rooms share multiple wall segments', () => {
+    const state = useDungeonStore.getState()
+    state.paintCells([[0, 0], [0, 1], [0, 2]])
+    state.paintCells([[1, 0], [1, 1], [1, 2]])
+
+    const openings = Object.values(useDungeonStore.getState().wallOpenings)
+    expect(openings).toHaveLength(1)
+    expect(openings[0]).toMatchObject({
+      assetId: 'core.opening_door_wall_1',
+      wallKey: '0:1:east',
+      width: 1,
+      source: 'generated',
+    })
+  })
+
+  it('preserves manual openings instead of generating overlapping connectors', () => {
+    const state = useDungeonStore.getState()
+    state.paintCells([[0, 0], [0, 1], [0, 2]])
+    state.placeOpening({
+      assetId: 'core.opening_door_wall_1',
+      wallKey: '0:1:east',
+      width: 1,
+      flipped: false,
+    })
+    state.paintCells([[1, 0], [1, 1], [1, 2]])
+
+    const openings = Object.values(useDungeonStore.getState().wallOpenings)
+    expect(openings).toHaveLength(1)
+    expect(openings[0]).toMatchObject({
+      assetId: 'core.opening_door_wall_1',
+      wallKey: '0:1:east',
+      source: 'manual',
+    })
+  })
+
+  it('updates generated connectors when a shared boundary shrinks', () => {
+    const state = useDungeonStore.getState()
+    state.paintCells([[0, 0], [0, 1]])
+    state.paintCells([[1, 0], [1, 1]])
+
+    const rightRoomId = useDungeonStore.getState().paintedCells['1:0']?.roomId
+    expect(rightRoomId).toBeTruthy()
+    expect(Object.values(useDungeonStore.getState().wallOpenings)[0]).toMatchObject({
+      assetId: 'core.opening_door_wall_1',
+      wallKey: '0:0:east',
+      source: 'generated',
+    })
+
+    useDungeonStore.getState().resizeRoom(rightRoomId!, {
+      minX: 1,
+      maxX: 1,
+      minZ: 0,
+      maxZ: 0,
+    })
+
+    const openings = Object.values(useDungeonStore.getState().wallOpenings)
+    expect(openings).toHaveLength(1)
+    expect(openings[0]).toMatchObject({
+      assetId: null,
+      wallKey: '0:0:east',
+      source: 'generated',
+    })
   })
 
   it('adds and removes inner wall segments in a single history step', () => {
