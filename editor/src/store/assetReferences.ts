@@ -110,6 +110,7 @@ function sanitizeOpeningRecord(opening: OpeningRecord): OpeningRecord {
     return {
       ...opening,
       assetId,
+      source: opening.source === 'generated' ? 'generated' : 'manual',
     }
   }
 
@@ -118,6 +119,7 @@ function sanitizeOpeningRecord(opening: OpeningRecord): OpeningRecord {
     ...opening,
     assetId,
     width: asset?.metadata?.openingWidth ?? 1,
+    source: opening.source === 'generated' ? 'generated' : 'manual',
   }
 }
 

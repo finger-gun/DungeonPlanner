@@ -17,8 +17,17 @@ const BUILD_ANIMATION_RENDER_ACTIVITY = 'build-animations'
 const NO_HELD_BUILD_BATCH_START = Number.MAX_SAFE_INTEGER
 
 type AnimEntry = { delay: number; startedAt: number; active: boolean }
-export type BuildAnimationState = { delay: number; startedAt: number }
+export type BuildAnimationDirection = 'rise' | 'fall'
+export type BuildAnimationState = {
+  delay: number
+  startedAt: number
+  direction?: BuildAnimationDirection
+}
 export type TriggerBuildOptions = { holdUntilReleased?: boolean; startedAt?: number }
+export type BuildAnimationTarget = {
+  key: string
+  cell: GridCell
+}
 export type HeldBuildBatchState = {
   startedAt: number
   effectiveReleaseAt: number
@@ -55,7 +64,22 @@ export function triggerBuild(
   originCell: GridCell,
   options: TriggerBuildOptions = {},
 ): number | null {
-  if (cells.length === 0) {
+  return triggerBuildTargets(
+    cells.map((cell) => ({
+      key: getCellKey(cell),
+      cell,
+    })),
+    originCell,
+    options,
+  )
+}
+
+export function triggerBuildTargets(
+  targets: BuildAnimationTarget[],
+  originCell: GridCell,
+  options: TriggerBuildOptions = {},
+): number | null {
+  if (targets.length === 0) {
     return null
   }
   const now = options.startedAt ?? performance.now()
@@ -67,15 +91,17 @@ export function triggerBuild(
   }
 
   // Normalise: find the max Manhattan distance from the origin so delays scale to [0, MAX_STAGGER_MS]
-  const maxDist = cells.reduce((max, cell) => {
+  const maxDist = targets.reduce((max, target) => {
+    const cell = target.cell
     const d = Math.abs(cell[0] - originCell[0]) + Math.abs(cell[1] - originCell[1])
     return Math.max(max, d)
   }, 1)
 
-  cells.forEach((cell) => {
+  targets.forEach((target) => {
+    const cell = target.cell
     const d     = Math.abs(cell[0] - originCell[0]) + Math.abs(cell[1] - originCell[1])
     const delay = (d / maxDist) * MAX_BUILD_STAGGER_MS
-    const key = getCellKey(cell)
+    const key = target.key
     const previous = registry.get(key)
     if (!previous?.active) {
       activeAnimationCount += 1
@@ -110,14 +136,18 @@ export function getBuildYOffsetForAnimation(animation: BuildAnimationState, now:
     / getBuildAnimationTimeScale()
     - animation.delay
   if (elapsed < 0) {
-    return -BUILD_ANIMATION_DEPTH
+    return animation.direction === 'fall' ? 0 : -BUILD_ANIMATION_DEPTH
   }
 
   if (elapsed >= BUILD_ANIMATION_RISE_DURATION_MS) {
-    return 0
+    return animation.direction === 'fall' ? -BUILD_ANIMATION_DEPTH : 0
   }
 
   const t = elapsed / BUILD_ANIMATION_RISE_DURATION_MS
+  if (animation.direction === 'fall') {
+    return -BUILD_ANIMATION_DEPTH * Math.pow(t, 3)
+  }
+
   return -BUILD_ANIMATION_DEPTH * Math.pow(1 - t, 3)
 }
 
@@ -248,6 +278,10 @@ export function resetBuildAnimations() {
   heldBuildBatch = null
   releaseContinuousRender(BUILD_ANIMATION_RENDER_ACTIVITY)
   notifyBuildAnimationsChanged()
+}
+
+export function getBuildAnimationPlaybackDurationMs(extraDelay = 0) {
+  return BUILD_ANIMATION_WARMUP_MS + BUILD_ANIMATION_RISE_DURATION_MS + MAX_BUILD_STAGGER_MS + extraDelay
 }
 
 function subscribeToBuildAnimations(listener: () => void) {

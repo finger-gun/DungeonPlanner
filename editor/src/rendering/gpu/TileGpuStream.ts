@@ -750,6 +750,7 @@ function buildTileStreamEntrySignature(entryState: TileStreamEntryState) {
     entryState.entry.rotation.join(','),
     entryState.entry.buildAnimationStart ?? '',
     entryState.entry.buildAnimationDelay ?? '',
+    entryState.entry.buildAnimationDirection ?? '',
     entryState.entry.bakedLightDirection?.join(',') ?? '',
     entryState.entry.bakedLightDirectionSecondary?.join(',') ?? '',
     entryState.entry.fogCell?.join(',') ?? '',

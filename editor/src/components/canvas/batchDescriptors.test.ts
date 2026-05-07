@@ -376,6 +376,43 @@ describe('buildBatchDescriptors', () => {
     expect(firstResult.batched[0]?.geometrySignature).not.toBe(secondResult.batched[0]?.geometrySignature)
   })
 
+  it('changes geometry signatures when build animation direction changes', () => {
+    const resolveSpy = vi.spyOn(tileAssetResolution, 'resolveBatchedTileAsset')
+    resolveSpy.mockImplementation(() => ({
+      assetUrl: '/assets/floor.glb',
+      transformKey: 'default',
+      receiveShadow: true,
+    }))
+
+    const riseResult = buildBatchDescriptors([
+      {
+        key: 'floor:0:0',
+        assetId: 'floor-tile',
+        position: [0, 0, 0],
+        rotation: [0, 0, 0],
+        variant: 'floor',
+        visibility: 'visible',
+        buildAnimationStart: 1000,
+        buildAnimationDelay: 0,
+      },
+    ], false)
+    const fallResult = buildBatchDescriptors([
+      {
+        key: 'floor:0:0',
+        assetId: 'floor-tile',
+        position: [0, 0, 0],
+        rotation: [0, 0, 0],
+        variant: 'floor',
+        visibility: 'visible',
+        buildAnimationStart: 1000,
+        buildAnimationDelay: 0,
+        buildAnimationDirection: 'fall',
+      },
+    ], false)
+
+    expect(riseResult.batched[0]?.geometrySignature).not.toBe(fallResult.batched[0]?.geometrySignature)
+  })
+
   it('keeps animated and static build entries in the same stable bucket', () => {
     const resolveSpy = vi.spyOn(tileAssetResolution, 'resolveBatchedTileAsset')
     resolveSpy.mockImplementation(() => ({

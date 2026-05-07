@@ -163,6 +163,7 @@ export function applyBuildAnimationToMaterial(
 
     const buildStart = attribute('buildAnimationStart', 'float') as ShaderNodeLike
     const buildDelay = attribute('buildAnimationDelay', 'float') as ShaderNodeLike
+    const buildDirection = attribute('buildAnimationDirection', 'float') as ShaderNodeLike
     const hasBuildAnimation = buildStart.greaterThanEqual(float(0))
     const holdApplies = buildStart.greaterThanEqual(buildAnimationHoldBatchStartUniform)
     const holdDuration = holdApplies.select(
@@ -186,7 +187,14 @@ export function applyBuildAnimationToMaterial(
     const riseOffset = float(-BUILD_ANIMATION_DEPTH).mul(
       remaining.mul(remaining).mul(remaining),
     )
-    const offsetY = hasBuildAnimation.select(riseOffset, float(0))
+    const fallOffset = float(-BUILD_ANIMATION_DEPTH).mul(
+      progress.mul(progress).mul(progress),
+    )
+    const isFalling = buildDirection.greaterThan(float(0.5))
+    const offsetY = hasBuildAnimation.select(
+      isFalling.select(fallOffset, riseOffset),
+      float(0),
+    )
     const animatedPosition = positionLocal.add(vec3(0, offsetY, 0))
 
     buildMaterial.positionNode = animatedPosition

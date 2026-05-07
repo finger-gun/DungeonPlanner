@@ -1,4 +1,5 @@
 import type { BakedFloorLightField } from '../../rendering/dungeonLightField'
+import type { BuildAnimationDirection } from '../../store/buildAnimations'
 import type { PlayVisibilityState } from './playVisibility'
 
 export type TilePlacement = {
@@ -7,6 +8,7 @@ export type TilePlacement = {
   rotation: readonly [number, number, number]
   buildAnimationDelay?: number
   buildAnimationStart?: number
+  buildAnimationDirection?: BuildAnimationDirection
   bakedLight?: readonly [number, number, number]
   bakedLightDirection?: readonly [number, number, number]
   bakedLightDirectionSecondary?: readonly [number, number, number]

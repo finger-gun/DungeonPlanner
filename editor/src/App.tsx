@@ -250,6 +250,7 @@ function App() {
   const tool = useDungeonStore((state) => state.tool)
   const mapMode = useDungeonStore((state) => state.mapMode)
   const roomEditMode = useDungeonStore((state) => state.roomEditMode)
+  const roomPaintMode = useDungeonStore((state) => state.roomPaintMode)
   const outdoorBrushMode = useDungeonStore((state) => state.outdoorBrushMode)
   const dungeonName = useDungeonStore((state) => state.dungeonName)
   const exportDungeonJson = useDungeonStore((state) => state.exportDungeonJson)
@@ -343,7 +344,8 @@ function App() {
 
     if (
       (event.key === 'Delete' || event.key === 'Backspace') &&
-      state.selectedRoomId
+      state.selectedRoomId &&
+      !(state.tool === 'room' && state.roomPaintMode === 'resize')
     ) {
       event.preventDefault()
       state.removeSelectedRoom()
@@ -708,12 +710,14 @@ function App() {
                 : outdoorBrushMode === 'terrain-sculpt'
                   ? 'Left-drag to raise stepped terrain · right-drag to lower stepped terrain into pits and trenches'
                   : 'Left-drag to paint nature with the selected style · right-drag to erase nature areas'
-              : 'Click room to select · drag room edges to resize · rectangular rooms also show corner handles · left-drag empty space to build · right-drag to erase'
+              : roomPaintMode === 'paint'
+                ? 'Paint rooms cell-by-cell · release to commit the stroke · right-drag to erase · use Props for floor and wall variants'
+                : roomPaintMode === 'resize'
+                  ? 'Click a room to show resize handles · drag edges or corners to reshape it · press Delete to remove the selected room'
+                  : 'Click and drag to draw a rectangular room selection · release to commit · right-drag to erase · use Props for floor and wall variants'
             : roomEditMode === 'walls'
-              ? 'Top-down wall editing · drag to preview an axis-locked wall run · release to add or remove it'
-            : roomEditMode === 'floor-variants'
-              ? 'Pick a floor variant · click a painted tile to apply it · right-click to clear the tile override'
-              : 'Pick a wall variant · click a wall segment to apply it · right-click to clear the wall override'
+              ? 'Top-down inner wall editing · drag to preview an axis-locked wall run · release to add or remove it'
+              : 'Click and drag to draw a rectangular room selection · release to commit · right-drag to erase · use Props for floor and wall variants'
         : tool === 'character'
           ? 'Select a character to place · click a room cell to place it · use Edit to reopen the character sheet'
         : tool === 'prop'

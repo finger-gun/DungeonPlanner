@@ -900,6 +900,39 @@ describe('dungeonLightField', () => {
     expect(probe!.baseLight[0]).toBeGreaterThan(0)
   })
 
+  it('suppresses prop probe brightness when a closed wall blocks the nearby light', () => {
+    clearBakedFloorLightFieldCache()
+
+    const field = getOrBuildBakedFloorLightField({
+      floorId: 'floor-prop-occluded',
+      floorCells: [[0, 0], [1, 0]],
+      staticLightSources: [createResolvedLightSource('torch', [1, 1.5, 1])],
+      occlusionInput: {
+        paintedCells: createPaintedCells(),
+        wallOpenings: {},
+        innerWalls: {
+          separator: { wallKey: '0:0:east', layerId: 'default' },
+        },
+      },
+    })
+
+    const litProbe = buildPropBakedLightProbe(
+      field,
+      new THREE.Box3(new THREE.Vector3(0.75, 0, 0.75), new THREE.Vector3(1.25, 2, 1.25)),
+    )
+    const blockedProbe = buildPropBakedLightProbe(
+      field,
+      new THREE.Box3(new THREE.Vector3(2.75, 0, 0.75), new THREE.Vector3(3.25, 2, 1.25)),
+    )
+    const litProbeLuminance = litProbe
+      ? litProbe.baseLight[0] * 0.2126 + litProbe.baseLight[1] * 0.7152 + litProbe.baseLight[2] * 0.0722
+      : 0
+
+    expect(litProbe).not.toBeNull()
+    expect(blockedProbe).toBeNull()
+    expect(litProbeLuminance).toBeGreaterThan(0.1)
+  })
+
   it('samples baked light smoothly between corner samples', () => {
     clearBakedFloorLightFieldCache()
 

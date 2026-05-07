@@ -22,6 +22,7 @@ import {
   getCanonicalInnerWallKey,
   type InnerWallRecord,
 } from './manualWalls'
+import { reconcileProceduralRoomLayout } from './proceduralRoomLayout'
 import { getCanonicalWallKey, getInheritedWallAssetIdForWallKey } from './wallSegments'
 import {
   getRoomBounds,
@@ -163,9 +164,12 @@ export type OpeningRecord = {
   /** Whether the opening is flipped 180° (front/back swap) */
   flipped?: boolean
   layerId: string
+  source?: OpeningSource
 }
 
-type PlaceOpeningInput = Pick<OpeningRecord, 'assetId' | 'wallKey' | 'width' | 'flipped'>
+export type OpeningSource = 'manual' | 'generated'
+
+type PlaceOpeningInput = Pick<OpeningRecord, 'assetId' | 'wallKey' | 'width' | 'flipped' | 'source'>
 
 export type DungeonObjectType = 'prop' | 'player'
 
@@ -1289,6 +1293,7 @@ function addOpeningRecord(
     width: input.width,
     flipped: input.flipped ?? false,
     layerId,
+    source: input.source ?? 'manual',
   }
 
   return id
@@ -1694,6 +1699,59 @@ function pruneInvalidSurfaceOverrides(
   return { floorTileAssetIds, wallSurfaceAssetIds, wallSurfaceProps }
 }
 
+function reconcileRoomLayoutMutation(
+  current: Pick<
+    DungeonSnapshot,
+    | 'placedObjects'
+    | 'occupancy'
+    | 'selection'
+    | 'wallOpenings'
+    | 'innerWalls'
+    | 'floorTileAssetIds'
+    | 'wallSurfaceAssetIds'
+    | 'wallSurfaceProps'
+  >,
+  paintedCells: PaintedCells,
+  changedCells: GridCell[],
+  options?: {
+    wallOpenings?: Record<string, OpeningRecord>
+  },
+) {
+  const currentWithWallOpenings = {
+    ...current,
+    wallOpenings: options?.wallOpenings ?? current.wallOpenings,
+  }
+  const {
+    placedObjects,
+    occupancy,
+    selection: prunedSelection,
+    wallOpenings: prunedWallOpenings,
+    innerWalls,
+  } = pruneInvalidConnectedProps(currentWithWallOpenings, paintedCells, changedCells)
+  const { floorTileAssetIds, wallSurfaceAssetIds, wallSurfaceProps } = pruneInvalidSurfaceOverrides(
+    current,
+    paintedCells,
+    changedCells,
+  )
+  const { wallOpenings, selection } = reconcileProceduralRoomLayout({
+    paintedCells,
+    wallOpenings: prunedWallOpenings,
+    selection: prunedSelection,
+    createOpeningId: createObjectId,
+  })
+
+  return {
+    floorTileAssetIds,
+    wallSurfaceAssetIds,
+    wallSurfaceProps,
+    placedObjects,
+    occupancy,
+    selection,
+    wallOpenings,
+    innerWalls,
+  }
+}
+
 function collectFloorSurfaceAnchorsForCellChange(
   cellKey: string,
   floorTileAssetIds: Record<string, string>,
@@ -2028,12 +2086,10 @@ export const useDungeonStore = create<DungeonState>()(
         selection,
         wallOpenings,
         innerWalls,
-      } = pruneInvalidConnectedProps(current, paintedCells, nextCells)
-      const { floorTileAssetIds, wallSurfaceAssetIds, wallSurfaceProps } = pruneInvalidSurfaceOverrides(
-        current,
-        paintedCells,
-        nextCells,
-      )
+        floorTileAssetIds,
+        wallSurfaceAssetIds,
+        wallSurfaceProps,
+      } = reconcileRoomLayoutMutation(current, paintedCells, nextCells)
 
       return {
         ...current,
@@ -2308,12 +2364,10 @@ export const useDungeonStore = create<DungeonState>()(
         selection,
         wallOpenings,
         innerWalls,
-      } = pruneInvalidConnectedProps(current, paintedCells, removedCells)
-      const { floorTileAssetIds, wallSurfaceAssetIds, wallSurfaceProps } = pruneInvalidSurfaceOverrides(
-        current,
-        paintedCells,
-        removedCells,
-      )
+        floorTileAssetIds,
+        wallSurfaceAssetIds,
+        wallSurfaceProps,
+      } = reconcileRoomLayoutMutation(current, paintedCells, removedCells)
 
       return {
         ...current,
@@ -3525,17 +3579,16 @@ export const useDungeonStore = create<DungeonState>()(
       const rooms = { ...current.rooms }
       delete rooms[id]
 
-      const { placedObjects, occupancy, selection, wallOpenings, innerWalls } =
-        pruneInvalidConnectedProps(
-          current,
-          paintedCells,
-          removedCells,
-        )
-      const { floorTileAssetIds, wallSurfaceAssetIds, wallSurfaceProps } = pruneInvalidSurfaceOverrides(
-        current,
-        paintedCells,
-        removedCells,
-      )
+      const {
+        placedObjects,
+        occupancy,
+        selection,
+        wallOpenings,
+        innerWalls,
+        floorTileAssetIds,
+        wallSurfaceAssetIds,
+        wallSurfaceProps,
+      } = reconcileRoomLayoutMutation(current, paintedCells, removedCells)
 
       return {
         ...current,
@@ -3581,12 +3634,10 @@ export const useDungeonStore = create<DungeonState>()(
         selection,
         wallOpenings,
         innerWalls,
-      } = pruneInvalidConnectedProps(current, paintedCells, changedCells)
-      const { floorTileAssetIds, wallSurfaceAssetIds, wallSurfaceProps } = pruneInvalidSurfaceOverrides(
-        current,
-        paintedCells,
-        changedCells,
-      )
+        floorTileAssetIds,
+        wallSurfaceAssetIds,
+        wallSurfaceProps,
+      } = reconcileRoomLayoutMutation(current, paintedCells, changedCells)
       return {
         ...current,
         paintedCells,
@@ -3683,17 +3734,18 @@ export const useDungeonStore = create<DungeonState>()(
         }),
       )
 
-      const { placedObjects, occupancy, selection, wallOpenings, innerWalls } =
-        pruneInvalidConnectedProps(
-          { ...current, wallOpenings: remappedWallOpenings },
-          paintedCells,
-          changedCells,
-        )
-      const { floorTileAssetIds, wallSurfaceAssetIds, wallSurfaceProps } = pruneInvalidSurfaceOverrides(
-        current,
-        paintedCells,
-        changedCells,
-      )
+      const {
+        placedObjects,
+        occupancy,
+        selection,
+        wallOpenings,
+        innerWalls,
+        floorTileAssetIds,
+        wallSurfaceAssetIds,
+        wallSurfaceProps,
+      } = reconcileRoomLayoutMutation(current, paintedCells, changedCells, {
+        wallOpenings: remappedWallOpenings,
+      })
 
       return {
         ...current,
@@ -3773,13 +3825,16 @@ export const useDungeonStore = create<DungeonState>()(
         }
       })
 
-      const { placedObjects, occupancy, selection, wallOpenings, innerWalls } =
-        pruneInvalidConnectedProps(current, paintedCells, changedCells)
-      const { floorTileAssetIds, wallSurfaceAssetIds, wallSurfaceProps } = pruneInvalidSurfaceOverrides(
-        current,
-        paintedCells,
-        changedCells,
-      )
+      const {
+        placedObjects,
+        occupancy,
+        selection,
+        wallOpenings,
+        innerWalls,
+        floorTileAssetIds,
+        wallSurfaceAssetIds,
+        wallSurfaceProps,
+      } = reconcileRoomLayoutMutation(current, paintedCells, changedCells)
 
       return {
         ...current,
@@ -4145,7 +4200,7 @@ export const useDungeonStore = create<DungeonState>()(
       wallKeys.forEach((wallKey) => {
         addOpeningRecord(
           wallOpenings,
-          { assetId: null, wallKey, width: 1, flipped: false },
+          { assetId: null, wallKey, width: 1, flipped: false, source: 'manual' },
           current.activeLayerId,
         )
       })

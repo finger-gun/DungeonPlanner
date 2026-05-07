@@ -30,7 +30,7 @@ export const dungeonCandleMeltedAsset = createGenericColorSwatch({
     light: {
       intensity: 0.5,
       distance: 2.5,
-      offset: [0, 0.58, 0],
+      offset: [0, 0.35, 0],
     },
   }),
   getEffect: createDungeonFlameEffectGetter({

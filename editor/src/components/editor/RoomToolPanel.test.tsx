@@ -6,25 +6,54 @@ import { useDungeonStore } from '../../store/useDungeonStore'
 describe('RoomToolPanel', () => {
   beforeEach(() => {
     useDungeonStore.getState().reset()
+    useDungeonStore.getState().setRoomPaintMode('area')
   })
 
   afterEach(() => {
     cleanup()
   })
 
-  it('switches between room and wall sub-tools', () => {
+  it('removes redundant room mode buttons from the sidebar', () => {
     render(<RoomToolPanel />)
 
-    const wallsButton = screen.getByRole('button', { name: 'Walls' })
-    fireEvent.click(wallsButton)
+    expect(screen.queryByRole('button', { name: 'Rooms' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Walls' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Inner walls' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Floor' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Wall Variants' })).not.toBeInTheDocument()
+  })
 
-    expect(useDungeonStore.getState().roomEditMode).toBe('walls')
-    expect(screen.getByText(/preview a locked wall run/i)).toBeInTheDocument()
+  it('still shows inner walls guidance when that mode is active', () => {
+    useDungeonStore.getState().setRoomEditMode('walls')
+    render(<RoomToolPanel />)
 
-    fireEvent.click(screen.getByRole('button', { name: 'Rooms' }))
+    expect(screen.getByText('Inner walls')).toBeInTheDocument()
+    expect(screen.getByText(/adds inner wall runs/i)).toBeInTheDocument()
+  })
+
+  it('updates indoor room descriptions to match the active context tool', () => {
+    useDungeonStore.getState().setRoomPaintMode('paint')
+    render(<RoomToolPanel />)
+
+    expect(screen.getByText('Paint Tool')).toBeInTheDocument()
+    expect(screen.getByText(/paint rooms cell-by-cell/i)).toBeInTheDocument()
+
+    cleanup()
+    useDungeonStore.getState().reset()
+    useDungeonStore.getState().setRoomPaintMode('resize')
+    render(<RoomToolPanel />)
+
+    expect(screen.getByText('Resize Tool')).toBeInTheDocument()
+    expect(screen.getByText(/show resize handles/i)).toBeInTheDocument()
+  })
+
+  it('resets legacy room variant modes back to rooms', () => {
+    useDungeonStore.getState().setRoomPaintMode('area')
+    useDungeonStore.getState().setRoomEditMode('floor-variants')
+    render(<RoomToolPanel />)
 
     expect(useDungeonStore.getState().roomEditMode).toBe('rooms')
-    expect(screen.getByText(/left-drag to paint rooms/i)).toBeInTheDocument()
+    expect(screen.getByText('Area Tool')).toBeInTheDocument()
   })
 
   it('shows outdoor texture paint controls only in outdoor mode', () => {
@@ -65,6 +94,7 @@ describe('RoomToolPanel', () => {
   })
 
   it('does not render a room row for each room in the sidebar', () => {
+    useDungeonStore.getState().setRoomPaintMode('area')
     const state = useDungeonStore.getState()
     const roomId = state.createRoom('Painted Room')
     state.renameRoom(roomId, 'Painted Room')
@@ -73,6 +103,6 @@ describe('RoomToolPanel', () => {
 
     expect(screen.queryByText('No rooms yet. Create one to override room-wide floor/wall assets.')).not.toBeInTheDocument()
     expect(screen.queryByText('Painted Room')).not.toBeInTheDocument()
-    expect(screen.getByText(/left-drag to paint rooms/i)).toBeInTheDocument()
+    expect(screen.getByText(/draw a rectangular room selection/i)).toBeInTheDocument()
   })
 })

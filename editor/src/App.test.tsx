@@ -218,6 +218,41 @@ describe('App sidebar drawer', () => {
     expect(screen.queryByText('Layers')).not.toBeInTheDocument()
   })
 
+  it('does not use the raw room delete shortcut while resize mode is active', () => {
+    render(<App />)
+
+    useDungeonStore.setState({
+      tool: 'room',
+      roomPaintMode: 'resize',
+      selectedRoomId: 'room-1',
+    })
+
+    const removeSelectedRoom = vi.fn()
+    useDungeonStore.setState({ removeSelectedRoom })
+
+    fireEvent.keyDown(window, { key: 'Delete' })
+
+    expect(removeSelectedRoom).not.toHaveBeenCalled()
+  })
+
+  it('updates the room hint text to match the active context tool', () => {
+    useDungeonStore.setState({
+      tool: 'room',
+      roomEditMode: 'rooms',
+      roomPaintMode: 'area',
+    })
+    render(<App />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Paint' }))
+    expect(screen.getByText(/paint rooms cell-by-cell/i)).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Resize' }))
+    expect(screen.getByText(/show resize handles/i)).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Inner walls' }))
+    expect(screen.getByText(/inner wall editing/i)).toBeInTheDocument()
+  })
+
   it('closes settings from play mode with the back button', async () => {
     const user = userEvent.setup()
     useDungeonStore.getState().setTool('play')

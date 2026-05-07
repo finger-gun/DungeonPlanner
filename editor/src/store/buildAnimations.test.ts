@@ -2,16 +2,19 @@ import { act, renderHook } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   BUILD_ANIMATION_DEBUG_SLOW_MULTIPLIER,
+  BUILD_ANIMATION_DEPTH,
   BUILD_ANIMATION_RISE_DURATION_MS,
   BUILD_ANIMATION_WARMUP_MS,
   getHeldBuildBatchState,
   getBuildAnimationState,
   getBuildYOffset,
+  getBuildYOffsetForAnimation,
   hasHeldBuildAnimations,
   isAnimationActive,
   releaseHeldBuildAnimations,
   resetBuildAnimations,
   triggerBuild,
+  triggerBuildTargets,
   useBuildAnimationVersion,
 } from './buildAnimations'
 import {
@@ -111,5 +114,37 @@ describe('buildAnimations', () => {
     expect(getBuildYOffset('0:0', 1450)).toBeLessThan(0)
     expect(getBuildYOffset('0:0', 1450 + BUILD_ANIMATION_RISE_DURATION_MS / 2)).toBeLessThan(0)
     expect(getBuildYOffset('0:0', 1450 + BUILD_ANIMATION_RISE_DURATION_MS)).toBe(0)
+  })
+
+  it('supports reverse build playback for removal ghosts', () => {
+    expect(getBuildYOffsetForAnimation({
+      startedAt: 1000,
+      delay: 0,
+      direction: 'fall',
+    }, 999)).toBe(0)
+
+    expect(getBuildYOffsetForAnimation({
+      startedAt: 1000,
+      delay: 0,
+      direction: 'fall',
+    }, 1000 + BUILD_ANIMATION_RISE_DURATION_MS / 2)).toBeLessThan(0)
+
+    expect(getBuildYOffsetForAnimation({
+      startedAt: 1000,
+      delay: 0,
+      direction: 'fall',
+    }, 1000 + BUILD_ANIMATION_RISE_DURATION_MS)).toBe(-BUILD_ANIMATION_DEPTH)
+  })
+
+  it('can animate non-floor build targets without reusing cell keys', () => {
+    act(() => {
+      triggerBuildTargets([
+        { key: '0:0:east', cell: [0, 0] },
+      ], [0, 0])
+    })
+
+    expect(isAnimationActive('0:0:east')).toBe(true)
+    expect(getBuildAnimationState('0:0:east')).toEqual({ delay: 0, startedAt: 1000 })
+    expect(getBuildAnimationState('0:0')).toBeNull()
   })
 })

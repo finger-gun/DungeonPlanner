@@ -24,3 +24,11 @@ export function shouldRenderRoomStreamPreview({
     && strokeMode === null,
   )
 }
+
+export function shouldBlockRoomStrokeStart({
+  latchedRoomPreview,
+}: {
+  latchedRoomPreview: { cells: GridCell[]; mode: 'paint' | 'erase' } | null
+}) {
+  return latchedRoomPreview !== null
+}

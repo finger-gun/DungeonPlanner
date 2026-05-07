@@ -26,7 +26,7 @@ type DoorSceneSetup = {
   pivotOffset: number
 }
 
-function DungeonWallDoorwayVariant({ objectProps, ...props }: ContentPackComponentProps) {
+export function DungeonWallDoorwayVariant({ objectProps, ...props }: ContentPackComponentProps) {
   const kind = objectProps?.kind === 'corner' ? 'corner' : 'wall'
   const modelUrl = kind === 'corner' ? cornerAssetUrl : assetUrl
   const gltf = useGLTF(modelUrl)

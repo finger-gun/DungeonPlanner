@@ -265,8 +265,9 @@ function FallbackTileEntry({
       : {
         startedAt: entry.buildAnimationStart,
         delay: entry.buildAnimationDelay ?? 0,
+        direction: entry.buildAnimationDirection,
       }),
-    [entry.buildAnimationDelay, entry.buildAnimationStart],
+    [entry.buildAnimationDelay, entry.buildAnimationDirection, entry.buildAnimationStart],
   )
 
   useFrame(() => {
