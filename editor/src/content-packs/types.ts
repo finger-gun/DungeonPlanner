@@ -150,6 +150,8 @@ export type ContentPackAssetMetadata = {
   wallCornerType?: 'solitary'
   /** Width in wall segments (1–3). Only meaningful for category='opening'. Default 1. */
   openingWidth?: 1 | 2 | 3
+  /** Opening interaction semantics: passages are always open, doors can toggle state. */
+  openingKind?: 'passage' | 'door'
   /** Marks a floor-connected opening as staircase that links floors. */
   stairDirection?: 'up' | 'down'
   /** Matching staircase asset to place on the adjacent floor. */
@@ -185,10 +187,32 @@ export type ContentPackAsset = {
   getPlayModeNextProps?: (objectProps: Record<string, unknown>) => Record<string, unknown> | null
 }
 
+export type ContentPackRoomSetFloor =
+  | {
+      kind: 'single'
+      assetId: string
+    }
+  | {
+      kind: 'randomized'
+      assetIds: string[]
+      randomQuarterTurns?: boolean
+    }
+
+export type ContentPackRoomSet = {
+  id: string
+  name: string
+  previewWallAssetId: string
+  wallAssetId: string
+  pillarAssetId: string
+  openingAssetId?: string
+  floor: ContentPackRoomSetFloor
+}
+
 export type ContentPack = {
   id: string
   name: string
   assets: ContentPackAsset[]
+  roomSets?: ContentPackRoomSet[]
   /** Optional default assets for each category. Using the asset object keeps defaults type-safe. */
   defaultAssets?: {
     floor?: ContentPackAsset & { category: 'floor' }

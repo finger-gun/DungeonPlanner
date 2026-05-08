@@ -10,12 +10,14 @@ import { dungeonWallBrokenAsset } from "./wall_broken"
 import { dungeonWallCornerAsset } from "./wall_corner"
 import { dungeonWallCornerGatedAsset } from "./wall_corner_gated"
 import { dungeonWallCornerScaffoldAsset } from "./wall_corner_scaffold"
+import { dungeonWallCaveAsset } from "./wall_cave"
 import { dungeonWallCrackedAsset } from "./wall_cracked"
 import { dungeonWallCrossingAsset } from "./wall_crossing"
 import { dungeonWallDoorwayAsset } from "./wall_doorway"
 import { dungeonWallDoorwayTsplitAsset } from "./wall_doorway_Tsplit"
 import { dungeonWallDoorwayScaffoldAsset } from "./wall_doorway_scaffold"
 import { dungeonWallDoorwaySidesAsset } from "./wall_doorway_sides"
+import { dungeonWallOpeningAsset } from "../../openings/wall_opening"
 import { dungeonWallGatedAsset } from "./wall_gated"
 import { dungeonWallHalfAsset } from "./wall_half"
 import { dungeonWallHalfEndcapAsset } from "./wall_half_endcap"
@@ -48,12 +50,14 @@ export const dungeonWallAssets: ContentPackAsset[] = [
   dungeonWallCornerAsset,
   dungeonWallCornerGatedAsset,
   dungeonWallCornerScaffoldAsset,
+  dungeonWallCaveAsset,
   dungeonWallCrackedAsset,
   dungeonWallCrossingAsset,
   dungeonWallDoorwayAsset,
   dungeonWallDoorwayTsplitAsset,
   dungeonWallDoorwayScaffoldAsset,
   dungeonWallDoorwaySidesAsset,
+  dungeonWallOpeningAsset,
   dungeonWallGatedAsset,
   dungeonWallHalfAsset,
   dungeonWallHalfEndcapAsset,

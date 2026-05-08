@@ -68,6 +68,30 @@ describe('buildFogOfWarLayout', () => {
     ]))
   })
 
+  it('clears wall occupancy for legacy wall-surface passage openings', () => {
+    const layout = buildFogOfWarLayout({
+      active: true,
+      paintedCells: {
+        '0:0': { cell: [0, 0], layerId: 'layer', roomId: 'room-a' },
+        '1:0': { cell: [1, 0], layerId: 'layer', roomId: 'room-b' },
+      },
+      wallOpenings: {},
+      innerWalls: {},
+      wallSurfaceAssetIds: {
+        '0:0:east': 'dungeon.wall_wall_opening',
+      },
+      wallSurfaceProps: {},
+    })
+
+    expect(layout?.occupancy).toEqual(new Int32Array([
+      1, 1, 1, 1, 1, 1, 1, 1, 1,
+      1, 0, 0, 0, 0, 0, 0, 0, 1,
+      1, 0, 0, 0, 0, 0, 0, 0, 1,
+      1, 0, 0, 0, 0, 0, 0, 0, 1,
+      1, 1, 1, 1, 1, 1, 1, 1, 1,
+    ]))
+  })
+
   it('returns null when fog of war is inactive', () => {
     expect(buildFogOfWarLayout({
       active: false,

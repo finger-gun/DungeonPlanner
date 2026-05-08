@@ -17,8 +17,8 @@ import {
   vec3,
 } from 'three/tsl'
 import { GRID_SIZE, getCellKey, type GridCell } from '../../hooks/useSnapToGrid'
-import { getOpeningSegments } from '../../store/openingSegments'
 import { getMirroredWallKey, type InnerWallRecord } from '../../store/manualWalls'
+import { buildOpenWallSegmentSet } from '../../store/openWallSegments'
 import { useDungeonStore, type OpeningRecord } from '../../store/useDungeonStore'
 
 const PLAYER_VISION_RANGE_CELLS = 8
@@ -329,11 +329,15 @@ export function buildFogOfWarLayout({
   paintedCells,
   wallOpenings,
   innerWalls,
+  wallSurfaceAssetIds = {},
+  wallSurfaceProps = {},
 }: {
   active: boolean
   paintedCells: ReturnType<typeof useDungeonStore.getState>['paintedCells']
   wallOpenings: Record<string, OpeningRecord>
   innerWalls: Record<string, InnerWallRecord>
+  wallSurfaceAssetIds?: Record<string, string>
+  wallSurfaceProps?: Record<string, Record<string, unknown>>
 }): FogOfWarLayout | null {
   if (!active) {
     return null
@@ -372,7 +376,7 @@ export function buildFogOfWarLayout({
   const occupancy = new Int32Array(occupancyWidth * occupancyHeight)
   occupancy.fill(1)
 
-  const openWalls = buildOpenWallSet(wallOpenings)
+  const openWalls = buildOpenWallSegmentSet(wallOpenings, wallSurfaceAssetIds, wallSurfaceProps)
   const solidWalls = buildSolidWallSet(innerWalls)
 
   cells.forEach(({ cell }) => {
@@ -595,22 +599,6 @@ function sampleExploredFactorNode(runtime: FogOfWarRuntime, options: FogOfWarMat
   const cellIndex = safeCellZ.mul(width).add(safeCellX)
   const sampledState = runtime.exploredStates.element(cellIndex)
   return inBounds.select(float(sampledState), float(0))
-}
-
-function buildOpenWallSet(wallOpenings: Record<string, OpeningRecord>) {
-  const openWalls = new Set<string>()
-
-  Object.values(wallOpenings).forEach((opening) => {
-    getOpeningSegments(opening.wallKey, opening.width).forEach((wallKey) => {
-      openWalls.add(wallKey)
-      const mirroredWallKey = getMirroredWallKey(wallKey)
-      if (mirroredWallKey) {
-        openWalls.add(mirroredWallKey)
-      }
-    })
-  })
-
-  return openWalls
 }
 
 function fillOccupancyRect(

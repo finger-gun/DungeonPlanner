@@ -14,6 +14,8 @@ import {
 import { createStandardCompatibleMaterial } from '../rendering/nodeMaterialUtils'
 import { SELECTION_OUTLINE_IGNORE_USER_DATA } from '../postprocessing/selectionOutlineConfig'
 
+const GENERATED_STANDEE_CARD_ALPHA_TEST = 0.08
+
 export function GeneratedStandeeBaseMesh({
   cardWidth,
   kind,
@@ -92,7 +94,7 @@ export function GeneratedStandeeCardSurfaceMesh({
     const material = new THREE.MeshDepthMaterial()
     material.depthPacking = THREE.RGBADepthPacking
     material.alphaMap = surfaceAlphaTexture ?? surfaceTexture
-    material.alphaTest = 0.03
+    material.alphaTest = GENERATED_STANDEE_CARD_ALPHA_TEST
     return material
   }, [surfaceAlphaTexture, surfaceTexture])
   const geometry = useMemo(
@@ -100,18 +102,7 @@ export function GeneratedStandeeCardSurfaceMesh({
     [cardHeight, cardWidth, mirrorX],
   )
   const surfaceMaterial = useMemo(
-    () => createStandardCompatibleMaterial({
-      map: surfaceTexture,
-      alphaMap: surfaceAlphaTexture ?? undefined,
-      transparent: true,
-      alphaTest: 0.03,
-      side: THREE.FrontSide,
-      polygonOffset: true,
-      polygonOffsetFactor: -1,
-      polygonOffsetUnits: -1,
-      roughness: 0.8,
-      metalness: 0,
-    }),
+    () => createGeneratedStandeeCardSurfaceMaterial(surfaceTexture, surfaceAlphaTexture),
     [surfaceAlphaTexture, surfaceTexture],
   )
   surfaceMaterial.userData.bakedLightMode = bakedLightMode
@@ -146,6 +137,24 @@ export function GeneratedStandeeCardSurfaceMesh({
       <primitive object={surfaceMaterial} attach="material" />
     </mesh>
   )
+}
+
+export function createGeneratedStandeeCardSurfaceMaterial(
+  surfaceTexture: THREE.Texture,
+  surfaceAlphaTexture?: THREE.Texture | null,
+) {
+  return createStandardCompatibleMaterial({
+    map: surfaceTexture,
+    alphaMap: surfaceAlphaTexture ?? undefined,
+    transparent: false,
+    alphaTest: GENERATED_STANDEE_CARD_ALPHA_TEST,
+    side: THREE.FrontSide,
+    polygonOffset: true,
+    polygonOffsetFactor: -1,
+    polygonOffsetUnits: -1,
+    roughness: 0.8,
+    metalness: 0,
+  })
 }
 
 export function createGeneratedStandeeCardSurfaceGeometry(

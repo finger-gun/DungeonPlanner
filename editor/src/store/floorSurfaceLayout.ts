@@ -1,4 +1,8 @@
-import { getContentPackAssetById, getDefaultAssetIdByCategory } from '../content-packs/registry'
+import {
+  getContentPackAssetById,
+  getContentPackRoomSetById,
+  getDefaultAssetIdByCategory,
+} from '../content-packs/registry'
 import type { TileSpan } from '../content-packs/types'
 import {
   GRID_SIZE,
@@ -9,6 +13,16 @@ import {
 import type { PaintedCells, Room } from './useDungeonStore'
 
 const SINGLE_TILE_SPAN = { gridWidth: 1, gridHeight: 1 } satisfies TileSpan
+const ZERO_ROTATION = [0, 0, 0] as const
+const ROOM_SET_CONTENT_PACK_ID = 'dungeon'
+
+type FloorRotation = readonly [number, number, number]
+
+type ResolvedInheritedFloorRender = {
+  assetId: string | null
+  rotation: FloorRotation
+  groupKey: string
+}
 
 export type FloorSurfacePlacement = {
   anchorCell: GridCell
@@ -23,6 +37,7 @@ export type FloorSurfacePlacement = {
 export type FloorRenderGroup = {
   groupKey: string
   floorAssetId: string | null
+  rotation: FloorRotation
   cells: GridCell[]
 }
 
@@ -30,6 +45,7 @@ export type FloorRenderPlan = {
   baseGroups: FloorRenderGroup[]
   surfacePlacements: FloorSurfacePlacement[]
   effectiveAssetIdsByCellKey: Record<string, string | null>
+  effectiveRotationsByCellKey: Record<string, FloorRotation>
   surfaceAnchorByCoveredCellKey: Record<string, string>
 }
 
@@ -152,9 +168,7 @@ export function getInheritedFloorAssetIdForCellKey(
   rooms: Record<string, Room>,
   globalFloorAssetId: string | null,
 ) {
-  const record = paintedCells[cellKey]
-  const room = record?.roomId ? rooms[record.roomId] : null
-  return room?.floorAssetId ?? globalFloorAssetId
+  return resolveInheritedFloorRenderForCellKey(cellKey, paintedCells, rooms, globalFloorAssetId).assetId
 }
 
 export function getRenderableInheritedFloorAssetId(assetId: string | null) {
@@ -198,11 +212,13 @@ export function buildFloorRenderPlan(
       placement.coveredCellKeys.map((cellKey) => [cellKey, placement.anchorCellKey])),
   ) as Record<string, string>
   const effectiveAssetIdsByCellKey: Record<string, string | null> = {}
+  const effectiveRotationsByCellKey: Record<string, FloorRotation> = {}
   const baseGroups = new Map<string, FloorRenderGroup>()
 
   surfacePlacements.forEach((placement) => {
     placement.coveredCellKeys.forEach((cellKey) => {
       effectiveAssetIdsByCellKey[cellKey] = placement.assetId
+      effectiveRotationsByCellKey[cellKey] = ZERO_ROTATION
     })
   })
 
@@ -211,27 +227,114 @@ export function buildFloorRenderPlan(
       return
     }
 
-    const floorAssetId = getRenderableInheritedFloorAssetId(
-      getInheritedFloorAssetIdForCellKey(cellKey, paintedCells, rooms, globalFloorAssetId),
+    const resolvedFloor = resolveInheritedFloorRenderForCellKey(
+      cellKey,
+      paintedCells,
+      rooms,
+      globalFloorAssetId,
     )
-    const groupKey = floorAssetId ?? 'none'
+    const groupKey = resolvedFloor.groupKey
     if (!baseGroups.has(groupKey)) {
       baseGroups.set(groupKey, {
         groupKey,
-        floorAssetId,
+        floorAssetId: resolvedFloor.assetId,
+        rotation: resolvedFloor.rotation,
         cells: [],
       })
     }
     baseGroups.get(groupKey)!.cells.push(record.cell)
-    effectiveAssetIdsByCellKey[cellKey] = floorAssetId
+    effectiveAssetIdsByCellKey[cellKey] = resolvedFloor.assetId
+    effectiveRotationsByCellKey[cellKey] = resolvedFloor.rotation
   })
 
   return {
     baseGroups: Array.from(baseGroups.values()),
     surfacePlacements,
     effectiveAssetIdsByCellKey,
+    effectiveRotationsByCellKey,
     surfaceAnchorByCoveredCellKey,
   }
+}
+
+function resolveInheritedFloorRenderForCellKey(
+  cellKey: string,
+  paintedCells: PaintedCells,
+  rooms: Record<string, Room>,
+  globalFloorAssetId: string | null,
+): ResolvedInheritedFloorRender {
+  const record = paintedCells[cellKey]
+  const room = record?.roomId ? rooms[record.roomId] : null
+  const cell = record?.cell ?? parseFloorCellKey(cellKey)
+
+  if (room?.floorAssetId) {
+    return createResolvedInheritedFloorRender(room.floorAssetId, ZERO_ROTATION)
+  }
+
+  const roomSet = getContentPackRoomSetById(ROOM_SET_CONTENT_PACK_ID, room?.roomSetId)
+  if (roomSet) {
+    if (roomSet.floor.kind === 'single') {
+      return createResolvedInheritedFloorRender(roomSet.floor.assetId, ZERO_ROTATION)
+    }
+
+    const assetIds = roomSet.floor.assetIds.filter(Boolean)
+    if (assetIds.length > 0 && cell) {
+      const variationSeed = hashSeedString(`${roomSet.id}:${room?.id ?? 'room-set'}`)
+      const assetIndex = hashCellVariation(variationSeed, cell, 0) % assetIds.length
+      const quarterTurns = roomSet.floor.randomQuarterTurns
+        ? (1 + (hashCellVariation(variationSeed, cell, 1) % 3)) as 1 | 2 | 3
+        : 0
+      return createResolvedInheritedFloorRender(
+        assetIds[assetIndex] ?? globalFloorAssetId,
+        quarterTurnRotation(quarterTurns),
+      )
+    }
+  }
+
+  return createResolvedInheritedFloorRender(globalFloorAssetId, ZERO_ROTATION)
+}
+
+function createResolvedInheritedFloorRender(
+  assetId: string | null,
+  rotation: FloorRotation,
+): ResolvedInheritedFloorRender {
+  const renderableAssetId = getRenderableInheritedFloorAssetId(assetId)
+  const renderableRotation = renderableAssetId === assetId ? rotation : ZERO_ROTATION
+  return {
+    assetId: renderableAssetId,
+    rotation: renderableRotation,
+    groupKey: `${renderableAssetId ?? 'none'}:${renderableRotation.join(',')}`,
+  }
+}
+
+function quarterTurnRotation(quarterTurns: 0 | 1 | 2 | 3): FloorRotation {
+  return [0, quarterTurns * (Math.PI / 2), 0] as const
+}
+
+function hashSeedString(value: string) {
+  let hash = 2166136261 >>> 0
+
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index)
+    hash = Math.imul(hash, 16777619) >>> 0
+  }
+
+  return hash >>> 0
+}
+
+function hashCellVariation(seed: number, cell: GridCell, channel: number) {
+  let hash =
+    (seed
+      ^ Math.imul(cell[0], 0x9e3779b1)
+      ^ Math.imul(cell[1], 0x85ebca6b)
+      ^ Math.imul(channel, 0xc2b2ae35)) >>> 0
+
+  hash ^= hash >>> 16
+  hash = Math.imul(hash, 0x7feb352d) >>> 0
+  hash ^= hash >>> 15
+  hash = Math.imul(hash, 0x846ca68b) >>> 0
+  hash ^= hash >>> 16
+
+  return hash >>> 0
 }
 
 function parseFloorCellKey(cellKey: string): GridCell | null {

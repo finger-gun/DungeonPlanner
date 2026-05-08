@@ -103,7 +103,7 @@ export function buildObjectHierarchy(objects: DungeonObjectRecord[]) {
 }
 
 export function buildBakedLightBuildInput(
-  data: Pick<DungeonRoomData, 'floorId' | 'wallOpenings' | 'innerWalls' | 'wallSurfaceProps'>,
+  data: Pick<DungeonRoomData, 'floorId' | 'wallOpenings' | 'innerWalls' | 'wallSurfaceAssetIds' | 'wallSurfaceProps'>,
   visiblePaintedCells: GridCell[],
   visiblePaintedCellRecords: PaintedCells,
   staticLightSources: ResolvedDungeonLightSource[],
@@ -128,6 +128,7 @@ export function buildBakedLightBuildInput(
       paintedCells: visiblePaintedCellRecords,
       wallOpenings: data.wallOpenings,
       innerWalls: data.innerWalls,
+      wallSurfaceAssetIds: data.wallSurfaceAssetIds,
       wallSurfaceProps: data.wallSurfaceProps,
     },
   }

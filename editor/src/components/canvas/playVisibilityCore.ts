@@ -2,6 +2,7 @@ import { GRID_SIZE, getCellKey, type GridCell } from '../../hooks/useSnapToGrid'
 import { getOpeningSegments } from '../../store/openingSegments'
 import { getMirroredWallKey, type InnerWallRecord } from '../../store/manualWalls'
 import { buildOpenWallSegmentSet } from '../../store/openWallSegments'
+import { isOpeningOpen } from '../../store/openingState'
 import type { OpeningRecord, PaintedCells } from '../../store/useDungeonStore'
 
 const MASK_BASE_SAMPLE_COUNT = 1024
@@ -62,6 +63,7 @@ export type PlayVisibilityComputation = {
 export type PlayVisibilityWorkerInput = {
   paintedCells: PaintedCells
   wallOpenings: Record<string, OpeningRecord>
+  wallSurfaceAssetIds: Record<string, string>
   wallSurfaceProps: Record<string, Record<string, unknown>>
   innerWalls: Record<string, InnerWallRecord>
   origins: GridCell[]
@@ -92,8 +94,8 @@ export function computePlayVisibilityData(input: PlayVisibilityWorkerInput): Pla
   const blockerLookup = new Map<string, BlockerCellEntry>(input.blockerLookupEntries)
   const blockingCells = new Set(input.blockingCellKeys)
   const solidWalls = buildSolidWallSet(input.innerWalls)
- const mask = computeVisibilityMask(
-   input.paintedCells,
+  const mask = computeVisibilityMask(
+    input.paintedCells,
     EMPTY_EXPLORED_CELLS,
     input.wallOpenings,
     input.origins,
@@ -102,16 +104,17 @@ export function computePlayVisibilityData(input: PlayVisibilityWorkerInput): Pla
     blockerLookup,
     solidWalls,
     input.wallSurfaceProps,
+    input.wallSurfaceAssetIds,
   )
 
- return { visibleCellKeys, mask }
+  return { visibleCellKeys, mask }
 }
 
 export function computeVisibleCellKeysFromInput(input: PlayVisibilityWorkerInput): string[] {
- const blockerLookup = new Map<string, BlockerCellEntry>(input.blockerLookupEntries)
- const blockingCells = new Set(input.blockingCellKeys)
- const solidWalls = buildSolidWallSet(input.innerWalls)
- return computeVisibleCellKeys(
+  const blockerLookup = new Map<string, BlockerCellEntry>(input.blockerLookupEntries)
+  const blockingCells = new Set(input.blockingCellKeys)
+  const solidWalls = buildSolidWallSet(input.innerWalls)
+  return computeVisibleCellKeys(
     input.paintedCells,
     input.wallOpenings,
     input.origins,
@@ -120,6 +123,7 @@ export function computeVisibleCellKeysFromInput(input: PlayVisibilityWorkerInput
     blockerLookup,
     solidWalls,
     input.wallSurfaceProps,
+    input.wallSurfaceAssetIds,
   )
 }
 
@@ -132,8 +136,9 @@ export function computeVisibleCellKeys(
   blockerLookup: BlockerLookup = new Map(),
   solidWalls: Set<string> = new Set(),
   wallSurfaceProps: Record<string, Record<string, unknown>> = {},
+  wallSurfaceAssetIds: Record<string, string> = {},
 ): string[] {
-  const openWalls = buildOpenWallSegmentSet(wallOpenings, wallSurfaceProps)
+  const openWalls = buildOpenWallSegmentSet(wallOpenings, wallSurfaceAssetIds, wallSurfaceProps)
   const blockingCells = new Set(blockingCellKeys)
   const visible = new Set<string>()
   const maxOffset = Math.ceil(range)
@@ -350,6 +355,7 @@ export function computeVisibilityMask(
   blockerLookup: BlockerLookup = new Map(),
   solidWalls: Set<string> = new Set(),
   wallSurfaceProps: Record<string, Record<string, unknown>> = {},
+  wallSurfaceAssetIds: Record<string, string> = {},
 ): PlayVisibilityMask | null {
   const paintedCellKeys = Object.keys(paintedCells)
   if (paintedCellKeys.length === 0 || origins.length === 0) {
@@ -357,7 +363,7 @@ export function computeVisibilityMask(
   }
 
   const blockingCells = new Set(blockingCellKeys)
-  const portalLookup = buildPortalLookup(wallOpenings, wallSurfaceProps)
+  const portalLookup = buildPortalLookup(wallOpenings, wallSurfaceProps, wallSurfaceAssetIds)
   const sources = origins
     .map((origin) => {
       const samples = computeVisibilitySamples(
@@ -765,6 +771,7 @@ function addEdgeAngles(
 export function buildPortalLookup(
   wallOpenings: Record<string, OpeningRecord>,
   wallSurfaceProps: Record<string, Record<string, unknown>> = {},
+  wallSurfaceAssetIds: Record<string, string> = {},
 ) {
   const lookup = new Map<string, PortalSegment>()
   for (const opening of Object.values(wallOpenings)) {
@@ -777,7 +784,7 @@ export function buildPortalLookup(
       }
     }
   }
-  const openWalls = buildOpenWallSegmentSet(wallOpenings, wallSurfaceProps)
+  const openWalls = buildOpenWallSegmentSet(wallOpenings, wallSurfaceAssetIds, wallSurfaceProps)
   for (const wallKey of openWalls) {
     if (!lookup.has(wallKey)) {
       lookup.set(wallKey, getWallPortalSegment(wallKey))
@@ -791,7 +798,7 @@ function getOpeningPortalSegment(opening: OpeningRecord): PortalSegment {
   const [xText, zText, directionText] = opening.wallKey.split(':')
   const x = Number.parseInt(xText ?? '', 10)
   const z = Number.parseInt(zText ?? '', 10)
-  const inset = opening.assetId ? MASK_OPENING_INSET : MASK_DISTANCE_EPSILON
+  const inset = isOpeningOpen(opening) ? MASK_DISTANCE_EPSILON : MASK_OPENING_INSET
   const indices = segments.map((segment) => segment.split(':')).map(([sx, sz]) => ({
     x: Number.parseInt(sx ?? '', 10),
     z: Number.parseInt(sz ?? '', 10),

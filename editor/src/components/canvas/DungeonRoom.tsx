@@ -40,7 +40,7 @@ import { useGLTF } from '../../rendering/useGLTF'
 import { shouldActivateFloorReceiver } from './floorReceiverMode'
 import type { ContentPackModelTransform } from '../../content-packs/types'
 import { resolveProjectionReceiverAsset } from './tileAssetResolution'
-import { getWallSpanInteriorLightDirections } from './wallLighting'
+import { getCornerInteriorLightDirections, getWallSpanInteriorLightDirections } from './wallLighting'
 import {
   buildChunkedFloorRenderDerivedCache,
   type FloorRenderChunkBundle,
@@ -59,6 +59,7 @@ import {
   getBuildAnimationKeyFromWallKeys,
   getOpeningHitboxSize,
 } from './DungeonRoomShared'
+import { getOpeningObjectProps, getOpeningPlayModeNextProps } from '../../store/openingState'
 import { getTileGpuStreamMountId } from './TileGpuStreamContextShared'
 
 const ZERO_ROTATION = [0, 0, 0] as const
@@ -290,6 +291,7 @@ function FloorRenderChunkRenderer({
       const buildAnimation = enableBuildAnimation
         ? getBuildAnimationState(cellKey, WALL_EXTRA_DELAY_MS)
         : null
+      const interiorDirections = getCornerInteriorLightDirections(corner.wallKeys)
 
       return {
         key: corner.key,
@@ -298,13 +300,16 @@ function FloorRenderChunkRenderer({
         rotation: corner.rotation,
         buildAnimationDelay: buildAnimation?.delay,
         buildAnimationStart: buildAnimation?.startedAt,
-        variant: 'wall',
+        variant: 'prop',
         variantKey: corner.key,
         visibility: getWallSpanVisibilityState(visibility, corner.wallKeys),
+        bakedLightField: bakedFloorLightField,
+        bakedLightDirection: interiorDirections.primary,
+        bakedLightDirectionSecondary: interiorDirections.secondary,
         objectProps: corner.objectProps,
       }
     }),
-    [bundle.corners, enableBuildAnimation, isBuildAnimationCurrentlyActive, visibility],
+    [bakedFloorLightField, bundle.corners, enableBuildAnimation, isBuildAnimationCurrentlyActive, visibility],
   )
 
   return (
@@ -429,11 +434,11 @@ function CellGroupRenderer({
       const buildAnimation = enableBuildAnimation
         ? getBuildAnimationState(key)
         : null
-      return [{
+        return [{
           key: `floor:${key}`,
           assetId: group.floorAssetId,
           position: cellToWorldPosition(cell),
-          rotation: ZERO_ROTATION,
+          rotation: group.rotation,
           buildAnimationDelay: buildAnimation?.delay,
           buildAnimationStart: buildAnimation?.startedAt,
           variant: 'floor',
@@ -443,7 +448,15 @@ function CellGroupRenderer({
         fogCell: cell,
       }]
       }),
-    [bakedFloorLightField, blockedFloorCellKeys, buildAnimationVersion, enableBuildAnimation, group.cells, group.floorAssetId],
+    [
+      bakedFloorLightField,
+      blockedFloorCellKeys,
+      buildAnimationVersion,
+      enableBuildAnimation,
+      group.cells,
+      group.floorAssetId,
+      group.rotation,
+    ],
   )
 
   return (
@@ -791,7 +804,7 @@ function WallInstanceRenderer({
     }
 
     event.stopPropagation()
-    setWallSurfaceProps(wallKey, nextProps)
+    setWallSurfaceProps(wallKey, { ...(wall.objectProps ?? {}), ...nextProps })
   }
 
   function handlePointerDown(event: ThreeEvent<PointerEvent>) {
@@ -804,11 +817,11 @@ function WallInstanceRenderer({
   }
 
   return (
-    <group ref={groupRef}>
+    <group ref={groupRef} position={wall.position} rotation={wall.rotation}>
       <ContentPackInstance
         assetId={wall.assetId}
-        position={wall.position}
-        rotation={wall.rotation}
+        position={ZERO_ROTATION}
+        rotation={ZERO_ROTATION}
         selected={false}
         variant="wall"
         variantKey={wall.key}
@@ -841,6 +854,7 @@ function OpeningRenderer({
 }) {
   const selection = useDungeonStore((state) => state.selection)
   const selectObject = useDungeonStore((state) => state.selectObject)
+  const setOpeningProps = useDungeonStore((state) => state.setOpeningProps)
   const selected = selection === opening.id
   const useLineOfSightPostMask = visibility.active
   const buildAnimationVersion = useBuildAnimationVersion()
@@ -854,10 +868,12 @@ function OpeningRenderer({
   const clipBelowGround = enableBuildAnimation && isBuildAnimationCurrentlyActive(openingAnimationCellKey)
 
   const groupRef = useRef<THREE.Group>(null)
+  const assetGroupRef = useRef<THREE.Group>(null)
   useLayoutEffect(() => {
-    if (groupRef.current) registerObject(opening.id, groupRef.current)
+    const selectionTarget = opening.assetId ? assetGroupRef.current : groupRef.current
+    if (selectionTarget) registerObject(opening.id, selectionTarget)
     return () => unregisterObject(opening.id)
-  }, [opening.id])
+  }, [opening.assetId, opening.id])
 
   const tool = useDungeonStore((state) => state.tool)
 
@@ -869,10 +885,35 @@ function OpeningRenderer({
     ? [wallPosition.rotation[0], wallPosition.rotation[1] + Math.PI, wallPosition.rotation[2]]
     : wallPosition.rotation
 
-  function handleClick(e: ThreeEvent<MouseEvent>) {
-    if (tool === 'select') return
-    if (!e.altKey) return
-    e.stopPropagation()
+  function handleClick(event: ThreeEvent<MouseEvent>) {
+    if (event.altKey) {
+      event.stopPropagation()
+      selectObject(opening.id)
+      return
+    }
+
+    if (tool !== 'play') {
+      return
+    }
+
+    const nextProps = getOpeningPlayModeNextProps(opening)
+    if (!nextProps) {
+      return
+    }
+
+    event.stopPropagation()
+    setOpeningProps(opening.id, {
+      ...getOpeningObjectProps(opening),
+      ...nextProps,
+    })
+  }
+
+  function handlePointerDown(event: ThreeEvent<PointerEvent>) {
+    if (tool !== 'select') {
+      return
+    }
+
+    event.stopPropagation()
     selectObject(opening.id)
   }
 
@@ -882,7 +923,7 @@ function OpeningRenderer({
       enabled={enableBuildAnimation}
     >
       <group ref={groupRef} position={wallPosition.position} rotation={rotation}>
-        <mesh onClick={handleClick}>
+        <mesh onClick={handleClick} onPointerDown={handlePointerDown}>
           <boxGeometry args={getOpeningHitboxSize(opening.width)} />
           <meshBasicMaterial
             transparent
@@ -893,17 +934,22 @@ function OpeningRenderer({
           />
         </mesh>
       {opening.assetId ? (
-        <ContentPackInstance
-          assetId={opening.assetId}
-          selected={false}
-          variant="wall"
-          visibility={wallVisibility}
-          useLineOfSightPostMask={useLineOfSightPostMask}
-          bakedLightField={bakedLightField}
-          bakedLightDirection={interiorDirections.primary}
-          bakedLightDirectionSecondary={interiorDirections.secondary}
-          clipBelowGround={clipBelowGround}
-        />
+        <group ref={assetGroupRef}>
+          <ContentPackInstance
+            assetId={opening.assetId}
+            selected={false}
+            variant="wall"
+            visibility={wallVisibility}
+            useLineOfSightPostMask={useLineOfSightPostMask}
+            bakedLightField={bakedLightField}
+            bakedLightDirection={interiorDirections.primary}
+            bakedLightDirectionSecondary={interiorDirections.secondary}
+            clipBelowGround={clipBelowGround}
+            objectProps={getOpeningObjectProps(opening)}
+            onClick={handleClick}
+            onPointerDown={handlePointerDown}
+          />
+        </group>
       ) : (
         <>
           {selected && (

@@ -91,6 +91,30 @@ describe('bakedLightMaterial', () => {
     expect(material.emissiveNode).toBe(material.userData.bakedLightBaseEmissiveNode ?? null)
   })
 
+  it('supports dual-direction surface lighting without falling back to uniform face lighting', () => {
+    const material = createStandardCompatibleMaterial({
+      color: '#ffffff',
+      roughness: 0.4,
+      metalness: 0.1,
+    }) as TestNodeMaterial
+    const lightField = createTestLightField()
+
+    material.isNodeMaterial = true
+
+    applyBakedLightToMaterial(material, {
+      useLightAttribute: true,
+      useDirectionAttribute: true,
+      useSecondaryDirectionAttribute: true,
+      lightField,
+      direction: [0, 0, 1],
+      directionSecondary: [-1, 0, 0],
+    })
+
+    expect(material.userData.bakedLightSignature).toContain('double-directed-constant')
+    expect(material.colorNode).toBeDefined()
+    expect(material.emissiveNode).toBeDefined()
+  })
+
   it('applies prop baked lighting directly from the shared baked field texture', () => {
     const material = createStandardCompatibleMaterial({
       color: '#ffffff',

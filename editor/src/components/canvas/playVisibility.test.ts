@@ -1,4 +1,5 @@
-import { describe, expect, it } from 'vitest'
+import { cleanup, renderHook, waitFor } from '@testing-library/react'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import * as THREE from 'three'
 import {
   clearPlayVisibilityDerivedCache,
@@ -11,10 +12,13 @@ import {
   getObjectVisibilityState,
   isVisiblePlayerOrigin,
   shouldActivatePlayVisibility,
+  usePlayVisibility,
 } from './playVisibility'
-import type { OpeningRecord, PaintedCells } from '../../store/useDungeonStore'
+import { useDungeonStore, type OpeningRecord, type PaintedCells } from '../../store/useDungeonStore'
 import { GRID_SIZE } from '../../hooks/useSnapToGrid'
 import { registerObject, unregisterObject } from './objectRegistry'
+
+const originalWorker = globalThis.Worker
 
 function makeCells(entries: Array<{ cell: [number, number]; roomId?: string | null }>): PaintedCells {
   return Object.fromEntries(
@@ -24,6 +28,35 @@ function makeCells(entries: Array<{ cell: [number, number]; roomId?: string | nu
     ]),
   )
 }
+
+class SilentWorker {
+  addEventListener() {}
+  removeEventListener() {}
+  postMessage() {}
+  terminate() {}
+}
+
+beforeEach(() => {
+  clearPlayVisibilityDerivedCache()
+  useDungeonStore.getState().reset()
+})
+
+afterEach(() => {
+  cleanup()
+  vi.restoreAllMocks()
+  clearPlayVisibilityDerivedCache()
+  useDungeonStore.getState().reset()
+  if (originalWorker) {
+    Object.defineProperty(globalThis, 'Worker', {
+      configurable: true,
+      writable: true,
+      value: originalWorker,
+    })
+    return
+  }
+
+  delete (globalThis as { Worker?: typeof Worker }).Worker
+})
 
 describe('computeVisibleCellKeys', () => {
   it('reveals cells in direct line of sight within range', () => {
@@ -701,4 +734,41 @@ describe('getObjectVisibilityState', () => {
     ).toBe('explored')
   })
 
+})
+
+describe('usePlayVisibility', () => {
+  it('falls back to immediate LOS computation when the worker does not answer', async () => {
+    Object.defineProperty(globalThis, 'Worker', {
+      configurable: true,
+      writable: true,
+      value: SilentWorker,
+    })
+
+    const state = useDungeonStore.getState()
+    state.paintCells([[0, 0]])
+    state.paintCells([[1, 0]])
+    state.placeOpening({
+      assetId: 'dungeon.wall_wall_opening',
+      wallKey: '0:0:east',
+      width: 1,
+      flipped: false,
+    })
+    state.placeObject({
+      type: 'player',
+      assetId: 'core.players_fighter',
+      position: [1, 0.45, 1],
+      rotation: [0, 0, 0],
+      props: {},
+      cell: [0, 0],
+      cellKey: '0:0:floor',
+    })
+    state.setTool('play')
+
+    const { result } = renderHook(() => usePlayVisibility())
+
+    await waitFor(() => {
+      expect(result.current.active).toBe(true)
+      expect(result.current.visibleCellKeys).toEqual(expect.arrayContaining(['0:0', '1:0']))
+    })
+  })
 })

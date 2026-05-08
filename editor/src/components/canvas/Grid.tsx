@@ -169,6 +169,7 @@ export function Grid({ size = 120, playMode = false, bakedLightField = null }: G
   const removeOpening = useDungeonStore((state) => state.removeOpening)
   const roomEditMode = useDungeonStore((state) => state.roomEditMode)
   const roomPaintMode = useDungeonStore((state) => state.roomPaintMode)
+  const activeRoomSetId = useDungeonStore((state) => state.activeRoomSetId)
   const assetBrowser = useDungeonStore((state) => state.assetBrowser)
   const outdoorOverpaintRegenerate = useDungeonStore((state) => state.outdoorOverpaintRegenerate)
   const activeLayerId = useDungeonStore((state) => state.activeLayerId)
@@ -908,6 +909,7 @@ export function Grid({ size = 120, playMode = false, bakedLightField = null }: G
 
       return buildSpeculativeRoomTileEntries({
         activeLayerId,
+        activeRoomSetId,
         bakedLightField,
         buildStartedAt: roomStreamTransactionStartedAt!,
         cells: previewCells,
@@ -925,6 +927,7 @@ export function Grid({ size = 120, playMode = false, bakedLightField = null }: G
     },
     [
       activeLayerId,
+      activeRoomSetId,
       bakedLightField,
       floorTileAssetIds,
       globalFloorAssetId,
@@ -977,6 +980,7 @@ export function Grid({ size = 120, playMode = false, bakedLightField = null }: G
         ? null
         : {
           activeLayerId,
+          activeRoomSetId,
           bakedLightField,
           floorTileAssetIds,
           globalFloorAssetId,
@@ -1054,6 +1058,7 @@ export function Grid({ size = 120, playMode = false, bakedLightField = null }: G
               before: previousRoomAnimationState,
               after: {
                 activeLayerId,
+                activeRoomSetId: nextState.activeRoomSetId,
                 bakedLightField,
                 floorTileAssetIds: nextState.floorTileAssetIds,
                 globalFloorAssetId: nextState.selectedAssetIds.floor,
@@ -1145,6 +1150,7 @@ export function Grid({ size = 120, playMode = false, bakedLightField = null }: G
     const previousRoomAnimationState = BUILD_ANIMATIONS_ENABLED && mapMode !== 'outdoor'
       ? {
         activeLayerId,
+        activeRoomSetId,
         bakedLightField,
         floorTileAssetIds,
         globalFloorAssetId,
@@ -1198,6 +1204,7 @@ export function Grid({ size = 120, playMode = false, bakedLightField = null }: G
           before: previousRoomAnimationState,
           after: {
             activeLayerId,
+            activeRoomSetId: nextState.activeRoomSetId,
             bakedLightField,
             floorTileAssetIds: nextState.floorTileAssetIds,
             globalFloorAssetId: nextState.selectedAssetIds.floor,

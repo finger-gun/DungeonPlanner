@@ -145,6 +145,8 @@ export function ContentPackInstance({
     tool,
     showPropProbeDebug,
   })
+  const propFieldLightWeight = 1
+  const suppressTopSurfacePropBakedLight = false
   const propDescriptorKey = useMemo(
     () => buildPropDescriptorKey({
       assetId,
@@ -195,6 +197,8 @@ export function ContentPackInstance({
           clipBelowGround={clipBelowGround}
           propInstanceKey={propInstanceKey}
           useRuntimePropProbe={useRuntimePropProbe}
+          propFieldLightWeight={propFieldLightWeight}
+          suppressTopSurfacePropBakedLight={suppressTopSurfacePropBakedLight}
         />
       </group>
     )
@@ -204,7 +208,7 @@ export function ContentPackInstance({
     <Suspense
       fallback={
         <group {...groupProps}>
-          <FallbackMesh
+            <FallbackMesh
             selected={selected}
             variant={variant}
             variantKey={variantKey}
@@ -218,11 +222,13 @@ export function ContentPackInstance({
             bakedLightField={bakedLightField}
              bakedLightDirection={bakedLightDirection}
              bakedLightDirectionSecondary={bakedLightDirectionSecondary}
-             disableBakedLight={disableBakedLight}
-             clipBelowGround={clipBelowGround}
-             propInstanceKey={propInstanceKey}
-             useRuntimePropProbe={useRuntimePropProbe}
-           />
+              disableBakedLight={disableBakedLight}
+              clipBelowGround={clipBelowGround}
+              propInstanceKey={propInstanceKey}
+              useRuntimePropProbe={useRuntimePropProbe}
+              propFieldLightWeight={propFieldLightWeight}
+              suppressTopSurfacePropBakedLight={suppressTopSurfacePropBakedLight}
+            />
         </group>
       }
     >
@@ -253,6 +259,8 @@ export function ContentPackInstance({
           propDescriptorKey={propDescriptorKey}
           propInstanceKey={propInstanceKey}
           useRuntimePropProbe={useRuntimePropProbe}
+          propFieldLightWeight={propFieldLightWeight}
+          suppressTopSurfacePropBakedLight={suppressTopSurfacePropBakedLight}
           {...groupProps}
         />
       ) : (
@@ -271,14 +279,16 @@ export function ContentPackInstance({
           bakedLightField={bakedLightField}
            bakedLightDirection={bakedLightDirection}
           bakedLightDirectionSecondary={bakedLightDirectionSecondary}
-          disableBakedLight={disableBakedLight}
-          clipBelowGround={clipBelowGround}
-          atlasColorVariant={atlasColorVariant}
-          propDescriptorKey={propDescriptorKey}
-          propInstanceKey={propInstanceKey}
-          useRuntimePropProbe={useRuntimePropProbe}
-          {...groupProps}
-        />
+            disableBakedLight={disableBakedLight}
+            clipBelowGround={clipBelowGround}
+            atlasColorVariant={atlasColorVariant}
+            propDescriptorKey={propDescriptorKey}
+            propInstanceKey={propInstanceKey}
+            useRuntimePropProbe={useRuntimePropProbe}
+            propFieldLightWeight={propFieldLightWeight}
+            suppressTopSurfacePropBakedLight={suppressTopSurfacePropBakedLight}
+            {...groupProps}
+          />
       )}
     </Suspense>
   )
@@ -307,14 +317,16 @@ function getSurfaceBakedLightOptions(
   if (!bakedLightField) {
     return null
   }
-  if (variant === 'wall' && !bakedLightDirection) {
+  const usesDirectionalSurfaceLighting =
+    (variant === 'wall' || variant === 'prop') && Boolean(bakedLightDirection)
+  if ((variant === 'wall' || variant === 'prop') && !usesDirectionalSurfaceLighting) {
     return null
   }
 
   return {
     useLightAttribute: true,
-    useDirectionAttribute: variant === 'wall',
-    useSecondaryDirectionAttribute: variant === 'wall' && Boolean(bakedLightDirectionSecondary),
+    useDirectionAttribute: usesDirectionalSurfaceLighting,
+    useSecondaryDirectionAttribute: usesDirectionalSurfaceLighting && Boolean(bakedLightDirectionSecondary),
     useTopSurfaceMask: variant === 'floor',
     lightField: bakedLightField,
     ...(bakedLightDirection ? { direction: bakedLightDirection } : {}),
@@ -343,6 +355,8 @@ function GLTFModel({
   propDescriptorKey,
   propInstanceKey,
   useRuntimePropProbe,
+  propFieldLightWeight,
+  suppressTopSurfacePropBakedLight,
   ...groupProps
 }: ThreeElements['group'] & {
   assetPath: string
@@ -365,6 +379,8 @@ function GLTFModel({
   propDescriptorKey?: string | null
   propInstanceKey?: string
   useRuntimePropProbe: boolean
+  propFieldLightWeight: number
+  suppressTopSurfacePropBakedLight: boolean
 }) {
   const gltf = useGLTF(assetPath)
   const fogOfWar = useFogOfWarRuntime()
@@ -408,6 +424,12 @@ function GLTFModel({
       return
     }
 
+    if (variant === 'prop' && surfaceBakedLightOptions?.useDirectionAttribute) {
+      applyPropBakedLightToObject(scene, null)
+      applyBakedLightToObject(scene, surfaceBakedLightOptions)
+      return
+    }
+
     if (variant === 'prop') {
       applyPropBakedLightToObject(scene, {
         lightField: bakedLightField,
@@ -419,6 +441,8 @@ function GLTFModel({
             localBounds: propLocalBounds,
           })
           : null,
+        fieldLightWeight: propFieldLightWeight,
+        suppressTopSurfaceLight: suppressTopSurfacePropBakedLight,
       })
       applyBakedLightToObject(scene, null)
       return
@@ -441,6 +465,8 @@ function GLTFModel({
     groupProps.scale,
     propLocalBounds,
     propInstanceKey,
+    propFieldLightWeight,
+    suppressTopSurfacePropBakedLight,
     useRuntimePropProbe,
   ])
 
@@ -508,6 +534,8 @@ function ComponentAsset({
   propDescriptorKey,
   propInstanceKey,
   useRuntimePropProbe,
+  propFieldLightWeight,
+  suppressTopSurfacePropBakedLight,
   ...groupProps
 }: ThreeElements['group'] & {
   Component: ComponentType<ContentPackComponentProps>
@@ -530,6 +558,8 @@ function ComponentAsset({
   propDescriptorKey?: string | null
   propInstanceKey?: string
   useRuntimePropProbe: boolean
+  propFieldLightWeight: number
+  suppressTopSurfacePropBakedLight: boolean
 }) {
   const contentRef = useRef<THREE.Group>(null)
   const [overlaySource, setOverlaySource] = useState<THREE.Group | null>(null)
@@ -590,6 +620,12 @@ function ComponentAsset({
       return
     }
 
+    if (variant === 'prop' && surfaceBakedLightOptions?.useDirectionAttribute) {
+      applyPropBakedLightToObject(contentRef.current, null)
+      applyBakedLightToObject(contentRef.current, surfaceBakedLightOptions)
+      return
+    }
+
     if (variant === 'prop') {
       applyPropBakedLightToObject(contentRef.current, {
         lightField: bakedLightField,
@@ -601,6 +637,8 @@ function ComponentAsset({
             localBounds: propLocalBounds,
           })
           : null,
+        fieldLightWeight: propFieldLightWeight,
+        suppressTopSurfaceLight: suppressTopSurfacePropBakedLight,
       })
       applyBakedLightToObject(contentRef.current, null)
       return
@@ -619,7 +657,9 @@ function ComponentAsset({
     groupProps.scale,
     propLocalBounds,
     propInstanceKey,
+    propFieldLightWeight,
     shouldRenderBase,
+    suppressTopSurfacePropBakedLight,
     surfaceBakedLightOptions,
     useRuntimePropProbe,
     variant,
@@ -713,6 +753,8 @@ function FallbackMesh({
   clipBelowGround = false,
   propInstanceKey,
   useRuntimePropProbe,
+  propFieldLightWeight,
+  suppressTopSurfacePropBakedLight,
 }: {
   selected: boolean
   tint?: string
@@ -731,6 +773,8 @@ function FallbackMesh({
   clipBelowGround?: boolean
   propInstanceKey?: string
   useRuntimePropProbe: boolean
+  propFieldLightWeight: number
+  suppressTopSurfacePropBakedLight: boolean
 }) {
   const baseColor =
     variant === 'floor' ? '#34d399' : variant === 'wall' ? '#fbbf24' : '#7dd3fc'
@@ -818,6 +862,12 @@ function FallbackMesh({
       return
     }
 
+    if (surfaceBakedLightOptions?.useDirectionAttribute) {
+      applyPropBakedLightToMaterial(material, null)
+      applyBakedLightToMaterial(material, surfaceBakedLightOptions)
+      return
+    }
+
     applyPropBakedLightToMaterial(material, {
       lightField: bakedLightField,
       probe: useRuntimePropProbe
@@ -828,6 +878,8 @@ function FallbackMesh({
           localBounds: propLocalBounds,
         })
         : null,
+      fieldLightWeight: propFieldLightWeight,
+      suppressTopSurfaceLight: suppressTopSurfacePropBakedLight,
     })
     applyBakedLightToMaterial(material, null)
   }, [
@@ -838,6 +890,8 @@ function FallbackMesh({
     material,
     propLocalBounds,
     propInstanceKey,
+    propFieldLightWeight,
+    suppressTopSurfacePropBakedLight,
     surfaceBakedLightOptions,
     useRuntimePropProbe,
     variant,

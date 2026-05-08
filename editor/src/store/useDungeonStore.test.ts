@@ -51,6 +51,19 @@ describe('useDungeonStore history', () => {
     expect(Object.keys(state.paintedCells)).toHaveLength(2)
   })
 
+  it('assigns the active room set to newly created rooms', () => {
+    const state = useDungeonStore.getState()
+    state.setActiveRoomSetId('cave')
+    state.paintCells([[0, 0]])
+
+    const roomId = useDungeonStore.getState().paintedCells['0:0']?.roomId
+    expect(roomId).toBeTruthy()
+    expect(useDungeonStore.getState().rooms[roomId!]?.roomSetId).toBe('cave')
+
+    const manualRoomId = useDungeonStore.getState().createRoom('Manual Room')
+    expect(useDungeonStore.getState().rooms[manualRoomId]?.roomSetId).toBe('cave')
+  })
+
   it('keeps pixelation disabled by default and allows toggling it', () => {
     expect(useDungeonStore.getState().postProcessing.pixelateEnabled).toBe(false)
     expect(useDungeonStore.getState().postProcessing.pixelSize).toBe(6)
@@ -1575,6 +1588,21 @@ describe('useDungeonStore wall openings', () => {
     })
   })
 
+  it('updates opening props without changing the opening asset', () => {
+    const id = useDungeonStore.getState().placeOpening({
+      assetId: 'core.opening_door_wall_1',
+      wallKey: '0:0:north',
+      width: 1,
+      flipped: false,
+    })
+
+    expect(useDungeonStore.getState().setOpeningProps(id!, { open: true })).toBe(true)
+    expect(useDungeonStore.getState().wallOpenings[id!]).toMatchObject({
+      assetId: 'core.opening_door_wall_1',
+      objectProps: { open: true },
+    })
+  })
+
   it('places an open passage without an asset mesh', () => {
     const id = useDungeonStore.getState().placeOpening({
       assetId: null,
@@ -1691,13 +1719,12 @@ describe('useDungeonStore wall openings', () => {
     state.paintCells([[0, 0], [0, 1], [0, 2]])
     state.paintCells([[1, 0], [1, 1], [1, 2]])
 
-    const openings = Object.values(useDungeonStore.getState().wallOpenings)
-    expect(openings).toHaveLength(1)
-    expect(openings[0]).toMatchObject({
-      assetId: 'core.opening_door_wall_1',
-      wallKey: '0:1:east',
-      width: 1,
-      source: 'generated',
+    expect(useDungeonStore.getState().wallOpenings).toEqual({})
+    expect(useDungeonStore.getState().wallSurfaceAssetIds).toMatchObject({
+      '0:1:east': 'dungeon.wall_wall_doorway',
+    })
+    expect(useDungeonStore.getState().wallSurfaceProps['0:1:east']).toMatchObject({
+      generatedConnector: true,
     })
   })
 
@@ -1728,10 +1755,8 @@ describe('useDungeonStore wall openings', () => {
 
     const rightRoomId = useDungeonStore.getState().paintedCells['1:0']?.roomId
     expect(rightRoomId).toBeTruthy()
-    expect(Object.values(useDungeonStore.getState().wallOpenings)[0]).toMatchObject({
-      assetId: 'core.opening_door_wall_1',
-      wallKey: '0:0:east',
-      source: 'generated',
+    expect(useDungeonStore.getState().wallSurfaceAssetIds).toMatchObject({
+      '0:0:east': 'dungeon.wall_wall_doorway',
     })
 
     useDungeonStore.getState().resizeRoom(rightRoomId!, {
@@ -1748,6 +1773,7 @@ describe('useDungeonStore wall openings', () => {
       wallKey: '0:0:east',
       source: 'generated',
     })
+    expect(useDungeonStore.getState().wallSurfaceAssetIds['0:0:east']).toBeUndefined()
   })
 
   it('adds and removes inner wall segments in a single history step', () => {

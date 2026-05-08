@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { getMetadataConnectors } from './connectors'
-import { getContentPackAssetById, getDefaultAssetIdByCategory } from './registry'
+import { getContentPackAssetById, getContentPackRoomSetById, getDefaultAssetIdByCategory } from './registry'
 import { syncGeneratedCharacterAssets } from './runtimeRegistry'
 
 describe('content pack registry', () => {
@@ -56,7 +56,7 @@ describe('content pack registry', () => {
     expect(asset.getPlayModeNextProps?.({ open: true })).toEqual({ open: false })
   })
 
-  it('registers the scaffold dungeon wall doorway as a play-toggleable wall', () => {
+  it('registers the scaffold dungeon wall doorway as a play-toggleable opening', () => {
     const asset = getContentPackAssetById('dungeon.wall_wall_doorway_scaffold')
 
     if (!asset) {
@@ -66,6 +66,41 @@ describe('content pack registry', () => {
 
     expect(asset.getPlayModeNextProps?.({})).toEqual({ open: true })
     expect(asset.getPlayModeNextProps?.({ open: true })).toEqual({ open: false })
+    expect(asset.category).toBe('opening')
+    expect(asset.metadata?.openingKind).toBe('door')
+  })
+
+  it('registers the timber frame room set with scaffold walls and scaffold doors', () => {
+    expect(getContentPackRoomSetById('dungeon', 'timber-frame')).toMatchObject({
+      id: 'timber-frame',
+      name: 'Timber Frame',
+      previewWallAssetId: 'dungeon.wall_wall_scaffold',
+      wallAssetId: 'dungeon.wall_wall_scaffold',
+      pillarAssetId: 'dungeon.props_pillars_pillar',
+      openingAssetId: 'dungeon.wall_wall_doorway_scaffold',
+      floor: {
+        kind: 'single',
+        assetId: 'dungeon.floor_floor_tile_small',
+      },
+    })
+  })
+
+  it('registers scaffold and opening wall variants as wall openings in the doors browser section', () => {
+    for (const assetId of [
+      'dungeon.wall_wall_open_scaffold',
+      'dungeon.wall_wall_opening',
+    ]) {
+      const asset = getContentPackAssetById(assetId)
+
+      if (!asset) {
+        expect(asset).toBeNull()
+        continue
+      }
+
+      expect(asset.category).toBe('opening')
+      expect(asset.metadata?.openingKind).toBe('passage')
+      expect(asset.metadata?.browserSubcategory).toBe('doors')
+    }
   })
 
   it('registers dungeon torches as play-toggleable flame props', () => {

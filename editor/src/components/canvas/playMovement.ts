@@ -37,6 +37,7 @@ type BuildMovementRangeInput = {
   paintedCells: PaintedCells
   blockedCells: BlockedCells
   wallOpenings: Record<string, OpeningRecord>
+  wallSurfaceAssetIds?: Record<string, string>
   wallSurfaceProps?: Record<string, Record<string, unknown>>
   innerWalls: Record<string, InnerWallRecord>
   occupancy: Record<string, string>
@@ -65,6 +66,7 @@ export function buildMovementRange({
   paintedCells,
   blockedCells,
   wallOpenings,
+  wallSurfaceAssetIds = {},
   wallSurfaceProps = {},
   innerWalls,
   occupancy,
@@ -76,7 +78,7 @@ export function buildMovementRange({
   const reachableCellKeys = new Set<string>([originKey])
   const reachableCells: GridCell[] = [[originCell[0], originCell[1]]]
   const queue: Array<{ cell: GridCell, steps: number }> = [{ cell: originCell, steps: 0 }]
-  const suppressedBoundaryWalls = buildOpenWallSegmentSet(wallOpenings, wallSurfaceProps)
+  const suppressedBoundaryWalls = buildOpenWallSegmentSet(wallOpenings, wallSurfaceAssetIds, wallSurfaceProps)
 
   for (let index = 0; index < queue.length; index += 1) {
     const current = queue[index]

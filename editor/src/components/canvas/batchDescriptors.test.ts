@@ -192,6 +192,31 @@ describe('buildBatchDescriptors', () => {
     expect(resultWithFog.batched[0]!.bucketKey).not.toBe(resultWithoutFog.batched[0]!.bucketKey)
   })
 
+  it('falls back prop variants so they can use runtime prop lighting', () => {
+    const resolveSpy = vi.spyOn(tileAssetResolution, 'resolveBatchedTileAsset')
+    resolveSpy.mockImplementation(() => ({
+      assetUrl: '/assets/pillar.glb',
+      transformKey: 'default',
+      receiveShadow: true,
+    }))
+
+    const entry: StaticTileEntry = {
+      key: '1:1:corner',
+      assetId: 'dungeon.props_pillars_pillar',
+      position: [2, 0, 2],
+      rotation: [0, 0, 0],
+      variant: 'prop',
+      variantKey: '1:1:corner',
+      visibility: 'visible',
+    }
+
+    const result = buildBatchDescriptors([entry], false)
+
+    expect(result.batched).toEqual([])
+    expect(result.fallback).toEqual([entry])
+    expect(resolveSpy).not.toHaveBeenCalled()
+  })
+
   it('should separate entries by visibility state', () => {
     const resolveSpy = vi.spyOn(tileAssetResolution, 'resolveBatchedTileAsset')
     resolveSpy.mockImplementation(() => ({

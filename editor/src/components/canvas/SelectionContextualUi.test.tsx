@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import * as THREE from 'three'
 import { SelectionContextualUi } from './SelectionContextualUi'
 
 const controlsMock = vi.hoisted(() => ({ enabled: true }))
@@ -27,9 +28,31 @@ const storeState = vi.hoisted(() => ({
       layerId: 'default',
     },
   } as Record<string, unknown>,
+  activeFloorId: 'floor-1',
+  activeLayerId: 'default',
+  selectedAssetIds: {
+    floor: 'floor-asset',
+    wall: 'wall-asset',
+  },
+  innerWalls: {},
+  paintedCells: {
+    '0:0': { roomId: 'room-a', floorId: 'floor-1', layerId: 'default' },
+  } as Record<string, unknown>,
+  rooms: {
+    'room-a': { id: 'room-a', name: 'Room A' },
+  } as Record<string, unknown>,
+  wallOpenings: {} as Record<string, unknown>,
+  wallSurfaceAssetIds: {} as Record<string, string | null>,
+  wallSurfaceProps: {} as Record<string, Record<string, unknown>>,
   setObjectProps: vi.fn(),
   repositionObject: vi.fn(),
   removeSelectedObject: vi.fn(),
+  removeOpening: vi.fn(),
+  rotateSelection: vi.fn(),
+  setOpeningAsset: vi.fn(),
+  setOpeningProps: vi.fn(),
+  setWallSurfaceAsset: vi.fn(),
+  setWallSurfaceProps: vi.fn(),
   setObjectScalePreview: vi.fn(),
   setObjectRotationPreview: vi.fn(),
   setObjectDragActive: vi.fn(),
@@ -37,7 +60,9 @@ const storeState = vi.hoisted(() => ({
   pickUpObject: vi.fn(() => true),
 }))
 
-const getRegisteredObjectMock = vi.hoisted(() => vi.fn((_id: string) => null))
+const getRegisteredObjectMock = vi.hoisted(
+  () => vi.fn<(id: string) => THREE.Object3D | null>(() => null),
+)
 const getContentPackAssetByIdMock = vi.hoisted(
   () => vi.fn<(id: string) => unknown>(() => null),
 )
@@ -88,6 +113,17 @@ vi.mock('./objectRegistry', () => ({
   useObjectRegistryVersion: () => 1,
 }))
 
+vi.mock('./useRemovalAnimationBatches', () => ({
+  useRemovalAnimationBatches: () => ({
+    removalAnimationBatches: [],
+    queueRemovalAnimationBatch: vi.fn(),
+  }),
+}))
+
+vi.mock('./BatchedTileEntries', () => ({
+  BatchedTileEntries: () => null,
+}))
+
 describe('SelectionContextualUi', () => {
   afterEach(() => {
     cleanup()
@@ -117,9 +153,31 @@ describe('SelectionContextualUi', () => {
         layerId: 'default',
       },
     }
+    storeState.activeFloorId = 'floor-1'
+    storeState.activeLayerId = 'default'
+    storeState.selectedAssetIds = {
+      floor: 'floor-asset',
+      wall: 'wall-asset',
+    }
+    storeState.innerWalls = {}
+    storeState.paintedCells = {
+      '0:0': { roomId: 'room-a', floorId: 'floor-1', layerId: 'default' },
+    }
+    storeState.rooms = {
+      'room-a': { id: 'room-a', name: 'Room A' },
+    }
+    storeState.wallOpenings = {}
+    storeState.wallSurfaceAssetIds = {}
+    storeState.wallSurfaceProps = {}
     storeState.setObjectProps.mockReset()
     storeState.repositionObject.mockReset()
     storeState.removeSelectedObject.mockReset()
+    storeState.removeOpening.mockReset()
+    storeState.rotateSelection.mockReset()
+    storeState.setOpeningAsset.mockReset()
+    storeState.setOpeningProps.mockReset()
+    storeState.setWallSurfaceAsset.mockReset()
+    storeState.setWallSurfaceProps.mockReset()
     storeState.setObjectScalePreview.mockReset()
     storeState.setObjectRotationPreview.mockReset()
     storeState.setObjectDragActive.mockReset()
@@ -267,6 +325,98 @@ describe('SelectionContextualUi', () => {
     expect(storeState.removeSelectedObject).toHaveBeenCalled()
   })
 
+  it('shows opening controls and toggles door state', () => {
+    storeState.selection = 'opening-1'
+    storeState.wallOpenings = {
+      'opening-1': {
+        id: 'opening-1',
+        wallKey: '0,0,N',
+        width: 1,
+        assetId: 'door-opening-asset',
+        objectProps: { open: false },
+      },
+    }
+    getContentPackAssetByIdMock.mockImplementation((id: string) => {
+      if (id === 'door-opening-asset') {
+        return {
+          id,
+          slug: id,
+          name: 'Door',
+          category: 'opening',
+          Component: () => null,
+          getPlayModeNextProps: (props: Record<string, unknown>) => ({ open: !props.open }),
+        }
+      }
+      return null
+    })
+
+    render(<SelectionContextualUi />)
+
+    expect(screen.getByLabelText('Toggle selected opening state')).toBeInTheDocument()
+    expect(screen.getByLabelText('Flip selected opening')).toBeInTheDocument()
+    expect(screen.getByLabelText('Delete selected opening')).toBeInTheDocument()
+
+    fireEvent.pointerDown(screen.getByLabelText('Toggle selected opening state'), { button: 0 })
+
+    expect(storeState.setOpeningProps).toHaveBeenCalledWith('opening-1', { open: true })
+  })
+
+  it('shows wall-door controls and snaps rotation on release', () => {
+    storeState.selection = '0:0:north'
+    storeState.wallSurfaceAssetIds = {
+      '0:0:north': 'wall-door-asset',
+    }
+    storeState.wallSurfaceProps = {
+      '0:0:north': { open: false, generatedConnector: true },
+    }
+    getContentPackAssetByIdMock.mockImplementation((id: string) => {
+      if (id === 'wall-door-asset') {
+        return {
+          id,
+          slug: id,
+          name: 'Wall Door',
+          category: 'wall',
+          Component: () => null,
+          metadata: {
+            atlasColorVariants: {
+              propKey: 'variant',
+              defaultVariantId: 'oak',
+              variants: [{ id: 'oak', label: 'Oak', swatchColor: '#8b5a2b', uvOffset: [0, 0] }],
+            },
+          },
+          getPlayModeNextProps: (props: Record<string, unknown>) => ({ open: !props.open }),
+        }
+      }
+      return null
+    })
+    getRegisteredObjectMock.mockReturnValue(new THREE.Group())
+
+    render(<SelectionContextualUi />)
+
+    expect(screen.getByLabelText('Toggle selected door state')).toBeInTheDocument()
+    expect(screen.getByLabelText('Flip selected door')).toBeInTheDocument()
+    expect(screen.getByLabelText('Delete selected door')).toBeInTheDocument()
+
+    fireEvent.pointerDown(screen.getByLabelText('Flip selected door'), {
+      button: 0,
+      clientX: 100,
+      clientY: 100,
+    })
+    fireEvent.pointerMove(window, {
+      clientX: 420,
+      clientY: 100,
+    })
+    fireEvent.pointerUp(window)
+
+    expect(storeState.rotateSelection).toHaveBeenCalled()
+
+    fireEvent.pointerDown(screen.getByLabelText('Toggle selected door state'), { button: 0 })
+    expect(storeState.setWallSurfaceProps).toHaveBeenCalledWith('0:0:north', {
+      open: true,
+      generatedConnector: true,
+    })
+  })
+
   it('shows color swatches for selected props with atlas color variants', () => {
     getContentPackAssetByIdMock.mockReturnValue({
       id: 'prop-asset',
@@ -300,6 +450,7 @@ describe('SelectionContextualUi', () => {
 
   it('hides the overlay when the selection is not a placed object', () => {
     storeState.selection = 'opening-1'
+    storeState.wallOpenings = {}
 
     render(<SelectionContextualUi />)
 

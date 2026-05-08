@@ -1,6 +1,7 @@
 import { getContentPackAssetById, getContentPackAssetsByCategory } from '../../content-packs/registry'
 import type { ContentPackAsset } from '../../content-packs/types'
 import { metadataSupportsConnectorType } from '../../content-packs/connectors'
+import { getOpeningObjectProps, getOpeningPlayModeNextProps, isOpeningPassage } from '../../store/openingState'
 import type { OpeningRecord } from '../../store/useDungeonStore'
 import { useDungeonStore } from '../../store/useDungeonStore'
 import { CompactPillButton } from './CompactPillButton'
@@ -21,9 +22,20 @@ export function SelectedOpeningInspector({
   const rotateSelection = useDungeonStore((state) => state.rotateSelection)
   const selectedOpeningAssetId = useDungeonStore((state) => state.selectedAssetIds.opening)
   const setOpeningAsset = useDungeonStore((state) => state.setOpeningAsset)
+  const setOpeningProps = useDungeonStore((state) => state.setOpeningProps)
   const fallbackClosedAsset = resolveClosedOpeningAsset(opening.width, selectedOpeningAssetId)
+  const playModeNextProps = getOpeningPlayModeNextProps(opening)
+  const isPassage = isOpeningPassage(opening)
 
-  const stateAction = opening.assetId
+  const stateAction = playModeNextProps
+    ? {
+        label: opening.objectProps?.open === true ? 'Close' : 'Open',
+        onClick: () => setOpeningProps(opening.id, {
+          ...getOpeningObjectProps(opening),
+          ...playModeNextProps,
+        }),
+      }
+    : opening.assetId && !isPassage
     ? {
         label: 'Open Passage',
         onClick: () => setOpeningAsset(opening.id, null),
@@ -77,7 +89,9 @@ export function SelectedOpeningInspector({
               </CompactPillButton>
             ) : (
               <p className="text-xs text-stone-500">
-                Choose a matching wall opening asset in the browser to close this passage.
+                {isPassage
+                  ? 'This opening is always passable and has no toggle state.'
+                  : 'Choose a matching wall opening asset in the browser to close this passage.'}
               </p>
             )}
             {opening.assetId ? (

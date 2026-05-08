@@ -38,6 +38,8 @@ describe('proceduralRoomLayout', () => {
     const result = reconcileProceduralRoomLayout({
       paintedCells,
       wallOpenings: {},
+      wallSurfaceAssetIds: {},
+      wallSurfaceProps: {},
       selection: null,
       createOpeningId: () => `generated-${Math.random()}`,
     })
@@ -45,18 +47,18 @@ describe('proceduralRoomLayout', () => {
       left.wallKey.localeCompare(right.wallKey),
     )
 
-    expect(openings).toHaveLength(2)
+    expect(openings).toHaveLength(1)
     expect(openings[0]).toMatchObject({
       assetId: null,
       wallKey: '0:0:east',
       width: 1,
       source: 'generated',
     })
-    expect(openings[1]).toMatchObject({
-      assetId: 'core.opening_door_wall_1',
-      wallKey: '3:1:east',
-      width: 1,
-      source: 'generated',
+    expect(result.wallSurfaceAssetIds).toEqual({
+      '3:1:east': 'dungeon.wall_wall_doorway',
+    })
+    expect(result.wallSurfaceProps).toEqual({
+      '3:1:east': { generatedConnector: true },
     })
   })
 
@@ -84,6 +86,8 @@ describe('proceduralRoomLayout', () => {
       wallOpenings: {
         [manualOpening.id]: manualOpening,
       },
+      wallSurfaceAssetIds: {},
+      wallSurfaceProps: {},
       selection: null,
       createOpeningId: () => 'generated-door',
     })
@@ -91,6 +95,8 @@ describe('proceduralRoomLayout', () => {
     expect(result.wallOpenings).toEqual({
       'manual-door': manualOpening,
     })
+    expect(result.wallSurfaceAssetIds).toEqual({})
+    expect(result.wallSurfaceProps).toEqual({})
   })
 
   it('limits each room side to one generated connector and prefers the longest shared run', () => {
@@ -109,18 +115,19 @@ describe('proceduralRoomLayout', () => {
     const result = reconcileProceduralRoomLayout({
       paintedCells,
       wallOpenings: {},
+      wallSurfaceAssetIds: {},
+      wallSurfaceProps: {},
       selection: null,
       createOpeningId: () => 'generated-door',
     })
 
-    expect(Object.values(result.wallOpenings)).toEqual([
-      expect.objectContaining({
-        assetId: 'core.opening_door_wall_1',
-        wallKey: '0:3:east',
-        width: 1,
-        source: 'generated',
-      }),
-    ])
+    expect(result.wallOpenings).toEqual({})
+    expect(result.wallSurfaceAssetIds).toEqual({
+      '0:3:east': 'dungeon.wall_wall_doorway',
+    })
+    expect(result.wallSurfaceProps).toEqual({
+      '0:3:east': { generatedConnector: true },
+    })
   })
 
   it('reuses matching generated openings and clears selection for removed ones', () => {
@@ -143,12 +150,16 @@ describe('proceduralRoomLayout', () => {
       wallOpenings: {
         [generatedOpening.id]: generatedOpening,
       },
+      wallSurfaceAssetIds: {},
+      wallSurfaceProps: {},
       selection: generatedOpening.id,
       createOpeningId: () => 'unused',
     })).toEqual({
       wallOpenings: {
         [generatedOpening.id]: generatedOpening,
       },
+      wallSurfaceAssetIds: {},
+      wallSurfaceProps: {},
       selection: generatedOpening.id,
     })
 
@@ -157,10 +168,14 @@ describe('proceduralRoomLayout', () => {
       wallOpenings: {
         [generatedOpening.id]: generatedOpening,
       },
+      wallSurfaceAssetIds: {},
+      wallSurfaceProps: {},
       selection: generatedOpening.id,
       createOpeningId: () => 'unused',
     })).toEqual({
       wallOpenings: {},
+      wallSurfaceAssetIds: {},
+      wallSurfaceProps: {},
       selection: null,
     })
   })

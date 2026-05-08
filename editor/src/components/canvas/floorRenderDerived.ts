@@ -1,4 +1,4 @@
-import { getContentPackAssetById } from '../../content-packs/registry'
+import { getContentPackAssetById, getContentPackRoomSetById } from '../../content-packs/registry'
 import type { ContentPackModelTransform } from '../../content-packs/types'
 import { GRID_SIZE, cellToWorldPosition, getCellKey, type GridCell } from '../../hooks/useSnapToGrid'
 import type { FloorDirtyInfo } from '../../store/floorDirtyDomains'
@@ -11,6 +11,8 @@ import {
 } from '../../store/floorSurfaceLayout'
 import {
   collectBoundaryWallSegments,
+  getInheritedWallAssetIdForRoom,
+  getWallOwnerRecord,
   getInheritedWallAssetIdForWallKey,
   wallKeyToWorldPosition,
   type BoundaryWallSegment,
@@ -52,7 +54,8 @@ type BoundaryWallSegmentWithAsset = BoundaryWallSegment & {
   assetId: string | null
 }
 
-const WALL_CORNER_PILLAR_ASSET_ID = 'dungeon.props_pillars_pillar'
+const ROOM_SET_CONTENT_PACK_ID = 'dungeon'
+const DEFAULT_WALL_CORNER_PILLAR_ASSET_ID = 'dungeon.props_pillars_pillar'
 
 export type FloorRenderDerivedBundle = {
   floorGroups: FloorRenderGroup[]
@@ -203,7 +206,7 @@ export function buildFloorRenderDerivedBundleForChunk(
 
       return [{
         ...group,
-        groupKey: `${chunkKey}:${group.floorAssetId ?? 'none'}`,
+        groupKey: `${chunkKey}:${group.groupKey}`,
         cells: chunkCells,
       }]
     }),
@@ -367,6 +370,9 @@ function deriveFloorReceiverCells(plan: ReturnType<typeof buildFloorRenderPlan>)
         cell,
         cellKey,
         assetId: plan.effectiveAssetIdsByCellKey[cellKey] ?? group.floorAssetId,
+        receiverTransformOverride: {
+          rotation: plan.effectiveRotationsByCellKey[cellKey] ?? group.rotation,
+        },
       }
     })),
     ...plan.surfacePlacements.map((placement) => ({
@@ -379,7 +385,7 @@ function deriveFloorReceiverCells(plan: ReturnType<typeof buildFloorRenderPlan>)
           placement.position[0] - cellToWorldPosition(placement.anchorCell)[0],
           0,
           placement.position[2] - cellToWorldPosition(placement.anchorCell)[2],
-        ],
+        ] as const,
       },
     })),
   ]
@@ -482,11 +488,49 @@ function deriveVisibleWallCorners(
     suppressedWallKeys,
     innerWalls,
   )
+  const wallAssetIdsByKey = new Map(wallSegments.map((segment) => [segment.key, segment.assetId]))
 
   return deriveWallCornersFromSegments(wallSegments).map((corner) => ({
     ...corner,
-    assetId: WALL_CORNER_PILLAR_ASSET_ID,
+    assetId: getPillarAssetIdForCorner(corner.wallKeys, wallAssetIdsByKey, paintedCells, rooms),
   }))
+}
+
+function getPillarAssetIdForCorner(
+  wallKeys: readonly string[],
+  wallAssetIdsByKey: ReadonlyMap<string, string | null>,
+  paintedCells: PaintedCells,
+  rooms: Record<string, Room>,
+) {
+  const distinctWallAssetIds = new Set(
+    wallKeys
+      .map((wallKey) => wallAssetIdsByKey.get(wallKey))
+      .filter((assetId): assetId is string => Boolean(assetId)),
+  )
+  if (distinctWallAssetIds.size > 1) {
+    return DEFAULT_WALL_CORNER_PILLAR_ASSET_ID
+  }
+
+  const distinctPillarAssetIds = new Set<string>()
+
+  for (const wallKey of wallKeys) {
+    const ownerRecord = getWallOwnerRecord(wallKey, paintedCells)
+    if (!ownerRecord?.roomId) {
+      continue
+    }
+
+    const room = rooms[ownerRecord.roomId]
+    const roomSet = getContentPackRoomSetById(ROOM_SET_CONTENT_PACK_ID, room?.roomSetId)
+    if (roomSet?.pillarAssetId) {
+      distinctPillarAssetIds.add(roomSet.pillarAssetId)
+    }
+  }
+
+  if (distinctPillarAssetIds.size === 1) {
+    return [...distinctPillarAssetIds][0] ?? DEFAULT_WALL_CORNER_PILLAR_ASSET_ID
+  }
+
+  return DEFAULT_WALL_CORNER_PILLAR_ASSET_ID
 }
 
 function collectRenderableWallSegments(
@@ -522,7 +566,7 @@ function collectRenderableWallSegments(
       key: wallKey,
       direction,
       index,
-      assetId: room?.wallAssetId ?? globalWallAssetId,
+      assetId: getInheritedWallAssetIdForRoom(room, globalWallAssetId),
     }]
   })
 

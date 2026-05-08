@@ -4,7 +4,10 @@ import {
   getCellKey,
   type GridCell,
 } from '../hooks/useSnapToGrid'
+import { getContentPackRoomSetById } from '../content-packs/registry'
 import type { PaintedCellRecord, PaintedCells, Room } from './useDungeonStore'
+
+const ROOM_SET_CONTENT_PACK_ID = 'dungeon'
 
 export type WallDirection = 'north' | 'south' | 'east' | 'west'
 
@@ -184,7 +187,19 @@ export function getInheritedWallAssetIdForWallKey(
   }
 
   const room = ownerRecord.roomId ? rooms[ownerRecord.roomId] : null
-  return room?.wallAssetId ?? globalWallAssetId
+  return getInheritedWallAssetIdForRoom(room, globalWallAssetId)
+}
+
+export function getInheritedWallAssetIdForRoom(
+  room: Room | null | undefined,
+  globalWallAssetId: string | null,
+) {
+  if (room?.wallAssetId) {
+    return room.wallAssetId
+  }
+
+  const roomSet = getContentPackRoomSetById(ROOM_SET_CONTENT_PACK_ID, room?.roomSetId)
+  return roomSet?.wallAssetId ?? globalWallAssetId
 }
 
 type ParsedWallKey = {

@@ -295,7 +295,11 @@ function FallbackTileEntry({
         rotation={entry.rotation}
         variant={entry.variant}
         variantKey={entry.variantKey}
+        propInstanceKey={entry.variant === 'prop' ? entry.key : undefined}
         visibility={entry.visibility}
+        bakedLightField={entry.bakedLightField}
+        bakedLightDirection={entry.bakedLightDirection}
+        bakedLightDirectionSecondary={entry.bakedLightDirectionSecondary}
         useLineOfSightPostMask={useLineOfSightPostMask}
         clipBelowGround={buildAnimation !== null}
         objectProps={entry.objectProps}

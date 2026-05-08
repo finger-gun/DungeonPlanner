@@ -59,7 +59,7 @@ describe('roomMutationAnimations', () => {
       assetId: 'dungeon.props_pillars_pillar',
       position: [2, 0, 2],
       rotation: [0, 0, 0],
-      variant: 'wall',
+      variant: 'prop',
       variantKey: '1:1:corner',
       visibility: 'visible',
       objectProps: {
@@ -70,7 +70,7 @@ describe('roomMutationAnimations', () => {
       assetId: 'dungeon.props_pillars_pillar',
       position: [2, 0, 2],
       rotation: [0, 0, 0],
-      variant: 'wall',
+      variant: 'prop',
       variantKey: '1:1:corner',
       visibility: 'visible',
       objectProps: {

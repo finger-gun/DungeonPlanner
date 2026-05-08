@@ -58,6 +58,8 @@ type SurfaceBakedLightOptions = {
 type PropBakedLightOptions = {
   lightField?: BakedFloorLightField | null
   probe?: PropBakedLightProbe | null
+  fieldLightWeight?: number
+  suppressTopSurfaceLight?: boolean
 }
 
 // TSL node wrappers use a shared fluent API that is wider than the public TypeScript surface.
@@ -258,12 +260,16 @@ export function applyPropBakedLightToMaterial(
 
   const lightField = options?.lightField ?? null
   const probe = options?.probe ?? null
+  const fieldLightWeight = Math.max(0, options?.fieldLightWeight ?? 1)
+  const suppressTopSurfaceLight = options?.suppressTopSurfaceLight ?? false
   const isBillboardSurface = bakedMaterial.userData.bakedLightMode === 'billboard'
-  const hasFieldLighting = Boolean(lightField?.lightFieldTexture)
+  const hasFieldLighting = Boolean(lightField?.lightFieldTexture) && fieldLightWeight > 0
   const hasPropLighting = hasFieldLighting || Boolean(probe)
   const nextSignature = hasPropLighting
     ? [
       hasFieldLighting ? buildBakedLightFieldPipelineSignature(lightField) : 'no-field',
+      `field-weight:${fieldLightWeight.toFixed(3)}`,
+      suppressTopSurfaceLight ? 'no-top-light' : 'all-faces',
       PROP_BAKED_UNIFORM_SIGNATURE_VERSION,
       isBillboardSurface ? BILLBOARD_BAKED_SIGNATURE_VERSION : PROP_BAKED_SIGNATURE_VERSION,
     ].join(':')
@@ -303,7 +309,7 @@ export function applyPropBakedLightToMaterial(
         ? buildShapedBakedLightNode(
           buildSmoothedBakedLightNode(lightField as BakedFloorLightField),
           responseProfile,
-        )
+        ).mul(float(fieldLightWeight) as never)
         : vec3(0, 0, 0)
       const combinedProbeLight = mix(
         sampledFieldLight,
@@ -317,14 +323,17 @@ export function applyPropBakedLightToMaterial(
       const propLightFactor = isBillboardSurface
         ? float(1)
         : mix(
-          float(1),
-          buildPropDirectionalLightFactorNode(
+            float(1),
+            buildPropDirectionalLightFactorNode(
             directionalFaceAlignment,
             probeUniformState.directionalStrength,
-          ),
-          float(probeUniformState.probeEnabled),
-        )
-      const propLight = combinedProbeLight.mul(propLightFactor as never)
+            ),
+            float(probeUniformState.probeEnabled),
+          )
+      const topSurfaceFactor = suppressTopSurfaceLight
+        ? float(1).sub(saturate(normalWorld.y) as never)
+        : float(1)
+      const propLight = combinedProbeLight.mul(propLightFactor.mul(topSurfaceFactor as never) as never)
       const albedoBoost = vec3(1, 1, 1).add(
         propLight.mul(float(
           isBillboardSurface

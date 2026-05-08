@@ -24,8 +24,8 @@ import {
   vec4,
 } from 'three/tsl'
 import { GRID_SIZE, getCellKey, type GridCell } from '../../hooks/useSnapToGrid'
-import { getOpeningSegments } from '../../store/openingSegments'
 import { getMirroredWallKey, type InnerWallRecord } from '../../store/manualWalls'
+import { buildOpenWallSegmentSet } from '../../store/openWallSegments'
 import { useDungeonStore, type OpeningRecord } from '../../store/useDungeonStore'
 import {
   ACTIVE_FLOOR_VISIBILITY_DOMAINS,
@@ -76,12 +76,14 @@ export function FogOfWarProvider({
   const renderer = useThree((state) => state.gl) as any
   const invalidate = useThree((state) => state.invalidate)
   const exploredCells = useDungeonStore((state) => state.exploredCells)
-  const { paintedCells, wallOpenings, innerWalls } = useActiveFloorSnapshot(
+  const { paintedCells, wallOpenings, innerWalls, wallSurfaceAssetIds, wallSurfaceProps } = useActiveFloorSnapshot(
     ACTIVE_FLOOR_VISIBILITY_DOMAINS,
     (state) => ({
       paintedCells: state.paintedCells,
       wallOpenings: state.wallOpenings,
       innerWalls: state.innerWalls,
+      wallSurfaceAssetIds: state.wallSurfaceAssetIds,
+      wallSurfaceProps: state.wallSurfaceProps,
     }),
   )
   const layout = useMemo(
@@ -90,12 +92,16 @@ export function FogOfWarProvider({
       paintedCells,
       wallOpenings,
       innerWalls,
+      wallSurfaceAssetIds,
+      wallSurfaceProps,
     }),
     [
       innerWalls,
       paintedCells,
       visibility.active,
       wallOpenings,
+      wallSurfaceAssetIds,
+      wallSurfaceProps,
     ],
   )
   const exploredStates = useMemo(
@@ -345,11 +351,15 @@ function buildFogOfWarLayout({
   paintedCells,
   wallOpenings,
   innerWalls,
+  wallSurfaceAssetIds,
+  wallSurfaceProps,
 }: {
   active: boolean
   paintedCells: ReturnType<typeof useDungeonStore.getState>['paintedCells']
   wallOpenings: Record<string, OpeningRecord>
   innerWalls: Record<string, InnerWallRecord>
+  wallSurfaceAssetIds: Record<string, string>
+  wallSurfaceProps: Record<string, Record<string, unknown>>
 }): FogOfWarLayout | null {
   if (!active) {
     return null
@@ -388,7 +398,7 @@ function buildFogOfWarLayout({
   const occupancy = new Int32Array(occupancyWidth * occupancyHeight)
   occupancy.fill(1)
 
-  const openWalls = buildOpenWallSet(wallOpenings)
+  const openWalls = buildOpenWallSegmentSet(wallOpenings, wallSurfaceAssetIds, wallSurfaceProps)
   const solidWalls = buildSolidWallSet(innerWalls)
 
   cells.forEach(({ cell }) => {
@@ -524,22 +534,6 @@ function buildFogOfWarExploredStates(
   })
 
   return exploredStates
-}
-
-function buildOpenWallSet(wallOpenings: Record<string, OpeningRecord>) {
-  const openWalls = new Set<string>()
-
-  Object.values(wallOpenings).forEach((opening) => {
-    getOpeningSegments(opening.wallKey, opening.width).forEach((wallKey) => {
-      openWalls.add(wallKey)
-      const mirroredWallKey = getMirroredWallKey(wallKey)
-      if (mirroredWallKey) {
-        openWalls.add(mirroredWallKey)
-      }
-    })
-  })
-
-  return openWalls
 }
 
 function fillOccupancyRect(

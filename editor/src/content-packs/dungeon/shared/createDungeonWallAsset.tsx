@@ -1,7 +1,12 @@
 import { useMemo } from 'react'
 import { useGLTF } from '../../../rendering/useGLTF'
 import type { ComponentType } from 'react'
-import type { ContentPackAsset, ContentPackComponentProps } from '../../types'
+import type {
+  ContentPackAsset,
+  ContentPackAssetMetadata,
+  ContentPackCategory,
+  ContentPackComponentProps,
+} from '../../types'
 import { DUNGEON_BASE_SCALE } from './dungeonConstants'
 import { cloneSceneWithNodeMaterials } from '../../../rendering/nodeMaterialUtils'
 
@@ -9,11 +14,14 @@ export type DungeonWallAssetDefinition = {
   id: string
   slug: string
   name: string
+  category?: ContentPackCategory
   modelName: string
   thumbnailName?: string
   cornerModelName?: string
+  wallRotationYOffset?: number
   getPlayModeNextProps?: (objectProps: Record<string, unknown>) => Record<string, unknown> | null
   Component?: ComponentType<ContentPackComponentProps>
+  metadata?: ContentPackAssetMetadata
 }
 
 // Corner pieces in KayKit dungeon are 2.5x2.5 (to cover 2.0 grid corner + 0.5 wall thickness)
@@ -31,9 +39,30 @@ export const WALL_DEFAULT_TRANSFORM = {
   scale: DUNGEON_BASE_SCALE,
 }
 
+function getWallTransform(
+  objectProps?: Record<string, unknown>,
+  wallRotationYOffset = 0,
+) {
+  const kind = objectProps?.kind === 'corner' ? 'corner' : 'wall'
+  if (kind === 'corner') {
+    return { position: [0, 0, 0] as const, rotation: WALL_CORNER_ROTATION, scale: WALL_CORNER_SCALE }
+  }
+
+  const flipped = objectProps?.flipped === true
+  return {
+    ...WALL_DEFAULT_TRANSFORM,
+    rotation: [
+      WALL_DEFAULT_TRANSFORM.rotation[0],
+      WALL_DEFAULT_TRANSFORM.rotation[1] + wallRotationYOffset + (flipped ? Math.PI : 0),
+      WALL_DEFAULT_TRANSFORM.rotation[2],
+    ] as const,
+  }
+}
+
 export function createDungeonWallAsset(definition: DungeonWallAssetDefinition): ContentPackAsset {
   const { assetUrl, cornerAssetUrl, thumbnailUrl } = resolveDungeonWallAssetResources(definition)
-  const Component = definition.Component ?? createStaticDungeonWallVariant(assetUrl, cornerAssetUrl)
+  const wallRotationYOffset = definition.wallRotationYOffset ?? 0
+  const Component = definition.Component ?? createStaticDungeonWallVariant(assetUrl, cornerAssetUrl, wallRotationYOffset)
 
   preloadDungeonWallAssets(assetUrl, cornerAssetUrl)
 
@@ -41,25 +70,21 @@ export function createDungeonWallAsset(definition: DungeonWallAssetDefinition): 
     id: definition.id,
     slug: definition.slug,
     name: definition.name,
-    category: 'wall',
+    category: definition.category ?? 'wall',
     assetUrl,
     ...(thumbnailUrl ? { thumbnailUrl } : {}),
     Component,
     batchRender: {
-      getAssetUrl: (_, objectProps) =>
-        objectProps?.kind === 'corner' ? cornerAssetUrl : assetUrl,
-      transform: (_, objectProps) => (
-        objectProps?.kind === 'corner'
-          ? { position: [0, 0, 0] as const, rotation: WALL_CORNER_ROTATION, scale: WALL_CORNER_SCALE }
-          : WALL_DEFAULT_TRANSFORM
-      ),
+      getAssetUrl: (_, objectProps) => (objectProps?.kind === 'corner' ? cornerAssetUrl : assetUrl),
+      transform: (_, objectProps) => getWallTransform(objectProps, wallRotationYOffset),
     },
-    ...(definition.getPlayModeNextProps ? { getPlayModeNextProps: definition.getPlayModeNextProps } : {}),
-    metadata: {
-      wallSpan: 1,
-      wallCornerType: 'solitary',
-    },
-  }
+     ...(definition.getPlayModeNextProps ? { getPlayModeNextProps: definition.getPlayModeNextProps } : {}),
+     metadata: {
+       wallSpan: 1,
+       wallCornerType: 'solitary',
+       ...definition.metadata,
+     },
+   }
 }
 
 export function resolveDungeonWallAssetResources(definition: Pick<DungeonWallAssetDefinition, 'modelName' | 'cornerModelName' | 'thumbnailName'>) {
@@ -85,15 +110,17 @@ export function preloadDungeonWallAssets(assetUrl: string, cornerAssetUrl: strin
   useGLTF.preload(cornerAssetUrl)
 }
 
-function createStaticDungeonWallVariant(assetUrl: string, cornerAssetUrl: string) {
+function createStaticDungeonWallVariant(
+  assetUrl: string,
+  cornerAssetUrl: string,
+  wallRotationYOffset = 0,
+) {
   function DungeonWallVariant({ objectProps, ...props }: ContentPackComponentProps) {
     const kind = objectProps?.kind === 'corner' ? 'corner' : 'wall'
     const modelUrl = kind === 'corner' ? cornerAssetUrl : assetUrl
     const gltf = useGLTF(modelUrl)
     const scene = useMemo(() => cloneSceneWithNodeMaterials(gltf.scene), [gltf.scene])
-    const transform = kind === 'corner'
-      ? { position: [0, 0, 0] as const, rotation: WALL_CORNER_ROTATION, scale: WALL_CORNER_SCALE }
-      : WALL_DEFAULT_TRANSFORM
+    const transform = getWallTransform(objectProps, wallRotationYOffset)
 
     return (
       <group {...props}>

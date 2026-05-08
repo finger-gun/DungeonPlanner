@@ -605,6 +605,7 @@ function FloorContent({ startY = 0 }: { startY?: number }) {
       paintedCells,
       blockedCells,
       wallOpenings,
+      wallSurfaceAssetIds,
       wallSurfaceProps,
       innerWalls,
       occupancy,
@@ -620,6 +621,7 @@ function FloorContent({ startY = 0 }: { startY?: number }) {
     paintedCells,
     placedObjects,
     wallOpenings,
+    wallSurfaceAssetIds,
     wallSurfaceProps,
   ])
 
@@ -763,6 +765,7 @@ function FloorContent({ startY = 0 }: { startY?: number }) {
       paintedCells,
       blockedCells,
       wallOpenings,
+      wallSurfaceAssetIds,
       wallSurfaceProps,
       innerWalls,
       occupancy,
@@ -813,6 +816,7 @@ function FloorContent({ startY = 0 }: { startY?: number }) {
     tool,
     updateDragFromClientPosition,
     wallOpenings,
+    wallSurfaceAssetIds,
     wallSurfaceProps,
   ])
 
@@ -866,7 +870,7 @@ function FloorContent({ startY = 0 }: { startY?: number }) {
         {showPropProbeDebug && (
           <PropProbeDebugOverlay floorId={activeFloorId} />
         )}
-        <SelectionContextualUi />
+        <SelectionContextualUi bakedLightField={bakedFloorLightField} />
         {dragState && (
           <group position={dragState.displayPosition} rotation={dragState.rotation} scale={dragPreviewScale}>
             <ContentPackInstance

@@ -53,6 +53,7 @@ export type BakedLightOcclusionInput = {
   paintedCells: PaintedCells
   wallOpenings: Record<string, OpeningRecord>
   innerWalls: Record<string, InnerWallRecord>
+  wallSurfaceAssetIds?: Record<string, string>
   wallSurfaceProps?: Record<string, Record<string, unknown>>
 }
 
@@ -2491,7 +2492,11 @@ function buildBakedLightOcclusion(
     return cachedOcclusion
   }
 
-  const openWalls = buildOpenWallSegmentSet(input.wallOpenings, input.wallSurfaceProps)
+  const openWalls = buildOpenWallSegmentSet(
+    input.wallOpenings,
+    input.wallSurfaceAssetIds ?? {},
+    input.wallSurfaceProps,
+  )
   const nextOcclusion = {
     paintedCells: input.paintedCells,
     openWalls,

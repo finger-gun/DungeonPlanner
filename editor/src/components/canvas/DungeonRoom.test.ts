@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest'
-import { getBuildAnimationKeyFromWallKeys, getOpeningHitboxSize } from './DungeonRoomShared'
+import {
+  getBuildAnimationKeyFromWallKeys,
+  getOpeningHitboxSize,
+} from './DungeonRoomShared'
 import { deriveWallCornersFromSegments } from './wallCornerLayout'
 import { shouldActivateFloorReceiver } from './floorReceiverMode'
 

@@ -1,4 +1,3 @@
-import { metadataSupportsConnectorType } from '../content-packs/connectors'
 import {
   getContentPackAssetById,
   getContentPackAssetsByCategory,
@@ -8,7 +7,8 @@ import { getOpeningSegments } from './openingSegments'
 import { WALL_DIRECTIONS } from './wallSegments'
 import type { OpeningRecord, OpeningSource, PaintedCellRecord } from './useDungeonStore'
 
-const GENERATED_DOOR_ASSET_ID = 'core.opening_door_wall_1'
+const GENERATED_SURFACE_DOOR_ASSET_ID = 'dungeon.wall_wall_doorway'
+const GENERATED_SURFACE_DOOR_MARKER = 'generatedConnector'
 
 type SharedBoundaryUnit = {
   wallKey: string
@@ -29,17 +29,26 @@ export type SharedBoundaryRun = {
 
 type GeneratedConnectorIntent = {
   opening: Omit<OpeningRecord, 'id'>
+} | {
+  surfaceDoor: {
+    wallKey: string
+    assetId: string
+  }
 }
 
 export type ProceduralRoomLayoutInput = {
   paintedCells: Record<string, PaintedCellRecord>
   wallOpenings: Record<string, OpeningRecord>
+  wallSurfaceAssetIds: Record<string, string>
+  wallSurfaceProps: Record<string, Record<string, unknown>>
   selection: string | null
   createOpeningId: () => string
 }
 
 export type ProceduralRoomLayoutResult = {
   wallOpenings: Record<string, OpeningRecord>
+  wallSurfaceAssetIds: Record<string, string>
+  wallSurfaceProps: Record<string, Record<string, unknown>>
   selection: string | null
 }
 
@@ -145,6 +154,8 @@ export function buildSharedBoundaryRuns(
 export function reconcileProceduralRoomLayout({
   paintedCells,
   wallOpenings,
+  wallSurfaceAssetIds,
+  wallSurfaceProps,
   selection,
   createOpeningId,
 }: ProceduralRoomLayoutInput): ProceduralRoomLayoutResult {
@@ -154,7 +165,12 @@ export function reconcileProceduralRoomLayout({
     manualOpenings.map((opening) => [opening.id, opening]),
   )
   const reusableGeneratedOpenings = new Map<string, OpeningRecord[]>()
-  const connectorIntents = buildGeneratedConnectorIntents(paintedCells, manualOpenings)
+  const connectorIntents = buildGeneratedConnectorIntents(
+    paintedCells,
+    manualOpenings,
+    wallSurfaceAssetIds,
+    wallSurfaceProps,
+  )
   let nextSelection = selection
 
   generatedOpenings.forEach((opening) => {
@@ -168,43 +184,109 @@ export function reconcileProceduralRoomLayout({
   })
 
   for (const intent of connectorIntents) {
-    const signature = buildOpeningSignature(intent.opening)
-    const reusable = reusableGeneratedOpenings.get(signature)?.shift()
+    if ('opening' in intent) {
+      const signature = buildOpeningSignature(intent.opening)
+      const reusable = reusableGeneratedOpenings.get(signature)?.shift()
 
-    if (reusable) {
-      wallOpeningsById[reusable.id] = reusable
-      continue
-    }
+      if (reusable) {
+        wallOpeningsById[reusable.id] = reusable
+        continue
+      }
 
-    const id = createOpeningId()
-    wallOpeningsById[id] = {
-      ...intent.opening,
-      id,
+      const id = createOpeningId()
+      wallOpeningsById[id] = {
+        ...intent.opening,
+        id,
+      }
     }
   }
 
+  let nextWallSurfaceAssetIds = wallSurfaceAssetIds
+  let nextWallSurfaceProps = wallSurfaceProps
+  const intendedGeneratedSurfaceDoors = new Map<string, string>(
+    connectorIntents
+      .filter((intent): intent is Extract<GeneratedConnectorIntent, { surfaceDoor: { wallKey: string; assetId: string } }> => 'surfaceDoor' in intent)
+      .map((intent) => [intent.surfaceDoor.wallKey, intent.surfaceDoor.assetId]),
+  )
+
+  Object.entries(wallSurfaceAssetIds).forEach(([wallKey, assetId]) => {
+    if (!isGeneratedSurfaceDoor(wallKey, assetId, wallSurfaceProps)) {
+      return
+    }
+
+    if (intendedGeneratedSurfaceDoors.has(wallKey)) {
+      return
+    }
+
+    if (nextWallSurfaceAssetIds === wallSurfaceAssetIds) {
+      nextWallSurfaceAssetIds = { ...wallSurfaceAssetIds }
+    }
+    if (nextWallSurfaceProps === wallSurfaceProps) {
+      nextWallSurfaceProps = { ...wallSurfaceProps }
+    }
+
+    delete nextWallSurfaceAssetIds[wallKey]
+    delete nextWallSurfaceProps[wallKey]
+
+    if (nextSelection === wallKey) {
+      nextSelection = null
+    }
+  })
+
+  intendedGeneratedSurfaceDoors.forEach((assetId, wallKey) => {
+    const currentAssetId = wallSurfaceAssetIds[wallKey] ?? null
+    const currentProps = wallSurfaceProps[wallKey] ?? {}
+    const alreadyGenerated = isGeneratedSurfaceDoor(wallKey, currentAssetId, wallSurfaceProps)
+
+    if (currentAssetId === assetId && alreadyGenerated) {
+      return
+    }
+
+    if (nextWallSurfaceAssetIds === wallSurfaceAssetIds) {
+      nextWallSurfaceAssetIds = { ...wallSurfaceAssetIds }
+    }
+    if (nextWallSurfaceProps === wallSurfaceProps) {
+      nextWallSurfaceProps = { ...wallSurfaceProps }
+    }
+
+    nextWallSurfaceAssetIds[wallKey] = assetId
+    nextWallSurfaceProps[wallKey] = {
+      ...currentProps,
+      [GENERATED_SURFACE_DOOR_MARKER]: true,
+    }
+  })
+
   if (nextSelection && wallOpenings[nextSelection]?.source === 'generated' && !wallOpeningsById[nextSelection]) {
-    nextSelection = null
+    const removedGeneratedOpening = wallOpenings[nextSelection]
+    if (
+      removedGeneratedOpening?.assetId
+      && intendedGeneratedSurfaceDoors.has(removedGeneratedOpening.wallKey)
+    ) {
+      nextSelection = removedGeneratedOpening.wallKey
+    } else {
+      nextSelection = null
+    }
   }
 
   return {
     wallOpenings: areWallOpeningMapsEquivalent(wallOpenings, wallOpeningsById)
       ? wallOpenings
       : wallOpeningsById,
+    wallSurfaceAssetIds: nextWallSurfaceAssetIds,
+    wallSurfaceProps: nextWallSurfaceProps,
     selection: nextSelection,
   }
 }
 
-export function resolveGeneratedDoorAssetId() {
-  const preferred = getContentPackAssetById(GENERATED_DOOR_ASSET_ID)
-  if (preferred && preferred.category === 'opening') {
+export function resolveGeneratedSurfaceDoorAssetId() {
+  const preferred = getContentPackAssetById(GENERATED_SURFACE_DOOR_ASSET_ID)
+  if (preferred?.category === 'wall' && preferred.getPlayModeNextProps) {
     return preferred.id
   }
 
-  return getContentPackAssetsByCategory('opening').find((asset) =>
-    metadataSupportsConnectorType(asset.metadata, 'WALL') &&
-    (asset.metadata?.openingWidth ?? 1) === 1,
-  )?.id ?? GENERATED_DOOR_ASSET_ID
+  return getContentPackAssetsByCategory('wall').find((asset) =>
+    Boolean(asset.getPlayModeNextProps),
+  )?.id ?? GENERATED_SURFACE_DOOR_ASSET_ID
 }
 
 function makeSharedBoundaryRun(units: SharedBoundaryUnit[]): SharedBoundaryRun {
@@ -219,10 +301,19 @@ function makeSharedBoundaryRun(units: SharedBoundaryUnit[]): SharedBoundaryRun {
 function buildGeneratedConnectorIntents(
   paintedCells: Record<string, PaintedCellRecord>,
   manualOpenings: OpeningRecord[],
+  wallSurfaceAssetIds: Record<string, string>,
+  wallSurfaceProps: Record<string, Record<string, unknown>>,
 ): GeneratedConnectorIntent[] {
-  const generatedDoorAssetId = resolveGeneratedDoorAssetId()
+  const generatedSurfaceDoorAssetId = resolveGeneratedSurfaceDoorAssetId()
   const manualOpeningSegments = manualOpenings.map((opening) =>
     new Set(getOpeningSegments(opening.wallKey, opening.width)),
+  )
+  const manualSurfaceDoorWallKeys = new Set(
+    Object.entries(wallSurfaceAssetIds)
+      .filter(([wallKey, assetId]) =>
+        !isGeneratedSurfaceDoor(wallKey, assetId, wallSurfaceProps) && isSurfaceDoorAssetId(assetId),
+      )
+      .map(([wallKey]) => wallKey),
   )
   const occupiedRoomSides = new Set<RoomSideKey>()
 
@@ -231,8 +322,9 @@ function buildGeneratedConnectorIntents(
     const hasManualOverlap = manualOpeningSegments.some((segments) =>
       [...segments].some((segment) => runSegments.has(segment)),
     )
+    const hasManualSurfaceDoor = run.wallKeys.some((wallKey) => manualSurfaceDoorWallKeys.has(wallKey))
 
-    if (hasManualOverlap) {
+    if (hasManualOverlap || hasManualSurfaceDoor) {
       run.roomSideKeys.forEach((roomSideKey) => occupiedRoomSides.add(roomSideKey))
     }
   })
@@ -242,9 +334,10 @@ function buildGeneratedConnectorIntents(
   buildSharedBoundaryRuns(paintedCells)
     .filter((run) => {
       const runSegments = new Set(run.wallKeys)
-      return !manualOpeningSegments.some((segments) =>
+      const hasManualOpeningOverlap = manualOpeningSegments.some((segments) =>
         [...segments].some((segment) => runSegments.has(segment)),
       )
+      return !hasManualOpeningOverlap && !run.wallKeys.some((wallKey) => manualSurfaceDoorWallKeys.has(wallKey))
     })
     .sort((left, right) => {
       if (right.wallKeys.length !== left.wallKeys.length) {
@@ -257,22 +350,25 @@ function buildGeneratedConnectorIntents(
         return
       }
 
-      const opening = buildGeneratedConnectorOpening(run, generatedDoorAssetId)
-      if (!opening) {
+      const intent = buildGeneratedConnectorIntent(
+        run,
+        generatedSurfaceDoorAssetId,
+      )
+      if (!intent) {
         return
       }
 
       run.roomSideKeys.forEach((roomSideKey) => occupiedRoomSides.add(roomSideKey))
-      intents.push({ opening })
+      intents.push(intent)
     })
 
   return intents
 }
 
-function buildGeneratedConnectorOpening(
+function buildGeneratedConnectorIntent(
   run: SharedBoundaryRun,
-  generatedDoorAssetId: string | undefined,
-): Omit<OpeningRecord, 'id'> | null {
+  generatedSurfaceDoorAssetId: string | undefined,
+): GeneratedConnectorIntent | null {
   if (run.wallKeys.length === 1) {
     const wallKey = run.wallKeys[0]
     if (!wallKey) {
@@ -280,16 +376,18 @@ function buildGeneratedConnectorOpening(
     }
 
     return {
-      assetId: null,
-      wallKey,
-      width: 1,
-      flipped: false,
-      layerId: run.layerId,
-      source: 'generated' satisfies OpeningSource,
+      opening: {
+        assetId: null,
+        wallKey,
+        width: 1,
+        flipped: false,
+        layerId: run.layerId,
+        source: 'generated' satisfies OpeningSource,
+      },
     }
   }
 
-  if (!generatedDoorAssetId) {
+  if (!generatedSurfaceDoorAssetId) {
     return null
   }
 
@@ -300,12 +398,10 @@ function buildGeneratedConnectorOpening(
   }
 
   return {
-    assetId: generatedDoorAssetId,
-    wallKey,
-    width: 1,
-    flipped: false,
-    layerId: run.layerId,
-    source: 'generated' satisfies OpeningSource,
+    surfaceDoor: {
+      wallKey,
+      assetId: generatedSurfaceDoorAssetId,
+    },
   }
 }
 
@@ -337,6 +433,23 @@ function buildOpeningSignature(opening: Omit<OpeningRecord, 'id'> | OpeningRecor
     opening.layerId,
     opening.source ?? 'manual',
   ].join(':')
+}
+
+function isSurfaceDoorAssetId(assetId: string | null | undefined) {
+  if (!assetId) {
+    return false
+  }
+
+  const asset = getContentPackAssetById(assetId)
+  return asset?.category === 'wall' && Boolean(asset.getPlayModeNextProps)
+}
+
+function isGeneratedSurfaceDoor(
+  wallKey: string,
+  assetId: string | null | undefined,
+  wallSurfaceProps: Record<string, Record<string, unknown>>,
+) {
+  return isSurfaceDoorAssetId(assetId) && wallSurfaceProps[wallKey]?.[GENERATED_SURFACE_DOOR_MARKER] === true
 }
 
 function areWallOpeningMapsEquivalent(

@@ -17,7 +17,7 @@ export type TilePlacement = {
 
 export type StaticTileEntry = TilePlacement & {
   assetId: string | null
-  variant: 'floor' | 'wall'
+  variant: 'floor' | 'wall' | 'prop'
   variantKey?: string
   objectProps?: Record<string, unknown>
   visibility: PlayVisibilityState

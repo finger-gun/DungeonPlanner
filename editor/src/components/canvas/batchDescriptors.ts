@@ -218,6 +218,11 @@ export function buildBatchDescriptors(
   const fallback: StaticTileEntry[] = []
 
   entries.forEach((entry) => {
+    if (entry.variant === 'prop') {
+      fallback.push(entry)
+      return
+    }
+
     const resolvedAsset = resolveBatchedTileAsset(entry.assetId, entry.variantKey, entry.objectProps)
     if (!resolvedAsset) {
       fallback.push(entry)

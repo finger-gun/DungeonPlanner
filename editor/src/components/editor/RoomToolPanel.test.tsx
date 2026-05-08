@@ -47,6 +47,34 @@ describe('RoomToolPanel', () => {
     expect(screen.getByText(/show resize handles/i)).toBeInTheDocument()
   })
 
+  it('shows room-set choices for area, paint, and inner walls but hides them in resize mode', () => {
+    render(<RoomToolPanel />)
+    expect(screen.getByRole('button', { name: 'Dungeon' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Timber Frame' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Cave' })).toBeInTheDocument()
+
+    cleanup()
+    useDungeonStore.getState().reset()
+    useDungeonStore.getState().setRoomPaintMode('resize')
+    render(<RoomToolPanel />)
+    expect(screen.queryByRole('button', { name: 'Dungeon' })).not.toBeInTheDocument()
+
+    cleanup()
+    useDungeonStore.getState().reset()
+    useDungeonStore.getState().setRoomEditMode('walls')
+    render(<RoomToolPanel />)
+    expect(screen.getByRole('button', { name: 'Dungeon' })).toBeInTheDocument()
+  })
+
+  it('updates the active room set from the sidebar picker', () => {
+    render(<RoomToolPanel />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Timber Frame' }))
+
+    expect(useDungeonStore.getState().activeRoomSetId).toBe('timber-frame')
+    expect(useDungeonStore.getState().selectedAssetIds.opening).toBe('dungeon.wall_wall_doorway_scaffold')
+  })
+
   it('resets legacy room variant modes back to rooms', () => {
     useDungeonStore.getState().setRoomPaintMode('area')
     useDungeonStore.getState().setRoomEditMode('floor-variants')

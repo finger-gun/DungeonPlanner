@@ -1,9 +1,11 @@
 import { getAssetBrowserCategory, getAssetBrowserSubcategory } from '../../content-packs/browserMetadata'
-import { getContentPackAssetById } from '../../content-packs/registry'
+import { getContentPackAssetById, getContentPackRoomSetById } from '../../content-packs/registry'
 import type { DungeonState } from '../useDungeonStore'
 
 type DungeonStoreSet = (updater: (state: DungeonState) => DungeonState) => void
 type DungeonStoreGet = () => DungeonState
+
+const ROOM_SET_CONTENT_PACK_ID = 'dungeon'
 
 type EditorUiActionKeys =
   | 'clearSelection'
@@ -14,6 +16,7 @@ type EditorUiActionKeys =
   | 'setRoomResizeHandleActive'
   | 'setRoomEditMode'
   | 'setRoomPaintMode'
+  | 'setActiveRoomSetId'
   | 'setWallConnectionMode'
   | 'setWallConnectionWidth'
   | 'setSelectedAsset'
@@ -124,6 +127,34 @@ export function createDungeonStoreEditorUiActions({
             ...current,
             roomPaintMode: mode,
           })
+    },
+    setActiveRoomSetId: (roomSetId) => {
+      set((current) => {
+        if (current.activeRoomSetId === roomSetId) {
+          return current
+        }
+
+        const roomSet = getContentPackRoomSetById(ROOM_SET_CONTENT_PACK_ID, roomSetId)
+        const openingAssetId = roomSet?.openingAssetId
+        const openingAsset = openingAssetId ? getContentPackAssetById(openingAssetId) : null
+
+        return {
+          ...current,
+          activeRoomSetId: roomSetId,
+          selectedAssetIds: openingAssetId
+            ? {
+                ...current.selectedAssetIds,
+                opening: openingAssetId,
+              }
+            : current.selectedAssetIds,
+          assetBrowser: openingAsset
+            ? {
+                category: getAssetBrowserCategory(openingAsset),
+                subcategory: getAssetBrowserSubcategory(openingAsset),
+              }
+            : current.assetBrowser,
+        }
+      })
     },
     setWallConnectionMode: (mode) => {
       set((current) => current.wallConnectionMode === mode

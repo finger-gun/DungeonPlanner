@@ -46,6 +46,109 @@ describe('buildFloorRenderDerivedBundle', () => {
     expect(bundle.corners.every((corner) => corner.rotation[0] === 0 && corner.rotation[1] === 0 && corner.rotation[2] === 0)).toBe(true)
   })
 
+  it('uses cave pillar assets for cave room corners', () => {
+    const derived = buildFloorDerivedBundle({
+      floorId: 'floor-1',
+      paintedCells: {
+        '0:0': { cell: [0, 0], layerId: 'visible', roomId: 'room-cave' },
+      },
+      layers: {
+        visible: { id: 'visible', name: 'Visible', visible: true, locked: false },
+      },
+      rooms: {
+        'room-cave': {
+          id: 'room-cave',
+          name: 'Cave Room',
+          layerId: 'visible',
+          roomSetId: 'cave',
+          floorAssetId: null,
+          wallAssetId: null,
+        },
+      },
+      wallOpenings: {},
+      innerWalls: {},
+      placedObjects: {},
+      floorTileAssetIds: {},
+      wallSurfaceAssetIds: {},
+      wallSurfaceProps: {},
+      globalFloorAssetId: 'dungeon.floor_floor_tile_small',
+      globalWallAssetId: 'dungeon.wall_wall',
+    } satisfies DungeonRoomData)
+
+    const bundle = buildFloorRenderDerivedBundle(derived, {
+      includeFloorReceivers: false,
+    })
+
+    expect(bundle.corners).toHaveLength(4)
+    expect(bundle.corners.every((corner) => corner.assetId === 'dungeon.props_pillars_cave_pillar')).toBe(true)
+    expect(bundle.walls).toHaveLength(4)
+    expect(bundle.walls.every((wall) => wall.assetId === 'dungeon.wall_wall_cave')).toBe(true)
+  })
+
+  it('uses dungeon pillars at mixed dungeon and cave wall joins', () => {
+    const derived = buildFloorDerivedBundle({
+      floorId: 'floor-1',
+      paintedCells: {
+        '0:0': { cell: [0, 0], layerId: 'visible', roomId: 'room-dungeon' },
+        '1:0': { cell: [1, 0], layerId: 'visible', roomId: 'room-cave' },
+      },
+      layers: {
+        visible: { id: 'visible', name: 'Visible', visible: true, locked: false },
+      },
+      rooms: {
+        'room-dungeon': {
+          id: 'room-dungeon',
+          name: 'Dungeon Room',
+          layerId: 'visible',
+          roomSetId: 'dungeon',
+          floorAssetId: null,
+          wallAssetId: null,
+        },
+        'room-cave': {
+          id: 'room-cave',
+          name: 'Cave Room',
+          layerId: 'visible',
+          roomSetId: 'cave',
+          floorAssetId: null,
+          wallAssetId: null,
+        },
+      },
+      wallOpenings: {},
+      innerWalls: {},
+      placedObjects: {},
+      floorTileAssetIds: {},
+      wallSurfaceAssetIds: {},
+      wallSurfaceProps: {},
+      globalFloorAssetId: 'dungeon.floor_floor_tile_small',
+      globalWallAssetId: 'dungeon.wall_wall',
+    } satisfies DungeonRoomData)
+
+    const bundle = buildFloorRenderDerivedBundle(derived, {
+      includeFloorReceivers: false,
+    })
+
+    expect(bundle.corners).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          key: '1:0:corner',
+          assetId: 'dungeon.props_pillars_pillar',
+        }),
+        expect.objectContaining({
+          key: '1:1:corner',
+          assetId: 'dungeon.props_pillars_pillar',
+        }),
+        expect.objectContaining({
+          key: '2:0:corner',
+          assetId: 'dungeon.props_pillars_cave_pillar',
+        }),
+        expect.objectContaining({
+          key: '2:1:corner',
+          assetId: 'dungeon.props_pillars_cave_pillar',
+        }),
+      ]),
+    )
+  })
+
   it('skips floor receiver planning when edit-mode receiver work is disabled', () => {
     const derived = buildFloorDerivedBundle({
       floorId: 'floor-1',

@@ -1,4 +1,5 @@
 import { createDungeonAsset } from '../shared/createDungeonAsset'
+import { DUNGEON_COLOR_SWATCHES } from '../shared/dungeonColorAtlas'
 import { DUNGEON_WALL_TRANSFORM } from '../shared/dungeonConstants'
 import { DungeonWallDoorwayVariant } from '../tiles/walls/wall_doorway'
 
@@ -21,6 +22,11 @@ export const dungeonDoorWall1Asset = createDungeonAsset({
     ],
     browserCategory: 'openings',
     browserSubcategory: 'doors',
+    atlasColorVariants: {
+      propKey: 'colorVariant',
+      defaultVariantId: 'orange',
+      variants: DUNGEON_COLOR_SWATCHES,
+    },
   },
   getPlayModeNextProps: (objectProps) => ({
     open: objectProps.open !== true,

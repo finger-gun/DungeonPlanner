@@ -15,6 +15,7 @@ afterEach(() => {
 function emptyFloorSnapshot() {
   return {
     tool: 'select' as const,
+    activeRoomSetId: 'dungeon',
     selectedAssetIds: { floor: null, wall: null, prop: null, opening: null, player: null },
     selection: null,
     layers: { default: { id: 'default', name: 'Default', visible: true, locked: false } },
@@ -144,6 +145,26 @@ describe('serializeDungeon / deserializeDungeon roundtrip', () => {
     // Active floor data is returned at top level for the store to spread
     const cells = result!.paintedCells ?? result!.floors?.['floor-1']?.snapshot?.paintedCells
     expect(cells?.['2:3']).toMatchObject({ cell: [2, 3] })
+  })
+
+  it('preserves room set selection and room room-set ids', () => {
+    const state = baseState()
+    state.activeRoomSetId = 'cave'
+    state.floors!['floor-1'].snapshot.activeRoomSetId = 'cave'
+    state.floors!['floor-1'].snapshot.rooms['room-1'] = {
+      id: 'room-1',
+      name: 'Cave Room',
+      layerId: 'default',
+      roomSetId: 'cave',
+      floorAssetId: null,
+      wallAssetId: null,
+    }
+
+    const result = deserializeDungeon(serializeDungeon(state))
+
+    expect(result).not.toBeNull()
+    expect(result!.activeRoomSetId).toBe('cave')
+    expect(result!.rooms['room-1']?.roomSetId).toBe('cave')
   })
 
   it('preserves blocked cells', () => {
@@ -296,6 +317,24 @@ describe('serializeDungeon / deserializeDungeon roundtrip', () => {
     expect(result).not.toBeNull()
     const openings = result!.wallOpenings ?? result!.floors?.['floor-1']?.snapshot?.wallOpenings
     expect(openings?.['op-1']).toMatchObject({ flipped: true, wallKey: '0:0:north' })
+  })
+
+  it('preserves opening object props during roundtrip', () => {
+    const state = baseState()
+    state.floors!['floor-1'].snapshot.wallOpenings['op-door'] = {
+      id: 'op-door',
+      assetId: 'core.opening_door_wall_1',
+      wallKey: '0:0:north',
+      width: 1,
+      flipped: false,
+      objectProps: { open: true },
+      layerId: 'default',
+    }
+
+    const result = deserializeDungeon(serializeDungeon(state))
+    expect(result).not.toBeNull()
+    const openings = result!.wallOpenings ?? result!.floors?.['floor-1']?.snapshot?.wallOpenings
+    expect(openings?.['op-door']).toMatchObject({ objectProps: { open: true } })
   })
 
   it('preserves opening provenance during roundtrip', () => {

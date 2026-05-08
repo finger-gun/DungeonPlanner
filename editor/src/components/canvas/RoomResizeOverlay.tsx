@@ -150,6 +150,7 @@ export function RoomResizeOverlay({ bakedLightField = null }: RoomResizeOverlayP
 
     const previousRoomAnimationState = {
       activeLayerId,
+      activeRoomSetId: useDungeonStore.getState().activeRoomSetId,
       bakedLightField,
       floorTileAssetIds,
       globalFloorAssetId,
@@ -174,6 +175,7 @@ export function RoomResizeOverlay({ bakedLightField = null }: RoomResizeOverlayP
       before: previousRoomAnimationState,
       after: {
         activeLayerId,
+        activeRoomSetId: nextState.activeRoomSetId,
         bakedLightField,
         floorTileAssetIds: nextState.floorTileAssetIds,
         globalFloorAssetId: nextState.selectedAssetIds.floor,
@@ -369,6 +371,7 @@ export function RoomResizeOverlay({ bakedLightField = null }: RoomResizeOverlayP
         const previousRoomAnimationState = current?.valid
           ? {
             activeLayerId,
+            activeRoomSetId: useDungeonStore.getState().activeRoomSetId,
             bakedLightField,
             floorTileAssetIds,
             globalFloorAssetId,
@@ -399,6 +402,7 @@ export function RoomResizeOverlay({ bakedLightField = null }: RoomResizeOverlayP
               before: previousRoomAnimationState,
               after: {
                 activeLayerId,
+                activeRoomSetId: nextState.activeRoomSetId,
                 bakedLightField,
                 floorTileAssetIds: nextState.floorTileAssetIds,
                 globalFloorAssetId: nextState.selectedAssetIds.floor,

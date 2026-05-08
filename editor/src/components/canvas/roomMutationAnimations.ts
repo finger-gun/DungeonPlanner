@@ -11,9 +11,11 @@ import type {
 import { WALL_EXTRA_DELAY_MS } from './DungeonRoomShared'
 import { buildFloorRenderDerivedBundleFromInput } from './floorRenderDerived'
 import type { StaticTileEntry } from './tileEntries'
+import { getCornerInteriorLightDirections } from './wallLighting'
 
 export type RoomAnimationStateInput = {
   activeLayerId: string
+  activeRoomSetId: string
   bakedLightField: BakedFloorLightField | null
   floorTileAssetIds: Record<string, string>
   globalFloorAssetId: string | null
@@ -28,6 +30,7 @@ export type RoomAnimationStateInput = {
 
 export function buildSpeculativeRoomTileEntries({
   activeLayerId,
+  activeRoomSetId,
   bakedLightField,
   buildStartedAt,
   cells,
@@ -67,13 +70,14 @@ export function buildSpeculativeRoomTileEntries({
     visiblePaintedCellRecords: previewPaintedCells,
     rooms: {
       ...rooms,
-      [previewRoomId]: {
-        id: previewRoomId,
-        name: 'Preview Room',
-        layerId: activeLayerId,
-        floorAssetId: null,
-        wallAssetId: null,
-      },
+        [previewRoomId]: {
+          id: previewRoomId,
+          name: 'Preview Room',
+          layerId: activeLayerId,
+          roomSetId: activeRoomSetId,
+          floorAssetId: null,
+          wallAssetId: null,
+        },
     },
     globalFloorAssetId,
     floorTileAssetIds,
@@ -245,12 +249,12 @@ function buildAnimatedRoomTileEntriesFromBundle({
         .filter((cell) => relatedCellKeys.has(getCellKey(cell)))
         .map((cell) => {
           const cellKey = getCellKey(cell)
-          return {
-            key: `floor:${cellKey}`,
-            assetId: group.floorAssetId,
-            position: cellToWorldPosition(cell),
-            rotation: [0, 0, 0] as const,
-            buildAnimationDelay: getSpeculativeBuildDelay(cells, originCell, cell),
+            return {
+              key: `floor:${cellKey}`,
+              assetId: group.floorAssetId,
+              position: cellToWorldPosition(cell),
+              rotation: group.rotation,
+              buildAnimationDelay: getSpeculativeBuildDelay(cells, originCell, cell),
             buildAnimationDirection,
             buildAnimationStart: buildStartedAt,
             variant: 'floor' as const,
@@ -301,6 +305,7 @@ function buildAnimatedRoomTileEntriesFromBundle({
       .filter((corner) => corner.wallKeys.some((wallKey) => isWallKeyRelatedToCells(wallKey, relatedCellKeys)))
       .map((corner) => {
         const cornerCell = getFirstWallCellForPreview(corner.wallKeys, relatedCellKeys) ?? cells[0] ?? [0, 0]
+        const interiorDirections = getCornerInteriorLightDirections(corner.wallKeys)
         return {
           key: corner.key,
           assetId: corner.assetId,
@@ -309,9 +314,12 @@ function buildAnimatedRoomTileEntriesFromBundle({
           buildAnimationDelay: getSpeculativeBuildDelay(cells, originCell, cornerCell, WALL_EXTRA_DELAY_MS),
           buildAnimationDirection,
           buildAnimationStart: buildStartedAt,
-          variant: 'wall' as const,
+          variant: 'prop' as const,
           variantKey: corner.key,
           visibility: 'visible' as const,
+          bakedLightField: bakedLightField ?? undefined,
+          bakedLightDirection: interiorDirections.primary,
+          bakedLightDirectionSecondary: interiorDirections.secondary,
           objectProps: corner.wallKeys.length > 0
             ? {
               ...(corner.objectProps ?? {}),

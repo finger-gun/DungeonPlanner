@@ -25,6 +25,31 @@ describe('computeVisibleCellKeys', () => {
     )
   })
 
+  it('passes through authored wall openings even before their visual open state toggles', () => {
+    const paintedCells = makeCells([
+      { cell: [0, 0], roomId: 'room-a' },
+      { cell: [1, 0], roomId: 'room-b' },
+    ])
+
+    expect(
+      computeVisibleCellKeys(
+        paintedCells,
+        {
+          door: {
+            id: 'door',
+            assetId: 'core.opening_door_wall_1',
+            wallKey: '0:0:east',
+            width: 1,
+            layerId: 'default',
+            objectProps: {},
+          },
+        },
+        [[0, 0]],
+        3,
+      ),
+    ).toEqual(expect.arrayContaining(['0:0', '1:0']))
+  })
+
   it('passes through wall segments with open wall state', () => {
     const paintedCells = makeCells([
       { cell: [0, 0], roomId: 'room-a' },
@@ -41,6 +66,27 @@ describe('computeVisibleCellKeys', () => {
         new Map(),
         new Set(),
         { '0:0:east': { open: true } },
+      ),
+    ).toEqual(expect.arrayContaining(['0:0', '1:0']))
+  })
+
+  it('passes through legacy wall-surface passage openings after reclassification', () => {
+    const paintedCells = makeCells([
+      { cell: [0, 0], roomId: 'room-a' },
+      { cell: [1, 0], roomId: 'room-b' },
+    ])
+
+    expect(
+      computeVisibleCellKeys(
+        paintedCells,
+        {},
+        [[0, 0]],
+        3,
+        [],
+        new Map(),
+        new Set(),
+        {},
+        { '0:0:east': 'dungeon.wall_wall_opening' },
       ),
     ).toEqual(expect.arrayContaining(['0:0', '1:0']))
   })
