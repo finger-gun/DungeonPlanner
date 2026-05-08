@@ -13,6 +13,7 @@ import type { BatchDescriptor, ResolvedStaticTileEntry } from '../../components/
 import { getBelowGroundClipMinY, applyBuildAnimationToMaterial, applyBelowGroundClipToMaterial } from '../../components/canvas/buildAnimationMaterial'
 import { applyBakedLightToMaterial } from '../../components/canvas/bakedLightMaterial'
 import { applyFogOfWarToMaterial } from '../../components/canvas/fogOfWarShared'
+import { applyRoomFloorMaskToMaterial } from '../../components/canvas/roomFloorMaskMaterial'
 import { requestContinuousRender, releaseContinuousRender } from '../renderActivity'
 import { recordBuildPerfEvent, traceBuildPerf } from '../../performance/runtimeBuildTrace'
 import { TileGpuUploadScheduler, type TileUploadBudget, type TileUploadBudgetResult } from './TileGpuUploadScheduler'
@@ -518,6 +519,10 @@ export class TileGpuStream {
     const useBuildAnimation = true
     const bakedLightField = descriptor.entries[0]?.bakedLightField ?? null
     const clipMinY = getBelowGroundClipMinY(descriptor.variant)
+    const roomFloorMaskRuntime =
+      descriptor.useRoomFloorMask && descriptor.variant === 'floor'
+        ? descriptor.roomFloorMaskRuntime
+        : null
 
     page.meshEntries.forEach((entry) => {
       const material = getInstancedMaterial(entry)
@@ -543,6 +548,12 @@ export class TileGpuStream {
           useCellAttribute: descriptor.usesGpuFog && descriptor.variant === 'floor',
         },
       )
+      applyRoomFloorMaskToMaterial(material, roomFloorMaskRuntime)
+      applyRoomFloorMaskToMaterial(entry.tintMesh.material, roomFloorMaskRuntime)
+
+      if (descriptor.variant === 'wall') {
+        material.needsUpdate = true
+      }
 
       const depthMaterial = getOrCreatePageDepthMaterial(page, entry.meshKey)
       applyBelowGroundClipToMaterial(depthMaterial, useBuildAnimation, clipMinY)

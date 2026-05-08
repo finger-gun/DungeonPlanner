@@ -152,6 +152,12 @@ export type ContentPackAssetMetadata = {
   openingWidth?: 1 | 2 | 3
   /** Opening interaction semantics: passages are always open, doors can toggle state. */
   openingKind?: 'passage' | 'door'
+  /** Optional centered clear width, in world units, to remove from a single wall segment. */
+  openingCutoutWidth?: number
+  /** Optional clear height, in world units, for a door-like opening below the wall top. */
+  openingCutoutHeight?: number
+  /** Optional structural cutout shape used by procedural wall collapsing. Defaults to rectangle. */
+  openingCutoutShape?: 'rectangle' | 'arched'
   /** Marks a floor-connected opening as staircase that links floors. */
   stairDirection?: 'up' | 'down'
   /** Matching staircase asset to place on the adjacent floor. */
@@ -198,6 +204,34 @@ export type ContentPackRoomSetFloor =
       randomQuarterTurns?: boolean
     }
 
+export type ContentPackWallMaterialTextures = {
+  albedoUrl: string
+  normalUrl?: string
+  aoUrl?: string
+  heightUrl?: string
+  roughnessUrl?: string
+  metallicUrl?: string
+}
+
+export type ContentPackWallMaterialShading = {
+  tintColor?: string
+  roughness?: number
+  metalness?: number
+  bumpScale?: number
+  aoMapIntensity?: number
+  topSurfaceColor?: string
+  topSurfaceRoughness?: number
+  topSurfaceMetalness?: number
+}
+
+export type ContentPackWallMaterialSet = {
+  id: string
+  name: string
+  previewImageUrl?: string
+  textures: ContentPackWallMaterialTextures
+  shading?: ContentPackWallMaterialShading
+}
+
 export type ContentPackRoomSet = {
   id: string
   name: string
@@ -213,6 +247,7 @@ export type ContentPack = {
   name: string
   assets: ContentPackAsset[]
   roomSets?: ContentPackRoomSet[]
+  wallMaterialSets?: ContentPackWallMaterialSet[]
   /** Optional default assets for each category. Using the asset object keeps defaults type-safe. */
   defaultAssets?: {
     floor?: ContentPackAsset & { category: 'floor' }

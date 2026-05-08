@@ -3,6 +3,8 @@ import {
   getContentPackRoomSetById,
   getDefaultAssetIdByCategory,
   getDefaultContentPackRoomSetId,
+  getContentPackWallMaterialSetById,
+  getDefaultContentPackWallMaterialSetId,
 } from '../content-packs/registry'
 import type { ContentPackCategory } from '../content-packs/types'
 import type { DungeonObjectRecord, FloorRecord, OpeningRecord, Room, SelectedAssetIds } from './useDungeonStore'
@@ -10,6 +12,7 @@ import type { DungeonObjectRecord, FloorRecord, OpeningRecord, Room, SelectedAss
 type SnapshotAssetState = {
   selectedAssetIds?: SelectedAssetIds
   activeRoomSetId?: string
+  activeWallMaterialSetId?: string
   rooms: Record<string, Room>
   wallOpenings: Record<string, OpeningRecord>
   placedObjects: Record<string, DungeonObjectRecord>
@@ -44,6 +47,15 @@ export function sanitizeSnapshotAssetReferences<T extends SnapshotAssetState>(sn
           activeRoomSetId: sanitizeActiveRoomSetId(snapshot.activeRoomSetId),
         }
       : {}),
+    ...(typeof snapshot.activeWallMaterialSetId === 'string'
+      ? {
+          activeWallMaterialSetId: sanitizeActiveWallMaterialSetId(snapshot.activeWallMaterialSetId),
+        }
+      : {
+          activeWallMaterialSetId: sanitizeActiveWallMaterialSetId(
+            getDefaultContentPackWallMaterialSetId('dungeon') ?? 'kaykit-stone',
+          ),
+        }),
     rooms: Object.fromEntries(
       Object.entries(snapshot.rooms).map(([roomId, room]) => [
         roomId,
@@ -130,6 +142,12 @@ function sanitizeRoomSetId(roomSetId: string | null | undefined) {
   return isValidRoomSetId(roomSetId) ? roomSetId : null
 }
 
+function sanitizeActiveWallMaterialSetId(wallMaterialSetId: string) {
+  return isValidWallMaterialSetId(wallMaterialSetId)
+    ? wallMaterialSetId
+    : (getDefaultContentPackWallMaterialSetId('dungeon') ?? 'kaykit-stone')
+}
+
 function sanitizeOpeningRecord(opening: OpeningRecord): OpeningRecord {
   const assetId = sanitizeOpeningAssetId(opening.assetId)
   if (!assetId) {
@@ -162,6 +180,10 @@ function isValidAssetId(assetId: string | null, category: ContentPackCategory) {
 
 function isValidRoomSetId(roomSetId: string) {
   return Boolean(getContentPackRoomSetById('dungeon', roomSetId))
+}
+
+function isValidWallMaterialSetId(wallMaterialSetId: string) {
+  return Boolean(getContentPackWallMaterialSetById('dungeon', wallMaterialSetId))
 }
 
 function mapLegacyAssetId(assetId: string | null, category: ContentPackCategory) {

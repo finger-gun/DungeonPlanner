@@ -8,6 +8,7 @@ import {
   getCellKey,
 } from '../../hooks/useSnapToGrid'
 import type { FloorDirtyInfo } from '../../store/floorDirtyDomains'
+import { EMPTY_SPLINE_WALL_GRAPH } from '../../store/splineWallGraph'
 import { getContentPackAssetById } from '../../content-packs/registry'
 import {
   useDungeonStore,
@@ -61,8 +62,17 @@ import {
 } from './DungeonRoomShared'
 import { getOpeningObjectProps, getOpeningPlayModeNextProps } from '../../store/openingState'
 import { getTileGpuStreamMountId } from './TileGpuStreamContextShared'
+import { SplineWallLayer } from './SplineWallLayer'
+import { buildRoomFloorMaskData, buildRoomFloorMaskGeometry } from './roomFloorMask'
+import {
+  buildRoomFloorMaskRuntime,
+  disposeRoomFloorMaskRuntime,
+  type RoomFloorMaskRuntime,
+} from './roomFloorMaskRuntime'
 
 const ZERO_ROTATION = [0, 0, 0] as const
+const EXPERIMENTAL_SPLINE_WALLS_ENABLED = true
+const IGNORE_RAYCAST: THREE.Object3D['raycast'] = () => {}
 
 function useIsBuildAnimationActive(buildAnimationVersion: number) {
   return useCallback((cellKey: string) => {
@@ -173,6 +183,23 @@ export function DungeonRoom({
     () => getTileGpuStreamMountId(floorId, streamScopeKey),
     [floorId, streamScopeKey],
   )
+  const visibleWallOpenings = useMemo(
+    () => Object.fromEntries(derived.visibleOpenings.map((opening) => [opening.id, opening])),
+    [derived.visibleOpenings],
+  )
+  const roomFloorMaskData = useMemo(
+    () => buildRoomFloorMaskData({
+      paintedCellRecords: Object.values(derived.visiblePaintedCellRecords),
+      layers: derived.data.layers,
+      splineWallGraph: derived.data.splineWallGraph ?? EMPTY_SPLINE_WALL_GRAPH,
+    }),
+    [derived.data.layers, derived.data.splineWallGraph, derived.visiblePaintedCellRecords],
+  )
+  const roomFloorMaskRuntime = useMemo(
+    () => buildRoomFloorMaskRuntime(roomFloorMaskData),
+    [roomFloorMaskData],
+  )
+  useLayoutEffect(() => () => disposeRoomFloorMaskRuntime(roomFloorMaskRuntime), [roomFloorMaskRuntime])
   useFrame(() => {
     const now = performance.now()
     const { holdBatchStart, holdReleaseAt } = getHeldBuildBatchUniformState(now)
@@ -183,6 +210,21 @@ export function DungeonRoom({
   return (
     <>
       <TileGpuStreamMount mountId={streamMountId} />
+      {EXPERIMENTAL_SPLINE_WALLS_ENABLED && (
+        <SplineWallLayer
+          floorId={derived.data.floorId}
+          dirtyInfo={dirtyInfo}
+          paintedCells={derived.visiblePaintedCellRecords}
+          splineWallGraph={derived.data.splineWallGraph ?? EMPTY_SPLINE_WALL_GRAPH}
+          layers={derived.data.layers}
+          rooms={derived.data.rooms}
+          wallOpenings={visibleWallOpenings}
+          wallSurfaceAssetIds={derived.data.wallSurfaceAssetIds}
+          wallSurfaceProps={derived.data.wallSurfaceProps}
+          globalWallAssetId={derived.data.globalWallAssetId}
+        />
+      )}
+      <RoomFloorMaskDebugOverlay maskData={roomFloorMaskData} />
       {floorRenderChunkCache.orderedChunkKeys.map((chunkKey) => {
         const bundle = floorRenderChunkCache.bundlesByChunk.get(chunkKey)
         if (!bundle) {
@@ -197,6 +239,7 @@ export function DungeonRoom({
             floorId={floorId}
             mountId={streamMountId}
             streamScopeKey={streamScopeKey}
+            wallSurfaceAssetIds={derived.data.wallSurfaceAssetIds}
             bakedFloorLightField={bakedFloorLightField}
             blockedFloorCellKeys={blockedFloorCellKeys}
             visibility={visibility}
@@ -205,6 +248,7 @@ export function DungeonRoom({
             enableFloorReceiver={enableFloorReceiver}
             floorReceiverActive={floorReceiverActive}
             showProjectionDebugMesh={showProjectionDebugMesh}
+            roomFloorMaskRuntime={roomFloorMaskRuntime}
           />
         )
       })}
@@ -218,6 +262,7 @@ function FloorRenderChunkRenderer({
   floorId,
   mountId,
   streamScopeKey,
+  wallSurfaceAssetIds,
   bakedFloorLightField,
   blockedFloorCellKeys,
   visibility,
@@ -226,12 +271,14 @@ function FloorRenderChunkRenderer({
   enableFloorReceiver,
   floorReceiverActive,
   showProjectionDebugMesh,
+  roomFloorMaskRuntime,
 }: {
   chunkKey: string
   bundle: FloorRenderChunkBundle
   floorId: string
   mountId: string
   streamScopeKey: string
+  wallSurfaceAssetIds: Record<string, string>
   bakedFloorLightField: BakedFloorLightField
   blockedFloorCellKeys: Set<string>
   visibility: PlayVisibility
@@ -240,11 +287,20 @@ function FloorRenderChunkRenderer({
   enableFloorReceiver: boolean
   floorReceiverActive: boolean
   showProjectionDebugMesh: boolean
+  roomFloorMaskRuntime: RoomFloorMaskRuntime | null
 }) {
   const isBuildAnimationCurrentlyActive = useIsBuildAnimationActive(buildAnimationVersion)
   const useLineOfSightPostMask = visibility.active
   const staticWallEntries = useMemo<StaticTileEntry[]>(
     () => bundle.walls.flatMap((wall) => {
+      const hasSurfaceOverride = wall.segmentKeys.some((segmentKey) => Boolean(wallSurfaceAssetIds[segmentKey]))
+      if (
+        EXPERIMENTAL_SPLINE_WALLS_ENABLED
+        && wall.source === 'boundary'
+        && !hasSurfaceOverride
+      ) {
+        return []
+      }
       const floorKey = getBuildAnimationKeyFromWallKeys(wall.segmentKeys, isBuildAnimationCurrentlyActive) ?? wall.key
       if (isInteractiveWallAsset(wall.assetId)) {
         return []
@@ -269,7 +325,14 @@ function FloorRenderChunkRenderer({
         objectProps: wall.objectProps,
       }]
     }),
-    [bakedFloorLightField, bundle.walls, enableBuildAnimation, isBuildAnimationCurrentlyActive, visibility],
+    [
+      bakedFloorLightField,
+      bundle.walls,
+      enableBuildAnimation,
+      isBuildAnimationCurrentlyActive,
+      visibility,
+      wallSurfaceAssetIds,
+    ],
   )
   const staticInteractiveWalls = useMemo(
     () => bundle.walls.filter((wall) => {
@@ -286,7 +349,7 @@ function FloorRenderChunkRenderer({
     [bundle.walls, enableBuildAnimation, isBuildAnimationCurrentlyActive],
   )
   const staticCornerEntries = useMemo<StaticTileEntry[]>(
-    () => bundle.corners.map((corner) => {
+    () => EXPERIMENTAL_SPLINE_WALLS_ENABLED ? [] : bundle.corners.map((corner) => {
       const cellKey = getBuildAnimationKeyFromWallKeys(corner.wallKeys, isBuildAnimationCurrentlyActive) ?? corner.key
       const buildAnimation = enableBuildAnimation
         ? getBuildAnimationState(cellKey, WALL_EXTRA_DELAY_MS)
@@ -330,12 +393,13 @@ function FloorRenderChunkRenderer({
           floorId={floorId}
           mountId={mountId}
           bakedFloorLightField={bakedFloorLightField}
-          blockedFloorCellKeys={blockedFloorCellKeys}
-          visibility={visibility}
-          enableBuildAnimation={enableBuildAnimation}
-          buildAnimationVersion={buildAnimationVersion}
-        />
-      ))}
+            blockedFloorCellKeys={blockedFloorCellKeys}
+            visibility={visibility}
+            enableBuildAnimation={enableBuildAnimation}
+            buildAnimationVersion={buildAnimationVersion}
+            roomFloorMaskRuntime={roomFloorMaskRuntime}
+          />
+        ))}
       <FloorSurfaceRenderer
         placements={bundle.floorSurfaceEntries}
         floorId={floorId}
@@ -346,6 +410,7 @@ function FloorRenderChunkRenderer({
         visibility={visibility}
         enableBuildAnimation={enableBuildAnimation}
         buildAnimationVersion={buildAnimationVersion}
+        roomFloorMaskRuntime={roomFloorMaskRuntime}
       />
       <BatchedTileEntries
         entries={staticWallEntries}
@@ -412,6 +477,7 @@ function CellGroupRenderer({
   visibility,
   enableBuildAnimation,
   buildAnimationVersion,
+  roomFloorMaskRuntime,
 }: {
   group: FloorRenderGroup
   floorId: string
@@ -421,6 +487,7 @@ function CellGroupRenderer({
   visibility: PlayVisibility
   enableBuildAnimation: boolean
   buildAnimationVersion: number
+  roomFloorMaskRuntime: RoomFloorMaskRuntime | null
 }) {
   const useLineOfSightPostMask = visibility.active
   const staticEntries = useMemo<StaticTileEntry[]>(
@@ -466,6 +533,8 @@ function CellGroupRenderer({
       mountId={mountId}
       sourceId={`floor-group:${floorId}:${group.groupKey}`}
       useLineOfSightPostMask={useLineOfSightPostMask}
+      useRoomFloorMask
+      roomFloorMaskRuntime={roomFloorMaskRuntime}
     />
   )
 }
@@ -480,6 +549,7 @@ function FloorSurfaceRenderer({
   visibility,
   enableBuildAnimation,
   buildAnimationVersion,
+  roomFloorMaskRuntime,
 }: {
   placements: FloorSurfacePlacement[]
   floorId: string
@@ -490,6 +560,7 @@ function FloorSurfaceRenderer({
   visibility: PlayVisibility
   enableBuildAnimation: boolean
   buildAnimationVersion: number
+  roomFloorMaskRuntime: RoomFloorMaskRuntime | null
 }) {
   const useLineOfSightPostMask = visibility.active
   const isBuildAnimationCurrentlyActive = useIsBuildAnimationActive(buildAnimationVersion)
@@ -531,6 +602,51 @@ function FloorSurfaceRenderer({
       mountId={mountId}
       sourceId={sourceId}
       useLineOfSightPostMask={useLineOfSightPostMask}
+      useRoomFloorMask
+      roomFloorMaskRuntime={roomFloorMaskRuntime}
+    />
+  )
+}
+
+function RoomFloorMaskDebugOverlay({
+  maskData,
+}: {
+  maskData: ReturnType<typeof buildRoomFloorMaskData>
+}) {
+  const showRoomFloorMaskDebug = useDungeonStore((state) => state.showRoomFloorMaskDebug)
+  const debugGeometry = useMemo(
+    () => showRoomFloorMaskDebug ? buildRoomFloorMaskGeometry(maskData, 0.00005) : null,
+    [maskData, showRoomFloorMaskDebug],
+  )
+  const debugMaterial = useMemo(
+    () => new THREE.MeshBasicMaterial({
+      color: '#2dd4bf',
+      transparent: true,
+      opacity: 0.3,
+      side: THREE.DoubleSide,
+      depthWrite: false,
+      depthTest: true,
+      polygonOffset: true,
+      polygonOffsetFactor: -1,
+      polygonOffsetUnits: -1,
+      toneMapped: false,
+    }),
+    [],
+  )
+
+  useLayoutEffect(() => () => debugGeometry?.dispose(), [debugGeometry])
+  useLayoutEffect(() => () => debugMaterial.dispose(), [debugMaterial])
+
+  if (!showRoomFloorMaskDebug || !debugGeometry) {
+    return null
+  }
+
+  return (
+    <mesh
+      geometry={debugGeometry}
+      material={debugMaterial}
+      renderOrder={6}
+      raycast={IGNORE_RAYCAST}
     />
   )
 }

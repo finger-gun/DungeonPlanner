@@ -39,6 +39,9 @@ import {
   type ResolvedAtlasColorVariant,
 } from '../../rendering/atlasColorVariants'
 import { buildPropDescriptorKey } from './ContentPackInstanceShared'
+import { applyRoomFloorMaskToMaterial, applyRoomFloorMaskToObject } from './roomFloorMaskMaterial'
+import type { RoomFloorMaskRuntime } from './roomFloorMaskRuntime'
+import { useRegisteredLightSources } from './objectSourceRegistry'
 
 function shouldUseGpuFog(variant: ContentPackInstanceVariant, fogOfWar: ReturnType<typeof useFogOfWarRuntime>) {
   return fogOfWar !== null && variant === 'floor'
@@ -97,6 +100,9 @@ type ContentPackInstanceProps = ThreeElements['group'] & {
   overlayOnly?: boolean
   visibility?: PlayVisibilityState
   useLineOfSightPostMask?: boolean
+  useRoomFloorMask?: boolean
+  roomFloorMaskRuntime?: RoomFloorMaskRuntime | null
+  dynamicPointLightsActive?: boolean
   variant: ContentPackInstanceVariant
   variantKey?: string
   objectProps?: Record<string, unknown>
@@ -119,6 +125,9 @@ export function ContentPackInstance({
   overlayOnly = false,
   visibility = 'visible',
   useLineOfSightPostMask = false,
+  useRoomFloorMask = false,
+  roomFloorMaskRuntime = null,
+  dynamicPointLightsActive: dynamicPointLightsActiveOverride,
   variant,
   variantKey,
   objectProps,
@@ -139,6 +148,8 @@ export function ContentPackInstance({
     () => resolveAtlasColorVariant(asset?.metadata, objectProps),
     [asset?.metadata, objectProps],
   )
+  const registeredLightSources = useRegisteredLightSources(bakedLightField?.floorId ?? '__content-pack-instance__')
+  const dynamicPointLightsActive = dynamicPointLightsActiveOverride ?? registeredLightSources.length > 0
   const tool = useDungeonStore((state) => state.tool)
   const showPropProbeDebug = useDungeonStore((state) => state.showPropProbeDebug)
   const useRuntimePropProbe = shouldUseRuntimePropProbe({
@@ -190,6 +201,9 @@ export function ContentPackInstance({
           overlayOnly={overlayOnly}
           visibility={visibility}
           useLineOfSightPostMask={useLineOfSightPostMask}
+          useRoomFloorMask={useRoomFloorMask}
+          roomFloorMaskRuntime={roomFloorMaskRuntime}
+          dynamicPointLightsActive={dynamicPointLightsActive}
           bakedLightField={bakedLightField}
           bakedLightDirection={bakedLightDirection}
           bakedLightDirectionSecondary={bakedLightDirectionSecondary}
@@ -215,11 +229,14 @@ export function ContentPackInstance({
             receiveShadow={receiveShadow}
             castShadow={castShadow}
             tint={tint}
-            tintOpacity={tintOpacity}
-            overlayOnly={overlayOnly}
-            visibility={visibility}
-            useLineOfSightPostMask={useLineOfSightPostMask}
-            bakedLightField={bakedLightField}
+             tintOpacity={tintOpacity}
+             overlayOnly={overlayOnly}
+               visibility={visibility}
+               useLineOfSightPostMask={useLineOfSightPostMask}
+               useRoomFloorMask={useRoomFloorMask}
+               roomFloorMaskRuntime={roomFloorMaskRuntime}
+               dynamicPointLightsActive={dynamicPointLightsActive}
+               bakedLightField={bakedLightField}
              bakedLightDirection={bakedLightDirection}
              bakedLightDirectionSecondary={bakedLightDirectionSecondary}
               disableBakedLight={disableBakedLight}
@@ -249,6 +266,9 @@ export function ContentPackInstance({
           overlayOnly={overlayOnly}
           visibility={visibility}
           useLineOfSightPostMask={useLineOfSightPostMask}
+          useRoomFloorMask={useRoomFloorMask}
+          roomFloorMaskRuntime={roomFloorMaskRuntime}
+          dynamicPointLightsActive={dynamicPointLightsActive}
           variant={variant}
           bakedLightField={bakedLightField}
            bakedLightDirection={bakedLightDirection}
@@ -274,6 +294,9 @@ export function ContentPackInstance({
           overlayOnly={overlayOnly}
           visibility={visibility}
           useLineOfSightPostMask={useLineOfSightPostMask}
+          useRoomFloorMask={useRoomFloorMask}
+          roomFloorMaskRuntime={roomFloorMaskRuntime}
+          dynamicPointLightsActive={dynamicPointLightsActive}
           variantKey={variantKey}
           variant={variant}
           bakedLightField={bakedLightField}
@@ -344,6 +367,9 @@ function GLTFModel({
   overlayOnly,
   visibility,
   useLineOfSightPostMask = false,
+  useRoomFloorMask = false,
+  roomFloorMaskRuntime = null,
+  dynamicPointLightsActive = false,
   variantKey,
   variant,
   bakedLightField = null,
@@ -368,6 +394,9 @@ function GLTFModel({
   overlayOnly?: boolean
   visibility?: PlayVisibilityState
   useLineOfSightPostMask?: boolean
+  useRoomFloorMask?: boolean
+  roomFloorMaskRuntime?: RoomFloorMaskRuntime | null
+  dynamicPointLightsActive?: boolean
   variantKey?: string
   variant: ContentPackInstanceVariant
   bakedLightField?: BakedFloorLightField | null
@@ -471,6 +500,10 @@ function GLTFModel({
   ])
 
   useLayoutEffect(() => {
+    applyBelowGroundClipToObject(scene, clipBelowGround, clipMinY)
+  }, [clipBelowGround, clipMinY, scene])
+
+  useLayoutEffect(() => {
     applyFogOfWarToObject(scene, usesGpuFog ? fogOfWar : null, {
       variant,
       cell: fogCell,
@@ -484,8 +517,19 @@ function GLTFModel({
   ])
 
   useLayoutEffect(() => {
-    applyBelowGroundClipToObject(scene, clipBelowGround, clipMinY)
-  }, [clipBelowGround, clipMinY, scene])
+    applyRoomFloorMaskToObject(
+      scene,
+      useRoomFloorMask && variant === 'floor' ? roomFloorMaskRuntime : null,
+    )
+  }, [clipBelowGround, fogOfWar, roomFloorMaskRuntime, scene, useRoomFloorMask, usesGpuFog, variant])
+
+  useLayoutEffect(() => {
+    if (variant !== 'wall') {
+      return
+    }
+
+    markObjectMaterialsForUpdate(scene)
+  }, [dynamicPointLightsActive, scene, variant])
 
   useLayoutEffect(() => {
     applyAtlasColorVariantToObject(scene, atlasColorVariant ?? null)
@@ -524,6 +568,9 @@ function ComponentAsset({
   overlayOnly,
   visibility,
   useLineOfSightPostMask = false,
+  useRoomFloorMask = false,
+  roomFloorMaskRuntime = null,
+  dynamicPointLightsActive = false,
   variant,
   bakedLightField = null,
   bakedLightDirection,
@@ -548,6 +595,9 @@ function ComponentAsset({
   overlayOnly?: boolean
   visibility?: PlayVisibilityState
   useLineOfSightPostMask?: boolean
+  useRoomFloorMask?: boolean
+  roomFloorMaskRuntime?: RoomFloorMaskRuntime | null
+  dynamicPointLightsActive?: boolean
   variant: ContentPackInstanceVariant
   bakedLightField?: BakedFloorLightField | null
   bakedLightDirection?: SurfaceBakedLightDirection
@@ -670,6 +720,14 @@ function ComponentAsset({
       return
     }
 
+    applyBelowGroundClipToObject(contentRef.current, clipBelowGround, clipMinY)
+  }, [clipBelowGround, clipMinY])
+
+  useLayoutEffect(() => {
+    if (!contentRef.current) {
+      return
+    }
+
     applyFogOfWarToObject(contentRef.current, usesGpuFog ? fogOfWar : null, {
       variant,
       cell: fogCell,
@@ -685,9 +743,19 @@ function ComponentAsset({
     if (!contentRef.current) {
       return
     }
+    applyRoomFloorMaskToObject(
+      contentRef.current,
+      useRoomFloorMask && variant === 'floor' ? roomFloorMaskRuntime : null,
+    )
+  }, [Component, clipBelowGround, componentProps, fogOfWar, roomFloorMaskRuntime, useRoomFloorMask, usesGpuFog, variant])
 
-    applyBelowGroundClipToObject(contentRef.current, clipBelowGround, clipMinY)
-  }, [clipBelowGround, clipMinY])
+  useLayoutEffect(() => {
+    if (!contentRef.current || variant !== 'wall') {
+      return
+    }
+
+    markObjectMaterialsForUpdate(contentRef.current)
+  }, [Component, componentProps, dynamicPointLightsActive, variant])
 
   useLayoutEffect(() => {
     if (!contentRef.current) {
@@ -735,6 +803,25 @@ function markIgnoreLosRaycast(object: THREE.Object3D) {
   })
 }
 
+function markMaterialForUpdate(material: THREE.Material | THREE.Material[]) {
+  if (Array.isArray(material)) {
+    material.forEach((entry) => {
+      entry.needsUpdate = true
+    })
+    return
+  }
+
+  material.needsUpdate = true
+}
+
+function markObjectMaterialsForUpdate(object: THREE.Object3D) {
+  object.traverse((child) => {
+    if (child instanceof THREE.Mesh) {
+      markMaterialForUpdate(child.material)
+    }
+  })
+}
+
 function FallbackMesh({
   selected,
   tint,
@@ -746,6 +833,9 @@ function FallbackMesh({
   castShadow = true,
   visibility = 'visible',
   useLineOfSightPostMask = false,
+  useRoomFloorMask = false,
+  roomFloorMaskRuntime = null,
+  dynamicPointLightsActive = false,
   bakedLightField = null,
   bakedLightDirection,
   bakedLightDirectionSecondary,
@@ -766,6 +856,9 @@ function FallbackMesh({
   castShadow?: boolean
   visibility?: PlayVisibilityState
   useLineOfSightPostMask?: boolean
+  useRoomFloorMask?: boolean
+  roomFloorMaskRuntime?: RoomFloorMaskRuntime | null
+  dynamicPointLightsActive?: boolean
   bakedLightField?: BakedFloorLightField | null
   bakedLightDirection?: SurfaceBakedLightDirection
   bakedLightDirectionSecondary?: SurfaceBakedLightDirection
@@ -910,6 +1003,21 @@ function FallbackMesh({
     usesGpuFog,
     variant,
   ])
+
+  useLayoutEffect(() => {
+    applyRoomFloorMaskToMaterial(
+      material,
+      useRoomFloorMask && variant === 'floor' ? roomFloorMaskRuntime : null,
+    )
+  }, [clipBelowGround, fogOfWar, material, roomFloorMaskRuntime, useRoomFloorMask, usesGpuFog, variant])
+
+  useLayoutEffect(() => {
+    if (variant !== 'wall') {
+      return
+    }
+
+    material.needsUpdate = true
+  }, [dynamicPointLightsActive, material, variant])
 
   useEffect(() => () => material.dispose(), [material])
 

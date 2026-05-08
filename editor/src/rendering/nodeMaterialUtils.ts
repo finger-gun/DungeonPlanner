@@ -190,8 +190,11 @@ function isPlainMeshStandardMaterial(material: THREE.Material): material is THRE
 }
 
 class MeshStandardNodeMaterialFallback extends THREE.MeshStandardMaterial {
+  declare isNodeMaterial: true
+
   constructor() {
     super()
     this.type = 'MeshStandardNodeMaterial'
+    this.isNodeMaterial = true
   }
 }

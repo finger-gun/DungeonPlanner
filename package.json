@@ -34,6 +34,7 @@
     "preview": "node scripts/run-vite-package.mjs editor preview",
     "generate:content-pack:core": "node scripts/generate-core-pack.mjs",
     "generate:thumbnails": "node scripts/generate-thumbnails.mjs",
+    "import:pbr-material": "node scripts/import-freepbr-material.mjs",
     "sync:ktx2-transcoders": "node scripts/sync-ktx2-transcoders.mjs",
     "optimize:models": "node scripts/optimize-models.mjs",
     "import:models": "node scripts/import-models.mjs",
@@ -49,11 +50,12 @@
     "turbo": "turbo",
     "video-to-gif": "bash scripts/video-to-gif.sh"
   },
-  "dependencies": {},
   "devDependencies": {
     "@gltf-transform/cli": "^4.3.0",
     "@playwright/test": "^1.59.1",
+    "cheerio": "^1.2.0",
     "concurrently": "^9.2.1",
+    "extract-zip": "^2.0.1",
     "sharp": "^0.34.5",
     "turbo": "^2.6.0",
     "vitest": "^4.1.3"

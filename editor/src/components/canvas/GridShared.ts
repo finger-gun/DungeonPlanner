@@ -27,8 +27,22 @@ export function shouldRenderRoomStreamPreview({
 
 export function shouldBlockRoomStrokeStart({
   latchedRoomPreview,
+  roomDraftActive,
 }: {
   latchedRoomPreview: { cells: GridCell[]; mode: 'paint' | 'erase' } | null
+  roomDraftActive: boolean
 }) {
-  return latchedRoomPreview !== null
+  return latchedRoomPreview !== null || roomDraftActive
+}
+
+export function shouldClearRoomDraftForFloorChange({
+  previousActiveFloorId,
+  activeFloorId,
+  roomDraftActive,
+}: {
+  previousActiveFloorId: string
+  activeFloorId: string
+  roomDraftActive: boolean
+}) {
+  return roomDraftActive && previousActiveFloorId !== activeFloorId
 }

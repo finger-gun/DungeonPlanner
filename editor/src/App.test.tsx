@@ -137,6 +137,8 @@ describe('App sidebar drawer', () => {
     expect(debugPanel).toHaveAttribute('data-sidebar-visible', 'true')
     expect(debugPanel).toHaveStyle({ right: '400px' })
     expect(debugPanel.className).toContain('bottom-4')
+    expect(debugPanel.className).toContain('max-h-[calc(100vh-2rem)]')
+    expect(debugPanel.className).toContain('overflow-y-auto')
 
     await user.click(screen.getByRole('button', { name: 'Hide sidebar' }))
 
@@ -168,6 +170,34 @@ describe('App sidebar drawer', () => {
     await user.click(screen.getByRole('button', { name: /visualize chunk bounds/i }))
 
     expect(useDungeonStore.getState().showChunkDebugOverlay).toBe(true)
+  })
+
+  it('toggles room floor mask visualization and hides deprecated los toggles', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+
+    fireEvent.keyDown(window, { key: 'F12', ctrlKey: true, shiftKey: true })
+
+    expect(useDungeonStore.getState().showRoomFloorMaskDebug).toBe(false)
+    expect(screen.queryByRole('button', { name: /render los rays/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /render los mask/i })).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: /visualize room floor mask/i }))
+
+    expect(useDungeonStore.getState().showRoomFloorMaskDebug).toBe(true)
+  })
+
+  it('toggles wall cutout visualization from the debug panel', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+
+    fireEvent.keyDown(window, { key: 'F12', ctrlKey: true, shiftKey: true })
+
+    expect(useDungeonStore.getState().showSplineWallCutoutDebug).toBe(false)
+
+    await user.click(screen.getByRole('button', { name: /visualize wall cutouts/i }))
+
+    expect(useDungeonStore.getState().showSplineWallCutoutDebug).toBe(true)
   })
 
   it('toggles x10 build animation slow mode from the debug panel', async () => {
@@ -249,8 +279,8 @@ describe('App sidebar drawer', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Resize' }))
     expect(screen.getByText(/show resize handles/i)).toBeInTheDocument()
 
-    fireEvent.click(screen.getByRole('button', { name: 'Inner walls' }))
-    expect(screen.getByText(/inner wall editing/i)).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Spline walls' }))
+    expect(screen.getByText(/spline wall editing/i)).toBeInTheDocument()
   })
 
   it('closes settings from play mode with the back button', async () => {

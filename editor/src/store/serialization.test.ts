@@ -5,6 +5,7 @@ import type { SerializableState } from './serialization'
 import type { FloorRecord } from './useDungeonStore'
 import { DEFAULT_POST_PROCESSING_SETTINGS } from '../postprocessing/tiltShiftMath'
 import { DEFAULT_OUTDOOR_TERRAIN_STYLE } from './outdoorTerrainStyles'
+import { createEmptySplineWallGraph } from './splineWallGraph'
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 
@@ -16,6 +17,7 @@ function emptyFloorSnapshot() {
   return {
     tool: 'select' as const,
     activeRoomSetId: 'dungeon',
+    activeWallMaterialSetId: 'kaykit-stone',
     selectedAssetIds: { floor: null, wall: null, prop: null, opening: null, player: null },
     selection: null,
     layers: { default: { id: 'default', name: 'Default', visible: true, locked: false } },
@@ -33,6 +35,7 @@ function emptyFloorSnapshot() {
     placedObjects: {},
     wallOpenings: {},
     innerWalls: {},
+    splineWallGraph: createEmptySplineWallGraph(),
     occupancy: {},
     nextRoomNumber: 1,
   }
@@ -167,6 +170,18 @@ describe('serializeDungeon / deserializeDungeon roundtrip', () => {
     expect(result!.rooms['room-1']?.roomSetId).toBe('cave')
   })
 
+  it('preserves the active wall material set selection', () => {
+    const state = baseState()
+    state.activeWallMaterialSetId = 'wedged-cobblestone'
+    state.floors!['floor-1'].snapshot.activeWallMaterialSetId = 'wedged-cobblestone'
+
+    const result = deserializeDungeon(serializeDungeon(state))
+
+    expect(result).not.toBeNull()
+    expect(result!.activeWallMaterialSetId).toBe('wedged-cobblestone')
+    expect(result!.floors?.['floor-1']?.snapshot.activeWallMaterialSetId).toBe('wedged-cobblestone')
+  })
+
   it('preserves blocked cells', () => {
     const state = baseState()
     state.floors!['floor-1'].snapshot.blockedCells['4:5'] = {
@@ -237,6 +252,66 @@ describe('serializeDungeon / deserializeDungeon roundtrip', () => {
     const wallSurfaceAssetIds = result!.wallSurfaceAssetIds ?? result!.floors?.['floor-1']?.snapshot?.wallSurfaceAssetIds
     expect(floorTileAssetIds?.['2:3']).toBe('dungeon.floor_floor_tile_small_broken_A')
     expect(wallSurfaceAssetIds?.['2:3:north']).toBe('dungeon.wall_wall')
+  })
+
+  it('preserves spline wall graphs across serialization', () => {
+    const state = baseState()
+    state.floors!['floor-1'].snapshot.splineWallGraph = {
+      nodes: {
+        'room-1:path:0:node:0': {
+          id: 'room-1:path:0:node:0',
+          position: [0, 0],
+          layerId: 'default',
+          roomId: 'room-1',
+          cornerMode: 'diagonal',
+          cornerAmount: 1,
+        },
+        'room-1:path:0:node:1': {
+          id: 'room-1:path:0:node:1',
+          position: [2, 0],
+          layerId: 'default',
+          roomId: 'room-1',
+        },
+      },
+      segments: {
+        'room-1:path:0:segment:0': {
+          id: 'room-1:path:0:segment:0',
+          pathId: 'room-1:path:0',
+          startNodeId: 'room-1:path:0:node:0',
+          endNodeId: 'room-1:path:0:node:1',
+          layerId: 'default',
+          roomId: 'room-1',
+          wallKey: '0:0:north',
+          wallHeight: null,
+          wallThickness: null,
+          cutouts: [],
+        },
+      },
+      paths: {
+        'room-1:path:0': {
+          id: 'room-1:path:0',
+          layerId: 'default',
+          roomId: 'room-1',
+          closed: false,
+          nodeIds: ['room-1:path:0:node:0', 'room-1:path:0:node:1'],
+          segmentIds: ['room-1:path:0:segment:0'],
+        },
+      },
+    }
+
+    const result = deserializeDungeon(serializeDungeon(state))
+
+    expect(result?.splineWallGraph.paths['room-1:path:0']).toMatchObject({
+      roomId: 'room-1',
+      nodeIds: ['room-1:path:0:node:0', 'room-1:path:0:node:1'],
+    })
+    expect(result?.floors?.['floor-1']?.snapshot.splineWallGraph.nodes['room-1:path:0:node:1']).toMatchObject({
+      position: [2, 0],
+    })
+    expect(result?.floors?.['floor-1']?.snapshot.splineWallGraph.nodes['room-1:path:0:node:0']).toMatchObject({
+      cornerMode: 'diagonal',
+      cornerAmount: 1,
+    })
   })
 
   it('preserves placed objects', () => {

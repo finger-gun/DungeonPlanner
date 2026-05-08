@@ -27,13 +27,18 @@ import { OutdoorGround } from './OutdoorGround'
 import { getEnvironmentLightingState } from './environmentLighting'
 import { createWebGpuRenderer } from '../../rendering/createWebGpuRenderer'
 import { FogOfWarProvider } from './fogOfWar'
-import { registerDebugCameraPoseReader, registerDebugWorldProjector } from './debugCameraBridge'
+import {
+  registerDebugCameraPoseReader,
+  registerDebugRenderRequester,
+  registerDebugWorldProjector,
+} from './debugCameraBridge'
 import {
   createEmptyBakedFloorLightField,
   getOrBuildBakedFloorLightField,
   pruneBakedFloorLightFieldCache,
   type BakedFloorLightField,
 } from '../../rendering/dungeonLightField'
+import { pruneSplineWallRenderCache } from '../../rendering/splineWallRenderCache'
 import { setBakedLightFlickerTime } from './bakedLightMaterial'
 import { useBakedFloorLightField } from '../../rendering/useBakedFloorLightField'
 import { PropProbeDebugOverlay } from './PropProbeDebugOverlay'
@@ -248,6 +253,7 @@ function BakedLightFlickerClock() {
 function DebugCameraBridgeBinder() {
   const camera = useThree((state) => state.camera)
   const gl = useThree((state) => state.gl)
+  const invalidate = useThree((state) => state.invalidate)
 
   useEffect(() => {
     if (!import.meta.env.DEV) {
@@ -275,12 +281,16 @@ function DebugCameraBridgeBinder() {
         y: rect.top + ((1 - vector.y) * 0.5 * rect.height),
       }
     })
+    registerDebugRenderRequester(() => {
+      invalidate()
+    })
 
     return () => {
       registerDebugCameraPoseReader(null)
+      registerDebugRenderRequester(null)
       registerDebugWorldProjector(null)
     }
-  }, [camera, gl])
+  }, [camera, gl, invalidate])
 
   return null
 }
@@ -307,6 +317,7 @@ function SceneOverviewContent() {
     wallOpenings,
     wallSurfaceProps,
     innerWalls,
+    splineWallGraph,
     placedObjects,
     floorTileAssetIds,
     wallSurfaceAssetIds,
@@ -320,6 +331,7 @@ function SceneOverviewContent() {
     wallOpenings: state.wallOpenings,
     wallSurfaceProps: state.wallSurfaceProps,
     innerWalls: state.innerWalls,
+    splineWallGraph: state.splineWallGraph,
     placedObjects: state.placedObjects,
     floorTileAssetIds: state.floorTileAssetIds,
     wallSurfaceAssetIds: state.wallSurfaceAssetIds,
@@ -347,6 +359,7 @@ function SceneOverviewContent() {
             rooms,
             wallOpenings,
             innerWalls,
+            splineWallGraph,
             placedObjects,
             floorTileAssetIds,
             wallSurfaceAssetIds,
@@ -374,9 +387,10 @@ function SceneOverviewContent() {
           paintedCells: snapshot.paintedCells,
           layers: snapshot.layers,
           rooms: snapshot.rooms,
-          wallOpenings: snapshot.wallOpenings,
-          innerWalls: snapshot.innerWalls,
-          placedObjects: snapshot.placedObjects,
+            wallOpenings: snapshot.wallOpenings,
+            innerWalls: snapshot.innerWalls,
+            splineWallGraph: snapshot.splineWallGraph,
+            placedObjects: snapshot.placedObjects,
           floorTileAssetIds: snapshot.floorTileAssetIds,
           wallSurfaceAssetIds: snapshot.wallSurfaceAssetIds,
           wallSurfaceProps: snapshot.wallSurfaceProps,
@@ -410,9 +424,14 @@ function SceneOverviewContent() {
     rooms,
     wallOpenings,
     innerWalls,
+    splineWallGraph,
     wallSurfaceAssetIds,
     wallSurfaceProps,
   ])
+
+  useEffect(() => {
+    pruneSplineWallRenderCache(floorEntries.map((entry) => entry.id))
+  }, [floorEntries])
 
   return (
     <>
@@ -464,6 +483,7 @@ function FloorContent({ startY = 0 }: { startY?: number }) {
     wallOpenings,
     wallSurfaceProps,
     innerWalls,
+    splineWallGraph,
     floorTileAssetIds,
     wallSurfaceAssetIds,
     globalFloorAssetId,
@@ -480,6 +500,7 @@ function FloorContent({ startY = 0 }: { startY?: number }) {
     wallOpenings: state.wallOpenings,
     wallSurfaceProps: state.wallSurfaceProps,
     innerWalls: state.innerWalls,
+    splineWallGraph: state.splineWallGraph,
     floorTileAssetIds: state.floorTileAssetIds,
     wallSurfaceAssetIds: state.wallSurfaceAssetIds,
     globalFloorAssetId: state.selectedAssetIds.floor,
@@ -509,6 +530,7 @@ function FloorContent({ startY = 0 }: { startY?: number }) {
         rooms,
         wallOpenings,
         innerWalls,
+        splineWallGraph,
         placedObjects,
         floorTileAssetIds,
         wallSurfaceAssetIds,
@@ -528,6 +550,7 @@ function FloorContent({ startY = 0 }: { startY?: number }) {
       layers,
       paintedCells,
       placedObjects,
+      splineWallGraph,
       rooms,
       wallOpenings,
       wallSurfaceAssetIds,
@@ -545,6 +568,10 @@ function FloorContent({ startY = 0 }: { startY?: number }) {
     deferPreparation: tool !== 'play',
     renderer: gl,
   })
+
+  useEffect(() => {
+    pruneSplineWallRenderCache([activeFloorId])
+  }, [activeFloorId])
 
   useEffect(() => {
     invalidate()
@@ -706,8 +733,12 @@ function FloorContent({ startY = 0 }: { startY?: number }) {
           : occupantId
       const withinMovementRange = movementRangeRef.current?.reachableCellKeys.has(targetKey) ?? true
 
-      setDragState((dragging) => dragging
-        ? updatePlayDragState(
+      setDragState((dragging) => {
+        if (!dragging) {
+          return dragging
+        }
+
+        const nextDragState = updatePlayDragState(
           dragging,
           nextPoint,
           (
@@ -718,7 +749,9 @@ function FloorContent({ startY = 0 }: { startY?: number }) {
           blockingOccupantId,
           mapMode === 'outdoor' ? outdoorTerrainHeights : undefined,
         )
-        : dragging)
+        dragStateRef.current = nextDragState
+        return nextDragState
+      })
       invalidate()
   }, [blockedCells, camera, getDragPointerPoint, gl, invalidate, mapMode, occupancy, outdoorTerrainHeights, paintedCells, placedObjects])
 

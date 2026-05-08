@@ -4,6 +4,7 @@ import {
   type BakedFloorLightFieldBuildInput,
   type ResolvedDungeonLightSource,
 } from '../../rendering/dungeonLightField'
+import type { SplineWallGraph } from '../splineWallGraph'
 import type {
   DungeonObjectRecord,
   InnerWallRecord,
@@ -29,6 +30,7 @@ export type DungeonRoomData = {
   floorTileAssetIds: Record<string, string>
   wallSurfaceAssetIds: Record<string, string>
   wallSurfaceProps: Record<string, Record<string, unknown>>
+  splineWallGraph?: SplineWallGraph
   globalFloorAssetId: string | null
   globalWallAssetId: string | null
 }
@@ -48,7 +50,12 @@ export type FloorDerivedBundle = {
 
 export type FloorSceneDerivedBundle = Pick<
   FloorDerivedBundle,
-  'data' | 'topLevelObjects' | 'childrenByParent' | 'bakedLightBuildInput'
+  | 'data'
+  | 'visiblePaintedCellRecords'
+  | 'visibleOpenings'
+  | 'topLevelObjects'
+  | 'childrenByParent'
+  | 'bakedLightBuildInput'
 >
 
 export function buildVisiblePaintedCells({
@@ -169,12 +176,15 @@ export function buildFloorDerivedBundle(data: DungeonRoomData): FloorDerivedBund
 
 export function buildFloorSceneDerivedBundle(data: DungeonRoomData): FloorSceneDerivedBundle {
   const { visiblePaintedCells, visiblePaintedCellRecords } = buildVisiblePaintedCells(data)
+  const visibleOpenings = buildVisibleOpenings(data)
   const visibleObjects = buildVisibleObjects(data)
   const staticLightSources = buildStaticLightSources(visibleObjects)
   const { topLevelObjects, childrenByParent } = buildObjectHierarchy(visibleObjects)
 
   return {
     data,
+    visiblePaintedCellRecords,
+    visibleOpenings,
     topLevelObjects,
     childrenByParent,
     bakedLightBuildInput: buildBakedLightBuildInput(

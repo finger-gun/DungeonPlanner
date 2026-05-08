@@ -19,6 +19,10 @@ export function getContentPackRoomSets(contentPackId: string) {
   return getContentPackById(contentPackId)?.roomSets ?? []
 }
 
+export function getContentPackWallMaterialSets(contentPackId: string) {
+  return getContentPackById(contentPackId)?.wallMaterialSets ?? []
+}
+
 export function getContentPackRoomSetById(contentPackId: string, roomSetId: string | null | undefined) {
   if (!roomSetId) {
     return null
@@ -27,8 +31,24 @@ export function getContentPackRoomSetById(contentPackId: string, roomSetId: stri
   return getContentPackRoomSets(contentPackId).find((roomSet) => roomSet.id === roomSetId) ?? null
 }
 
+export function getContentPackWallMaterialSetById(
+  contentPackId: string,
+  wallMaterialSetId: string | null | undefined,
+) {
+  if (!wallMaterialSetId) {
+    return null
+  }
+
+  return getContentPackWallMaterialSets(contentPackId)
+    .find((wallMaterialSet) => wallMaterialSet.id === wallMaterialSetId) ?? null
+}
+
 export function getDefaultContentPackRoomSetId(contentPackId: string) {
   return getContentPackRoomSets(contentPackId)[0]?.id ?? null
+}
+
+export function getDefaultContentPackWallMaterialSetId(contentPackId: string) {
+  return getContentPackWallMaterialSets(contentPackId)[0]?.id ?? null
 }
 
 export function getContentPackAssetById(id: string) {

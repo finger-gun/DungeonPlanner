@@ -1,4 +1,5 @@
 import { SquareMousePointer, Brush, VectorSquare, BrickWall } from 'lucide-react'
+import { WALLS_MODE_LABEL } from '../../roomWallEditing'
 import { useDungeonStore, type RoomEditMode, type RoomPaintMode } from '../../store/useDungeonStore'
 
 type RoomContextTool =
@@ -37,7 +38,7 @@ const ROOM_TOOLS: RoomContextTool[] = [
   {
     id: 'walls' as const,
     type: 'edit-mode',
-    label: 'Inner walls',
+    label: WALLS_MODE_LABEL,
     Icon: BrickWall,
   },
 ]

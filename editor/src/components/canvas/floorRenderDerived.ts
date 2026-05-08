@@ -31,6 +31,7 @@ export type RoomWallInstance = {
   key: string
   assetId: string | null
   segmentKeys: string[]
+  source: 'boundary' | 'inner'
   position: [number, number, number]
   rotation: [number, number, number]
   bakedLightDirection?: [number, number, number]
@@ -52,6 +53,7 @@ export type FloorReceiverCellInput = {
 
 type BoundaryWallSegmentWithAsset = BoundaryWallSegment & {
   assetId: string | null
+  source: 'boundary' | 'inner'
 }
 
 const ROOM_SET_CONTENT_PACK_ID = 'dungeon'
@@ -416,7 +418,7 @@ function deriveWallInstances(
       segment.direction === 'north' || segment.direction === 'south'
         ? `${segment.direction}:${zPart}`
         : `${segment.direction}:${xPart}`
-    const groupKey = `${segment.assetId ?? 'none'}|${lineKey}`
+    const groupKey = `${segment.source}|${segment.assetId ?? 'none'}|${lineKey}`
     if (!groups.has(groupKey)) {
       groups.set(groupKey, [])
     }
@@ -454,6 +456,7 @@ function deriveWallInstances(
             key: segmentKeys.join('|'),
             assetId: run[offset]?.assetId ?? null,
             segmentKeys,
+            source: run[offset]?.source ?? 'boundary',
             position: transform.position,
             rotation: transform.rotation,
             bakedLightDirection: interiorDirections.primary,
@@ -543,6 +546,7 @@ function collectRenderableWallSegments(
 ) {
   const boundarySegments = collectBoundaryWallSegments(paintedCells, { suppressedWallKeys }).map((segment) => ({
     ...segment,
+    source: 'boundary' as const,
     assetId:
       wallSurfaceAssetIds[segment.key] ??
       getInheritedWallAssetIdForWallKey(segment.key, paintedCells, rooms, globalWallAssetId),
@@ -566,6 +570,7 @@ function collectRenderableWallSegments(
       key: wallKey,
       direction,
       index,
+      source: 'inner' as const,
       assetId: getInheritedWallAssetIdForRoom(room, globalWallAssetId),
     }]
   })

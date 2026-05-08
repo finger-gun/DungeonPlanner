@@ -19,6 +19,8 @@ type ViewActionKeys =
   | 'setShowGrid'
   | 'setShowLosDebugMask'
   | 'setShowLosDebugRays'
+  | 'setShowRoomFloorMaskDebug'
+  | 'setShowSplineWallCutoutDebug'
   | 'setShowLensFocusDebugPoint'
   | 'setShowChunkDebugOverlay'
   | 'setShowProjectionDebugMesh'
@@ -160,6 +162,12 @@ export function createDungeonStoreViewActions({
     },
     setShowLosDebugRays: (show) => {
       set((state) => ({ ...state, showLosDebugRays: show }))
+    },
+    setShowRoomFloorMaskDebug: (show) => {
+      set((state) => ({ ...state, showRoomFloorMaskDebug: show }))
+    },
+    setShowSplineWallCutoutDebug: (show) => {
+      set((state) => ({ ...state, showSplineWallCutoutDebug: show }))
     },
     setShowLensFocusDebugPoint: (show) => {
       set((state) => ({ ...state, showLensFocusDebugPoint: show }))

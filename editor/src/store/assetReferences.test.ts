@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { getContentPackAssetById, getDefaultAssetIdByCategory } from '../content-packs/registry'
+import { createEmptySplineWallGraph } from './splineWallGraph'
 import type { DungeonObjectRecord } from './useDungeonStore'
 import {
   sanitizePersistedAssetReferences,
@@ -11,6 +12,7 @@ function createSnapshot() {
   return {
     tool: 'select' as const,
     activeRoomSetId: 'dungeon',
+    activeWallMaterialSetId: 'kaykit-stone',
     selectedAssetIds: {
       floor: 'missing.floor',
       wall: 'missing.wall',
@@ -51,6 +53,7 @@ function createSnapshot() {
       },
     },
     innerWalls: {},
+    splineWallGraph: createEmptySplineWallGraph(),
     occupancy: {},
     nextRoomNumber: 1,
   }

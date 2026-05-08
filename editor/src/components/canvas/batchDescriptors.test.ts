@@ -8,9 +8,19 @@ import {
 import type { StaticTileEntry } from './BatchedTileEntries'
 import { buildChunkEntrySignature } from './BatchedTileEntriesShared'
 import * as tileAssetResolution from './tileAssetResolution'
+import type { RoomFloorMaskRuntime } from './roomFloorMaskRuntime'
 import type { BakedFloorLightField } from '../../rendering/dungeonLightField'
 
 describe('buildBatchDescriptors', () => {
+  const roomFloorMaskRuntime: RoomFloorMaskRuntime = {
+    texture: new THREE.Texture(),
+    minWorldX: -1,
+    minWorldZ: -1,
+    sizeWorldX: 2,
+    sizeWorldZ: 2,
+    signature: 'room-floor-mask:test',
+  }
+
   beforeEach(() => {
     vi.clearAllMocks()
   })
@@ -190,6 +200,85 @@ describe('buildBatchDescriptors', () => {
     expect(resultWithFog.batched[0]!.usesGpuFog).toBe(true)
     expect(resultWithoutFog.batched[0]!.usesGpuFog).toBe(false)
     expect(resultWithFog.batched[0]!.bucketKey).not.toBe(resultWithoutFog.batched[0]!.bucketKey)
+  })
+
+  it('separates masked and unmasked floor batches', () => {
+    const resolveSpy = vi.spyOn(tileAssetResolution, 'resolveBatchedTileAsset')
+    resolveSpy.mockImplementation(() => ({
+      assetUrl: '/assets/floor.glb',
+      transformKey: 'default',
+      receiveShadow: true,
+    }))
+
+    const entry: StaticTileEntry = {
+      key: 'floor:0:0',
+      assetId: 'floor-tile',
+      position: [0, 0, 0],
+      rotation: [0, 0, 0],
+      variant: 'floor',
+      visibility: 'visible',
+      variantKey: '0:0',
+    }
+
+    const masked = buildBatchDescriptors([entry], {
+      floorId: 'floor-1',
+      fogOfWarEnabled: false,
+      useLineOfSightPostMask: false,
+      lightFlickerEnabled: false,
+      roomFloorMaskRuntime,
+    })
+    const unmasked = buildBatchDescriptors([entry], {
+      floorId: 'floor-1',
+      fogOfWarEnabled: false,
+      useLineOfSightPostMask: false,
+      lightFlickerEnabled: false,
+      roomFloorMaskRuntime: null,
+    })
+
+    expect(masked.batched[0]?.useRoomFloorMask).toBe(true)
+    expect(masked.batched[0]?.bucketKey).toContain('room-floor-mask')
+    expect(unmasked.batched[0]?.bucketKey).toContain('no-room-floor-mask')
+    expect(masked.batched[0]?.bucketKey).not.toBe(unmasked.batched[0]?.bucketKey)
+  })
+
+  it('changes wall render signatures when dynamic point lights toggle', () => {
+    const resolveSpy = vi.spyOn(tileAssetResolution, 'resolveBatchedTileAsset')
+    resolveSpy.mockImplementation(() => ({
+      assetUrl: '/assets/wall.glb',
+      transformKey: 'default',
+      receiveShadow: true,
+    }))
+
+    const entry: StaticTileEntry = {
+      key: 'wall:0:0:north',
+      assetId: 'wall-tile',
+      position: [0, 0, 0],
+      rotation: [0, 0, 0],
+      variant: 'wall',
+      visibility: 'visible',
+      variantKey: '0:0:north',
+    }
+
+    const unlit = buildBatchDescriptors([entry], {
+      floorId: 'floor-1',
+      fogOfWarEnabled: false,
+      useLineOfSightPostMask: false,
+      lightFlickerEnabled: false,
+      roomFloorMaskRuntime: null,
+      dynamicPointLightsActive: false,
+    })
+    const lit = buildBatchDescriptors([entry], {
+      floorId: 'floor-1',
+      fogOfWarEnabled: false,
+      useLineOfSightPostMask: false,
+      lightFlickerEnabled: false,
+      roomFloorMaskRuntime: null,
+      dynamicPointLightsActive: true,
+    })
+
+    expect(unlit.batched[0]?.renderSignature).toContain('dynamic-point-lights:off')
+    expect(lit.batched[0]?.renderSignature).toContain('dynamic-point-lights:on')
+    expect(unlit.batched[0]?.renderSignature).not.toBe(lit.batched[0]?.renderSignature)
   })
 
   it('falls back prop variants so they can use runtime prop lighting', () => {

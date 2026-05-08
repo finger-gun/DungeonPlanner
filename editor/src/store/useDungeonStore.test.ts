@@ -1,5 +1,11 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import { getContentPackAssetById } from '../content-packs/registry'
+import {
+  buildRoomDraftCells,
+  buildRoomDraftSplineNodes,
+  createRoomDraftFromStroke,
+  setRoomDraftCorner,
+} from './roomDraft'
 import { useDungeonStore } from './useDungeonStore'
 import { getOpeningSegments } from './openingSegments'
 
@@ -49,6 +55,274 @@ describe('useDungeonStore history', () => {
     state.redo()
     state = useDungeonStore.getState()
     expect(Object.keys(state.paintedCells)).toHaveLength(2)
+  })
+
+  it('seeds spline wall graphs from painted rooms and supports undoable node edits', () => {
+    const state = useDungeonStore.getState()
+    state.paintCells([
+      [0, 0],
+      [1, 0],
+    ])
+
+    expect(state.seedSplineWallGraphFromPaintedCells()).toBe(true)
+
+    let nextState = useDungeonStore.getState()
+    expect(Object.keys(nextState.splineWallGraph.paths).length).toBeGreaterThan(0)
+    const path = Object.values(nextState.splineWallGraph.paths)[0]
+    expect(path).toBeDefined()
+    const nodeId = path!.nodeIds[0]!
+    const originalPosition = [...nextState.splineWallGraph.nodes[nodeId]!.position] as [number, number]
+    const movedPosition: [number, number] = [originalPosition[0], originalPosition[1] - 0.5]
+
+    expect(nextState.moveSplineWallNode(nodeId, movedPosition)).toBe(true)
+    nextState = useDungeonStore.getState()
+    expect(nextState.splineWallGraph.nodes[nodeId]?.position).toEqual(movedPosition)
+
+    nextState.undo()
+    nextState = useDungeonStore.getState()
+    expect(nextState.splineWallGraph.nodes[nodeId]?.position).toEqual(originalPosition)
+
+    nextState.redo()
+    nextState = useDungeonStore.getState()
+    expect(nextState.splineWallGraph.nodes[nodeId]?.position).toEqual(movedPosition)
+  })
+
+  it('commits draft rooms atomically with spline corner metadata and undo support', () => {
+    const draft = setRoomDraftCorner(createRoomDraftFromStroke([0, 0], [1, 1]), 'nw', 'diagonal', 1)
+    const roomId = useDungeonStore.getState().commitDraftRoom({
+      cells: buildRoomDraftCells(draft),
+      splineNodes: buildRoomDraftSplineNodes(draft),
+    })
+
+    expect(roomId).toBeTruthy()
+
+    let state = useDungeonStore.getState()
+    expect(Object.keys(state.paintedCells)).toHaveLength(4)
+    expect(state.splineWallGraph.paths[`${roomId}:path:0`]).toBeDefined()
+    expect(state.splineWallGraph.nodes[`${roomId}:path:0:node:0`]).toMatchObject({
+      cornerMode: 'diagonal',
+      cornerAmount: 1,
+    })
+
+    state.undo()
+    state = useDungeonStore.getState()
+    expect(Object.keys(state.paintedCells)).toHaveLength(0)
+    expect(state.splineWallGraph.paths[`${roomId}:path:0`]).toBeUndefined()
+
+    state.redo()
+    state = useDungeonStore.getState()
+    expect(Object.keys(state.paintedCells)).toHaveLength(4)
+    expect(state.splineWallGraph.paths[`${roomId}:path:0`]).toBeDefined()
+  })
+
+  it('splits spline wall segments into new nodes and supports undo/redo', () => {
+    const state = useDungeonStore.getState()
+    state.paintCells([
+      [0, 0],
+      [1, 0],
+    ])
+    expect(state.seedSplineWallGraphFromPaintedCells()).toBe(true)
+
+    let nextState = useDungeonStore.getState()
+    const path = Object.values(nextState.splineWallGraph.paths)[0]
+    const originalNodeCount = Object.keys(nextState.splineWallGraph.nodes).length
+    const originalSegmentCount = Object.keys(nextState.splineWallGraph.segments).length
+    const segmentId = path!.segmentIds[0]!
+
+    expect(nextState.splitSplineWallSegment(segmentId)).toBe(true)
+    nextState = useDungeonStore.getState()
+
+    expect(Object.keys(nextState.splineWallGraph.nodes)).toHaveLength(originalNodeCount + 1)
+    expect(Object.keys(nextState.splineWallGraph.segments)).toHaveLength(originalSegmentCount + 1)
+    expect(nextState.splineWallGraph.paths[path!.id]?.segmentIds).toHaveLength(path!.segmentIds.length + 1)
+
+    nextState.undo()
+    nextState = useDungeonStore.getState()
+    expect(Object.keys(nextState.splineWallGraph.nodes)).toHaveLength(originalNodeCount)
+    expect(Object.keys(nextState.splineWallGraph.segments)).toHaveLength(originalSegmentCount)
+
+    nextState.redo()
+    nextState = useDungeonStore.getState()
+    expect(Object.keys(nextState.splineWallGraph.nodes)).toHaveLength(originalNodeCount + 1)
+    expect(Object.keys(nextState.splineWallGraph.segments)).toHaveLength(originalSegmentCount + 1)
+  })
+
+  it('syncs wall openings into spline wall cutouts when seeding the graph', () => {
+    const state = useDungeonStore.getState()
+    state.paintCells([[0, 0]])
+    const openingId = state.placeOpening({
+      assetId: null,
+      wallKey: '0:0:north',
+      width: 1,
+      flipped: false,
+    })
+
+    expect(openingId).toBeTruthy()
+    expect(state.seedSplineWallGraphFromPaintedCells()).toBe(true)
+
+    const nextState = useDungeonStore.getState()
+    const northSegments = Object.values(nextState.splineWallGraph.segments)
+      .filter((segment) => segment.wallKey === '0:0:north')
+    expect(northSegments).toHaveLength(1)
+    expect(northSegments[0]?.cutouts).toMatchObject([{
+      openingId,
+      kind: 'passage',
+      startRatio: 0,
+      endRatio: 1,
+      bottomHeight: 0,
+      topHeight: null,
+    }])
+  })
+
+  it('auto-seeds the spline wall graph when placing a custom door opening on painted walls', () => {
+    const state = useDungeonStore.getState()
+    state.paintCells([[0, 0]])
+    const openingId = state.placeOpening({
+      assetId: 'core.opening_door_custom',
+      wallKey: '0:0:north',
+      width: 1,
+      flipped: false,
+    })
+
+    expect(openingId).toBeTruthy()
+
+    const nextState = useDungeonStore.getState()
+    expect(Object.keys(nextState.splineWallGraph.paths)).toHaveLength(1)
+    const northSegments = Object.values(nextState.splineWallGraph.segments)
+      .filter((segment) => segment.wallKey === '0:0:north')
+    expect(northSegments).toHaveLength(1)
+    expect(northSegments[0]?.cutouts).toMatchObject([{
+      openingId,
+      kind: 'door',
+      startRatio: 0.24,
+      endRatio: 0.76,
+      bottomHeight: 0,
+      topHeight: 1.42,
+    }])
+  })
+
+  it('syncs custom door cutouts onto graph-authored wall segments without wall keys', () => {
+    const state = useDungeonStore.getState()
+    state.paintCells([
+      [0, 0],
+      [1, 0],
+    ])
+
+    useDungeonStore.setState((current) => ({
+      ...current,
+        splineWallGraph: {
+          nodes: {
+            'node-a': { id: 'node-a', position: [0, 1], layerId: 'default', roomId: 'room-1' },
+            'node-b': { id: 'node-b', position: [2, 1], layerId: 'default', roomId: 'room-1' },
+          },
+        segments: {
+          'segment-a': {
+            id: 'segment-a',
+            pathId: 'path-a',
+            startNodeId: 'node-a',
+            endNodeId: 'node-b',
+            layerId: 'default',
+            roomId: 'room-1',
+            wallKey: null,
+            wallHeight: null,
+            wallThickness: null,
+            cutouts: [],
+          },
+        },
+        paths: {
+          'path-a': {
+            id: 'path-a',
+            layerId: 'default',
+            roomId: 'room-1',
+            closed: false,
+            nodeIds: ['node-a', 'node-b'],
+            segmentIds: ['segment-a'],
+          },
+        },
+      },
+    }))
+
+    const openingId = useDungeonStore.getState().placeOpening({
+      assetId: 'core.opening_door_custom',
+      wallKey: '0:0:north',
+      width: 1,
+      flipped: false,
+    })
+
+    expect(openingId).toBeTruthy()
+
+    const nextState = useDungeonStore.getState()
+    expect(nextState.splineWallGraph.segments['segment-a']?.cutouts).toMatchObject([{
+      openingId,
+      kind: 'door',
+      startRatio: 0.12,
+      endRatio: 0.38,
+      bottomHeight: 0,
+      topHeight: 1.42,
+    }])
+  })
+
+  it('preserves opening cutouts across spline segment splits', () => {
+    const state = useDungeonStore.getState()
+    state.paintCells([[0, 0]])
+    const openingId = state.placeOpening({
+      assetId: null,
+      wallKey: '0:0:north',
+      width: 1,
+      flipped: false,
+    })
+
+    expect(state.seedSplineWallGraphFromPaintedCells()).toBe(true)
+
+    let nextState = useDungeonStore.getState()
+    const northSegment = Object.values(nextState.splineWallGraph.segments)
+      .find((segment) => segment.wallKey === '0:0:north')
+    expect(northSegment).toBeDefined()
+
+    expect(nextState.splitSplineWallSegment(northSegment!.id)).toBe(true)
+    nextState = useDungeonStore.getState()
+
+    const splitNorthSegments = Object.values(nextState.splineWallGraph.segments)
+      .filter((segment) => segment.wallKey === '0:0:north')
+    expect(splitNorthSegments).toHaveLength(2)
+    expect(splitNorthSegments.every((segment) =>
+      segment.cutouts.some((cutout) => cutout.openingId === openingId && cutout.startRatio === 0 && cutout.endRatio === 1),
+    )).toBe(true)
+  })
+
+  it('removes spline wall nodes and supports undo/redo', () => {
+    const state = useDungeonStore.getState()
+    state.paintCells([
+      [0, 0],
+      [1, 0],
+    ])
+    expect(state.seedSplineWallGraphFromPaintedCells()).toBe(true)
+
+    let nextState = useDungeonStore.getState()
+    const path = Object.values(nextState.splineWallGraph.paths)[0]
+    const segmentId = path!.segmentIds[0]!
+    expect(nextState.splitSplineWallSegment(segmentId)).toBe(true)
+
+    nextState = useDungeonStore.getState()
+    const removableNodeId = Object.keys(nextState.splineWallGraph.nodes).find((nodeId) => nodeId.includes(':node:split:'))
+    expect(removableNodeId).toBeTruthy()
+    const splitNodeCount = Object.keys(nextState.splineWallGraph.nodes).length
+    const splitSegmentCount = Object.keys(nextState.splineWallGraph.segments).length
+
+    expect(nextState.removeSplineWallNode(removableNodeId!)).toBe(true)
+    nextState = useDungeonStore.getState()
+    expect(Object.keys(nextState.splineWallGraph.nodes)).toHaveLength(splitNodeCount - 1)
+    expect(Object.keys(nextState.splineWallGraph.segments)).toHaveLength(splitSegmentCount - 1)
+
+    nextState.undo()
+    nextState = useDungeonStore.getState()
+    expect(Object.keys(nextState.splineWallGraph.nodes)).toHaveLength(splitNodeCount)
+    expect(Object.keys(nextState.splineWallGraph.segments)).toHaveLength(splitSegmentCount)
+
+    nextState.redo()
+    nextState = useDungeonStore.getState()
+    expect(Object.keys(nextState.splineWallGraph.nodes)).toHaveLength(splitNodeCount - 1)
+    expect(Object.keys(nextState.splineWallGraph.segments)).toHaveLength(splitSegmentCount - 1)
   })
 
   it('assigns the active room set to newly created rooms', () => {
@@ -993,6 +1267,16 @@ describe('useDungeonStore history', () => {
 
     useDungeonStore.getState().setShowPropProbeDebug(false)
     expect(useDungeonStore.getState().showPropProbeDebug).toBe(false)
+  })
+
+  it('toggles the spline wall cutout debug visibility flag', () => {
+    expect(useDungeonStore.getState().showSplineWallCutoutDebug).toBe(false)
+
+    useDungeonStore.getState().setShowSplineWallCutoutDebug(true)
+    expect(useDungeonStore.getState().showSplineWallCutoutDebug).toBe(true)
+
+    useDungeonStore.getState().setShowSplineWallCutoutDebug(false)
+    expect(useDungeonStore.getState().showSplineWallCutoutDebug).toBe(false)
   })
 
   it('toggles the build performance tracing debug flag', () => {

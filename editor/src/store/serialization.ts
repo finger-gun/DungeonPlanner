@@ -8,6 +8,7 @@ import {
   getContentPackAssetById,
   getDefaultAssetIdByCategory,
   getDefaultContentPackRoomSetId,
+  getDefaultContentPackWallMaterialSetId,
 } from '../content-packs/registry'
 import { sanitizePersistedAssetReferences } from './assetReferences'
 import {
@@ -39,10 +40,17 @@ import {
   DEFAULT_OUTDOOR_TERRAIN_STYLE,
   OUTDOOR_TERRAIN_STYLES,
 } from './outdoorTerrainStyles'
+import {
+  createEmptySplineWallGraph,
+  syncSplineWallGraphCutoutsFromOpenings,
+  type SplineWallGraph,
+} from './splineWallGraph'
 
-const CURRENT_VERSION = 20
+const CURRENT_VERSION = 22
 const ROOM_SET_CONTENT_PACK_ID = 'dungeon'
 const FALLBACK_ROOM_SET_ID = 'dungeon'
+const WALL_MATERIAL_SET_CONTENT_PACK_ID = 'dungeon'
+const FALLBACK_WALL_MATERIAL_SET_ID = 'kaykit-stone'
 
 // ── Serialized shapes (compact, no redundant keys) ────────────────────────────
 
@@ -74,6 +82,48 @@ type SerializedOpening = {
   objectProps?: Record<string, unknown>
   layerId: string
   source?: 'manual' | 'generated'
+}
+
+type SerializedSplineWallGraph = {
+  nodes: Array<{
+    id: string
+    x: number
+    z: number
+    layerId: string
+    roomId: string | null
+    cornerMode?: 'square' | 'rounded' | 'diagonal' | null
+    cornerAmount?: number | null
+  }>
+  segments: Array<{
+    id: string
+    pathId: string
+    startNodeId: string
+    endNodeId: string
+    layerId: string
+    roomId: string | null
+    wallKey: string | null
+    wallHeight: number | null
+    wallThickness: number | null
+    cutouts: Array<{
+      id: string
+      kind: 'door' | 'passage' | 'window'
+      startRatio: number
+      endRatio: number
+      bottomHeight?: number | null
+      topHeight?: number | null
+      assetId: string | null
+      openingId: string | null
+      objectProps: Record<string, unknown>
+    }>
+  }>
+  paths: Array<{
+    id: string
+    layerId: string
+    roomId: string | null
+    closed: boolean
+    nodeIds: string[]
+    segmentIds: string[]
+  }>
 }
 
 type SerializedFloor = {
@@ -108,8 +158,10 @@ type SerializedFloor = {
   objects: SerializedObject[]
   openings: SerializedOpening[]
   innerWalls?: string[]
+  splineWallGraph?: SerializedSplineWallGraph
   nextRoomNumber: number
   activeRoomSetId?: string
+  activeWallMaterialSetId?: string
 }
 
 export type DungeonFile = {
@@ -176,9 +228,11 @@ export type SerializableState = {
   placedObjects: Record<string, DungeonObjectRecord>
   wallOpenings: Record<string, OpeningRecord>
   innerWalls: Record<string, InnerWallRecord>
+  splineWallGraph: SplineWallGraph
   occupancy: Record<string, string>
   nextRoomNumber: number
   activeRoomSetId?: string
+  activeWallMaterialSetId?: string
   // Multi-floor data
   floors?: Record<string, FloorRecord>
   floorOrder?: string[]
@@ -186,6 +240,50 @@ export type SerializableState = {
 }
 
 // ── Helpers: floor snapshot → serialized floor ────────────────────────────────
+
+function serializeSplineWallGraph(graph: SplineWallGraph): SerializedSplineWallGraph {
+  return {
+    nodes: Object.values(graph.nodes).map((node) => ({
+      id: node.id,
+      x: node.position[0],
+      z: node.position[1],
+      layerId: node.layerId,
+      roomId: node.roomId,
+      cornerMode: node.cornerMode ?? null,
+      cornerAmount: node.cornerAmount ?? null,
+    })),
+    segments: Object.values(graph.segments).map((segment) => ({
+      id: segment.id,
+      pathId: segment.pathId,
+      startNodeId: segment.startNodeId,
+      endNodeId: segment.endNodeId,
+      layerId: segment.layerId,
+      roomId: segment.roomId,
+      wallKey: segment.wallKey,
+      wallHeight: segment.wallHeight,
+      wallThickness: segment.wallThickness,
+      cutouts: segment.cutouts.map((cutout) => ({
+        id: cutout.id,
+        kind: cutout.kind,
+        startRatio: cutout.startRatio,
+        endRatio: cutout.endRatio,
+        bottomHeight: cutout.bottomHeight,
+        topHeight: cutout.topHeight,
+        assetId: cutout.assetId,
+        openingId: cutout.openingId,
+        objectProps: { ...cutout.objectProps },
+      })),
+    })),
+    paths: Object.values(graph.paths).map((path) => ({
+      id: path.id,
+      layerId: path.layerId,
+      roomId: path.roomId,
+      closed: path.closed,
+      nodeIds: [...path.nodeIds],
+      segmentIds: [...path.segmentIds],
+    })),
+  }
+}
 
 function serializeFloorData(
   id: string,
@@ -207,8 +305,10 @@ function serializeFloorData(
     placedObjects: Record<string, DungeonObjectRecord>
     wallOpenings: Record<string, OpeningRecord>
     innerWalls: Record<string, InnerWallRecord>
+    splineWallGraph: SplineWallGraph
     nextRoomNumber: number
     activeRoomSetId?: string
+    activeWallMaterialSetId?: string
   },
 ): SerializedFloor {
   return {
@@ -249,8 +349,10 @@ function serializeFloorData(
       source: o.source ?? 'manual',
     })),
     innerWalls: Object.values(snapshot.innerWalls).map((innerWall) => innerWall.wallKey),
+    splineWallGraph: serializeSplineWallGraph(snapshot.splineWallGraph),
     nextRoomNumber: snapshot.nextRoomNumber,
     activeRoomSetId: snapshot.activeRoomSetId,
+    activeWallMaterialSetId: snapshot.activeWallMaterialSetId,
   }
 }
 
@@ -283,8 +385,10 @@ export function serializeDungeon(state: SerializableState): string {
       placedObjects: state.placedObjects,
       wallOpenings: state.wallOpenings,
        innerWalls: state.innerWalls,
+       splineWallGraph: state.splineWallGraph,
        nextRoomNumber: state.nextRoomNumber,
        activeRoomSetId: state.activeRoomSetId,
+       activeWallMaterialSetId: state.activeWallMaterialSetId,
      }))
   }
 
@@ -581,10 +685,117 @@ export function deserializeDungeon(json: string): SerializableState | null {
     }
   }
 
+  if (version < 21 && Array.isArray((raw as Record<string, unknown>).floors)) {
+    const r = raw as Record<string, unknown>
+    raw = {
+      ...r,
+      floors: (r.floors as unknown[]).map((floor) =>
+        isObject(floor) && !isObject(floor.splineWallGraph)
+          ? { ...floor, splineWallGraph: serializeSplineWallGraph(createEmptySplineWallGraph()) }
+          : floor,
+      ),
+    }
+  }
+
   return parseFile(raw as Record<string, unknown>)
 }
 
 // ── Parsing / validation ──────────────────────────────────────────────────────
+
+function parseSplineWallGraph(raw: unknown): SplineWallGraph {
+  if (!isObject(raw)) {
+    return createEmptySplineWallGraph()
+  }
+
+  const graph = createEmptySplineWallGraph()
+
+  const nodes = Array.isArray(raw.nodes) ? raw.nodes : []
+  for (const value of nodes) {
+    if (!isObject(value) || typeof value.id !== 'string') {
+      continue
+    }
+
+    graph.nodes[value.id] = {
+      id: value.id,
+      position: [
+        typeof value.x === 'number' ? value.x : 0,
+        typeof value.z === 'number' ? value.z : 0,
+      ],
+      layerId: typeof value.layerId === 'string' ? value.layerId : 'default',
+      roomId: typeof value.roomId === 'string' ? value.roomId : null,
+      cornerMode: value.cornerMode === 'rounded' || value.cornerMode === 'diagonal' || value.cornerMode === 'square'
+        ? value.cornerMode
+        : null,
+      cornerAmount: typeof value.cornerAmount === 'number' ? value.cornerAmount : null,
+    }
+  }
+
+  const segments = Array.isArray(raw.segments) ? raw.segments : []
+  for (const value of segments) {
+    if (
+      !isObject(value)
+      || typeof value.id !== 'string'
+      || typeof value.pathId !== 'string'
+      || typeof value.startNodeId !== 'string'
+      || typeof value.endNodeId !== 'string'
+    ) {
+      continue
+    }
+
+    graph.segments[value.id] = {
+      id: value.id,
+      pathId: value.pathId,
+      startNodeId: value.startNodeId,
+      endNodeId: value.endNodeId,
+      layerId: typeof value.layerId === 'string' ? value.layerId : 'default',
+      roomId: typeof value.roomId === 'string' ? value.roomId : null,
+      wallKey: typeof value.wallKey === 'string' ? value.wallKey : null,
+      wallHeight: typeof value.wallHeight === 'number' ? value.wallHeight : null,
+      wallThickness: typeof value.wallThickness === 'number' ? value.wallThickness : null,
+      cutouts: (Array.isArray(value.cutouts) ? value.cutouts : []).flatMap((cutout) => {
+        if (!isObject(cutout) || typeof cutout.id !== 'string') {
+          return []
+        }
+
+        return [{
+          id: cutout.id,
+          kind: cutout.kind === 'door' || cutout.kind === 'passage' || cutout.kind === 'window'
+            ? cutout.kind
+            : 'passage',
+          startRatio: typeof cutout.startRatio === 'number' ? cutout.startRatio : 0,
+          endRatio: typeof cutout.endRatio === 'number' ? cutout.endRatio : 1,
+          bottomHeight: typeof cutout.bottomHeight === 'number' ? cutout.bottomHeight : 0,
+          topHeight: typeof cutout.topHeight === 'number' ? cutout.topHeight : null,
+          assetId: typeof cutout.assetId === 'string' ? cutout.assetId : null,
+          openingId: typeof cutout.openingId === 'string' ? cutout.openingId : null,
+          objectProps: isObject(cutout.objectProps) ? (cutout.objectProps as Record<string, unknown>) : {},
+        }]
+      }),
+    }
+  }
+
+  const paths = Array.isArray(raw.paths) ? raw.paths : []
+  for (const value of paths) {
+    if (!isObject(value) || typeof value.id !== 'string') {
+      continue
+    }
+
+    graph.paths[value.id] = {
+      id: value.id,
+      layerId: typeof value.layerId === 'string' ? value.layerId : 'default',
+      roomId: typeof value.roomId === 'string' ? value.roomId : null,
+      closed: value.closed === true,
+      nodeIds: (Array.isArray(value.nodeIds) ? value.nodeIds : []).filter(
+        (nodeId): nodeId is string => typeof nodeId === 'string',
+      ),
+      segmentIds: (Array.isArray(value.segmentIds) ? value.segmentIds : []).filter(
+        (segmentId): segmentId is string => typeof segmentId === 'string',
+      ),
+    }
+  }
+
+  return graph
+}
 
 function parseFloorData(raw: Record<string, unknown>): {
   layers: Record<string, Layer>
@@ -602,10 +813,12 @@ function parseFloorData(raw: Record<string, unknown>): {
   placedObjects: Record<string, DungeonObjectRecord>
   wallOpenings: Record<string, OpeningRecord>
   innerWalls: Record<string, InnerWallRecord>
-  occupancy: Record<string, string>
-  nextRoomNumber: number
-  activeRoomSetId: string
-} {
+  splineWallGraph: SplineWallGraph
+   occupancy: Record<string, string>
+   nextRoomNumber: number
+   activeRoomSetId: string
+   activeWallMaterialSetId: string
+  } {
   const layers: Record<string, Layer> = {}
   const layersArr = Array.isArray(raw.layers) ? (raw.layers as unknown[]) : []
   for (const l of layersArr) {
@@ -774,6 +987,10 @@ function parseFloorData(raw: Record<string, unknown>): {
       .filter((wallKey): wallKey is string => typeof wallKey === 'string')
       .map((wallKey) => [wallKey, { wallKey, layerId: activeLayerId } satisfies InnerWallRecord]),
   ) as Record<string, InnerWallRecord>
+  const splineWallGraph = syncSplineWallGraphCutoutsFromOpenings(
+    parseSplineWallGraph(raw.splineWallGraph),
+    wallOpenings,
+  )
 
   return {
     layers, layerOrder, activeLayerId, rooms,
@@ -788,11 +1005,14 @@ function parseFloorData(raw: Record<string, unknown>): {
     placedObjects,
     wallOpenings,
     innerWalls,
+    splineWallGraph,
     occupancy,
     nextRoomNumber: typeof raw.nextRoomNumber === 'number' && raw.nextRoomNumber >= 1
       ? raw.nextRoomNumber : 1,
     activeRoomSetId:
       typeof raw.activeRoomSetId === 'string' ? raw.activeRoomSetId : getDefaultRoomSetId(),
+    activeWallMaterialSetId:
+      typeof raw.activeWallMaterialSetId === 'string' ? raw.activeWallMaterialSetId : getDefaultWallMaterialSetId(),
   }
 }
 
@@ -825,6 +1045,7 @@ function parseFile(raw: Record<string, unknown>): SerializableState | null {
           ...data,
           tool: 'select' as const,
           activeRoomSetId: data.activeRoomSetId,
+          activeWallMaterialSetId: data.activeWallMaterialSetId,
           selectedAssetIds: {
             floor: getDefaultAssetIdByCategory('floor'),
             wall: getDefaultAssetIdByCategory('wall'),
@@ -856,6 +1077,7 @@ function parseFile(raw: Record<string, unknown>): SerializableState | null {
           ...activeFloorData,
           tool: 'select',
           activeRoomSetId: activeFloorData.activeRoomSetId,
+          activeWallMaterialSetId: activeFloorData.activeWallMaterialSetId,
           selectedAssetIds: {
             floor: getDefaultAssetIdByCategory('floor'),
             wall: getDefaultAssetIdByCategory('wall'),
@@ -966,6 +1188,10 @@ function parseOutdoorTerrainProfiles(value: unknown): Partial<Record<OutdoorTerr
 
 function getDefaultRoomSetId() {
   return getDefaultContentPackRoomSetId(ROOM_SET_CONTENT_PACK_ID) ?? FALLBACK_ROOM_SET_ID
+}
+
+function getDefaultWallMaterialSetId() {
+  return getDefaultContentPackWallMaterialSetId(WALL_MATERIAL_SET_CONTENT_PACK_ID) ?? FALLBACK_WALL_MATERIAL_SET_ID
 }
 
 // Suppress "unused import" — kept for completeness in registry-aware migrations

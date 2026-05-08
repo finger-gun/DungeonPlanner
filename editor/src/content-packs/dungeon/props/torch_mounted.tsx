@@ -4,7 +4,7 @@ import { createDungeonFlameEffectGetter, createDungeonFlameLightGetter } from '.
 
 
 const transform: ContentPackModelTransform = {
-  position: [0, 0.9, -0.4],
+  position: [0, 0.9, -0.275],
   rotation: [0, 0, 0],
   scale: 1,
 } 

@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import { shouldBlockRoomStrokeStart, shouldRenderRoomStreamPreview } from './GridShared'
+import {
+  shouldBlockRoomStrokeStart,
+  shouldClearRoomDraftForFloorChange,
+  shouldRenderRoomStreamPreview,
+} from './GridShared'
 
 describe('shouldRenderRoomStreamPreview', () => {
   it('suppresses speculative tile streaming while a paint stroke is still active', () => {
@@ -27,10 +31,33 @@ describe('shouldRenderRoomStreamPreview', () => {
   it('does not block starting a new room stroke after the previous batch is released', () => {
     expect(shouldBlockRoomStrokeStart({
       latchedRoomPreview: null,
+      roomDraftActive: false,
     })).toBe(false)
 
     expect(shouldBlockRoomStrokeStart({
       latchedRoomPreview: { cells: [[0, 0]], mode: 'paint' },
+      roomDraftActive: false,
+    })).toBe(true)
+  })
+
+  it('blocks starting a new area stroke while a draft room is active', () => {
+    expect(shouldBlockRoomStrokeStart({
+      latchedRoomPreview: null,
+      roomDraftActive: true,
+    })).toBe(true)
+  })
+
+  it('only clears a room draft when the active floor actually changes', () => {
+    expect(shouldClearRoomDraftForFloorChange({
+      previousActiveFloorId: 'floor-1',
+      activeFloorId: 'floor-1',
+      roomDraftActive: true,
+    })).toBe(false)
+
+    expect(shouldClearRoomDraftForFloorChange({
+      previousActiveFloorId: 'floor-1',
+      activeFloorId: 'floor-2',
+      roomDraftActive: true,
     })).toBe(true)
   })
 })

@@ -1,0 +1,109 @@
+import * as THREE from 'three'
+import { describe, expect, it } from 'vitest'
+import type { ContentPackWallMaterialSet } from '../../content-packs/types'
+import {
+  configureSplineWallTexture,
+  createSplineWallMaterial,
+  createSplineWallTopMaterial,
+  resolveActiveSplineWallMaterialSet,
+} from './splineWallMaterial'
+
+function createTextures(overrides: Partial<{
+  albedo: THREE.Texture
+  normal: THREE.Texture | null
+  ao: THREE.Texture | null
+  height: THREE.Texture | null
+  roughness: THREE.Texture | null
+  metallic: THREE.Texture | null
+}> = {}) {
+  return {
+    albedo: new THREE.Texture(),
+    normal: new THREE.Texture(),
+    ao: new THREE.Texture(),
+    height: new THREE.Texture(),
+    roughness: new THREE.Texture(),
+    metallic: new THREE.Texture(),
+    ...overrides,
+  }
+}
+
+describe('splineWallMaterial', () => {
+  it('configures tiled wall textures with the right sampling mode', () => {
+    const colorTexture = new THREE.Texture()
+    const dataTexture = new THREE.Texture()
+
+    configureSplineWallTexture(colorTexture, 'color')
+    configureSplineWallTexture(dataTexture, 'data')
+
+    expect(colorTexture.wrapS).toBe(THREE.RepeatWrapping)
+    expect(colorTexture.wrapT).toBe(THREE.RepeatWrapping)
+    expect(colorTexture.colorSpace).toBe(THREE.SRGBColorSpace)
+    expect(colorTexture.anisotropy).toBe(8)
+    expect(dataTexture.colorSpace).toBe(THREE.NoColorSpace)
+  })
+
+  it('creates a dungeon wall material with PBR maps', () => {
+    const textures = createTextures()
+    const material = createSplineWallMaterial('dungeon', textures) as THREE.MeshStandardMaterial
+
+    expect(material.map).toBe(textures.albedo)
+    expect(material.normalMap).toBe(textures.normal)
+    expect(material.aoMap).toBe(textures.ao)
+    expect(material.bumpMap).toBe(textures.height)
+    expect(material.roughnessMap).toBe(textures.roughness)
+    expect(material.metalnessMap).toBe(textures.metallic)
+    expect(material.color.getHexString()).toBe('ffffff')
+    expect(material.side).toBe(THREE.DoubleSide)
+  })
+
+  it('applies authored wall-set tint and scalar shading overrides', () => {
+    const textures = createTextures({
+      roughness: null,
+      metallic: null,
+      height: null,
+    })
+    const wallMaterialSet: ContentPackWallMaterialSet = {
+      id: 'kaykit-stone',
+      name: 'KayKit Stone',
+      textures: {
+        albedoUrl: '/wall_albedo.png',
+      },
+      shading: {
+        tintColor: '#9499a7',
+        roughness: 0.55,
+        aoMapIntensity: 0.32,
+        topSurfaceColor: '#2f3442',
+        topSurfaceRoughness: 0.7,
+      },
+    }
+
+    const material = createSplineWallMaterial('dungeon', textures, wallMaterialSet) as THREE.MeshStandardMaterial
+    const topMaterial = createSplineWallTopMaterial('dungeon', wallMaterialSet) as THREE.MeshStandardMaterial
+
+    expect(material.color.getHexString()).toBe('9499a7')
+    expect(material.roughness).toBe(0.55)
+    expect(material.aoMapIntensity).toBe(0.32)
+    expect(topMaterial.map).toBeNull()
+    expect(topMaterial.color.getHexString()).toBe('2f3442')
+    expect(topMaterial.roughness).toBe(0.7)
+  })
+
+  it('keeps cave walls on an untextured fallback material', () => {
+    const textures = createTextures()
+    const material = createSplineWallMaterial('cave', textures) as THREE.MeshStandardMaterial
+
+    expect(material.map).toBeNull()
+    expect(material.normalMap).toBeNull()
+    expect(material.aoMap).toBeNull()
+    expect(material.bumpMap).toBeNull()
+    expect(material.roughnessMap).toBeNull()
+    expect(material.color.getHexString()).toBe('55605b')
+  })
+
+  it('falls back to the default authored wall material set', () => {
+    expect(resolveActiveSplineWallMaterialSet('missing-wall-set')).toMatchObject({
+      id: 'kaykit-stone',
+      name: 'KayKit Stone',
+    })
+  })
+})

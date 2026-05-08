@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest'
 import { getMetadataConnectors } from './connectors'
-import { getContentPackAssetById, getContentPackRoomSetById, getDefaultAssetIdByCategory } from './registry'
+import {
+  getContentPackAssetById,
+  getContentPackRoomSetById,
+  getContentPackWallMaterialSetById,
+  getDefaultAssetIdByCategory,
+  getDefaultContentPackWallMaterialSetId,
+} from './registry'
 import { syncGeneratedCharacterAssets } from './runtimeRegistry'
 
 describe('content pack registry', () => {
@@ -81,6 +87,29 @@ describe('content pack registry', () => {
       floor: {
         kind: 'single',
         assetId: 'dungeon.floor_floor_tile_small',
+      },
+    })
+  })
+
+  it('registers authored dungeon wall material sets', () => {
+    expect(getDefaultContentPackWallMaterialSetId('dungeon')).toBe('kaykit-stone')
+    expect(getContentPackWallMaterialSetById('dungeon', 'kaykit-stone')).toMatchObject({
+      id: 'kaykit-stone',
+      name: 'KayKit Stone',
+      textures: {
+        albedoUrl: expect.any(String),
+        normalUrl: expect.any(String),
+        roughnessUrl: expect.any(String),
+      },
+    })
+    expect(getContentPackWallMaterialSetById('dungeon', 'wedged-cobblestone')).toMatchObject({
+      id: 'wedged-cobblestone',
+      name: 'Wedged Cobblestone',
+      textures: {
+        albedoUrl: expect.any(String),
+        normalUrl: expect.any(String),
+        aoUrl: expect.any(String),
+        heightUrl: expect.any(String),
       },
     })
   })
