@@ -333,10 +333,10 @@ describe('SplineWallComputePrototype', () => {
       maxZ: 0.05,
     })).toBeGreaterThan(0)
     expect(countLiveTrianglesInsideBox(extractedGeometry, {
-      minX: 0.8,
-      maxX: 1.2,
-      minY: 1.05,
-      maxY: 1.25,
+      minX: 0.82,
+      maxX: 1.18,
+      minY: 1.3,
+      maxY: 1.42,
       minZ: -0.05,
       maxZ: 0.05,
     })).toBeGreaterThan(0)
