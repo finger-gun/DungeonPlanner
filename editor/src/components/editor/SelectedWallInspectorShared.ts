@@ -1,13 +1,21 @@
 import { getContentPackAssetById } from '../../content-packs/registry'
 import { useDungeonStore } from '../../store/useDungeonStore'
-import { getInheritedWallAssetIdForWallKey } from '../../store/wallSegments'
+import { getCanonicalWallKey, getInheritedWallAssetIdForWallKey } from '../../store/wallSegments'
+
+const EMPTY_WALL_PROPS: Record<string, unknown> = Object.freeze({})
 
 type SelectedWallInspectorState = Pick<
   ReturnType<typeof useDungeonStore.getState>,
-  'placedObjects' | 'wallOpenings' | 'wallSurfaceAssetIds' | 'paintedCells' | 'rooms' | 'selectedAssetIds'
+  | 'placedObjects'
+  | 'wallOpenings'
+  | 'wallSurfaceAssetIds'
+  | 'wallSurfaceProps'
+  | 'paintedCells'
+  | 'rooms'
+  | 'selectedAssetIds'
 >
 
-export function getSelectedWallAssetId(
+export function getSelectedWallKey(
   selection: string | null,
   state: SelectedWallInspectorState,
 ) {
@@ -15,15 +23,39 @@ export function getSelectedWallAssetId(
     return null
   }
 
+  return getCanonicalWallKey(selection, state.paintedCells) ?? selection
+}
+
+export function getSelectedWallAssetId(
+  selection: string | null,
+  state: SelectedWallInspectorState,
+) {
+  const wallKey = getSelectedWallKey(selection, state)
+  if (!wallKey) {
+    return null
+  }
+
   return (
-    state.wallSurfaceAssetIds[selection]
+    state.wallSurfaceAssetIds[wallKey]
     ?? getInheritedWallAssetIdForWallKey(
-      selection,
+      wallKey,
       state.paintedCells,
       state.rooms,
       state.selectedAssetIds.wall,
     )
   )
+}
+
+export function getSelectedWallProps(
+  selection: string | null,
+  state: SelectedWallInspectorState,
+) {
+  const wallKey = getSelectedWallKey(selection, state)
+  if (!wallKey) {
+    return null
+  }
+
+  return state.wallSurfaceProps[wallKey] ?? EMPTY_WALL_PROPS
 }
 
 export function getSelectedWallAsset(

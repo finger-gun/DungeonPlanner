@@ -19,7 +19,9 @@ import {
 import { serializeDungeon, deserializeDungeon } from './serialization'
 import { sanitizePersistedAssetReferences } from './assetReferences'
 import { getOpeningSegments } from './openingSegments'
+import { buildSplineWallOpeningPlacement, doOpeningsOverlap } from './openingPlacement'
 import { buildSplineWallGraphFromPaintedCells } from './splineWalls'
+import { createSplineWallQueryCache } from './splineWallQueries'
 import {
   cloneSplineWallGraph,
   createEmptySplineWallGraph,
@@ -37,7 +39,7 @@ import {
   type InnerWallRecord,
 } from './manualWalls'
 import { reconcileProceduralRoomLayout } from './proceduralRoomLayout'
-import { getCanonicalWallKey, getInheritedWallAssetIdForWallKey } from './wallSegments'
+import { getCanonicalWallKey, getInheritedWallAssetIdForWallKey, wallKeyToWorldPosition } from './wallSegments'
 import {
   getRoomBounds,
   getRoomCellKeysInBounds,
@@ -176,6 +178,11 @@ export type OpeningRecord = {
   /** Anchor wall segment key — center of the span (format: "x:z:direction") */
   wallKey: string
   width: 1 | 2 | 3
+  /** Preferred spline segment ownership for procedural walls. */
+  segmentId?: string | null
+  /** Normalized span along the owning spline segment. */
+  segmentStartRatio?: number | null
+  segmentEndRatio?: number | null
   /** Whether the opening is flipped 180° (front/back swap) */
   flipped?: boolean
   objectProps?: Record<string, unknown>
@@ -185,7 +192,10 @@ export type OpeningRecord = {
 
 export type OpeningSource = 'manual' | 'generated'
 
-type PlaceOpeningInput = Pick<OpeningRecord, 'assetId' | 'wallKey' | 'width' | 'flipped' | 'objectProps' | 'source'>
+type PlaceOpeningInput = Pick<
+  OpeningRecord,
+  'assetId' | 'wallKey' | 'width' | 'segmentId' | 'segmentStartRatio' | 'segmentEndRatio' | 'flipped' | 'objectProps' | 'source'
+>
 
 type CommitDraftRoomInput = {
   cells: GridCell[]
@@ -1344,29 +1354,69 @@ function addOpeningRecord(
   wallOpenings: Record<string, OpeningRecord>,
   input: PlaceOpeningInput,
   layerId: string,
+  splineWallGraph: SplineWallGraph,
+  paintedCells: PaintedCells,
 ) {
   const id = createObjectId()
-  const newSegments = new Set(getOpeningSegments(input.wallKey, input.width))
+  const overlapGraph = hasSplineWallGraphPaths(splineWallGraph)
+    ? splineWallGraph
+    : buildSplineWallGraphFromPaintedCells(paintedCells)
+  const resolvedInput = resolveSplineOpeningOwnership(input, overlapGraph, paintedCells)
 
   Object.values(wallOpenings).forEach((existing) => {
-    const existingSegments = getOpeningSegments(existing.wallKey, existing.width)
-    if (existingSegments.some((segment) => newSegments.has(segment))) {
+    if (doOpeningsOverlap(overlapGraph, existing, resolvedInput)) {
       delete wallOpenings[existing.id]
     }
   })
 
   wallOpenings[id] = {
     id,
-    assetId: input.assetId,
-    wallKey: input.wallKey,
-    width: input.width,
-    flipped: input.flipped ?? false,
-    objectProps: input.objectProps ? { ...input.objectProps } : {},
+    assetId: resolvedInput.assetId,
+    wallKey: resolvedInput.wallKey,
+    width: resolvedInput.width,
+    segmentId: resolvedInput.segmentId ?? null,
+    segmentStartRatio: resolvedInput.segmentStartRatio ?? null,
+    segmentEndRatio: resolvedInput.segmentEndRatio ?? null,
+    flipped: resolvedInput.flipped ?? false,
+    objectProps: resolvedInput.objectProps ? { ...resolvedInput.objectProps } : {},
     layerId,
-    source: input.source ?? 'manual',
+    source: resolvedInput.source ?? 'manual',
   }
 
   return id
+}
+
+function resolveSplineOpeningOwnership(
+  input: PlaceOpeningInput,
+  splineWallGraph: SplineWallGraph,
+  paintedCells: PaintedCells,
+): PlaceOpeningInput {
+  if (input.segmentId || !hasSplineWallGraphPaths(splineWallGraph)) {
+    return input
+  }
+
+  const wallTransform = wallKeyToWorldPosition(input.wallKey)
+  if (!wallTransform) {
+    return input
+  }
+
+  const placement = buildSplineWallOpeningPlacement(
+    { x: wallTransform.position[0], z: wallTransform.position[2] },
+    splineWallGraph,
+    createSplineWallQueryCache(splineWallGraph),
+    paintedCells,
+    input.assetId,
+  )
+  if (!placement?.valid) {
+    return input
+  }
+
+  return {
+    ...input,
+    segmentId: placement.segmentId ?? null,
+    segmentStartRatio: placement.segmentStartRatio ?? null,
+    segmentEndRatio: placement.segmentEndRatio ?? null,
+  }
 }
 
 function syncOpeningCutoutsIntoSplineWallGraph(
@@ -3289,7 +3339,8 @@ export const useDungeonStore = create<DungeonState>()(
 
     const selectedOpening = state.wallOpenings[selection]
     if (!selectedOpening || !selectedOpening.assetId) {
-      const selectedWallSurfaceAssetId = state.wallSurfaceAssetIds[selection]
+      const selectedWallKey = getCanonicalWallKey(selection, state.paintedCells) ?? selection
+      const selectedWallSurfaceAssetId = state.wallSurfaceAssetIds[selectedWallKey]
       if (!selectedWallSurfaceAssetId) {
         return
       }
@@ -3297,15 +3348,15 @@ export const useDungeonStore = create<DungeonState>()(
       const previousSnapshot = cloneSnapshot(state)
       queueFloorDirtyHint({
         domains: ['walls', 'lighting', 'renderPlan'],
-        wallKeys: [selection],
+        wallKeys: [selectedWallKey],
       })
       set((current) => ({
         ...current,
         wallSurfaceProps: {
           ...current.wallSurfaceProps,
-          [selection]: {
-            ...(current.wallSurfaceProps[selection] ?? {}),
-            flipped: !((current.wallSurfaceProps[selection] ?? {}).flipped === true),
+          [selectedWallKey]: {
+            ...(current.wallSurfaceProps[selectedWallKey] ?? {}),
+            flipped: !((current.wallSurfaceProps[selectedWallKey] ?? {}).flipped === true),
           },
         },
         history: [...current.history, previousSnapshot],
@@ -4572,7 +4623,13 @@ export const useDungeonStore = create<DungeonState>()(
     set((current) => {
       const previousSnapshot = cloneSnapshot(current)
       const wallOpenings = { ...current.wallOpenings }
-      openingId = addOpeningRecord(wallOpenings, input, current.activeLayerId)
+      openingId = addOpeningRecord(
+        wallOpenings,
+        input,
+        current.activeLayerId,
+        current.splineWallGraph,
+        current.paintedCells,
+      )
       const splineWallGraph = syncOpeningCutoutsIntoSplineWallGraph(
         current.splineWallGraph,
         current.paintedCells,
@@ -4606,6 +4663,8 @@ export const useDungeonStore = create<DungeonState>()(
           wallOpenings,
           { assetId: null, wallKey, width: 1, flipped: false, source: 'manual' },
           current.activeLayerId,
+          current.splineWallGraph,
+          current.paintedCells,
         )
       })
       const splineWallGraph = syncOpeningCutoutsIntoSplineWallGraph(

@@ -19,7 +19,16 @@ import {
 import { GRID_SIZE, getCellKey, type GridCell } from '../../hooks/useSnapToGrid'
 import { getMirroredWallKey, type InnerWallRecord } from '../../store/manualWalls'
 import { buildOpenWallSegmentSet } from '../../store/openWallSegments'
+import {
+  createActiveSplineWallQueryCache,
+  doesLineCrossBlockingSplineWall,
+  isPointInsideBlockingSplineWall,
+  isPointInsideSplineRoom,
+  type SplineWallQueryCache,
+} from '../../store/splineWallQueries'
+import type { SplineWallGraph } from '../../store/splineWallGraph'
 import { useDungeonStore, type OpeningRecord } from '../../store/useDungeonStore'
+import { doesLineIntersectClosedWall } from '../../rendering/dungeonLightFieldOcclusion'
 
 const PLAYER_VISION_RANGE_CELLS = 8
 const VISION_RADIUS_WORLD = PLAYER_VISION_RANGE_CELLS * GRID_SIZE
@@ -32,7 +41,7 @@ const FOG_GRID_MAX_WIDTH = 128
 const FOG_GRID_MAX_HEIGHT = 128
 const GPU_LOS_DDA_MAX_STEPS = getFogOfWarDdaMaxSteps()
 
-type FogOfWarLayout = {
+export type FogOfWarLayout = {
   minCellX: number
   minCellZ: number
   width: number
@@ -40,6 +49,8 @@ type FogOfWarLayout = {
   occupancyWidth: number
   occupancyHeight: number
   occupancy: Int32Array
+  solidWalls: Set<string>
+  splineWallQueryCache: SplineWallQueryCache | null
 }
 
 export type FogOfWarRuntime = {
@@ -327,6 +338,7 @@ export function buildFogOfWarVisibilityMasks(
 export function buildFogOfWarLayout({
   active,
   paintedCells,
+  splineWallGraph,
   wallOpenings,
   innerWalls,
   wallSurfaceAssetIds = {},
@@ -334,6 +346,7 @@ export function buildFogOfWarLayout({
 }: {
   active: boolean
   paintedCells: ReturnType<typeof useDungeonStore.getState>['paintedCells']
+  splineWallGraph?: SplineWallGraph
   wallOpenings: Record<string, OpeningRecord>
   innerWalls: Record<string, InnerWallRecord>
   wallSurfaceAssetIds?: Record<string, string>
@@ -378,6 +391,31 @@ export function buildFogOfWarLayout({
 
   const openWalls = buildOpenWallSegmentSet(wallOpenings, wallSurfaceAssetIds, wallSurfaceProps)
   const solidWalls = buildSolidWallSet(innerWalls)
+  const splineWallQueryCache = createActiveSplineWallQueryCache(splineWallGraph)
+
+  if (splineWallQueryCache) {
+    rasterizeSplineFogOccupancy({
+      occupancy,
+      occupancyWidth,
+      occupancyHeight,
+      minCellX,
+      minCellZ,
+      splineWallQueryCache,
+      solidWalls,
+    })
+
+    return {
+      minCellX,
+      minCellZ,
+      width,
+      height,
+      occupancyWidth,
+      occupancyHeight,
+      occupancy,
+      solidWalls,
+      splineWallQueryCache,
+    }
+  }
 
   cells.forEach(({ cell }) => {
     const [cellX, cellZ] = cell
@@ -476,6 +514,8 @@ export function buildFogOfWarLayout({
     occupancyWidth,
     occupancyHeight,
     occupancy,
+    solidWalls,
+    splineWallQueryCache,
   }
 }
 
@@ -519,6 +559,17 @@ function hasLineOfSightInOccupancy(
   origin: readonly [number, number],
   target: readonly [number, number],
 ) {
+  if (layout.splineWallQueryCache) {
+    return (
+      !doesLineCrossBlockingSplineWall(layout.splineWallQueryCache, origin, target)
+      && !doesLineIntersectClosedWall(
+        [origin[0], 0, origin[1]],
+        [target[0], 0, target[1]],
+        layout.solidWalls,
+      )
+    )
+  }
+
   const minWorldX = layout.minCellX * GRID_SIZE
   const minWorldZ = layout.minCellZ * GRID_SIZE
   const gridOriginX = (origin[0] - minWorldX) / OCCUPANCY_CELL_SIZE
@@ -615,6 +666,175 @@ function fillOccupancyRect(
       occupancy[z * occupancyWidth + x] = value
     }
   }
+}
+
+function rasterizeSplineFogOccupancy({
+  occupancy,
+  occupancyWidth,
+  occupancyHeight,
+  minCellX,
+  minCellZ,
+  splineWallQueryCache,
+  solidWalls,
+}: {
+  occupancy: Int32Array
+  occupancyWidth: number
+  occupancyHeight: number
+  minCellX: number
+  minCellZ: number
+  splineWallQueryCache: SplineWallQueryCache
+  solidWalls: Set<string>
+}) {
+  const minWorldX = minCellX * GRID_SIZE
+  const minWorldZ = minCellZ * GRID_SIZE
+
+  for (let z = 0; z < occupancyHeight; z += 1) {
+    for (let x = 0; x < occupancyWidth; x += 1) {
+      const point: readonly [number, number] = [
+        minWorldX + (x + 0.5) * OCCUPANCY_CELL_SIZE,
+        minWorldZ + (z + 0.5) * OCCUPANCY_CELL_SIZE,
+      ]
+      occupancy[z * occupancyWidth + x] = isPointInsideAnySplineRoom(splineWallQueryCache, point)
+        && !isPointInsideBlockingSplineWall(splineWallQueryCache, point)
+        ? 0
+        : 1
+    }
+  }
+
+  solidWalls.forEach((wallKey) => {
+    paintSolidWallOccupancyLine({
+      occupancy,
+      occupancyWidth,
+      occupancyHeight,
+      minCellX,
+      minCellZ,
+      wallKey,
+    })
+  })
+}
+
+function isPointInsideAnySplineRoom(cache: SplineWallQueryCache, point: readonly [number, number]) {
+  return Object.values(cache.rooms).some((room) => isPointInsideSplineRoom(cache, room.roomId, point))
+}
+
+function paintSolidWallOccupancyLine({
+  occupancy,
+  occupancyWidth,
+  occupancyHeight,
+  minCellX,
+  minCellZ,
+  wallKey,
+}: {
+  occupancy: Int32Array
+  occupancyWidth: number
+  occupancyHeight: number
+  minCellX: number
+  minCellZ: number
+  wallKey: string
+}) {
+  const parsed = parseWallKey(wallKey)
+  if (!parsed) {
+    return
+  }
+
+  const localX = parsed.cellX - minCellX
+  const localZ = parsed.cellZ - minCellZ
+  if (localX < -1 || localZ < -1) {
+    return
+  }
+
+  const occupancyX = localX * OCCUPANCY_SUBDIVISIONS
+  const occupancyZ = localZ * OCCUPANCY_SUBDIVISIONS
+
+  switch (parsed.direction) {
+    case 'north':
+      setOccupancyRange(
+        occupancy,
+        occupancyWidth,
+        occupancyHeight,
+        occupancyX + 1,
+        occupancyX + OCCUPANCY_SUBDIVISIONS - 1,
+        occupancyZ + OCCUPANCY_SUBDIVISIONS,
+        occupancyZ + OCCUPANCY_SUBDIVISIONS,
+      )
+      break
+    case 'south':
+      setOccupancyRange(
+        occupancy,
+        occupancyWidth,
+        occupancyHeight,
+        occupancyX + 1,
+        occupancyX + OCCUPANCY_SUBDIVISIONS - 1,
+        occupancyZ,
+        occupancyZ,
+      )
+      break
+    case 'east':
+      setOccupancyRange(
+        occupancy,
+        occupancyWidth,
+        occupancyHeight,
+        occupancyX + OCCUPANCY_SUBDIVISIONS,
+        occupancyX + OCCUPANCY_SUBDIVISIONS,
+        occupancyZ + 1,
+        occupancyZ + OCCUPANCY_SUBDIVISIONS - 1,
+      )
+      break
+    case 'west':
+      setOccupancyRange(
+        occupancy,
+        occupancyWidth,
+        occupancyHeight,
+        occupancyX,
+        occupancyX,
+        occupancyZ + 1,
+        occupancyZ + OCCUPANCY_SUBDIVISIONS - 1,
+      )
+      break
+  }
+}
+
+function setOccupancyRange(
+  occupancy: Int32Array,
+  occupancyWidth: number,
+  occupancyHeight: number,
+  minX: number,
+  maxX: number,
+  minZ: number,
+  maxZ: number,
+) {
+  const clampedMinX = Math.max(0, minX)
+  const clampedMaxX = Math.min(occupancyWidth - 1, maxX)
+  const clampedMinZ = Math.max(0, minZ)
+  const clampedMaxZ = Math.min(occupancyHeight - 1, maxZ)
+
+  if (clampedMinX > clampedMaxX || clampedMinZ > clampedMaxZ) {
+    return
+  }
+
+  fillOccupancyRect(
+    occupancy,
+    occupancyWidth,
+    clampedMinX,
+    clampedMaxX,
+    clampedMinZ,
+    clampedMaxZ,
+    1,
+  )
+}
+
+function parseWallKey(wallKey: string): { cellX: number, cellZ: number, direction: WallDirection } | null {
+  const [rawCellX, rawCellZ, direction] = wallKey.split(':')
+  const cellX = Number.parseInt(rawCellX ?? '', 10)
+  const cellZ = Number.parseInt(rawCellZ ?? '', 10)
+  if (!Number.isFinite(cellX) || !Number.isFinite(cellZ)) {
+    return null
+  }
+  if (direction !== 'north' && direction !== 'south' && direction !== 'east' && direction !== 'west') {
+    return null
+  }
+
+  return { cellX, cellZ, direction }
 }
 
 function buildSolidWallSet(innerWalls: Record<string, InnerWallRecord>) {

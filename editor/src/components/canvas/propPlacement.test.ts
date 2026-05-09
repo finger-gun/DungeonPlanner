@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import type { ContentPackAsset } from '../../content-packs/types'
 import type { OutdoorTerrainHeightfield } from '../../store/outdoorTerrain'
+import { upsertSplineWallGraphRoomPath } from '../../store/splineWallGraph'
+import { createSplineWallQueryCache } from '../../store/splineWallQueries'
 import type { PaintedCellRecord } from '../../store/useDungeonStore'
 import { calculatePropSnapPosition } from './propPlacement'
 
@@ -233,6 +235,84 @@ describe('calculatePropSnapPosition', () => {
     expect(placement?.connector.type).toBe('WALL')
     expect(placement?.position[0]).toBeCloseTo(1.5)
     expect(placement?.position[2]).toBeCloseTo(0.35)
+  })
+
+  it('snaps wall props to diagonal spline walls using the nearest sampled surface', () => {
+    const asset = createTestAsset({
+      connectsTo: 'WALL',
+      snapsTo: 'GRID',
+      connectors: [{ type: 'WALL', point: [0, 0, 0] }],
+    })
+    const graph = upsertSplineWallGraphRoomPath({
+      nodes: {},
+      segments: {},
+      paths: {},
+    }, {
+      roomId: 'room-a',
+      layerId: 'default',
+      nodes: [
+        { position: [0, 0], cornerMode: 'square', cornerAmount: 0 },
+        { position: [2, 2], cornerMode: 'square', cornerAmount: 0 },
+        { position: [0, 4], cornerMode: 'square', cornerAmount: 0 },
+      ],
+    })
+    const queryCache = createSplineWallQueryCache(graph)
+
+    const placement = calculatePropSnapPosition(
+      asset,
+      { x: 3, y: 0, z: 1 },
+      {},
+      null,
+      undefined,
+      true,
+      undefined,
+      undefined,
+      queryCache,
+    )
+
+    expect(placement).not.toBeNull()
+    expect(placement?.rotation[1]).toBeCloseTo(-Math.PI / 4, 4)
+    expect(placement?.position[0]).toBeCloseTo(2 + (Math.SQRT1_2 * 0.25), 3)
+    expect(placement?.position[2]).toBeCloseTo(2 - (Math.SQRT1_2 * 0.25), 3)
+  })
+
+  it('snaps wall props to rounded spline wall surfaces with non-cardinal rotation', () => {
+    const asset = createTestAsset({
+      connectsTo: 'WALL',
+      snapsTo: 'GRID',
+      connectors: [{ type: 'WALL', point: [0, 0, 0] }],
+    })
+    const graph = upsertSplineWallGraphRoomPath({
+      nodes: {},
+      segments: {},
+      paths: {},
+    }, {
+      roomId: 'room-a',
+      layerId: 'default',
+      nodes: [
+        { position: [0, 0], cornerMode: 'rounded', cornerAmount: 2 },
+        { position: [4, 0], cornerMode: 'square', cornerAmount: 0 },
+        { position: [4, 4], cornerMode: 'square', cornerAmount: 0 },
+        { position: [0, 4], cornerMode: 'square', cornerAmount: 0 },
+      ],
+    })
+    const queryCache = createSplineWallQueryCache(graph, { curveSubdivisions: 8 })
+
+    const placement = calculatePropSnapPosition(
+      asset,
+      { x: 2.4, y: 0, z: 0.6 },
+      {},
+      null,
+      undefined,
+      true,
+      undefined,
+      undefined,
+      queryCache,
+    )
+
+    expect(placement).not.toBeNull()
+    expect(placement!.rotation[1]).toBeGreaterThan(0.1)
+    expect(placement!.rotation[1]).toBeLessThan(Math.PI / 2 - 0.1)
   })
 
   it('uses the cursor ray against the wall plane for FREE wall placement', () => {

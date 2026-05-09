@@ -35,6 +35,7 @@ const storeState = vi.hoisted(() => ({
     wall: 'wall-asset',
   },
   innerWalls: {},
+  splineWallGraph: { nodes: {}, segments: {}, paths: {} },
   paintedCells: {
     '0:0': { roomId: 'room-a', floorId: 'floor-1', layerId: 'default' },
   } as Record<string, unknown>,
@@ -160,6 +161,7 @@ describe('SelectionContextualUi', () => {
       wall: 'wall-asset',
     }
     storeState.innerWalls = {}
+    storeState.splineWallGraph = { nodes: {}, segments: {}, paths: {} }
     storeState.paintedCells = {
       '0:0': { roomId: 'room-a', floorId: 'floor-1', layerId: 'default' },
     }
@@ -218,6 +220,79 @@ describe('SelectionContextualUi', () => {
     expect(screen.queryByLabelText('Rotate selected object')).toBeNull()
     expect(screen.getByLabelText('Move selected object')).toBeInTheDocument()
     expect(screen.getByLabelText('Delete selected object')).toBeInTheDocument()
+  })
+
+  it('shows wall-door controls for inherited interactive wall assets', () => {
+    storeState.selection = '0:0:north'
+    storeState.placedObjects = {}
+    storeState.wallOpenings = {}
+    storeState.wallSurfaceAssetIds = {}
+    storeState.rooms = {
+      'room-a': {
+        id: 'room-a',
+        name: 'Room A',
+        bounds: { x: 0, z: 0, width: 1, height: 1 },
+        floorAssetId: null,
+        wallAssetId: 'wall-asset',
+      },
+    }
+    getContentPackAssetByIdMock.mockImplementation((id: string) => {
+      if (id === 'wall-asset') {
+        return {
+          id: 'wall-asset',
+          slug: 'wall-asset',
+          name: 'Interactive Door Wall',
+          category: 'wall',
+          Component: () => null,
+          getPlayModeNextProps: () => ({ open: true }),
+          metadata: {},
+        }
+      }
+
+      return null
+    })
+
+    render(<SelectionContextualUi />)
+
+    expect(screen.getByLabelText('Toggle selected door state')).toBeInTheDocument()
+    expect(screen.getByLabelText('Delete selected door')).toBeInTheDocument()
+  })
+
+  it('routes mirrored wall-door interactions through the canonical wall key', () => {
+    storeState.selection = '1:0:west'
+    storeState.placedObjects = {}
+    storeState.wallOpenings = {}
+    storeState.paintedCells = {
+      '0:0': { roomId: 'room-a', floorId: 'floor-1', layerId: 'default' },
+      '1:0': { roomId: 'room-b', floorId: 'floor-1', layerId: 'default' },
+    }
+    storeState.wallSurfaceAssetIds = {
+      '0:0:east': 'wall-door-asset',
+    }
+    storeState.wallSurfaceProps = {
+      '0:0:east': { open: false },
+    }
+    getContentPackAssetByIdMock.mockImplementation((id: string) => {
+      if (id === 'wall-door-asset') {
+        return {
+          id,
+          slug: id,
+          name: 'Wall Door',
+          category: 'wall',
+          Component: () => null,
+          metadata: {},
+          getPlayModeNextProps: (props: Record<string, unknown>) => ({ open: !props.open }),
+        }
+      }
+
+      return null
+    })
+
+    render(<SelectionContextualUi />)
+
+    fireEvent.pointerDown(screen.getByLabelText('Toggle selected door state'), { button: 0 })
+
+    expect(storeState.setWallSurfaceProps).toHaveBeenCalledWith('0:0:east', { open: true })
   })
 
   it('starts a scale drag that previews and commits instance scale changes', () => {
@@ -389,7 +464,9 @@ describe('SelectionContextualUi', () => {
       }
       return null
     })
-    getRegisteredObjectMock.mockReturnValue(new THREE.Group())
+    const wallObject = new THREE.Group()
+    wallObject.rotation.y = Math.PI
+    getRegisteredObjectMock.mockReturnValue(wallObject)
 
     render(<SelectionContextualUi />)
 
@@ -403,7 +480,7 @@ describe('SelectionContextualUi', () => {
       clientY: 100,
     })
     fireEvent.pointerMove(window, {
-      clientX: 420,
+      clientX: 320,
       clientY: 100,
     })
     fireEvent.pointerUp(window)

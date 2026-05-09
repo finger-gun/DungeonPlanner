@@ -11,6 +11,7 @@ import {
   getDefaultContentPackWallMaterialSetId,
 } from '../content-packs/registry'
 import { sanitizePersistedAssetReferences } from './assetReferences'
+import { buildSplineWallOpeningPlacement } from './openingPlacement'
 import {
   DEFAULT_POST_PROCESSING_SETTINGS,
   normalizePostProcessingSettings,
@@ -42,9 +43,12 @@ import {
 } from './outdoorTerrainStyles'
 import {
   createEmptySplineWallGraph,
+  hasSplineWallGraphPaths,
   syncSplineWallGraphCutoutsFromOpenings,
   type SplineWallGraph,
 } from './splineWallGraph'
+import { createSplineWallQueryCache } from './splineWallQueries'
+import { wallKeyToWorldPosition } from './wallSegments'
 
 const CURRENT_VERSION = 22
 const ROOM_SET_CONTENT_PACK_ID = 'dungeon'
@@ -78,6 +82,9 @@ type SerializedOpening = {
   assetId: string | null
   wallKey: string
   width: 1 | 2 | 3
+  segmentId?: string | null
+  segmentStartRatio?: number | null
+  segmentEndRatio?: number | null
   flipped: boolean
   objectProps?: Record<string, unknown>
   layerId: string
@@ -343,6 +350,9 @@ function serializeFloorData(
     })),
     openings: Object.values(snapshot.wallOpenings).map((o) => ({
       id: o.id, assetId: o.assetId, wallKey: o.wallKey, width: o.width,
+      segmentId: o.segmentId ?? null,
+      segmentStartRatio: o.segmentStartRatio ?? null,
+      segmentEndRatio: o.segmentEndRatio ?? null,
       flipped: o.flipped ?? false,
       objectProps: { ...(o.objectProps ?? {}) },
       layerId: o.layerId,
@@ -797,6 +807,52 @@ function parseSplineWallGraph(raw: unknown): SplineWallGraph {
   return graph
 }
 
+function hydrateOpeningSegmentOwnership(
+  splineWallGraph: SplineWallGraph,
+  paintedCells: PaintedCells,
+  wallOpenings: Record<string, OpeningRecord>,
+): Record<string, OpeningRecord> {
+  if (!hasSplineWallGraphPaths(splineWallGraph)) {
+    return wallOpenings
+  }
+
+  const queryCache = createSplineWallQueryCache(splineWallGraph)
+  let mutated = false
+  const hydrated = Object.fromEntries(
+    Object.entries(wallOpenings).map(([openingId, opening]) => {
+      if (opening.segmentId) {
+        return [openingId, opening]
+      }
+
+      const wallTransform = wallKeyToWorldPosition(opening.wallKey)
+      if (!wallTransform) {
+        return [openingId, opening]
+      }
+
+      const placement = buildSplineWallOpeningPlacement(
+        { x: wallTransform.position[0], z: wallTransform.position[2] },
+        splineWallGraph,
+        queryCache,
+        paintedCells,
+        opening.assetId,
+      )
+      if (!placement?.valid) {
+        return [openingId, opening]
+      }
+
+      mutated = true
+      return [openingId, {
+        ...opening,
+        segmentId: placement.segmentId ?? null,
+        segmentStartRatio: placement.segmentStartRatio ?? null,
+        segmentEndRatio: placement.segmentEndRatio ?? null,
+      }]
+    }),
+  ) as Record<string, OpeningRecord>
+
+  return mutated ? hydrated : wallOpenings
+}
+
 function parseFloorData(raw: Record<string, unknown>): {
   layers: Record<string, Layer>
   layerOrder: string[]
@@ -975,6 +1031,9 @@ function parseFloorData(raw: Record<string, unknown>): {
       id,
       assetId: typeof o.assetId === 'string' ? o.assetId : null,
       wallKey, width,
+      segmentId: typeof o.segmentId === 'string' ? o.segmentId : null,
+      segmentStartRatio: typeof o.segmentStartRatio === 'number' ? o.segmentStartRatio : null,
+      segmentEndRatio: typeof o.segmentEndRatio === 'number' ? o.segmentEndRatio : null,
       flipped: o.flipped === true,
       objectProps: isObject(o.objectProps) ? (o.objectProps as Record<string, unknown>) : {},
       layerId: typeof o.layerId === 'string' && layers[o.layerId] ? o.layerId : 'default',
@@ -987,9 +1046,11 @@ function parseFloorData(raw: Record<string, unknown>): {
       .filter((wallKey): wallKey is string => typeof wallKey === 'string')
       .map((wallKey) => [wallKey, { wallKey, layerId: activeLayerId } satisfies InnerWallRecord]),
   ) as Record<string, InnerWallRecord>
+  const parsedSplineWallGraph = parseSplineWallGraph(raw.splineWallGraph)
+  const hydratedWallOpenings = hydrateOpeningSegmentOwnership(parsedSplineWallGraph, paintedCells, wallOpenings)
   const splineWallGraph = syncSplineWallGraphCutoutsFromOpenings(
-    parseSplineWallGraph(raw.splineWallGraph),
-    wallOpenings,
+    parsedSplineWallGraph,
+    hydratedWallOpenings,
   )
 
   return {
@@ -1003,7 +1064,7 @@ function parseFloorData(raw: Record<string, unknown>): {
     wallSurfaceAssetIds,
     wallSurfaceProps,
     placedObjects,
-    wallOpenings,
+    wallOpenings: hydratedWallOpenings,
     innerWalls,
     splineWallGraph,
     occupancy,

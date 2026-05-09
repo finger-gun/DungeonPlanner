@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { computeVisibilityMask, computeVisibleCellKeys } from './playVisibilityCore'
+import { upsertSplineWallGraphRoomPath } from '../../store/splineWallGraph'
 import type { PaintedCells } from '../../store/useDungeonStore'
 
 function makeCells(entries: Array<{ cell: [number, number]; roomId?: string | null }>): PaintedCells {
@@ -8,6 +9,15 @@ function makeCells(entries: Array<{ cell: [number, number]; roomId?: string | nu
       `${cell[0]}:${cell[1]}`,
       { cell, layerId: 'default', roomId },
     ]),
+  )
+}
+
+function makeRectangleCells(width: number, height: number, roomId: string = 'room-1'): PaintedCells {
+  return makeCells(
+    Array.from({ length: width * height }, (_, index) => ({
+      cell: [index % width, Math.floor(index / width)] as [number, number],
+      roomId,
+    })),
   )
 }
 
@@ -90,6 +100,51 @@ describe('computeVisibleCellKeys', () => {
       ),
     ).toEqual(expect.arrayContaining(['0:0', '1:0']))
   })
+
+  it('blocks cells that fall outside rounded spline room coverage', () => {
+    const paintedCells = makeRectangleCells(4, 4)
+    const splineWallGraph = upsertSplineWallGraphRoomPath({
+      nodes: {},
+      segments: {},
+      paths: {},
+    }, {
+      roomId: 'room-1',
+      layerId: 'default',
+      nodes: [
+        { position: [0, 0], cornerMode: 'rounded', cornerAmount: 2 },
+        { position: [4, 0], cornerMode: 'square', cornerAmount: 0 },
+        { position: [4, 4], cornerMode: 'square', cornerAmount: 0 },
+        { position: [0, 4], cornerMode: 'square', cornerAmount: 0 },
+      ],
+    })
+
+    const visible = computeVisibleCellKeys(paintedCells, {}, [[1, 1]], 4, [], new Map(), new Set(), {}, {}, splineWallGraph)
+
+    expect(visible).not.toContain('0:0')
+    expect(visible).toContain('3:3')
+  })
+
+  it('blocks line of sight across diagonal spline room boundaries', () => {
+    const paintedCells = makeRectangleCells(4, 4)
+    const splineWallGraph = upsertSplineWallGraphRoomPath({
+      nodes: {},
+      segments: {},
+      paths: {},
+    }, {
+      roomId: 'room-1',
+      layerId: 'default',
+      nodes: [
+        { position: [0, 0], cornerMode: 'square', cornerAmount: 0 },
+        { position: [4, 4], cornerMode: 'square', cornerAmount: 0 },
+        { position: [0, 4], cornerMode: 'square', cornerAmount: 0 },
+      ],
+    })
+
+    const visible = computeVisibleCellKeys(paintedCells, {}, [[0, 2]], 4, [], new Map(), new Set(), {}, {}, splineWallGraph)
+
+    expect(visible).not.toContain('2:0')
+    expect(visible).toContain('1:2')
+  })
 })
 
 describe('computeVisibilityMask', () => {
@@ -108,5 +163,27 @@ describe('computeVisibilityMask', () => {
 
     expect(mask).not.toBeNull()
     expect(mask?.sources[0]?.polygon.some((point) => point[0] > 2.3)).toBe(true)
+  })
+
+  it('clips the visibility mask to diagonal spline room walls', () => {
+    const paintedCells = makeRectangleCells(4, 4)
+    const splineWallGraph = upsertSplineWallGraphRoomPath({
+      nodes: {},
+      segments: {},
+      paths: {},
+    }, {
+      roomId: 'room-1',
+      layerId: 'default',
+      nodes: [
+        { position: [0, 0], cornerMode: 'square', cornerAmount: 0 },
+        { position: [4, 4], cornerMode: 'square', cornerAmount: 0 },
+        { position: [0, 4], cornerMode: 'square', cornerAmount: 0 },
+      ],
+    })
+
+    const mask = computeVisibilityMask(paintedCells, {}, {}, [[0, 2]], 6, [], new Map(), new Set(), {}, {}, splineWallGraph)
+
+    expect(mask).not.toBeNull()
+    expect(mask?.sources[0]?.polygon.every((point) => point[0] <= point[1] + 0.05)).toBe(true)
   })
 })

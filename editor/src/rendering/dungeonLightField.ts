@@ -15,6 +15,8 @@ import { getObjectLightOverrides, mergePropLightWithOverrides } from '../store/l
 import { DEFAULT_FLOOR_CHUNK_SIZE } from '../store/floorChunkKeys'
 import { buildOpenWallSegmentSet } from '../store/openWallSegments'
 import { getMirroredWallKey } from '../store/manualWalls'
+import { createActiveSplineWallQueryCache, doesLineCrossBlockingSplineWall, type SplineWallQueryCache } from '../store/splineWallQueries'
+import type { SplineWallGraph } from '../store/splineWallGraph'
 import { collectBoundaryWallSegments } from '../store/wallSegments'
 import { doesLineIntersectClosedWall, isCornerBlockedBySolidWall } from './dungeonLightFieldOcclusion'
 import {
@@ -51,6 +53,7 @@ export type BakedLightSample = readonly [number, number, number]
 export type BakedLightCornerSample = readonly [number, number, number]
 export type BakedLightOcclusionInput = {
   paintedCells: PaintedCells
+  splineWallGraph?: SplineWallGraph
   wallOpenings: Record<string, OpeningRecord>
   innerWalls: Record<string, InnerWallRecord>
   wallSurfaceAssetIds?: Record<string, string>
@@ -62,6 +65,7 @@ export type BakedLightOcclusion = {
   openWalls: Set<string>
   solidWalls: Set<string>
   cornerBlockingWalls: Set<string>
+  splineWallQueryCache: SplineWallQueryCache | null
 }
 
 export type PropBakedLightProbe = {
@@ -1148,6 +1152,9 @@ export function prepareBakedFloorLightFieldWorkerBuild(
   if (prepared.staticLightSources.length === 0) {
     return null
   }
+  if (prepared.occlusion?.splineWallQueryCache) {
+    return null
+  }
 
   const layout = buildBakedFloorLightFieldLayout({
     floorCells: prepared.floorCells,
@@ -1678,6 +1685,9 @@ function getDirtyChunkKeysForOcclusionChanges(
   }
   if (!previousOcclusion || !nextOcclusion) {
     return previousOcclusion !== nextOcclusion ? null : new Set<string>()
+  }
+  if (previousOcclusion.splineWallQueryCache || nextOcclusion.splineWallQueryCache) {
+    return null
   }
 
   const changedWallKeys = new Set<string>()
@@ -2486,7 +2496,13 @@ function buildBakedLightOcclusion(
     return null
   }
 
-  const cacheKey = `${getDerivedObjectIdentity(input.paintedCells)}:${getDerivedObjectIdentity(input.wallOpenings)}:${getDerivedObjectIdentity(input.innerWalls)}:${input.wallSurfaceProps ? getDerivedObjectIdentity(input.wallSurfaceProps) : 'none'}`
+  const cacheKey = [
+    getDerivedObjectIdentity(input.paintedCells),
+    input.splineWallGraph ? getDerivedObjectIdentity(input.splineWallGraph) : 'none',
+    getDerivedObjectIdentity(input.wallOpenings),
+    getDerivedObjectIdentity(input.innerWalls),
+    input.wallSurfaceProps ? getDerivedObjectIdentity(input.wallSurfaceProps) : 'none',
+  ].join(':')
   const cachedOcclusion = bakedLightOcclusionCache.get(cacheKey)
   if (cachedOcclusion) {
     return cachedOcclusion
@@ -2497,11 +2513,19 @@ function buildBakedLightOcclusion(
     input.wallSurfaceAssetIds ?? {},
     input.wallSurfaceProps,
   )
+  const splineWallQueryCache = createActiveSplineWallQueryCache(input.splineWallGraph)
+  const solidWalls = splineWallQueryCache
+    ? buildManualInnerWallSet(input.innerWalls, openWalls)
+    : buildSolidWallSet(input.paintedCells, input.innerWalls, openWalls)
+  const cornerBlockingWalls = splineWallQueryCache
+    ? buildManualInnerWallSet(input.innerWalls, openWalls)
+    : buildCornerBlockingWallSet(input.paintedCells, input.innerWalls, openWalls)
   const nextOcclusion = {
     paintedCells: input.paintedCells,
     openWalls,
-    solidWalls: buildSolidWallSet(input.paintedCells, input.innerWalls, openWalls),
-    cornerBlockingWalls: buildCornerBlockingWallSet(input.paintedCells, input.innerWalls, openWalls),
+    solidWalls,
+    cornerBlockingWalls,
+    splineWallQueryCache,
   }
   bakedLightOcclusionCache.set(cacheKey, nextOcclusion)
   return nextOcclusion
@@ -2537,6 +2561,27 @@ function buildSolidWallSet(
       solidWalls.add(mirroredWallKey)
     }
   })
+
+  Object.keys(innerWalls).forEach((wallKey) => {
+    if (openWalls.has(wallKey)) {
+      return
+    }
+
+    solidWalls.add(wallKey)
+    const mirroredWallKey = getMirroredWallKey(wallKey)
+    if (mirroredWallKey && !openWalls.has(mirroredWallKey)) {
+      solidWalls.add(mirroredWallKey)
+    }
+  })
+
+  return solidWalls
+}
+
+function buildManualInnerWallSet(
+  innerWalls: Record<string, InnerWallRecord>,
+  openWalls: ReadonlySet<string>,
+) {
+  const solidWalls = new Set<string>()
 
   Object.keys(innerWalls).forEach((wallKey) => {
     if (openWalls.has(wallKey)) {
@@ -2592,6 +2637,17 @@ function hasBakedLightLineOfSight(
   targetWorld: readonly [number, number, number],
   occlusion: BakedLightOcclusion,
 ) {
+  if (
+    occlusion.splineWallQueryCache
+    && doesLineCrossBlockingSplineWall(
+      occlusion.splineWallQueryCache,
+      [originWorld[0], originWorld[2]],
+      [targetWorld[0], targetWorld[2]],
+    )
+  ) {
+    return false
+  }
+
   return !doesLineIntersectClosedWall(originWorld, targetWorld, occlusion.solidWalls)
 }
 

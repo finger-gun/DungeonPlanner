@@ -4,7 +4,6 @@ import {
   getContentPackRoomSets,
   getContentPackWallMaterialSets,
 } from '../../content-packs/registry'
-import { LEGACY_INNER_WALL_EDITING_ENABLED, WALLS_MODE_LABEL } from '../../roomWallEditing'
 import {
   useDungeonStore,
   type OutdoorBrushMode,
@@ -38,6 +37,7 @@ const OUTDOOR_BRUSH_MODES: Array<{ id: OutdoorBrushMode; label: string }> = [
   { id: 'terrain-sculpt', label: 'Sculpt' },
   { id: 'terrain-style', label: 'Style' },
 ]
+const WALLS_MODE_LABEL = 'Spline walls'
 
 const OUTDOOR_SCULPT_MODES: Array<{ id: OutdoorTerrainSculptMode; label: string }> = [
   { id: 'raise', label: 'Raise' },
@@ -330,22 +330,11 @@ export function RoomToolPanel() {
       ) : roomEditMode === 'walls' ? (
         <section className="rounded-2xl border border-stone-800 bg-stone-950/50 p-4 text-sm leading-6 text-stone-400">
           <p className="font-medium text-stone-300">{WALLS_MODE_LABEL}</p>
-          {LEGACY_INNER_WALL_EDITING_ENABLED ? (
-            <>
-              <p className="mt-1 text-xs">Click and drag to preview a locked wall run. Release to add or remove the whole run.</p>
-              <p className="text-xs">Left-drag adds inner wall runs. Right-drag removes inner or shared wall runs.</p>
-              <p className="text-xs">This mode is for structure editing in top-down view, not asset placement.</p>
-            </>
-          ) : (
-            <>
-              <p className="mt-1 text-xs">Legacy inner-wall drawing is temporarily disabled on this branch so spline handles do not fight the grid wall brush.</p>
-              <p className="text-xs">
-                {hasSplineWallGraph
-                  ? 'Use the amber node handles to drag/select spline nodes, click blue split handles to insert new nodes, and press Delete or right-click a node to remove it.'
-                  : 'Convert Rooms to Spline Graph below, then use Walls mode to edit the spline boundary directly in the scene.'}
-              </p>
-            </>
-          )}
+          <p className="mt-1 text-xs">
+            {hasSplineWallGraph
+              ? 'Use the amber node handles to drag/select spline nodes, click blue split handles to insert new nodes, and press Delete or right-click a node to remove it.'
+              : 'Convert Rooms to Spline Graph below, then use Walls mode to edit the spline boundary directly in the scene.'}
+          </p>
           {showRoomSetPicker ? (
             <RoomSetPicker
               roomSets={roomSets}

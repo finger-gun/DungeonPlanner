@@ -28,7 +28,7 @@ describe('RoomToolPanel', () => {
     render(<RoomToolPanel />)
 
     expect(screen.getByText('Spline walls')).toBeInTheDocument()
-    expect(screen.getByText(/legacy inner-wall drawing is temporarily disabled/i)).toBeInTheDocument()
+    expect(screen.getByText(/convert rooms to spline graph below/i)).toBeInTheDocument()
   })
 
   it('updates indoor room descriptions to match the active context tool', () => {

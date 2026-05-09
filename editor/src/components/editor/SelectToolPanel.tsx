@@ -3,24 +3,23 @@ import { useDungeonStore } from '../../store/useDungeonStore'
 import { SelectedOpeningInspector } from './SelectedOpeningInspector'
 import { SelectedPropInspector } from './SelectedPropInspector'
 import { SelectedWallInspector } from './SelectedWallInspector'
-import { getSelectedWallAsset } from './SelectedWallInspectorShared'
-
-const EMPTY_WALL_PROPS: Record<string, unknown> = {}
+import {
+  getSelectedWallAsset,
+  getSelectedWallKey,
+  getSelectedWallProps,
+} from './SelectedWallInspectorShared'
 
 export function SelectToolPanel() {
   const selection = useDungeonStore((state) => state.selection)
   const selectedObject = useDungeonStore((state) =>
     selection ? state.placedObjects[selection] : null,
   )
+  const selectedWallKey = useDungeonStore((state) => getSelectedWallKey(selection, state))
   const selectedWallAsset = useDungeonStore((state) => getSelectedWallAsset(selection, state))
   const selectedOpening = useDungeonStore((state) =>
     selection ? state.wallOpenings[selection] : null,
   )
-  const selectedWallProps = useDungeonStore((state) =>
-    selection && !state.placedObjects[selection] && !state.wallOpenings[selection]
-      ? (state.wallSurfaceProps[selection] ?? EMPTY_WALL_PROPS)
-      : null,
-  )
+  const selectedWallProps = useDungeonStore((state) => getSelectedWallProps(selection, state))
   const removeSelectedObject = useDungeonStore((state) => state.removeSelectedObject)
   const removeOpening = useDungeonStore((state) => state.removeOpening)
 
@@ -41,11 +40,11 @@ export function SelectToolPanel() {
     )
   }
 
-  if (selection && selectedWallAsset && selectedWallProps) {
+  if (selectedWallKey && selectedWallAsset && selectedWallProps) {
     return (
       <div className="space-y-4">
         <SelectedWallInspector
-          wallKey={selection}
+          wallKey={selectedWallKey}
           asset={selectedWallAsset}
           wallProps={selectedWallProps}
           title="Selected Wall Variant"

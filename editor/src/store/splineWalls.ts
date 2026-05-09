@@ -240,6 +240,18 @@ export function buildSplineWallMaskPathFromGraph(
     return []
   }
 
+  return buildSampledSplineWallPathFromGraph(path, splineWallGraph, options)
+}
+
+export function buildSampledSplineWallPathFromGraph(
+  path: SplineWallGraph['paths'][string],
+  splineWallGraph: SplineWallGraph,
+  options: SplineWallGeometryOptions = {},
+): SplineMaskWorldPoint[] {
+  if (path.nodeIds.length < 2) {
+    return []
+  }
+
   const points: SplineBoundaryPoint[] = []
   path.nodeIds.forEach((nodeId) => {
     const point = splineWallGraph.nodes[nodeId]?.position
@@ -247,7 +259,8 @@ export function buildSplineWallMaskPathFromGraph(
       points.push(point)
     }
   })
-  if (points.length < 3) {
+  const minimumPointCount = path.closed ? 3 : 2
+  if (points.length < minimumPointCount) {
     return []
   }
 
@@ -255,7 +268,7 @@ export function buildSplineWallMaskPathFromGraph(
     roomId: path.roomId ?? path.id,
     wallKeys: path.segmentIds,
     points,
-    closed: true,
+    closed: path.closed,
     cornerStyles: path.nodeIds.map((nodeId) => getSplineWallNodeCornerStyle(splineWallGraph.nodes[nodeId])),
   }, options)
 }

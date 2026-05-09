@@ -1,11 +1,14 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import { getContentPackAssetById } from '../content-packs/registry'
+import { buildSplineWallOpeningPlacement } from './openingPlacement'
 import {
   buildRoomDraftCells,
   buildRoomDraftSplineNodes,
   createRoomDraftFromStroke,
   setRoomDraftCorner,
 } from './roomDraft'
+import { createSplineWallQueryCache } from './splineWallQueries'
+import { upsertSplineWallGraphRoomPath } from './splineWallGraph'
 import { useDungeonStore } from './useDungeonStore'
 import { getOpeningSegments } from './openingSegments'
 
@@ -1820,6 +1823,30 @@ describe('useDungeonStore history', () => {
 
     expect(useDungeonStore.getState().wallOpenings[openingId!]?.flipped).toBe(true)
   })
+
+  it('rotates a mirrored wall selection by updating canonical wall props', () => {
+    useDungeonStore.setState((state) => ({
+      ...state,
+      selection: '1:0:west',
+      paintedCells: {
+        ...state.paintedCells,
+        '0:0': { cell: [0, 0], layerId: state.activeLayerId, roomId: 'room-a' },
+        '1:0': { cell: [1, 0], layerId: state.activeLayerId, roomId: 'room-b' },
+      },
+      wallSurfaceAssetIds: {
+        ...state.wallSurfaceAssetIds,
+        '0:0:east': 'dungeon.wall_wall_doorway',
+      },
+      wallSurfaceProps: {
+        ...state.wallSurfaceProps,
+        '0:0:east': {},
+      },
+    }))
+
+    useDungeonStore.getState().rotateSelection()
+
+    expect(useDungeonStore.getState().wallSurfaceProps['0:0:east']).toMatchObject({ flipped: true })
+  })
 })
 
 // ── getOpeningSegments ────────────────────────────────────────────────────────
@@ -1869,6 +1896,97 @@ describe('useDungeonStore wall openings', () => {
       wallKey: '0:0:north',
       width: 1,
       flipped: false,
+    })
+  })
+
+  it('records spline segment ownership for procedural door placements and syncs cutouts', () => {
+    const graph = upsertSplineWallGraphRoomPath({
+      nodes: {},
+      segments: {},
+      paths: {},
+    }, {
+      roomId: 'room-a',
+      layerId: 'default',
+      nodes: [
+        { position: [0, 0], cornerMode: 'square', cornerAmount: 0 },
+        { position: [2, 2], cornerMode: 'square', cornerAmount: 0 },
+        { position: [0, 4], cornerMode: 'square', cornerAmount: 0 },
+      ],
+    })
+    const queryCache = createSplineWallQueryCache(graph)
+    const placement = buildSplineWallOpeningPlacement(
+      { x: 3, z: 1 },
+      graph,
+      queryCache,
+      {},
+      'core.opening_door_custom',
+    )
+
+    useDungeonStore.getState().setSplineWallGraph(graph)
+    const id = useDungeonStore.getState().placeOpening({
+      assetId: 'core.opening_door_custom',
+      wallKey: placement!.wallKey,
+      width: placement!.width,
+      segmentId: placement!.segmentId,
+      segmentStartRatio: placement!.segmentStartRatio,
+      segmentEndRatio: placement!.segmentEndRatio,
+      flipped: false,
+    })
+
+    const state = useDungeonStore.getState()
+    expect(state.wallOpenings[id!]).toMatchObject({
+      assetId: 'core.opening_door_custom',
+      segmentId: placement!.segmentId,
+      segmentStartRatio: placement!.segmentStartRatio,
+      segmentEndRatio: placement!.segmentEndRatio,
+    })
+    expect(state.splineWallGraph.segments[placement!.segmentId]?.cutouts[0]).toMatchObject({
+      openingId: id,
+      startRatio: placement!.segmentStartRatio,
+      endRatio: placement!.segmentEndRatio,
+    })
+  })
+
+  it('records spline segment ownership for graph-backed open passages', () => {
+    const graph = upsertSplineWallGraphRoomPath({
+      nodes: {},
+      segments: {},
+      paths: {},
+    }, {
+      roomId: 'room-a',
+      layerId: 'default',
+      nodes: [
+        { position: [0, 0], cornerMode: 'square', cornerAmount: 0 },
+        { position: [2, 2], cornerMode: 'square', cornerAmount: 0 },
+        { position: [0, 4], cornerMode: 'square', cornerAmount: 0 },
+      ],
+    })
+    const queryCache = createSplineWallQueryCache(graph)
+    const placement = buildSplineWallOpeningPlacement(
+      { x: 3, z: 1 },
+      graph,
+      queryCache,
+      {},
+      null,
+    )
+
+    useDungeonStore.getState().setSplineWallGraph(graph)
+    useDungeonStore.getState().placeOpenPassages([placement!.wallKey])
+
+    const state = useDungeonStore.getState()
+    const opening = Object.values(state.wallOpenings)[0]
+    expect(opening).toMatchObject({
+      assetId: null,
+      wallKey: placement!.wallKey,
+      source: 'manual',
+    })
+    expect(opening?.segmentId).toBe(placement!.segmentId)
+    expect(opening?.segmentStartRatio).not.toBeNull()
+    expect(opening?.segmentEndRatio).not.toBeNull()
+    expect(state.splineWallGraph.segments[opening!.segmentId!]?.cutouts[0]).toMatchObject({
+      openingId: opening!.id,
+      startRatio: opening!.segmentStartRatio,
+      endRatio: opening!.segmentEndRatio,
     })
   })
 

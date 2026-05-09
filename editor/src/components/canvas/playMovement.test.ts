@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { upsertSplineWallGraphRoomPath } from '../../store/splineWallGraph'
 import type { DungeonObjectRecord, OpeningRecord, PaintedCells } from '../../store/useDungeonStore'
 import type { InnerWallRecord } from '../../store/manualWalls'
 import { buildMovementRange, getObjectMovementMeters, metersToSquares } from './playMovement'
@@ -23,6 +24,13 @@ function createPaintedCells(cells: Array<[number, number]>, roomId: string | nul
     `${cell[0]}:${cell[1]}`,
     { cell, layerId: 'layer-1', roomId },
   ]))
+}
+
+function createRectangleCells(width: number, height: number): Array<[number, number]> {
+  return Array.from({ length: width * height }, (_, index) => [
+    index % width,
+    Math.floor(index / width),
+  ] as [number, number])
 }
 
 describe('playMovement', () => {
@@ -119,5 +127,78 @@ describe('playMovement', () => {
     expect(range.reachableCellKeys.has('1:0')).toBe(false)
     expect(range.reachableCellKeys.has('0:1')).toBe(false)
     expect(range.reachableCellKeys.has('1:1')).toBe(false)
+  })
+
+  it('rejects cells that are less than 75% inside a rounded spline room', () => {
+    const object = createPlayer({
+      cell: [1, 1],
+      cellKey: '1:1:floor',
+      position: [3, 0, 3],
+    })
+    const splineWallGraph = upsertSplineWallGraphRoomPath({
+      nodes: {},
+      segments: {},
+      paths: {},
+    }, {
+      roomId: 'room-1',
+      layerId: 'layer-1',
+      nodes: [
+        { position: [0, 0], cornerMode: 'rounded', cornerAmount: 2 },
+        { position: [4, 0], cornerMode: 'square', cornerAmount: 0 },
+        { position: [4, 4], cornerMode: 'square', cornerAmount: 0 },
+        { position: [0, 4], cornerMode: 'square', cornerAmount: 0 },
+      ],
+    })
+
+    const range = buildMovementRange({
+      object,
+      mapMode: 'indoor',
+      paintedCells: createPaintedCells(createRectangleCells(4, 4)),
+      blockedCells: {},
+      wallOpenings: {},
+      innerWalls: {},
+      occupancy: { '1:1:floor': 'player-1' },
+      placedObjects: { 'player-1': object },
+      splineWallGraph,
+    })
+
+    expect(range.reachableCellKeys.has('0:0')).toBe(false)
+    expect(range.reachableCellKeys.has('3:3')).toBe(true)
+  })
+
+  it('blocks movement into cells outside diagonal spline room boundaries', () => {
+    const object = createPlayer({
+      cell: [0, 2],
+      cellKey: '0:2:floor',
+      position: [1, 0, 5],
+    })
+    const splineWallGraph = upsertSplineWallGraphRoomPath({
+      nodes: {},
+      segments: {},
+      paths: {},
+    }, {
+      roomId: 'room-1',
+      layerId: 'layer-1',
+      nodes: [
+        { position: [0, 0], cornerMode: 'square', cornerAmount: 0 },
+        { position: [4, 4], cornerMode: 'square', cornerAmount: 0 },
+        { position: [0, 4], cornerMode: 'square', cornerAmount: 0 },
+      ],
+    })
+
+    const range = buildMovementRange({
+      object,
+      mapMode: 'indoor',
+      paintedCells: createPaintedCells(createRectangleCells(4, 4)),
+      blockedCells: {},
+      wallOpenings: {},
+      innerWalls: {},
+      occupancy: { '0:2:floor': 'player-1' },
+      placedObjects: { 'player-1': object },
+      splineWallGraph,
+    })
+
+    expect(range.reachableCellKeys.has('2:0')).toBe(false)
+    expect(range.reachableCellKeys.has('1:2')).toBe(true)
   })
 })

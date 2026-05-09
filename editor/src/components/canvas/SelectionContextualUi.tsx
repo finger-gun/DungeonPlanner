@@ -19,16 +19,23 @@ import type { BakedFloorLightField } from '../../rendering/dungeonLightField'
 import { BUILD_ANIMATIONS_ENABLED, getBuildAnimationPlaybackDurationMs, triggerBuildTargets } from '../../store/buildAnimations'
 import { getOpeningSegments } from '../../store/openingSegments'
 import { getOpeningObjectProps, getOpeningPlayModeNextProps } from '../../store/openingState'
+import { getOpeningWorldTransform } from '../../store/openingPlacement'
 import {
   getObjectAtlasColorVariant,
   getObjectInstanceScale,
   withObjectAtlasColorVariant,
   withObjectInstanceScale,
 } from '../../store/objectAppearance'
+import { createSplineWallQueryCache } from '../../store/splineWallQueries'
 import { useDungeonStore } from '../../store/useDungeonStore'
 import { wallKeyToWorldPosition } from '../../store/wallSegments'
 import { AtlasColorVariantPicker } from '../editor/AtlasColorVariantPicker'
-import { getSelectedWallAsset } from '../editor/SelectedWallInspectorShared'
+import {
+  getSelectedWallAsset,
+  getSelectedWallAssetId,
+  getSelectedWallKey,
+  getSelectedWallProps,
+} from '../editor/SelectedWallInspectorShared'
 import { BatchedTileEntries } from './BatchedTileEntries'
 import { WALL_EXTRA_DELAY_MS } from './DungeonRoomShared'
 import { getRegisteredObject, useObjectRegistryVersion } from './objectRegistry'
@@ -82,23 +89,17 @@ export function SelectionContextualUi({ bakedLightField = null }: SelectionConte
   const activeFloorId = useDungeonStore((state) => state.activeFloorId)
   const isObjectDragActive = useDungeonStore((state) => state.isObjectDragActive)
   const pickedUpObject = useDungeonStore((state) => state.pickedUpObject)
+  const splineWallGraph = useDungeonStore((state) => state.splineWallGraph)
   const selectedObject = useDungeonStore((state) =>
     selection ? state.placedObjects[selection] : null,
   )
   const selectedOpening = useDungeonStore((state) =>
     selection ? state.wallOpenings[selection] : null,
   )
+  const selectedWallKey = useDungeonStore((state) => getSelectedWallKey(selection, state))
   const selectedWallAsset = useDungeonStore((state) => getSelectedWallAsset(selection, state))
-  const selectedWallAssetId = useDungeonStore((state) =>
-    selection && !state.placedObjects[selection] && !state.wallOpenings[selection]
-      ? (state.wallSurfaceAssetIds[selection] ?? null)
-      : null,
-  )
-  const selectedWallProps = useDungeonStore((state) =>
-    selection && !state.placedObjects[selection] && !state.wallOpenings[selection]
-      ? (state.wallSurfaceProps[selection] ?? EMPTY_SELECTION_PROPS)
-      : null,
-  )
+  const selectedWallAssetId = useDungeonStore((state) => getSelectedWallAssetId(selection, state))
+  const selectedWallProps = useDungeonStore((state) => getSelectedWallProps(selection, state))
   const setObjectProps = useDungeonStore((state) => state.setObjectProps)
   const setOpeningProps = useDungeonStore((state) => state.setOpeningProps)
   const setOpeningAsset = useDungeonStore((state) => state.setOpeningAsset)
@@ -122,14 +123,19 @@ export function SelectionContextualUi({ bakedLightField = null }: SelectionConte
   const selectionRotateCleanupRef = useRef<(() => void) | null>(null)
   const moveDragCleanupRef = useRef<(() => void) | null>(null)
   const [isColorPickerOpen, setIsColorPickerOpen] = useState(false)
+  const openingQueryCache = useMemo(() => createSplineWallQueryCache(splineWallGraph), [splineWallGraph])
 
   const selectedOpeningAsset = useMemo(
     () => (selectedOpening?.assetId ? getContentPackAssetById(selectedOpening.assetId) : null),
     [selectedOpening?.assetId],
   )
+  const selectedOpeningTransform = useMemo(
+    () => (selectedOpening ? getOpeningWorldTransform(splineWallGraph, openingQueryCache, selectedOpening) : null),
+    [openingQueryCache, selectedOpening, splineWallGraph],
+  )
   const openingProps = selectedOpening ? getOpeningObjectProps(selectedOpening) : null
   const isSelectedWallDoor = Boolean(
-    selection
+    selectedWallKey
     && selectedWallAssetId
     && selectedWallAsset
     && (selectedWallAsset.getPlayModeNextProps || hasAtlasColorVariants(selectedWallAsset.metadata)),
@@ -149,7 +155,7 @@ export function SelectionContextualUi({ bakedLightField = null }: SelectionConte
     if (selectionMode === 'opening' && selectedOpening) {
       return getSelectionAnchorPosition(
         selectedOpening.id,
-        wallKeyToWorldPosition(selectedOpening.wallKey)?.position ?? [0, 0, 0],
+        selectedOpeningTransform?.position ?? wallKeyToWorldPosition(selectedOpening.wallKey)?.position ?? [0, 0, 0],
         openingProps ?? EMPTY_SELECTION_PROPS,
         objectRegistryVersion,
       )
@@ -157,8 +163,8 @@ export function SelectionContextualUi({ bakedLightField = null }: SelectionConte
 
     if (selectionMode === 'wall-door' && selectedWallProps) {
       return getSelectionAnchorPosition(
-        selection,
-        wallKeyToWorldPosition(selection)?.position ?? [0, 0, 0],
+        selectedWallKey ?? selection,
+        wallKeyToWorldPosition(selectedWallKey ?? selection)?.position ?? [0, 0, 0],
         selectedWallProps,
         objectRegistryVersion,
       )
@@ -174,7 +180,17 @@ export function SelectionContextualUi({ bakedLightField = null }: SelectionConte
       selectedObject.props,
       objectRegistryVersion,
     )
-  }, [objectRegistryVersion, openingProps, selectedObject, selectedOpening, selectedWallProps, selection, selectionMode])
+  }, [
+    objectRegistryVersion,
+    openingProps,
+    selectedObject,
+    selectedOpening,
+    selectedOpeningTransform,
+    selectedWallKey,
+    selectedWallProps,
+    selection,
+    selectionMode,
+  ])
   const selectedAsset = selectionMode === 'object'
     ? (selectedObject?.assetId ? getContentPackAssetById(selectedObject.assetId) : null)
     : selectionMode === 'opening'
@@ -543,8 +559,8 @@ export function SelectionContextualUi({ bakedLightField = null }: SelectionConte
       return
     }
 
-    if (selectionMode === 'wall-door' && selection) {
-      runAnimatedWallMutation([selection], () => setWallSurfaceAsset(selection, null))
+    if (selectionMode === 'wall-door' && selectedWallKey) {
+      runAnimatedWallMutation([selectedWallKey], () => setWallSurfaceAsset(selectedWallKey, null))
       return
     }
 
@@ -556,24 +572,33 @@ export function SelectionContextualUi({ bakedLightField = null }: SelectionConte
     removeSelectedObject,
     runAnimatedWallMutation,
     selectedOpening,
-    selection,
+    selectedWallKey,
     selectionMode,
     setWallSurfaceAsset,
   ])
 
   const handleDiscreteRotatePointerDown = useCallback((event: ReactPointerEvent<HTMLButtonElement>) => {
-    if (event.button !== 0 || !selection || !(selectionMode === 'opening' || selectionMode === 'wall-door')) {
+    if (
+      event.button !== 0 ||
+      (
+        (selectionMode === 'opening' && !selection) ||
+        (selectionMode === 'wall-door' && !selectedWallKey) ||
+        (selectionMode !== 'opening' && selectionMode !== 'wall-door')
+      )
+    ) {
       return
     }
 
     event.preventDefault()
     event.stopPropagation()
 
-    const previewObject = getRegisteredObject(selection)
-    const wallTransform = selectionMode === 'opening' && selectedOpening
-      ? wallKeyToWorldPosition(selectedOpening.wallKey)
-      : wallKeyToWorldPosition(selection)
-    if (!previewObject || !wallTransform) {
+    const previewSelectionId = selectionMode === 'wall-door' ? selectedWallKey : selection
+    if (!previewSelectionId) {
+      return
+    }
+
+    const previewObject = getRegisteredObject(previewSelectionId)
+    if (!previewObject) {
       return
     }
 
@@ -587,7 +612,10 @@ export function SelectionContextualUi({ bakedLightField = null }: SelectionConte
 
     selectionRotateDragStateRef.current = {
       previewObject,
-      wallRotationY: wallTransform.rotation[1],
+      wallRotationY:
+        selectionMode === 'opening'
+          ? getObjectWorldRotationY(previewObject) - (initialFlipped ? Math.PI : 0)
+          : getObjectWorldRotationY(previewObject),
       visualRotationOffsetY,
       startClientX: event.clientX,
       startClientY: event.clientY,
@@ -639,7 +667,7 @@ export function SelectionContextualUi({ bakedLightField = null }: SelectionConte
     }
 
     invalidate()
-  }, [controls, invalidate, selectedOpening, selectedWallProps, selection, selectionMode, stopSelectionRotateDrag])
+  }, [controls, invalidate, selectedOpening, selectedWallKey, selectedWallProps, selection, selectionMode, stopSelectionRotateDrag])
 
   const handleStateTogglePointerDown = useCallback((event: ReactPointerEvent<HTMLButtonElement>) => {
     event.preventDefault()
@@ -659,10 +687,10 @@ export function SelectionContextualUi({ bakedLightField = null }: SelectionConte
       return
     }
 
-    if (selectionMode === 'wall-door' && selection && selectedWallAsset && selectedWallProps) {
+    if (selectionMode === 'wall-door' && selectedWallKey && selectedWallAsset && selectedWallProps) {
       const nextProps = selectedWallAsset.getPlayModeNextProps?.(selectedWallProps) ?? null
       if (nextProps) {
-        setWallSurfaceProps(selection, { ...selectedWallProps, ...nextProps })
+        setWallSurfaceProps(selectedWallKey, { ...selectedWallProps, ...nextProps })
         invalidate()
       }
     }
@@ -671,7 +699,7 @@ export function SelectionContextualUi({ bakedLightField = null }: SelectionConte
     selectedOpening,
     selectedWallAsset,
     selectedWallProps,
-    selection,
+    selectedWallKey,
     selectionMode,
     setOpeningAsset,
     setOpeningProps,
@@ -693,9 +721,9 @@ export function SelectionContextualUi({ bakedLightField = null }: SelectionConte
         selectedOpening.id,
         withObjectAtlasColorVariant(getOpeningObjectProps(selectedOpening), atlasColorVariants.propKey, variantId),
       )
-    } else if (selectionMode === 'wall-door' && selection && selectedWallProps) {
+    } else if (selectionMode === 'wall-door' && selectedWallKey && selectedWallProps) {
       setWallSurfaceProps(
-        selection,
+        selectedWallKey,
         withObjectAtlasColorVariant(selectedWallProps, atlasColorVariants.propKey, variantId),
       )
     }
@@ -707,7 +735,7 @@ export function SelectionContextualUi({ bakedLightField = null }: SelectionConte
     selectedObject,
     selectedOpening,
     selectedWallProps,
-    selection,
+    selectedWallKey,
     selectionMode,
     setObjectProps,
     setOpeningProps,
@@ -969,6 +997,14 @@ function getObjectAnchorPosition(
     fallbackPosition[1] + (UNDER_MODEL_OFFSET * getObjectInstanceScale(objectProps)),
     fallbackPosition[2],
   ]
+}
+
+function getObjectWorldRotationY(object: THREE.Object3D) {
+  const quaternion = new THREE.Quaternion()
+  const euler = new THREE.Euler()
+  object.getWorldQuaternion(quaternion)
+  euler.setFromQuaternion(quaternion, 'YXZ')
+  return euler.y
 }
 
 function getNearestWallSnapRotationY(rotationY: number, wallRotationY: number) {

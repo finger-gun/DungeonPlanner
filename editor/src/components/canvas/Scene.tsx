@@ -637,6 +637,7 @@ function FloorContent({ startY = 0 }: { startY?: number }) {
       innerWalls,
       occupancy,
       placedObjects,
+      splineWallGraph,
     })
   }, [
     activeMovementObject,
@@ -647,6 +648,7 @@ function FloorContent({ startY = 0 }: { startY?: number }) {
     occupancy,
     paintedCells,
     placedObjects,
+    splineWallGraph,
     wallOpenings,
     wallSurfaceAssetIds,
     wallSurfaceProps,
@@ -803,6 +805,7 @@ function FloorContent({ startY = 0 }: { startY?: number }) {
       innerWalls,
       occupancy,
       placedObjects,
+      splineWallGraph,
     })
 
     selectObject(object.id)
@@ -846,6 +849,7 @@ function FloorContent({ startY = 0 }: { startY?: number }) {
     placedObjects,
     selectObject,
     setObjectDragActive,
+    splineWallGraph,
     tool,
     updateDragFromClientPosition,
     wallOpenings,

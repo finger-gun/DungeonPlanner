@@ -5,7 +5,7 @@ import type { SerializableState } from './serialization'
 import type { FloorRecord } from './useDungeonStore'
 import { DEFAULT_POST_PROCESSING_SETTINGS } from '../postprocessing/tiltShiftMath'
 import { DEFAULT_OUTDOOR_TERRAIN_STYLE } from './outdoorTerrainStyles'
-import { createEmptySplineWallGraph } from './splineWallGraph'
+import { createEmptySplineWallGraph, upsertSplineWallGraphRoomPath } from './splineWallGraph'
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 
@@ -114,6 +114,80 @@ describe('serializeDungeon / deserializeDungeon roundtrip', () => {
     expect(result).not.toBeNull()
     expect(result!.mapMode).toBe('outdoor')
     expect(result!.outdoorTimeOfDay).toBe(0.8)
+  })
+
+  it('preserves spline-owned opening placement data', () => {
+    const state = baseState()
+    state.splineWallGraph = upsertSplineWallGraphRoomPath(createEmptySplineWallGraph(), {
+      roomId: 'room-a',
+      layerId: 'default',
+      nodes: [
+        { position: [0, 0], cornerMode: 'square', cornerAmount: 0 },
+        { position: [2, 2], cornerMode: 'square', cornerAmount: 0 },
+        { position: [0, 4], cornerMode: 'square', cornerAmount: 0 },
+      ],
+    })
+    state.wallOpenings = {
+      'opening-a': {
+        id: 'opening-a',
+        assetId: 'core.opening_door_custom',
+        wallKey: '1:1:south',
+        width: 1,
+        segmentId: 'room-a:path:0:segment:0',
+        segmentStartRatio: 0.35,
+        segmentEndRatio: 0.65,
+        flipped: false,
+        objectProps: {},
+        layerId: 'default',
+        source: 'manual',
+      },
+    }
+    state.floors!['floor-1']!.snapshot.splineWallGraph = state.splineWallGraph
+    state.floors!['floor-1']!.snapshot.wallOpenings = state.wallOpenings
+
+    const result = deserializeDungeon(serializeDungeon(state))
+
+    expect(result?.wallOpenings['opening-a']).toMatchObject({
+      segmentId: 'room-a:path:0:segment:0',
+      segmentStartRatio: 0.35,
+      segmentEndRatio: 0.65,
+    })
+  })
+
+  it('hydrates missing spline opening ownership on load when a graph-backed wall exists', () => {
+    const state = baseState()
+    state.splineWallGraph = upsertSplineWallGraphRoomPath(createEmptySplineWallGraph(), {
+      roomId: 'room-a',
+      layerId: 'default',
+      nodes: [
+        { position: [0, 0], cornerMode: 'square', cornerAmount: 0 },
+        { position: [2, 2], cornerMode: 'square', cornerAmount: 0 },
+        { position: [0, 4], cornerMode: 'square', cornerAmount: 0 },
+      ],
+    })
+    state.wallOpenings = {
+      'opening-a': {
+        id: 'opening-a',
+        assetId: null,
+        wallKey: '1:1:south',
+        width: 1,
+        segmentId: null,
+        segmentStartRatio: null,
+        segmentEndRatio: null,
+        flipped: false,
+        objectProps: {},
+        layerId: 'default',
+        source: 'manual',
+      },
+    }
+    state.floors!['floor-1']!.snapshot.splineWallGraph = state.splineWallGraph
+    state.floors!['floor-1']!.snapshot.wallOpenings = state.wallOpenings
+
+    const result = deserializeDungeon(serializeDungeon(state))
+
+    expect(result?.wallOpenings['opening-a']?.segmentId).toBe('room-a:path:0:segment:0')
+    expect(result?.wallOpenings['opening-a']?.segmentStartRatio).not.toBeNull()
+    expect(result?.wallOpenings['opening-a']?.segmentEndRatio).not.toBeNull()
   })
 
   it('preserves outdoor terrain brush settings', () => {

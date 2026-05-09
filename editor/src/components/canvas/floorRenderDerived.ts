@@ -2,6 +2,7 @@ import { getContentPackAssetById, getContentPackRoomSetById } from '../../conten
 import type { ContentPackModelTransform } from '../../content-packs/types'
 import { GRID_SIZE, cellToWorldPosition, getCellKey, type GridCell } from '../../hooks/useSnapToGrid'
 import type { FloorDirtyInfo } from '../../store/floorDirtyDomains'
+import type { SplineWallGraph } from '../../store/splineWallGraph'
 import { getInnerWallOwnerRecord } from '../../store/manualWalls'
 import { buildWallOpeningDerivedState } from '../../store/derived/wallOpeningDerived'
 import {
@@ -90,6 +91,7 @@ export type FloorRenderDerivedInput = {
   wallSurfaceProps: Record<string, Record<string, unknown>>
   wallOpeningDerivedState: FloorDerivedBundle['wallOpeningDerivedState']
   innerWalls: Record<string, InnerWallRecord>
+  splineWallGraph?: SplineWallGraph
 }
 
 export type FloorRenderChunkInput = {
@@ -103,6 +105,7 @@ export type FloorRenderChunkInput = {
   wallSurfaceProps: Record<string, Record<string, unknown>>
   globalFloorAssetId: string | null
   globalWallAssetId: string | null
+  splineWallGraph?: SplineWallGraph
 }
 
 export function buildFloorRenderDerivedBundle(
@@ -121,6 +124,7 @@ export function buildFloorRenderDerivedBundle(
     wallSurfaceProps: derived.data.wallSurfaceProps,
     wallOpeningDerivedState: derived.wallOpeningDerivedState,
     innerWalls: derived.data.innerWalls,
+    splineWallGraph: derived.data.splineWallGraph,
   }, options)
 }
 
@@ -130,6 +134,7 @@ export function buildFloorRenderDerivedBundleFromInput(
     includeFloorReceivers?: boolean
   },
 ): FloorRenderDerivedBundle {
+  const graphBackedRoomIds = getGraphBackedRoomIds(input.splineWallGraph)
   const floorRenderPlan = buildFloorRenderPlan(
     input.visiblePaintedCellRecords,
     input.rooms,
@@ -151,6 +156,7 @@ export function buildFloorRenderDerivedBundleFromInput(
       input.wallSurfaceProps,
       input.wallOpeningDerivedState.suppressedWallKeys,
       input.innerWalls,
+      graphBackedRoomIds,
     ),
     corners: deriveVisibleWallCorners(
       input.visiblePaintedCellRecords,
@@ -159,6 +165,7 @@ export function buildFloorRenderDerivedBundleFromInput(
       input.wallSurfaceAssetIds,
       input.wallOpeningDerivedState.suppressedWallKeys,
       input.innerWalls,
+      graphBackedRoomIds,
     ),
   }
 }
@@ -194,6 +201,7 @@ export function buildFloorRenderDerivedBundleForChunk(
     wallSurfaceProps: filterWallKeyRecordByRect(input.wallSurfaceProps, contextRect),
     wallOpeningDerivedState: contextWallOpeningDerivedState,
     innerWalls: filterWallKeyRecordByRect(input.innerWalls, contextRect),
+    splineWallGraph: input.splineWallGraph,
   }, options)
 
   return {
@@ -401,6 +409,7 @@ function deriveWallInstances(
   wallSurfaceProps: Record<string, Record<string, unknown>>,
   suppressedWallKeys: Set<string>,
   innerWalls: Record<string, InnerWallRecord>,
+  graphBackedRoomIds: ReadonlySet<string>,
 ): RoomWallInstance[] {
   const wallSegments = collectRenderableWallSegments(
     paintedCells,
@@ -409,6 +418,7 @@ function deriveWallInstances(
     wallSurfaceAssetIds,
     suppressedWallKeys,
     innerWalls,
+    graphBackedRoomIds,
   )
 
   const groups = new Map<string, BoundaryWallSegmentWithAsset[]>()
@@ -482,6 +492,7 @@ function deriveVisibleWallCorners(
   wallSurfaceAssetIds: Record<string, string>,
   suppressedWallKeys: Set<string>,
   innerWalls: Record<string, InnerWallRecord>,
+  graphBackedRoomIds: ReadonlySet<string>,
 ): RoomCornerRenderInstance[] {
   const wallSegments = collectRenderableWallSegments(
     paintedCells,
@@ -490,6 +501,7 @@ function deriveVisibleWallCorners(
     wallSurfaceAssetIds,
     suppressedWallKeys,
     innerWalls,
+    graphBackedRoomIds,
   )
   const wallAssetIdsByKey = new Map(wallSegments.map((segment) => [segment.key, segment.assetId]))
 
@@ -543,14 +555,29 @@ function collectRenderableWallSegments(
   wallSurfaceAssetIds: Record<string, string>,
   suppressedWallKeys: Set<string>,
   innerWalls: Record<string, InnerWallRecord>,
+  graphBackedRoomIds: ReadonlySet<string>,
 ) {
-  const boundarySegments = collectBoundaryWallSegments(paintedCells, { suppressedWallKeys }).map((segment) => ({
-    ...segment,
-    source: 'boundary' as const,
-    assetId:
-      wallSurfaceAssetIds[segment.key] ??
-      getInheritedWallAssetIdForWallKey(segment.key, paintedCells, rooms, globalWallAssetId),
-  }))
+  const boundarySegments = collectBoundaryWallSegments(paintedCells, { suppressedWallKeys }).flatMap((segment) => {
+    const explicitAssetId = wallSurfaceAssetIds[segment.key] ?? null
+    const assetId = explicitAssetId
+      ?? getInheritedWallAssetIdForWallKey(segment.key, paintedCells, rooms, globalWallAssetId)
+    const ownerRecord = getWallOwnerRecord(segment.key, paintedCells)
+
+    if (
+      ownerRecord?.roomId
+      && graphBackedRoomIds.has(ownerRecord.roomId)
+      && !explicitAssetId
+      && !isInteractiveWallAsset(assetId)
+    ) {
+      return []
+    }
+
+    return [{
+      ...segment,
+      source: 'boundary' as const,
+      assetId,
+    }]
+  })
 
   const explicitInnerSegments = Object.keys(innerWalls).flatMap<BoundaryWallSegmentWithAsset>((wallKey) => {
     const ownerRecord = getInnerWallOwnerRecord(wallKey, paintedCells)
@@ -576,6 +603,18 @@ function collectRenderableWallSegments(
   })
 
   return [...boundarySegments, ...explicitInnerSegments]
+}
+
+function getGraphBackedRoomIds(splineWallGraph: SplineWallGraph | null | undefined) {
+  return new Set(
+    Object.values(splineWallGraph?.paths ?? {})
+      .map((path) => path.roomId)
+      .filter((roomId): roomId is string => Boolean(roomId)),
+  )
+}
+
+function isInteractiveWallAsset(assetId: string | null) {
+  return Boolean(getContentPackAssetById(assetId ?? '')?.getPlayModeNextProps)
 }
 
 function getWallSpanWorldTransform(

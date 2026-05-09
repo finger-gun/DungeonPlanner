@@ -1,6 +1,7 @@
 import { SquareMousePointer, Brush, VectorSquare, BrickWall } from 'lucide-react'
-import { WALLS_MODE_LABEL } from '../../roomWallEditing'
 import { useDungeonStore, type RoomEditMode, type RoomPaintMode } from '../../store/useDungeonStore'
+
+const WALLS_MODE_LABEL = 'Spline walls'
 
 type RoomContextTool =
   | {

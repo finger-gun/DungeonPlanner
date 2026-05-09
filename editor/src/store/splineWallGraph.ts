@@ -1,6 +1,7 @@
-import { getContentPackAssetById } from '../content-packs/registry'
-import { GRID_SIZE } from '../hooks/useSnapToGrid'
-import { getOpeningSegments } from './openingSegments'
+import {
+  getOpeningSpanPlacements,
+  getOpeningVerticalCutoutSpec,
+} from './openingPlacement'
 import type { RoomDraftCornerMode, RoomDraftSplineNodeInput } from './roomDraft'
 import type { OpeningRecord } from './useDungeonStore'
 
@@ -422,9 +423,9 @@ export function syncSplineWallGraphCutoutsFromOpenings(
 
   Object.values(wallOpenings).forEach((opening) => {
     const kind: SplineWallCutoutKind = opening.assetId === null ? 'passage' : 'door'
-    const { startRatio, endRatio, bottomHeight, topHeight } = getSplineWallOpeningCutoutSpec(opening)
+    const { bottomHeight, topHeight } = getOpeningVerticalCutoutSpec(opening)
 
-    getSplineWallOpeningCutoutPlacements(nextGraph, opening, startRatio, endRatio).forEach((placement) => {
+    getOpeningSpanPlacements(nextGraph, opening).forEach((placement) => {
       const nextCutout = {
         id: `${opening.id}:${placement.segmentId}`,
         kind,
@@ -461,183 +462,7 @@ export function syncSplineWallGraphCutoutsFromOpenings(
   return nextGraph
 }
 
-function getSplineWallOpeningCutoutPlacements(
-  graph: SplineWallGraph,
-  opening: OpeningRecord,
-  openingStartRatio: number,
-  openingEndRatio: number,
-) {
-  return getOpeningSegments(opening.wallKey, opening.width)
-    .flatMap((wallKey) => {
-      const directPlacements = Object.values(graph.segments)
-        .filter((segment) => segment.wallKey === wallKey)
-        .map((segment) => ({
-          segmentId: segment.id,
-          startRatio: openingStartRatio,
-          endRatio: openingEndRatio,
-        }))
-      if (directPlacements.length > 0) {
-        return directPlacements
-      }
-
-      const boundary = getWallKeyBoundary(wallKey)
-      if (!boundary) {
-        return []
-      }
-
-      return Object.values(graph.segments)
-        .flatMap((segment) => projectWallKeyOpeningOntoSplineSegment(
-          graph,
-          segment,
-          boundary,
-          openingStartRatio,
-          openingEndRatio,
-        ))
-    })
-}
-
-function getWallKeyBoundary(wallKey: string) {
-  const [cellXText, cellZText, direction] = wallKey.split(':')
-  const cellX = Number.parseInt(cellXText ?? '', 10)
-  const cellZ = Number.parseInt(cellZText ?? '', 10)
-  if (!Number.isFinite(cellX) || !Number.isFinite(cellZ)) {
-    return null
-  }
-
-  switch (direction) {
-    case 'north':
-      return { start: [cellX, cellZ + 1] as [number, number], end: [cellX + 1, cellZ + 1] as [number, number] }
-    case 'south':
-      return { start: [cellX, cellZ] as [number, number], end: [cellX + 1, cellZ] as [number, number] }
-    case 'east':
-      return { start: [cellX + 1, cellZ] as [number, number], end: [cellX + 1, cellZ + 1] as [number, number] }
-    case 'west':
-      return { start: [cellX, cellZ] as [number, number], end: [cellX, cellZ + 1] as [number, number] }
-    default:
-      return null
-  }
-}
-
-function projectWallKeyOpeningOntoSplineSegment(
-  graph: SplineWallGraph,
-  segment: SplineWallSegment,
-  boundary: { start: [number, number]; end: [number, number] },
-  openingStartRatio: number,
-  openingEndRatio: number,
-) {
-  const start = graph.nodes[segment.startNodeId]?.position
-  const end = graph.nodes[segment.endNodeId]?.position
-  if (!start || !end) {
-    return []
-  }
-
-  const segmentDeltaX = end[0] - start[0]
-  const segmentDeltaZ = end[1] - start[1]
-  const boundaryDeltaX = boundary.end[0] - boundary.start[0]
-  const boundaryDeltaZ = boundary.end[1] - boundary.start[1]
-  const segmentIsHorizontal = Math.abs(segmentDeltaZ) <= SPLINE_WALL_CUTOUT_EPSILON
-  const segmentIsVertical = Math.abs(segmentDeltaX) <= SPLINE_WALL_CUTOUT_EPSILON
-  const boundaryIsHorizontal = Math.abs(boundaryDeltaZ) <= SPLINE_WALL_CUTOUT_EPSILON
-  const boundaryIsVertical = Math.abs(boundaryDeltaX) <= SPLINE_WALL_CUTOUT_EPSILON
-
-  if (
-    (!segmentIsHorizontal && !segmentIsVertical)
-    || segmentIsHorizontal !== boundaryIsHorizontal
-    || segmentIsVertical !== boundaryIsVertical
-  ) {
-    return []
-  }
-
-  if (segmentIsHorizontal && Math.abs(start[1] - boundary.start[1]) > SPLINE_WALL_CUTOUT_EPSILON) {
-    return []
-  }
-  if (segmentIsVertical && Math.abs(start[0] - boundary.start[0]) > SPLINE_WALL_CUTOUT_EPSILON) {
-    return []
-  }
-
-  const boundaryStartRatio = projectPointOntoSegmentRatio(boundary.start, start, end)
-  const boundaryEndRatio = projectPointOntoSegmentRatio(boundary.end, start, end)
-  const overlapStartRatio = Math.max(0, Math.min(boundaryStartRatio, boundaryEndRatio))
-  const overlapEndRatio = Math.min(1, Math.max(boundaryStartRatio, boundaryEndRatio))
-  if (overlapEndRatio - overlapStartRatio <= SPLINE_WALL_CUTOUT_EPSILON) {
-    return []
-  }
-
-  const segmentOverlapStart = interpolateSplineWallPoint(start, end, overlapStartRatio)
-  const segmentOverlapEnd = interpolateSplineWallPoint(start, end, overlapEndRatio)
-  const overlapBoundaryStart = projectPointOntoSegmentRatio(segmentOverlapStart, boundary.start, boundary.end)
-  const overlapBoundaryEnd = projectPointOntoSegmentRatio(segmentOverlapEnd, boundary.start, boundary.end)
-  const cutoutBoundaryStart = Math.max(openingStartRatio, Math.min(overlapBoundaryStart, overlapBoundaryEnd))
-  const cutoutBoundaryEnd = Math.min(openingEndRatio, Math.max(overlapBoundaryStart, overlapBoundaryEnd))
-  if (cutoutBoundaryEnd - cutoutBoundaryStart <= SPLINE_WALL_CUTOUT_EPSILON) {
-    return []
-  }
-
-  const cutoutStart = interpolateSplineWallPoint(boundary.start, boundary.end, cutoutBoundaryStart)
-  const cutoutEnd = interpolateSplineWallPoint(boundary.start, boundary.end, cutoutBoundaryEnd)
-  const cutoutStartRatio = projectPointOntoSegmentRatio(cutoutStart, start, end)
-  const cutoutEndRatio = projectPointOntoSegmentRatio(cutoutEnd, start, end)
-
-  return [{
-    segmentId: segment.id,
-    startRatio: Math.max(0, Math.min(cutoutStartRatio, cutoutEndRatio)),
-    endRatio: Math.min(1, Math.max(cutoutStartRatio, cutoutEndRatio)),
-  }]
-}
-
-function getSplineWallOpeningCutoutSpec(opening: OpeningRecord) {
-  if (opening.assetId === null || opening.width !== 1) {
-    return { startRatio: 0, endRatio: 1, bottomHeight: 0, topHeight: null }
-  }
-
-  const asset = getContentPackAssetById(opening.assetId)
-  const clearWidth = asset?.metadata?.openingCutoutWidth
-  const clearHeight = asset?.metadata?.openingCutoutHeight
-  if (clearWidth === undefined) {
-    return { startRatio: 0, endRatio: 1, bottomHeight: 0, topHeight: clearHeight ?? null }
-  }
-
-  const clampedWidth = Math.min(Math.max(clearWidth, SPLINE_WALL_CUTOUT_EPSILON), GRID_SIZE)
-  if (clampedWidth >= GRID_SIZE - SPLINE_WALL_CUTOUT_EPSILON) {
-    return { startRatio: 0, endRatio: 1, bottomHeight: 0, topHeight: clearHeight ?? null }
-  }
-
-  const insetRatio = (GRID_SIZE - clampedWidth) / (GRID_SIZE * 2)
-  return {
-    startRatio: insetRatio,
-    endRatio: 1 - insetRatio,
-    bottomHeight: 0,
-    topHeight: clearHeight ?? null,
-  }
-}
-
 const SPLINE_WALL_CUTOUT_EPSILON = 1e-5
-
-function interpolateSplineWallPoint(
-  start: [number, number],
-  end: [number, number],
-  ratio: number,
-): [number, number] {
-  return [
-    start[0] + ((end[0] - start[0]) * ratio),
-    start[1] + ((end[1] - start[1]) * ratio),
-  ]
-}
-
-function projectPointOntoSegmentRatio(
-  point: [number, number],
-  start: [number, number],
-  end: [number, number],
-) {
-  const deltaX = end[0] - start[0]
-  const deltaZ = end[1] - start[1]
-  const lengthSquared = deltaX * deltaX + deltaZ * deltaZ
-  if (lengthSquared <= SPLINE_WALL_CUTOUT_EPSILON) {
-    return 0
-  }
-
-  return (((point[0] - start[0]) * deltaX) + ((point[1] - start[1]) * deltaZ)) / lengthSquared
-}
 
 function getSplineWallSegmentSplitRatio(
   start: [number, number],

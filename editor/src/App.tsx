@@ -58,7 +58,6 @@ import {
   stripEditorDungeonHandoff,
 } from './lib/editorDungeonHandoff'
 import { listEditorActors } from './lib/editorActors'
-import { LEGACY_INNER_WALL_EDITING_ENABLED } from './roomWallEditing'
 import type { SavedDungeonSummary } from '@dungeonplanner/shared/editorAccess'
 import type { EditorActorRecord } from '@dungeonplanner/shared/actors'
 
@@ -769,9 +768,7 @@ function App() {
                   ? 'Click a room to show resize handles · drag edges or corners to reshape it · press Delete to remove the selected room'
                   : 'Drag to draft a room footprint · release to place blue edit anchors · drag corners to round them, hold Ctrl for diagonals, then commit in-scene'
             : roomEditMode === 'walls'
-              ? LEGACY_INNER_WALL_EDITING_ENABLED
-                ? 'Top-down inner wall editing · drag to preview an axis-locked wall run · release to add or remove it'
-                : 'Spline wall editing · drag amber nodes to reshape walls · click blue handles to split segments · Delete removes the selected node'
+              ? 'Spline wall editing · drag amber nodes to reshape walls · click blue handles to split segments · Delete removes the selected node'
               : 'Drag to draft a room footprint · release to place blue edit anchors · drag corners to round them, hold Ctrl for diagonals, then commit in-scene'
         : tool === 'character'
           ? 'Select a character to place · click a room cell to place it · use Edit to reopen the character sheet'

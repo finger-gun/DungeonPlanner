@@ -1,6 +1,7 @@
 import * as THREE from 'three'
 import { describe, expect, it } from 'vitest'
 import { GRID_SIZE } from '../hooks/useSnapToGrid'
+import { upsertSplineWallGraphRoomPath } from '../store/splineWallGraph'
 import type {
   DungeonObjectRecord,
   PaintedCells,
@@ -439,6 +440,54 @@ describe('dungeonLightField', () => {
       [3, 0, 3],
       new Set(['0:0:east']),
     )).toBe(true)
+  })
+
+  it('blocks baked light across diagonal spline walls', () => {
+    clearBakedFloorLightFieldCache()
+
+    const paintedCells: PaintedCells = {
+      '0:0': { cell: [0, 0], layerId: 'default', roomId: 'room-a' },
+      '0:1': { cell: [0, 1], layerId: 'default', roomId: 'room-a' },
+      '0:2': { cell: [0, 2], layerId: 'default', roomId: 'room-a' },
+      '0:3': { cell: [0, 3], layerId: 'default', roomId: 'room-a' },
+      '1:1': { cell: [1, 1], layerId: 'default', roomId: 'room-a' },
+      '1:2': { cell: [1, 2], layerId: 'default', roomId: 'room-a' },
+      '1:3': { cell: [1, 3], layerId: 'default', roomId: 'room-a' },
+      '2:2': { cell: [2, 2], layerId: 'default', roomId: 'room-a' },
+      '2:3': { cell: [2, 3], layerId: 'default', roomId: 'room-a' },
+      '3:3': { cell: [3, 3], layerId: 'default', roomId: 'room-a' },
+    }
+    const splineWallGraph = upsertSplineWallGraphRoomPath({
+      nodes: {},
+      segments: {},
+      paths: {},
+    }, {
+      roomId: 'room-a',
+      layerId: 'default',
+      nodes: [
+        { position: [0, 0], cornerMode: 'square', cornerAmount: 0 },
+        { position: [4, 4], cornerMode: 'square', cornerAmount: 0 },
+        { position: [0, 4], cornerMode: 'square', cornerAmount: 0 },
+      ],
+    })
+
+    const field = getOrBuildBakedFloorLightField({
+      floorId: 'floor-diagonal-occlusion',
+      floorCells: Object.values(paintedCells).map((record) => record.cell),
+      staticLightSources: [createResolvedLightSource('torch', [1, 1.5, 5])],
+      occlusionInput: {
+        paintedCells,
+        splineWallGraph,
+        wallOpenings: {},
+        innerWalls: {},
+      },
+    })
+
+    const visibleSample = sampleBakedLightFieldAtWorldPosition(field, [1, 0, 5])
+    const blockedSample = sampleBakedLightFieldAtWorldPosition(field, [5, 0, 1])
+
+    expect(visibleSample[0]).toBeGreaterThan(0.2)
+    expect(blockedSample).toEqual([0, 0, 0])
   })
 
   it('caps overlapping baked light intensity at the configured ceiling', () => {

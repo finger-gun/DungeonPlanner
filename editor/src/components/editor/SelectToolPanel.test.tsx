@@ -162,4 +162,31 @@ describe('SelectToolPanel', () => {
 
     expect(useDungeonStore.getState().wallSurfaceProps[wallKey]).toMatchObject({ open: true })
   })
+
+  it('resolves mirrored wall selections back to the canonical wall key', () => {
+    const canonicalWallKey = '0:0:east'
+    useDungeonStore.setState((state) => ({
+      ...state,
+      selection: '1:0:west',
+      paintedCells: {
+        ...state.paintedCells,
+        '0:0': { cell: [0, 0], layerId: state.activeLayerId, roomId: 'room-a' },
+        '1:0': { cell: [1, 0], layerId: state.activeLayerId, roomId: 'room-b' },
+      },
+      wallSurfaceAssetIds: {
+        ...state.wallSurfaceAssetIds,
+        [canonicalWallKey]: 'dungeon.wall_wall_doorway',
+      },
+      wallSurfaceProps: {
+        ...state.wallSurfaceProps,
+        [canonicalWallKey]: {},
+      },
+    }))
+
+    render(<SelectToolPanel />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Open' }))
+
+    expect(useDungeonStore.getState().wallSurfaceProps[canonicalWallKey]).toMatchObject({ open: true })
+  })
 })
