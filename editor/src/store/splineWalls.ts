@@ -197,11 +197,22 @@ export function buildRoomSplineWallChainsFromGraph(
   defaultWallHeight: number = DEFAULT_SPLINE_WALL_HEIGHT,
   respectCutouts: boolean = true,
 ): RoomSplineWallChain[] {
+  const sharedSegmentGroups = buildSharedSplineWallSegmentGroups(
+    splineWallGraph,
+    visibleLayerIds,
+  )
   return Object.values(splineWallGraph.paths)
     .filter((path) =>
       (!visibleLayerIds || visibleLayerIds.has(path.layerId))
       && (!roomIds || (path.roomId !== null && roomIds.has(path.roomId))))
-    .flatMap((path) => buildPathSplineWallChains(path, splineWallGraph, suppressedWallKeys, defaultWallHeight, respectCutouts))
+    .flatMap((path) => buildPathSplineWallChains(
+      path,
+      splineWallGraph,
+      suppressedWallKeys,
+      defaultWallHeight,
+      respectCutouts,
+      sharedSegmentGroups,
+    ))
 }
 
 export function buildRoomSplineWallMeshes(
@@ -1034,8 +1045,15 @@ function buildPathSplineWallChains(
   suppressedWallKeys: ReadonlySet<string>,
   defaultWallHeight: number,
   respectCutouts: boolean,
+  sharedSegmentGroups: ReadonlyMap<string, SharedSplineWallSegmentGroup>,
 ): RoomSplineWallChain[] {
-  return getPathSplineWallHeightBands(path, splineWallGraph, defaultWallHeight, respectCutouts)
+  return getPathSplineWallHeightBands(
+    path,
+    splineWallGraph,
+    defaultWallHeight,
+    respectCutouts,
+    sharedSegmentGroups,
+  )
     .flatMap(({ baseHeight, topHeight }) => {
       const segmentEntries = path.segmentIds
         .flatMap((segmentId, index) => {
@@ -1050,6 +1068,7 @@ function buildPathSplineWallChains(
             path,
             index,
             segment,
+            splineWallGraph,
             start,
             end,
             suppressedWallKeys,
@@ -1057,6 +1076,7 @@ function buildPathSplineWallChains(
             topHeight,
             defaultWallHeight,
             respectCutouts,
+            sharedSegmentGroups,
           )
         })
 
@@ -1080,6 +1100,11 @@ type PathSplineWallSegmentEntry = {
   suppressed: boolean
 }
 
+type SharedSplineWallSegmentGroup = {
+  ownerSegmentId: string
+  segmentIds: string[]
+}
+
 type SplineWallHeightBand = {
   baseHeight: number
   topHeight: number
@@ -1090,6 +1115,7 @@ function getPathSplineWallHeightBands(
   splineWallGraph: SplineWallGraph,
   defaultWallHeight: number,
   respectCutouts: boolean,
+  sharedSegmentGroups: ReadonlyMap<string, SharedSplineWallSegmentGroup>,
 ): SplineWallHeightBand[] {
   const breakpoints = path.segmentIds
     .flatMap((segmentId) => {
@@ -1099,8 +1125,15 @@ function getPathSplineWallHeightBands(
       }
 
       const resolvedWallHeight = getResolvedSplineWallSegmentHeight(segment, defaultWallHeight)
+      const cutouts = sharedSegmentGroups.get(segmentId)?.ownerSegmentId === segmentId
+        ? getSharedRenderableSegmentCutouts(
+            splineWallGraph,
+            segmentId,
+            sharedSegmentGroups.get(segmentId)?.segmentIds ?? [segmentId],
+          )
+        : segment.cutouts
       const cutoutBreakpoints = respectCutouts
-        ? segment.cutouts.flatMap((cutout) => {
+        ? cutouts.flatMap((cutout) => {
             const bottomHeight = clampSplineWallHeight(cutout.bottomHeight, resolvedWallHeight)
             const topHeight = cutout.topHeight === null
               ? resolvedWallHeight
@@ -1197,10 +1230,177 @@ function buildSplineWallChainsFromSegmentEntries(
   })
 }
 
+function buildSharedSplineWallSegmentGroups(
+  splineWallGraph: SplineWallGraph,
+  visibleLayerIds: ReadonlySet<string> | null,
+) {
+  const segmentsByGeometryKey = new Map<string, SplineWallGraph['segments'][string][]>()
+
+  Object.values(splineWallGraph.segments).forEach((segment) => {
+    if (visibleLayerIds && !visibleLayerIds.has(segment.layerId)) {
+      return
+    }
+
+    const start = splineWallGraph.nodes[segment.startNodeId]?.position
+    const end = splineWallGraph.nodes[segment.endNodeId]?.position
+    if (!start || !end) {
+      return
+    }
+
+    const geometryKey = buildCoincidentSegmentKey(segment.layerId, start, end)
+    const existing = segmentsByGeometryKey.get(geometryKey)
+    if (existing) {
+      existing.push(segment)
+    } else {
+      segmentsByGeometryKey.set(geometryKey, [segment])
+    }
+  })
+
+  const sharedSegmentGroups = new Map<string, SharedSplineWallSegmentGroup>()
+  segmentsByGeometryKey.forEach((segments) => {
+    if (segments.length < 2) {
+      return
+    }
+
+    const distinctRoomIds = new Set(
+      segments.map((segment) => segment.roomId ?? `segment:${segment.id}`),
+    )
+    if (distinctRoomIds.size < 2) {
+      return
+    }
+
+    const ownerSegmentId = [...segments].sort(compareSplineWallSegmentOwnership)[0]?.id
+    if (!ownerSegmentId) {
+      return
+    }
+
+    const segmentIds = [...new Set(segments.map((segment) => segment.id))]
+    segmentIds.forEach((segmentId) => {
+      sharedSegmentGroups.set(segmentId, {
+        ownerSegmentId,
+        segmentIds,
+      })
+    })
+  })
+
+  return sharedSegmentGroups
+}
+
+function buildCoincidentSegmentKey(
+  layerId: string,
+  start: SplineBoundaryPoint,
+  end: SplineBoundaryPoint,
+) {
+  const startKey = getPointKey(start)
+  const endKey = getPointKey(end)
+  return startKey <= endKey
+    ? `${layerId}:${startKey}|${endKey}`
+    : `${layerId}:${endKey}|${startKey}`
+}
+
+function compareSplineWallSegmentOwnership(
+  left: SplineWallGraph['segments'][string],
+  right: SplineWallGraph['segments'][string],
+) {
+  const leftOwnership = getSplineWallSegmentOwnershipOrder(left)
+  const rightOwnership = getSplineWallSegmentOwnershipOrder(right)
+
+  if (leftOwnership.rank !== rightOwnership.rank) {
+    return leftOwnership.rank - rightOwnership.rank
+  }
+  if (leftOwnership.cellX !== rightOwnership.cellX) {
+    return leftOwnership.cellX - rightOwnership.cellX
+  }
+  if (leftOwnership.cellZ !== rightOwnership.cellZ) {
+    return leftOwnership.cellZ - rightOwnership.cellZ
+  }
+  if (leftOwnership.directionRank !== rightOwnership.directionRank) {
+    return leftOwnership.directionRank - rightOwnership.directionRank
+  }
+  if (leftOwnership.roomId !== rightOwnership.roomId) {
+    return leftOwnership.roomId.localeCompare(rightOwnership.roomId)
+  }
+  return left.id.localeCompare(right.id)
+}
+
+function getSplineWallSegmentOwnershipOrder(segment: SplineWallGraph['segments'][string]) {
+  if (segment.wallKey) {
+    const [cellXText = '', cellZText = '', direction = ''] = segment.wallKey.split(':')
+    const cellX = Number.parseInt(cellXText, 10)
+    const cellZ = Number.parseInt(cellZText, 10)
+    if (Number.isFinite(cellX) && Number.isFinite(cellZ)) {
+      return {
+        rank: 0,
+        cellX,
+        cellZ,
+        directionRank: getWallDirectionSortRank(direction),
+        roomId: segment.roomId ?? '',
+      }
+    }
+  }
+
+  return {
+    rank: segment.wallKey ? 1 : 2,
+    cellX: Number.POSITIVE_INFINITY,
+    cellZ: Number.POSITIVE_INFINITY,
+    directionRank: Number.POSITIVE_INFINITY,
+    roomId: segment.roomId ?? '',
+  }
+}
+
+function getWallDirectionSortRank(direction: string) {
+  switch (direction) {
+    case 'north':
+      return 0
+    case 'east':
+      return 1
+    case 'south':
+      return 2
+    case 'west':
+      return 3
+    default:
+      return 4
+  }
+}
+
+export function getSharedRenderableSegmentCutouts(
+  splineWallGraph: SplineWallGraph,
+  ownerSegmentId: string,
+  segmentIds: readonly string[],
+) {
+  const ownerSegment = splineWallGraph.segments[ownerSegmentId]
+  const ownerStart = splineWallGraph.nodes[ownerSegment?.startNodeId ?? '']?.position
+  const ownerEnd = splineWallGraph.nodes[ownerSegment?.endNodeId ?? '']?.position
+  if (!ownerSegment || !ownerStart || !ownerEnd) {
+    return ownerSegment?.cutouts ?? []
+  }
+
+  return segmentIds.flatMap((segmentId) => {
+    const segment = splineWallGraph.segments[segmentId]
+    const start = splineWallGraph.nodes[segment?.startNodeId ?? '']?.position
+    const end = splineWallGraph.nodes[segment?.endNodeId ?? '']?.position
+    if (!segment || !start || !end) {
+      return []
+    }
+
+    const isReversed = pointsEqual(start, ownerEnd) && pointsEqual(end, ownerStart)
+    if (!isReversed) {
+      return segment.cutouts
+    }
+
+    return segment.cutouts.map((cutout) => ({
+      ...cutout,
+      startRatio: 1 - cutout.endRatio,
+      endRatio: 1 - cutout.startRatio,
+    }))
+  })
+}
+
 function buildPathSegmentEntries(
   path: SplineWallGraph['paths'][string],
   index: number,
   segment: SplineWallGraph['segments'][string],
+  splineWallGraph: SplineWallGraph,
   start: SplineBoundaryPoint,
   end: SplineBoundaryPoint,
   suppressedWallKeys: ReadonlySet<string>,
@@ -1208,6 +1408,7 @@ function buildPathSegmentEntries(
   bandTopHeight: number,
   defaultWallHeight: number,
   respectCutouts: boolean,
+  sharedSegmentGroups: ReadonlyMap<string, SharedSplineWallSegmentGroup>,
 ): PathSplineWallSegmentEntry[] {
   const resolvedWallHeight = getResolvedSplineWallSegmentHeight(segment, defaultWallHeight)
   if (
@@ -1218,6 +1419,10 @@ function buildPathSegmentEntries(
   }
 
   const wallKey = segment.wallKey ?? `${path.id}:segment:${index}`
+  const sharedSegmentGroup = sharedSegmentGroups.get(segment.id)
+  if (sharedSegmentGroup && sharedSegmentGroup.ownerSegmentId !== segment.id) {
+    return [createPathSegmentEntry(wallKey, segment, start, end, 0, 1, true)]
+  }
   const isSuppressedByLegacyOpening = !!segment.wallKey && suppressedWallKeys.has(segment.wallKey)
   if (isSuppressedByLegacyOpening) {
     return [createPathSegmentEntry(wallKey, segment, start, end, 0, 1, true)]
@@ -1228,7 +1433,9 @@ function buildPathSegmentEntries(
   }
 
   const cutoutIntervals = getMergedSplineWallCutoutIntervalsForBand(
-    segment.cutouts,
+    sharedSegmentGroup
+      ? getSharedRenderableSegmentCutouts(splineWallGraph, sharedSegmentGroup.ownerSegmentId, sharedSegmentGroup.segmentIds)
+      : segment.cutouts,
     bandBaseHeight,
     bandTopHeight,
     resolvedWallHeight,

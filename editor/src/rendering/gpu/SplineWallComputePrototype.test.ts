@@ -478,6 +478,104 @@ describe('SplineWallComputePrototype', () => {
     expect(prototype).toBeNull()
   })
 
+  it('keeps mirrored shared-segment cutouts when packing a single owner room', () => {
+    const splineWallGraph = createEmptySplineWallGraph()
+    splineWallGraph.nodes['room-a:n0'] = {
+      id: 'room-a:n0',
+      position: [0, 0],
+      layerId: 'default',
+      roomId: 'room-a',
+    }
+    splineWallGraph.nodes['room-a:n1'] = {
+      id: 'room-a:n1',
+      position: [1, 0],
+      layerId: 'default',
+      roomId: 'room-a',
+    }
+    splineWallGraph.nodes['room-b:n0'] = {
+      id: 'room-b:n0',
+      position: [1, 0],
+      layerId: 'default',
+      roomId: 'room-b',
+    }
+    splineWallGraph.nodes['room-b:n1'] = {
+      id: 'room-b:n1',
+      position: [0, 0],
+      layerId: 'default',
+      roomId: 'room-b',
+    }
+    splineWallGraph.segments['room-a:s0'] = {
+      id: 'room-a:s0',
+      pathId: 'room-a:path:0',
+      startNodeId: 'room-a:n0',
+      endNodeId: 'room-a:n1',
+      layerId: 'default',
+      roomId: 'room-a',
+      wallKey: null,
+      wallHeight: null,
+      wallThickness: null,
+      cutouts: [],
+    }
+    splineWallGraph.segments['room-b:s0'] = {
+      id: 'room-b:s0',
+      pathId: 'room-b:path:0',
+      startNodeId: 'room-b:n0',
+      endNodeId: 'room-b:n1',
+      layerId: 'default',
+      roomId: 'room-b',
+      wallKey: null,
+      wallHeight: null,
+      wallThickness: null,
+      cutouts: [{
+        id: 'cutout-shared',
+        kind: 'door',
+        startRatio: 0.2,
+        endRatio: 0.8,
+        bottomHeight: 0,
+        topHeight: 1.42,
+        assetId: 'core.opening_door_custom',
+        openingId: 'opening-shared',
+        objectProps: {},
+      }],
+    }
+    splineWallGraph.paths['room-a:path:0'] = {
+      id: 'room-a:path:0',
+      layerId: 'default',
+      roomId: 'room-a',
+      closed: false,
+      nodeIds: ['room-a:n0', 'room-a:n1'],
+      segmentIds: ['room-a:s0'],
+    }
+    splineWallGraph.paths['room-b:path:0'] = {
+      id: 'room-b:path:0',
+      layerId: 'default',
+      roomId: 'room-b',
+      closed: false,
+      nodeIds: ['room-b:n0', 'room-b:n1'],
+      segmentIds: ['room-b:s0'],
+    }
+
+    const prototype = prepareSplineWallComputePrototype({
+      floorId: 'floor-spline-shared-cutout-owner',
+      splineWallGraph,
+      visibleLayerIds: new Set(['default']),
+      suppressedWallKeys: new Set(),
+      roomIds: new Set(['room-a']),
+      cornerRadius: 0,
+      curveSubdivisions: 1,
+      wallHeight: 2.4,
+      wallThickness: 0.2,
+      workgroupSize: 8,
+    })
+
+    expect(prototype).not.toBeNull()
+    expect(prototype?.packed.cutoutCount).toBe(1)
+
+    populateSplineWallComputePrototypeFallbackOutputs(prototype!.packed)
+    const extractedGeometry = extractSplineWallComputePrototypeGeometry(prototype!.packed)
+    expect(countDegenerateTriangles(extractedGeometry.indices)).toBeGreaterThan(0)
+  })
+
   it('packs long cutout-heavy chains without overflowing the call stack', () => {
     const splineWallGraph = createEmptySplineWallGraph()
     splineWallGraph.nodes['node-a'] = {

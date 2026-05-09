@@ -102,6 +102,7 @@ describe('content pack registry', () => {
         roughnessUrl: expect.any(String),
       },
     })
+    expect(getContentPackWallMaterialSetById('dungeon', 'kaykit-stone')?.textures).not.toHaveProperty('aoUrl')
     expect(getContentPackWallMaterialSetById('dungeon', 'wedged-cobblestone')).toMatchObject({
       id: 'wedged-cobblestone',
       name: 'Wedged Cobblestone',

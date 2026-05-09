@@ -229,6 +229,8 @@ export function DungeonRoom({
         wallSurfaceAssetIds={derived.data.wallSurfaceAssetIds}
         wallSurfaceProps={derived.data.wallSurfaceProps}
         globalWallAssetId={derived.data.globalWallAssetId}
+        bakedLightField={bakedFloorLightField}
+        visibility={visibility}
       />
       <RoomFloorMaskDebugOverlay maskData={roomFloorMaskData} />
       {floorRenderChunkCache.orderedChunkKeys.map((chunkKey) => {

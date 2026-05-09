@@ -179,4 +179,47 @@ describe('proceduralRoomLayout', () => {
       selection: null,
     })
   })
+
+  it('skips generated connectors and clears old generated connector state for graph-backed rooms', () => {
+    const paintedCells: Record<string, PaintedCellRecord> = {
+      '0:0': { cell: [0, 0], layerId: 'default', roomId: 'left' },
+      '1:0': { cell: [1, 0], layerId: 'default', roomId: 'right' },
+      '3:0': { cell: [3, 0], layerId: 'default', roomId: 'top' },
+      '4:0': { cell: [4, 0], layerId: 'default', roomId: 'bottom' },
+      '3:1': { cell: [3, 1], layerId: 'default', roomId: 'top' },
+      '4:1': { cell: [4, 1], layerId: 'default', roomId: 'bottom' },
+      '3:2': { cell: [3, 2], layerId: 'default', roomId: 'top' },
+      '4:2': { cell: [4, 2], layerId: 'default', roomId: 'bottom' },
+    }
+    const generatedOpening: OpeningRecord = {
+      id: 'generated-open',
+      assetId: null,
+      wallKey: '0:0:east',
+      width: 1,
+      flipped: false,
+      layerId: 'default',
+      source: 'generated',
+    }
+
+    expect(reconcileProceduralRoomLayout({
+      paintedCells,
+      wallOpenings: {
+        [generatedOpening.id]: generatedOpening,
+      },
+      wallSurfaceAssetIds: {
+        '3:1:east': 'dungeon.wall_wall_doorway',
+      },
+      wallSurfaceProps: {
+        '3:1:east': { generatedConnector: true },
+      },
+      graphBackedRoomIds: new Set(['left', 'right', 'top', 'bottom']),
+      selection: generatedOpening.id,
+      createOpeningId: () => 'unused',
+    })).toEqual({
+      wallOpenings: {},
+      wallSurfaceAssetIds: {},
+      wallSurfaceProps: {},
+      selection: null,
+    })
+  })
 })

@@ -41,6 +41,7 @@ export type ProceduralRoomLayoutInput = {
   wallOpenings: Record<string, OpeningRecord>
   wallSurfaceAssetIds: Record<string, string>
   wallSurfaceProps: Record<string, Record<string, unknown>>
+  graphBackedRoomIds?: ReadonlySet<string>
   selection: string | null
   createOpeningId: () => string
 }
@@ -156,6 +157,7 @@ export function reconcileProceduralRoomLayout({
   wallOpenings,
   wallSurfaceAssetIds,
   wallSurfaceProps,
+  graphBackedRoomIds = new Set(),
   selection,
   createOpeningId,
 }: ProceduralRoomLayoutInput): ProceduralRoomLayoutResult {
@@ -170,6 +172,7 @@ export function reconcileProceduralRoomLayout({
     manualOpenings,
     wallSurfaceAssetIds,
     wallSurfaceProps,
+    graphBackedRoomIds,
   )
   let nextSelection = selection
 
@@ -303,6 +306,7 @@ function buildGeneratedConnectorIntents(
   manualOpenings: OpeningRecord[],
   wallSurfaceAssetIds: Record<string, string>,
   wallSurfaceProps: Record<string, Record<string, unknown>>,
+  graphBackedRoomIds: ReadonlySet<string>,
 ): GeneratedConnectorIntent[] {
   const generatedSurfaceDoorAssetId = resolveGeneratedSurfaceDoorAssetId()
   const manualOpeningSegments = manualOpenings.map((opening) =>
@@ -318,6 +322,10 @@ function buildGeneratedConnectorIntents(
   const occupiedRoomSides = new Set<RoomSideKey>()
 
   buildSharedBoundaryRuns(paintedCells).forEach((run) => {
+    if (run.roomIds.some((roomId) => graphBackedRoomIds.has(roomId))) {
+      return
+    }
+
     const runSegments = new Set(run.wallKeys)
     const hasManualOverlap = manualOpeningSegments.some((segments) =>
       [...segments].some((segment) => runSegments.has(segment)),
@@ -332,6 +340,7 @@ function buildGeneratedConnectorIntents(
   const intents: GeneratedConnectorIntent[] = []
 
   buildSharedBoundaryRuns(paintedCells)
+    .filter((run) => !run.roomIds.some((roomId) => graphBackedRoomIds.has(roomId)))
     .filter((run) => {
       const runSegments = new Set(run.wallKeys)
       const hasManualOpeningOverlap = manualOpeningSegments.some((segments) =>

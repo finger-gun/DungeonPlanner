@@ -162,6 +162,162 @@ describe('splineWalls', () => {
     })
   })
 
+  it('deduplicates coincident shared wall segments across adjacent graph-backed rooms', () => {
+    const graph: SplineWallGraph = {
+      nodes: {
+        'room-a:n0': { id: 'room-a:n0', position: [0, 0], layerId: 'default', roomId: 'room-a' },
+        'room-a:n1': { id: 'room-a:n1', position: [1, 0], layerId: 'default', roomId: 'room-a' },
+        'room-a:n2': { id: 'room-a:n2', position: [1, 1], layerId: 'default', roomId: 'room-a' },
+        'room-a:n3': { id: 'room-a:n3', position: [0, 1], layerId: 'default', roomId: 'room-a' },
+        'room-b:n0': { id: 'room-b:n0', position: [1, 0], layerId: 'default', roomId: 'room-b' },
+        'room-b:n1': { id: 'room-b:n1', position: [2, 0], layerId: 'default', roomId: 'room-b' },
+        'room-b:n2': { id: 'room-b:n2', position: [2, 1], layerId: 'default', roomId: 'room-b' },
+        'room-b:n3': { id: 'room-b:n3', position: [1, 1], layerId: 'default', roomId: 'room-b' },
+      },
+      segments: {
+        'room-a:s0': { id: 'room-a:s0', pathId: 'room-a:path:0', startNodeId: 'room-a:n0', endNodeId: 'room-a:n1', layerId: 'default', roomId: 'room-a', wallKey: null, wallHeight: null, wallThickness: null, cutouts: [] },
+        'room-a:s1': { id: 'room-a:s1', pathId: 'room-a:path:0', startNodeId: 'room-a:n1', endNodeId: 'room-a:n2', layerId: 'default', roomId: 'room-a', wallKey: null, wallHeight: null, wallThickness: null, cutouts: [] },
+        'room-a:s2': { id: 'room-a:s2', pathId: 'room-a:path:0', startNodeId: 'room-a:n2', endNodeId: 'room-a:n3', layerId: 'default', roomId: 'room-a', wallKey: null, wallHeight: null, wallThickness: null, cutouts: [] },
+        'room-a:s3': { id: 'room-a:s3', pathId: 'room-a:path:0', startNodeId: 'room-a:n3', endNodeId: 'room-a:n0', layerId: 'default', roomId: 'room-a', wallKey: null, wallHeight: null, wallThickness: null, cutouts: [] },
+        'room-b:s0': { id: 'room-b:s0', pathId: 'room-b:path:0', startNodeId: 'room-b:n0', endNodeId: 'room-b:n1', layerId: 'default', roomId: 'room-b', wallKey: null, wallHeight: null, wallThickness: null, cutouts: [] },
+        'room-b:s1': { id: 'room-b:s1', pathId: 'room-b:path:0', startNodeId: 'room-b:n1', endNodeId: 'room-b:n2', layerId: 'default', roomId: 'room-b', wallKey: null, wallHeight: null, wallThickness: null, cutouts: [] },
+        'room-b:s2': { id: 'room-b:s2', pathId: 'room-b:path:0', startNodeId: 'room-b:n2', endNodeId: 'room-b:n3', layerId: 'default', roomId: 'room-b', wallKey: null, wallHeight: null, wallThickness: null, cutouts: [] },
+        'room-b:s3': { id: 'room-b:s3', pathId: 'room-b:path:0', startNodeId: 'room-b:n3', endNodeId: 'room-b:n0', layerId: 'default', roomId: 'room-b', wallKey: null, wallHeight: null, wallThickness: null, cutouts: [] },
+      },
+      paths: {
+        'room-a:path:0': {
+          id: 'room-a:path:0',
+          layerId: 'default',
+          roomId: 'room-a',
+          closed: true,
+          nodeIds: ['room-a:n0', 'room-a:n1', 'room-a:n2', 'room-a:n3'],
+          segmentIds: ['room-a:s0', 'room-a:s1', 'room-a:s2', 'room-a:s3'],
+        },
+        'room-b:path:0': {
+          id: 'room-b:path:0',
+          layerId: 'default',
+          roomId: 'room-b',
+          closed: true,
+          nodeIds: ['room-b:n0', 'room-b:n1', 'room-b:n2', 'room-b:n3'],
+          segmentIds: ['room-b:s0', 'room-b:s1', 'room-b:s2', 'room-b:s3'],
+        },
+      },
+    }
+
+    const chains = buildRoomSplineWallChainsFromGraph(graph)
+
+    expect(chains).toHaveLength(2)
+    expect(chains).toEqual(expect.arrayContaining([
+      expect.objectContaining({ roomId: 'room-a', closed: true }),
+      expect.objectContaining({ roomId: 'room-b', closed: false }),
+    ]))
+    const allWallKeys = chains.flatMap((chain) => chain.wallKeys)
+    expect(allWallKeys).toContain('room-a:path:0:segment:1')
+    expect(allWallKeys).not.toContain('room-b:path:0:segment:3')
+    expect(allWallKeys).toHaveLength(7)
+  })
+
+  it('deduplicates shared wall segments even when only one room is requested', () => {
+    const graph = buildSplineWallGraphFromPaintedCells({
+      '0:0': { cell: [0, 0], layerId: 'default', roomId: 'room-a' },
+      '1:0': { cell: [1, 0], layerId: 'default', roomId: 'room-b' },
+    })
+
+    const ownerChains = buildRoomSplineWallChainsFromGraph(graph, null, new Set(), new Set(['room-a']))
+    const mirroredChains = buildRoomSplineWallChainsFromGraph(graph, null, new Set(), new Set(['room-b']))
+
+    expect(ownerChains).toHaveLength(1)
+    expect(ownerChains[0]).toMatchObject({
+      roomId: 'room-a',
+      closed: true,
+      wallKeys: ['0:0:north', '0:0:east', '0:0:south', '0:0:west'],
+    })
+    expect(mirroredChains).toHaveLength(1)
+    expect(mirroredChains[0]).toMatchObject({
+      roomId: 'room-b',
+      closed: false,
+      wallKeys: ['1:0:north', '1:0:east', '1:0:south'],
+      points: [[1, 1], [2, 1], [2, 0], [1, 0]],
+    })
+  })
+
+  it('mirrors cutouts from reversed shared segments onto the owning wall chain', () => {
+    const graph: SplineWallGraph = {
+      nodes: {
+        'room-a:n0': { id: 'room-a:n0', position: [0, 0], layerId: 'default', roomId: 'room-a' },
+        'room-a:n1': { id: 'room-a:n1', position: [1, 0], layerId: 'default', roomId: 'room-a' },
+        'room-b:n0': { id: 'room-b:n0', position: [1, 0], layerId: 'default', roomId: 'room-b' },
+        'room-b:n1': { id: 'room-b:n1', position: [0, 0], layerId: 'default', roomId: 'room-b' },
+      },
+      segments: {
+        'room-a:s0': {
+          id: 'room-a:s0',
+          pathId: 'room-a:path:0',
+          startNodeId: 'room-a:n0',
+          endNodeId: 'room-a:n1',
+          layerId: 'default',
+          roomId: 'room-a',
+          wallKey: null,
+          wallHeight: null,
+          wallThickness: null,
+          cutouts: [],
+        },
+        'room-b:s0': {
+          id: 'room-b:s0',
+          pathId: 'room-b:path:0',
+          startNodeId: 'room-b:n0',
+          endNodeId: 'room-b:n1',
+          layerId: 'default',
+          roomId: 'room-b',
+          wallKey: null,
+          wallHeight: null,
+          wallThickness: null,
+          cutouts: [{
+            id: 'cutout-shared',
+            kind: 'door',
+            startRatio: 0.1,
+            endRatio: 0.4,
+            bottomHeight: 0,
+            topHeight: 1.42,
+            assetId: 'core.opening_door_custom',
+            openingId: 'opening-shared',
+            objectProps: {},
+          }],
+        },
+      },
+      paths: {
+        'room-a:path:0': {
+          id: 'room-a:path:0',
+          layerId: 'default',
+          roomId: 'room-a',
+          closed: false,
+          nodeIds: ['room-a:n0', 'room-a:n1'],
+          segmentIds: ['room-a:s0'],
+        },
+        'room-b:path:0': {
+          id: 'room-b:path:0',
+          layerId: 'default',
+          roomId: 'room-b',
+          closed: false,
+          nodeIds: ['room-b:n0', 'room-b:n1'],
+          segmentIds: ['room-b:s0'],
+        },
+      },
+    }
+
+    const chains = buildRoomSplineWallChainsFromGraph(graph)
+
+    expect(chains).toHaveLength(3)
+    expect(chains.map((chain) => chain.roomId)).toEqual(['room-a', 'room-a', 'room-a'])
+    expect(chains.map((chain) => chain.points)).toEqual([
+      [[0, 0], [0.6, 0]],
+      [[0.9, 0], [1, 0]],
+      [[0, 0], [1, 0]],
+    ])
+    expect(chains[2]?.wallBaseHeight).toBeCloseTo(1.42)
+    expect(chains[2]?.wallHeight).toBeCloseTo(0.58)
+  })
+
   it('treats full-span graph cutouts as spline wall gaps without legacy suppression keys', () => {
     const graph = buildSplineWallGraphFromPaintedCells({
       '0:0': { cell: [0, 0], layerId: 'default', roomId: 'room-a' },

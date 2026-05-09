@@ -105,12 +105,13 @@ import { WALL_EXTRA_DELAY_MS } from './DungeonRoomShared'
 import { RoomDraftOverlay } from './RoomDraftOverlay'
 import { CursorInspectionLight } from './cursorInspectionLight'
 import {
-  buildRoomDraftCells,
-  buildRoomDraftSplineNodes,
-  buildRoomDraftWorldPoints,
   createRoomDraftFromStroke,
   type RoomDraftState,
 } from '../../store/roomDraft'
+import {
+  buildRoomDraftOccupancyPolygons,
+  clipRoomDraft,
+} from '../../store/roomDraftClip'
 
 type GridProps = {
   size?: number
@@ -688,15 +689,30 @@ export function Grid({ size = 120, playMode = false, bakedLightField = null }: G
     }
     return blockedCells
   }, [blockedCells, mapMode, outdoorBrushMode, outdoorTerrainStyleCells, paintedCells])
+  const roomDraftOccupancyPolygons = useMemo(
+    () => buildRoomDraftOccupancyPolygons(paintedCells, splineWallGraph),
+    [paintedCells, splineWallGraph],
+  )
+  const occupiedRoomDraftCellKeys = useMemo(
+    () => new Set(Object.keys(paintedCells)),
+    [paintedCells],
+  )
+  const clippedRoomDraft = useMemo(
+    () => roomDraft
+      ? clipRoomDraft(roomDraft, roomDraftOccupancyPolygons, occupiedRoomDraftCellKeys)
+      : null,
+    [occupiedRoomDraftCellKeys, roomDraft, roomDraftOccupancyPolygons],
+  )
   const roomDraftCells = useMemo(
-    () => roomDraft ? buildRoomDraftCells(roomDraft) : [],
-    [roomDraft],
+    () => clippedRoomDraft?.commitCells ?? [],
+    [clippedRoomDraft],
   )
-  const roomDraftHasOverlap = useMemo(
-    () => roomDraftCells.some((cell) => Boolean(paintedCells[getCellKey(cell)])),
-    [paintedCells, roomDraftCells],
+  const roomDraftValid = Boolean(
+    clippedRoomDraft
+    && clippedRoomDraft.valid
+    && roomDraftCells.length > 0
+    && clippedRoomDraft.splineNodes.length >= 3,
   )
-  const roomDraftValid = Boolean(roomDraft && roomDraftCells.length > 0 && !roomDraftHasOverlap)
   const strokeRoomDraftPreview = useMemo(() => {
     if (
       roomDraft
@@ -724,6 +740,12 @@ export function Grid({ size = 120, playMode = false, bakedLightField = null }: G
     strokeStartCell,
     tool,
   ])
+  const strokeRoomDraftPreviewClip = useMemo(
+    () => strokeRoomDraftPreview
+      ? clipRoomDraft(strokeRoomDraftPreview, roomDraftOccupancyPolygons, occupiedRoomDraftCellKeys)
+      : null,
+    [occupiedRoomDraftCellKeys, roomDraftOccupancyPolygons, strokeRoomDraftPreview],
+  )
 
   // R key: rotates floor-connected assets; flips wall-connected openings 180°
   useEffect(() => {
@@ -1195,7 +1217,7 @@ export function Grid({ size = 120, playMode = false, bakedLightField = null }: G
   })
 
   const commitRoomDraftOverlay = useCallback(() => {
-    if (!roomDraft || !roomDraftValid || roomDraftCells.length === 0) {
+    if (!roomDraft || !clippedRoomDraft || !roomDraftValid || roomDraftCells.length === 0) {
       return
     }
 
@@ -1216,7 +1238,7 @@ export function Grid({ size = 120, playMode = false, bakedLightField = null }: G
 
     if (!commitDraftRoom({
       cells: roomDraftCells,
-      splineNodes: buildRoomDraftSplineNodes(roomDraft),
+      splineNodes: clippedRoomDraft.splineNodes,
     })) {
       return
     }
@@ -1268,6 +1290,7 @@ export function Grid({ size = 120, playMode = false, bakedLightField = null }: G
     activeLayerId,
     activeRoomSetId,
     bakedLightField,
+    clippedRoomDraft,
     commitDraftRoom,
     floorTileAssetIds,
     globalFloorAssetId,
@@ -1996,6 +2019,16 @@ export function Grid({ size = 120, playMode = false, bakedLightField = null }: G
         <RoomDraftOverlay
           draft={roomDraft}
           valid={roomDraftValid}
+          previewPoints={clippedRoomDraft?.previewPoints}
+          centerPosition={clippedRoomDraft?.controlPosition}
+          handleVisibility={clippedRoomDraft?.handleVisibility}
+          invalidTitle={
+            clippedRoomDraft?.invalidReason === 'disconnected'
+              ? 'Draft must remain one connected piece after clipping'
+              : clippedRoomDraft?.invalidReason === 'empty'
+                ? 'Draft has no visible area after clipping'
+                : 'Commit draft room'
+          }
           onChange={setRoomDraft}
           onCommit={commitRoomDraftOverlay}
           onCancel={cancelRoomDraft}
@@ -2007,7 +2040,8 @@ export function Grid({ size = 120, playMode = false, bakedLightField = null }: G
           hoveredCell={hoveredCell}
           hoveredPoint={hoveredPoint}
           previewCells={previewCells}
-          roomDraftPreview={strokeRoomDraftPreview}
+          roomDraftPreviewPoints={strokeRoomDraftPreviewClip?.previewPoints ?? null}
+          roomDraftPreviewValid={strokeRoomDraftPreviewClip?.valid ?? false}
           strokeMode={previewStrokeMode}
           propPlacement={(() => {
             if (pickedUpAsset && hoveredPoint)
@@ -2127,7 +2161,8 @@ function HoverPreview({
   hoveredCell,
   hoveredPoint,
   previewCells,
-  roomDraftPreview,
+  roomDraftPreviewPoints,
+  roomDraftPreviewValid,
   strokeMode,
   propPlacement,
   propAssetId,
@@ -2155,7 +2190,8 @@ function HoverPreview({
   hoveredCell: SnappedGridPosition | null
   hoveredPoint: { x: number; y: number; z: number } | null
   previewCells: GridCell[]
-  roomDraftPreview: RoomDraftState | null
+  roomDraftPreviewPoints: readonly (readonly [number, number])[] | null
+  roomDraftPreviewValid: boolean
   strokeMode: 'paint' | 'erase' | null
   propPlacement: PropPlacement | null
   propAssetId: string | null
@@ -2358,11 +2394,11 @@ function HoverPreview({
     )
   }
 
-  if (roomDraftPreview) {
+  if (roomDraftPreviewPoints) {
     return (
       <RoomDraftFootprintPreview
-        draft={roomDraftPreview}
-        color="#7dd3fc"
+        points={roomDraftPreviewPoints}
+        color={roomDraftPreviewValid ? '#7dd3fc' : '#f87171'}
         opacity={0.24}
       />
     )
@@ -2393,22 +2429,21 @@ function HoverPreview({
 }
 
 function RoomDraftFootprintPreview({
-  draft,
+  points,
   color,
   opacity,
 }: {
-  draft: RoomDraftState
+  points: readonly (readonly [number, number])[]
   color: string
   opacity: number
 }) {
-  const previewPoints = useMemo(() => buildRoomDraftWorldPoints(draft), [draft])
   const fillGeometry = useMemo(() => {
-    if (previewPoints.length < 3) {
+    if (points.length < 3) {
       return null
     }
 
     const shape = new THREE.Shape()
-    const [firstPoint, ...rest] = previewPoints
+    const [firstPoint, ...rest] = points
     shape.moveTo(firstPoint![0], firstPoint![1])
     rest.forEach((point) => {
       shape.lineTo(point[0], point[1])
@@ -2419,15 +2454,15 @@ function RoomDraftFootprintPreview({
     geometry.rotateX(Math.PI / 2)
     geometry.translate(0, 0.02, 0)
     return geometry
-  }, [previewPoints])
+  }, [points])
   const outlinePositions = useMemo(() => {
-    if (previewPoints.length === 0) {
+    if (points.length === 0) {
       return new Float32Array()
     }
 
-    const points = [...previewPoints, previewPoints[0]!]
-    return new Float32Array(points.flatMap((point) => [point[0], 0.03, point[1]]))
-  }, [previewPoints])
+    const closedPoints = [...points, points[0]!]
+    return new Float32Array(closedPoints.flatMap((point) => [point[0], 0.03, point[1]]))
+  }, [points])
 
   useEffect(() => () => {
     fillGeometry?.dispose()

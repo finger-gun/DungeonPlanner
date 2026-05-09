@@ -10,6 +10,7 @@ import {
   computeVisibleCellKeys,
   getOrBuildPlayVisibilityDerivedState,
   getObjectVisibilityState,
+  getRoomVisibilityState,
   isVisiblePlayerOrigin,
   shouldActivatePlayVisibility,
   usePlayVisibility,
@@ -734,6 +735,26 @@ describe('getObjectVisibilityState', () => {
     ).toBe('explored')
   })
 
+})
+
+describe('getRoomVisibilityState', () => {
+  it('returns the highest visibility across a rooms painted cells', () => {
+    const paintedCells = makeCells([
+      { cell: [0, 0], roomId: 'room-a' },
+      { cell: [1, 0], roomId: 'room-a' },
+      { cell: [2, 0], roomId: 'room-b' },
+    ])
+
+    expect(getRoomVisibilityState('room-a', paintedCells, (cellKey) => {
+      if (cellKey === '1:0') {
+        return 'explored'
+      }
+      return 'hidden'
+    })).toBe('explored')
+
+    expect(getRoomVisibilityState('room-b', paintedCells, () => 'visible')).toBe('visible')
+    expect(getRoomVisibilityState('missing-room', paintedCells, () => 'visible')).toBe('hidden')
+  })
 })
 
 describe('usePlayVisibility', () => {

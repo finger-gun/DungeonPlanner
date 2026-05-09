@@ -42,14 +42,19 @@ describe('SplineWallComputeRuntime', () => {
     const computeAsync = vi.fn(async () => {
       populateSplineWallComputePrototypeFallbackOutputs(prototype!.packed)
     })
-    const getArrayBufferAsync = vi.fn(async (attribute) => cloneStorageBufferAttributeArray(attribute).buffer)
+    const getArrayBufferAsync = vi.fn(async (attribute) => {
+      if (attribute === prototype!.dispatch.bufferAttributes.indexData) {
+        throw new Error('index readback should not happen')
+      }
+      return cloneStorageBufferAttributeArray(attribute).buffer
+    })
     const geometry = await dispatchSplineWallComputePrototype({
       computeAsync,
       getArrayBufferAsync,
     }, prototype!)
 
     expect(computeAsync).toHaveBeenCalledTimes(1)
-    expect(getArrayBufferAsync).toHaveBeenCalledTimes(4)
+    expect(getArrayBufferAsync).toHaveBeenCalledTimes(3)
     expect(geometry.positions).toHaveLength(144)
     expect(geometry.normals).toHaveLength(144)
     expect(geometry.uvs).toHaveLength(96)
@@ -119,14 +124,19 @@ describe('SplineWallComputeRuntime', () => {
     const computeAsync = vi.fn(async () => {
       populateSplineWallComputePrototypeFallbackOutputs(prototype!.packed)
     })
-    const getArrayBufferAsync = vi.fn(async (attribute) => cloneStorageBufferAttributeArray(attribute).buffer)
+    const getArrayBufferAsync = vi.fn(async (attribute) => {
+      if (attribute === prototype!.dispatch.bufferAttributes.indexData) {
+        throw new Error('index readback should not happen')
+      }
+      return cloneStorageBufferAttributeArray(attribute).buffer
+    })
     const geometry = await dispatchSplineWallComputePrototype({
       computeAsync,
       getArrayBufferAsync,
     }, prototype!)
 
     expect(computeAsync).toHaveBeenCalledTimes(2)
-    expect(getArrayBufferAsync).toHaveBeenCalledTimes(4)
+    expect(getArrayBufferAsync).toHaveBeenCalledTimes(3)
     expect(countDegenerateTriangles(geometry.indices)).toBeGreaterThan(0)
   })
 
@@ -154,13 +164,19 @@ describe('SplineWallComputeRuntime', () => {
         prototype!.packed.buffers.indexData.data.set(originalIndices)
       }
     })
-    const getArrayBufferAsync = vi.fn(async (attribute) => cloneStorageBufferAttributeArray(attribute).buffer)
+    const getArrayBufferAsync = vi.fn(async (attribute) => {
+      if (attribute === prototype!.dispatch.bufferAttributes.indexData) {
+        throw new Error('index readback should not happen')
+      }
+      return cloneStorageBufferAttributeArray(attribute).buffer
+    })
     const geometry = await dispatchSplineWallComputePrototype({
       computeAsync,
       getArrayBufferAsync,
     }, prototype!)
 
     expect(computeAsync).toHaveBeenCalledTimes(2)
+    expect(getArrayBufferAsync).toHaveBeenCalledTimes(3)
     expect(countDegenerateTriangles(geometry.indices)).toBeGreaterThan(0)
   })
 })

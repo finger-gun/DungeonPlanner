@@ -7,6 +7,7 @@ import {
   createRoomDraftFromStroke,
   setRoomDraftCorner,
 } from './roomDraft'
+import { buildRoomDraftOccupancyPolygons, clipRoomDraft } from './roomDraftClip'
 import { createSplineWallQueryCache } from './splineWallQueries'
 import { upsertSplineWallGraphRoomPath } from './splineWallGraph'
 import { useDungeonStore } from './useDungeonStore'
@@ -116,6 +117,71 @@ describe('useDungeonStore history', () => {
     state = useDungeonStore.getState()
     expect(Object.keys(state.paintedCells)).toHaveLength(4)
     expect(state.splineWallGraph.paths[`${roomId}:path:0`]).toBeDefined()
+  })
+
+  it('does not generate legacy connector doors when graph-backed draft rooms share a wall', () => {
+    const firstRoomId = useDungeonStore.getState().commitDraftRoom({
+      cells: buildRoomDraftCells(createRoomDraftFromStroke([0, 0], [0, 0])),
+      splineNodes: buildRoomDraftSplineNodes(createRoomDraftFromStroke([0, 0], [0, 0])),
+    })
+    const secondRoomId = useDungeonStore.getState().commitDraftRoom({
+      cells: buildRoomDraftCells(createRoomDraftFromStroke([1, 0], [1, 0])),
+      splineNodes: buildRoomDraftSplineNodes(createRoomDraftFromStroke([1, 0], [1, 0])),
+    })
+
+    const state = useDungeonStore.getState()
+    expect(firstRoomId).toBeTruthy()
+    expect(secondRoomId).toBeTruthy()
+    expect(Object.keys(state.splineWallGraph.paths)).toHaveLength(2)
+    expect(state.wallOpenings).toEqual({})
+    expect(state.wallSurfaceAssetIds).toEqual({})
+    expect(state.wallSurfaceProps).toEqual({})
+  })
+
+  it('rejects draft commits when any target cell became occupied before commit', () => {
+    useDungeonStore.getState().paintCells([[0, 0]])
+
+    const staleDraft = createRoomDraftFromStroke([0, 0], [1, 0])
+    const committedRoomId = useDungeonStore.getState().commitDraftRoom({
+      cells: buildRoomDraftCells(staleDraft),
+      splineNodes: buildRoomDraftSplineNodes(staleDraft),
+    })
+
+    expect(committedRoomId).toBeNull()
+    expect(Object.keys(useDungeonStore.getState().rooms)).toHaveLength(1)
+  })
+
+  it('commits clipped overlap drafts against graph-backed rounded rooms', () => {
+    const existing = setRoomDraftCorner(
+      setRoomDraftCorner(createRoomDraftFromStroke([0, 0], [2, 2]), 'ne', 'rounded', 1),
+      'se',
+      'rounded',
+      1,
+    )
+    const existingRoomId = useDungeonStore.getState().commitDraftRoom({
+      cells: buildRoomDraftCells(existing),
+      splineNodes: buildRoomDraftSplineNodes(existing),
+    })
+    expect(existingRoomId).toBeTruthy()
+
+    const state = useDungeonStore.getState()
+    const overlapDraft = createRoomDraftFromStroke([2, 0], [4, 2])
+    const clipped = clipRoomDraft(
+      overlapDraft,
+      buildRoomDraftOccupancyPolygons(state.paintedCells, state.splineWallGraph),
+      new Set(Object.keys(state.paintedCells)),
+    )
+
+    expect(clipped.valid).toBe(true)
+    expect(clipped.commitCells.length).toBeGreaterThan(0)
+
+    const committedRoomId = useDungeonStore.getState().commitDraftRoom({
+      cells: clipped.commitCells,
+      splineNodes: clipped.splineNodes,
+    })
+
+    expect(committedRoomId).toBeTruthy()
+    expect(Object.keys(useDungeonStore.getState().rooms)).toHaveLength(2)
   })
 
   it('splits spline wall segments into new nodes and supports undo/redo', () => {

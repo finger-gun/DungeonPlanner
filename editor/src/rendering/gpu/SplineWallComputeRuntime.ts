@@ -45,17 +45,15 @@ export async function dispatchSplineWallComputePrototype(
     }
   }
 
-  const [positionsBuffer, normalsBuffer, uvsBuffer, indicesBuffer] = await Promise.all([
+  const [positionsBuffer, normalsBuffer, uvsBuffer] = await Promise.all([
     renderer.getArrayBufferAsync(prototype.dispatch.bufferAttributes.outputPositionData),
     renderer.getArrayBufferAsync(prototype.dispatch.bufferAttributes.outputNormalData),
     renderer.getArrayBufferAsync(prototype.dispatch.bufferAttributes.outputUvData),
-    renderer.getArrayBufferAsync(prototype.dispatch.bufferAttributes.indexData),
   ])
 
   copyBufferIntoTypedArray(prototype.packed.buffers.outputPositionData.data, positionsBuffer)
   copyBufferIntoTypedArray(prototype.packed.buffers.outputNormalData.data, normalsBuffer)
   copyBufferIntoTypedArray(prototype.packed.buffers.outputUvData.data, uvsBuffer)
-  copyBufferIntoTypedArray(prototype.packed.buffers.indexData.data, indicesBuffer)
   if (prototype.packed.cutoutCount > 0) {
     applySplineWallComputePrototypeTriangleCollapse(prototype.packed)
   }

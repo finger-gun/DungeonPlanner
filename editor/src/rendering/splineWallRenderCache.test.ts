@@ -123,6 +123,59 @@ describe('splineWallRenderCache', () => {
     expect(nextRoomBEntry!.geometry.getAttribute('position')).toBe(roomBPositionAttribute)
   })
 
+  it('refreshes the shared-boundary owner room when the dirty wall key belongs to the mirrored room', () => {
+    const paintedCells: PaintedCells = {
+      '0:0': { cell: [0, 0], layerId: 'default', roomId: 'room-a' },
+      '1:0': { cell: [1, 0], layerId: 'default', roomId: 'room-b' },
+    }
+    const graph = buildSplineWallGraphFromPaintedCells(paintedCells)
+    const entriesA = getCachedSplineWallRenderEntries({
+      floorId: 'floor-1',
+      paintedCells,
+      splineWallGraph: graph,
+      visibleLayerIds: new Set(['default']),
+      suppressedWallKeys: new Set(),
+    })
+
+    const roomAEntry = entriesA.find((entry) => entry.roomId === 'room-a')
+    expect(roomAEntry).toBeDefined()
+    const roomAPositionAttribute = roomAEntry!.geometry.getAttribute('position')
+
+    const nextGraph = cloneSplineWallGraph(graph)
+    const mirroredSharedSegment = Object.values(nextGraph.segments).find((segment) => segment.wallKey === '1:0:west')
+    expect(mirroredSharedSegment).toBeDefined()
+    mirroredSharedSegment!.cutouts = [{
+      id: 'door-cutout',
+      kind: 'door',
+      startRatio: 0.1,
+      endRatio: 0.4,
+      bottomHeight: 0,
+      topHeight: 1.42,
+      assetId: null,
+      openingId: 'door-opening',
+      objectProps: {},
+    }]
+
+    const entriesB = getCachedSplineWallRenderEntries({
+      floorId: 'floor-1',
+      paintedCells,
+      splineWallGraph: nextGraph,
+      visibleLayerIds: new Set(['default']),
+      suppressedWallKeys: new Set(),
+      dirtyInfo: {
+        ...createFloorDirtyInfo(),
+        sequence: 1,
+        wallsVersion: 1,
+        dirtyWallKeys: ['1:0:west'],
+      },
+    })
+
+    const nextRoomAEntry = entriesB.find((entry) => entry.roomId === 'room-a')
+    expect(nextRoomAEntry).toBeDefined()
+    expect(nextRoomAEntry!.geometry).toBe(roomAEntry!.geometry)
+    expect(nextRoomAEntry!.geometry.getAttribute('position')).not.toBe(roomAPositionAttribute)
+  })
+
   it('applies computed geometry updates only when the cached source key still matches', () => {
     const graph = buildSplineWallGraphFromPaintedCells({
       '0:0': { cell: [0, 0], layerId: 'default', roomId: 'room-a' },

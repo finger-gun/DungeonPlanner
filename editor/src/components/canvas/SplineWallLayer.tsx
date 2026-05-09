@@ -33,12 +33,16 @@ import {
   type PaintedCells,
   type Room,
 } from '../../store/useDungeonStore'
+import { shouldRenderLineOfSightGeometry } from './losRendering'
+import { getRoomVisibilityState, type PlayVisibility, type PlayVisibilityState } from './playVisibility'
 import {
   type SplineWallMaterialBundle,
   type SplineWallMaterialPreset,
   useSplineWallMaterialLibrary,
 } from './splineWallMaterial'
 import { useRegisteredLightSources } from './objectSourceRegistry'
+import type { BakedFloorLightField } from '../../rendering/dungeonLightField'
+import { applyBakedLightToSplineWallMaterialLibrary } from './splineWallBakedLight'
 
 const ROOM_SET_CONTENT_PACK_ID = 'dungeon'
 const NODE_HANDLE_COLOR = new THREE.Color('#f59e0b')
@@ -70,6 +74,8 @@ export function SplineWallLayer({
   wallSurfaceAssetIds,
   wallSurfaceProps,
   globalWallAssetId,
+  bakedLightField = null,
+  visibility,
 }: {
   floorId: string
   dirtyInfo?: FloorDirtyInfo | null
@@ -81,6 +87,8 @@ export function SplineWallLayer({
   wallSurfaceAssetIds: Record<string, string>
   wallSurfaceProps: Record<string, Record<string, unknown>>
   globalWallAssetId: string | null
+  bakedLightField?: BakedFloorLightField | null
+  visibility: PlayVisibility
 }) {
   const renderer = useThree((state) => state.gl)
   const invalidate = useThree((state) => state.invalidate)
@@ -206,6 +214,23 @@ export function SplineWallLayer({
 
     return affectedRoomIds.size > 0 ? [...affectedRoomIds] : visibleGraphRoomIds
   }, [dirtyInfo, splineWallGraph.segments, visibleGraphRoomIds])
+  const roomVisibilityById = useMemo(() => {
+    if (!visibility.active) {
+      return new Map<string, PlayVisibilityState>()
+    }
+
+    const roomIds = new Set<string>([
+      ...cachedWallEntries.map((entry) => entry.roomId),
+      ...wallMeshes.map((mesh) => mesh.roomId),
+    ])
+
+    return new Map(
+      [...roomIds].map((roomId) => [
+        roomId,
+        getRoomVisibilityState(roomId, paintedCells, visibility.getCellVisibility),
+      ]),
+    )
+  }, [cachedWallEntries, paintedCells, visibility, wallMeshes])
   const handleCommitNodeMove = useCallback((nodeId: string, position: [number, number]) => {
     moveSplineWallNode(nodeId, position)
   }, [moveSplineWallNode])
@@ -223,6 +248,10 @@ export function SplineWallLayer({
       top.needsUpdate = true
     })
   }, [dynamicPointLightsActive, wallMaterials])
+
+  useEffect(() => {
+    applyBakedLightToSplineWallMaterialLibrary(wallMaterials, bakedLightField)
+  }, [bakedLightField, wallMaterials])
 
   useEffect(() => {
     if (!selectedNodeId || effectiveSplineWallGraph.nodes[selectedNodeId]) {
@@ -334,20 +363,38 @@ export function SplineWallLayer({
   return (
     <>
       {dragNodeState
-        ? wallMeshes.map((meshData) => (
-            <SplineWallPreviewMesh
-              key={meshData.roomId}
-              meshData={meshData}
-              materialBundle={wallMaterials[getSplineWallMaterialPreset(rooms[meshData.roomId], globalWallAssetId)]}
-            />
-          ))
-        : cachedWallEntries.map((entry) => (
-            <SplineWallCachedMesh
-              key={entry.roomId}
-              entry={entry}
-              materialBundle={wallMaterials[getSplineWallMaterialPreset(rooms[entry.roomId], globalWallAssetId)]}
-            />
-          ))}
+        ? wallMeshes.map((meshData) => {
+            const roomVisibility = visibility.active
+              ? (roomVisibilityById.get(meshData.roomId) ?? 'hidden')
+              : 'visible'
+            if (!shouldRenderLineOfSightGeometry(roomVisibility, visibility.active)) {
+              return null
+            }
+
+            return (
+              <SplineWallPreviewMesh
+                key={meshData.roomId}
+                meshData={meshData}
+                materialBundle={wallMaterials[getSplineWallMaterialPreset(rooms[meshData.roomId], globalWallAssetId)]}
+              />
+            )
+          })
+        : cachedWallEntries.map((entry) => {
+            const roomVisibility = visibility.active
+              ? (roomVisibilityById.get(entry.roomId) ?? 'hidden')
+              : 'visible'
+            if (!shouldRenderLineOfSightGeometry(roomVisibility, visibility.active)) {
+              return null
+            }
+
+            return (
+              <SplineWallCachedMesh
+                key={entry.roomId}
+                entry={entry}
+                materialBundle={wallMaterials[getSplineWallMaterialPreset(rooms[entry.roomId], globalWallAssetId)]}
+              />
+            )
+          })}
       {showNodeHandles ? (
         <SplineWallNodeHandles
           nodes={visibleGraphNodes}

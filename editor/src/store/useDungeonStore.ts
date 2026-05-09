@@ -1843,6 +1843,7 @@ function reconcileRoomLayoutMutation(
     | 'floorTileAssetIds'
     | 'wallSurfaceAssetIds'
     | 'wallSurfaceProps'
+    | 'splineWallGraph'
   >,
   paintedCells: PaintedCells,
   changedCells: GridCell[],
@@ -1876,6 +1877,11 @@ function reconcileRoomLayoutMutation(
     wallOpenings: prunedWallOpenings,
     wallSurfaceAssetIds,
     wallSurfaceProps,
+    graphBackedRoomIds: new Set(
+      Object.values(current.splineWallGraph.paths)
+        .map((path) => path.roomId)
+        .filter((roomId): roomId is string => Boolean(roomId)),
+    ),
     selection: prunedSelection,
     createOpeningId: createObjectId,
   })
@@ -2262,7 +2268,7 @@ export const useDungeonStore = create<DungeonState>()(
   commitDraftRoom: ({ cells, splineNodes }) => {
     const state = get()
     const nextCells = cells.filter((cell) => !state.paintedCells[getCellKey(cell)])
-    if (nextCells.length === 0 || splineNodes.length < 3) {
+    if (nextCells.length === 0 || nextCells.length !== cells.length || splineNodes.length < 3) {
       return null
     }
 

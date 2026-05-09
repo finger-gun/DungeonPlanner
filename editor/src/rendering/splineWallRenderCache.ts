@@ -344,7 +344,17 @@ function resolveAffectedSplineWallRoomIds({
         .map((segment) => segment.roomId)
         .filter((roomId): roomId is string => typeof roomId === 'string' && roomId.length > 0),
     )
-    return roomIds.size > 0 ? roomIds : null
+    dirtyInfo.dirtyCellKeys.forEach((cellKey) => {
+      const roomId = paintedCells[cellKey]?.roomId
+      if (typeof roomId === 'string' && roomId.length > 0) {
+        roomIds.add(roomId)
+      }
+    })
+    if (roomIds.size === 0) {
+      return null
+    }
+
+    return expandSharedSplineWallRoomIds(splineWallGraph, roomIds)
   }
 
   const roomIds = new Set(
@@ -353,6 +363,63 @@ function resolveAffectedSplineWallRoomIds({
       .filter((roomId): roomId is string => typeof roomId === 'string' && roomId.length > 0),
   )
   return roomIds.size > 0 ? roomIds : null
+}
+
+function expandSharedSplineWallRoomIds(
+  splineWallGraph: SplineWallGraph,
+  roomIds: ReadonlySet<string>,
+) {
+  const expandedRoomIds = new Set(roomIds)
+  const roomIdsByCoincidentSegmentKey = new Map<string, Set<string>>()
+
+  Object.values(splineWallGraph.segments).forEach((segment) => {
+    if (!segment.roomId) {
+      return
+    }
+
+    const start = splineWallGraph.nodes[segment.startNodeId]?.position
+    const end = splineWallGraph.nodes[segment.endNodeId]?.position
+    if (!start || !end) {
+      return
+    }
+
+    const coincidentKey = buildCoincidentSplineWallSegmentKey(segment.layerId, start, end)
+    const existing = roomIdsByCoincidentSegmentKey.get(coincidentKey)
+    if (existing) {
+      existing.add(segment.roomId)
+    } else {
+      roomIdsByCoincidentSegmentKey.set(coincidentKey, new Set([segment.roomId]))
+    }
+  })
+
+  roomIdsByCoincidentSegmentKey.forEach((groupRoomIds) => {
+    if (groupRoomIds.size < 2) {
+      return
+    }
+
+    const touchesDirtyRoom = [...groupRoomIds].some((roomId) => expandedRoomIds.has(roomId))
+    if (!touchesDirtyRoom) {
+      return
+    }
+
+    groupRoomIds.forEach((roomId) => {
+      expandedRoomIds.add(roomId)
+    })
+  })
+
+  return expandedRoomIds.size > 0 ? expandedRoomIds : null
+}
+
+function buildCoincidentSplineWallSegmentKey(
+  layerId: string,
+  start: readonly [number, number],
+  end: readonly [number, number],
+) {
+  const startKey = `${start[0]}:${start[1]}`
+  const endKey = `${end[0]}:${end[1]}`
+  return startKey <= endKey
+    ? `${layerId}:${startKey}|${endKey}`
+    : `${layerId}:${endKey}|${startKey}`
 }
 
 function buildSetKey(values: ReadonlySet<string>) {

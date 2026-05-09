@@ -295,7 +295,7 @@ export function pruneBakedFloorLightFieldCache(retainedFloorIds: Iterable<string
   }
 }
 
-export function getPropLightWorldPosition(
+export function getObjectLocalOffsetWorldPosition(
   object: Pick<DungeonObjectRecord, 'position' | 'rotation'>,
   offset?: [number, number, number],
 ): [number, number, number] {
@@ -309,6 +309,13 @@ export function getPropLightWorldPosition(
   offsetScratch.applyEuler(rotationScratch)
   positionScratch.add(offsetScratch)
   return positionScratch.toArray() as [number, number, number]
+}
+
+export function getPropLightWorldPosition(
+  object: Pick<DungeonObjectRecord, 'position' | 'rotation'>,
+  offset?: [number, number, number],
+): [number, number, number] {
+  return getObjectLocalOffsetWorldPosition(object, offset)
 }
 
 function disposeBakedFloorLightField(field: BakedFloorLightField) {

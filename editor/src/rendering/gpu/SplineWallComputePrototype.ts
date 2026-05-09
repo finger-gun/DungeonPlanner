@@ -20,6 +20,7 @@ import {
   DEFAULT_SPLINE_WALL_THICKNESS,
   DEFAULT_SPLINE_WALL_UV_SCALE,
   SPLINE_WALL_GEOMETRY_EPSILON,
+  getSharedRenderableSegmentCutouts,
   type SampledSplineWallFrame,
   type SplineWallGeometryData,
   type SplineWallGeometryOptions,
@@ -635,12 +636,21 @@ export function collectSplineWallComputePrototypeDebugCutouts(
 ) {
   const defaultWallHeight = options.wallHeight ?? DEFAULT_SPLINE_WALL_HEIGHT
   const defaultWallThickness = options.wallThickness ?? DEFAULT_SPLINE_WALL_THICKNESS
+  const sharedSegmentGroups = buildSharedSplineWallSegmentGroupsForCompute(
+    splineWallGraph,
+    visibleLayerIds,
+  )
 
   return Object.values(splineWallGraph.segments)
     .filter((segment) =>
       (!visibleLayerIds || visibleLayerIds.has(segment.layerId))
       && (!roomIds || (segment.roomId !== null && roomIds.has(segment.roomId))))
     .flatMap((segment) => {
+      const sharedSegmentGroup = sharedSegmentGroups.get(segment.id)
+      if (sharedSegmentGroup && sharedSegmentGroup.ownerSegmentId !== segment.id) {
+        return []
+      }
+
       const start = splineWallGraph.nodes[segment.startNodeId]?.position
       const end = splineWallGraph.nodes[segment.endNodeId]?.position
       if (!start || !end) {
@@ -660,8 +670,15 @@ export function collectSplineWallComputePrototypeDebugCutouts(
       ]
       const resolvedWallHeight = segment.wallHeight ?? defaultWallHeight
       const halfThickness = (segment.wallThickness ?? defaultWallThickness) / 2
+      const cutouts = sharedSegmentGroup
+        ? getSharedRenderableSegmentCutouts(
+            splineWallGraph,
+            sharedSegmentGroup.ownerSegmentId,
+            sharedSegmentGroup.segmentIds,
+          )
+        : segment.cutouts
 
-      return segment.cutouts.flatMap((cutout) => {
+      return cutouts.flatMap((cutout) => {
         const startRatio = Math.max(0, Math.min(cutout.startRatio, cutout.endRatio))
         const endRatio = Math.min(1, Math.max(cutout.startRatio, cutout.endRatio))
         const bottomHeight = clampSplineWallComputeValue(cutout.bottomHeight, 0, resolvedWallHeight)
@@ -701,6 +718,144 @@ export function collectSplineWallComputePrototypeDebugCutouts(
         } satisfies SplineWallComputePrototypeCutout]
       })
     })
+}
+
+type SharedSplineWallSegmentGroup = {
+  ownerSegmentId: string
+  segmentIds: string[]
+}
+
+function buildSharedSplineWallSegmentGroupsForCompute(
+  splineWallGraph: SplineWallGraph,
+  visibleLayerIds: ReadonlySet<string> | null,
+) {
+  const segmentsByGeometryKey = new Map<string, SplineWallGraph['segments'][string][]>()
+
+  Object.values(splineWallGraph.segments).forEach((segment) => {
+    if (visibleLayerIds && !visibleLayerIds.has(segment.layerId)) {
+      return
+    }
+
+    const start = splineWallGraph.nodes[segment.startNodeId]?.position
+    const end = splineWallGraph.nodes[segment.endNodeId]?.position
+    if (!start || !end) {
+      return
+    }
+
+    const geometryKey = buildCoincidentComputeSegmentKey(segment.layerId, start, end)
+    const existing = segmentsByGeometryKey.get(geometryKey)
+    if (existing) {
+      existing.push(segment)
+    } else {
+      segmentsByGeometryKey.set(geometryKey, [segment])
+    }
+  })
+
+  const sharedSegmentGroups = new Map<string, SharedSplineWallSegmentGroup>()
+  segmentsByGeometryKey.forEach((segments) => {
+    if (segments.length < 2) {
+      return
+    }
+
+    const distinctRoomIds = new Set(
+      segments.map((segment) => segment.roomId ?? `segment:${segment.id}`),
+    )
+    if (distinctRoomIds.size < 2) {
+      return
+    }
+
+    const ownerSegmentId = [...segments].sort(compareComputeSegmentOwnership)[0]?.id
+    if (!ownerSegmentId) {
+      return
+    }
+
+    const segmentIds = [...new Set(segments.map((segment) => segment.id))]
+    segmentIds.forEach((segmentId) => {
+      sharedSegmentGroups.set(segmentId, {
+        ownerSegmentId,
+        segmentIds,
+      })
+    })
+  })
+
+  return sharedSegmentGroups
+}
+
+function buildCoincidentComputeSegmentKey(
+  layerId: string,
+  start: readonly [number, number],
+  end: readonly [number, number],
+) {
+  const startKey = `${start[0]}:${start[1]}`
+  const endKey = `${end[0]}:${end[1]}`
+  return startKey <= endKey
+    ? `${layerId}:${startKey}|${endKey}`
+    : `${layerId}:${endKey}|${startKey}`
+}
+
+function compareComputeSegmentOwnership(
+  left: SplineWallGraph['segments'][string],
+  right: SplineWallGraph['segments'][string],
+) {
+  const leftOwnership = getComputeSegmentOwnershipOrder(left)
+  const rightOwnership = getComputeSegmentOwnershipOrder(right)
+
+  if (leftOwnership.rank !== rightOwnership.rank) {
+    return leftOwnership.rank - rightOwnership.rank
+  }
+  if (leftOwnership.cellX !== rightOwnership.cellX) {
+    return leftOwnership.cellX - rightOwnership.cellX
+  }
+  if (leftOwnership.cellZ !== rightOwnership.cellZ) {
+    return leftOwnership.cellZ - rightOwnership.cellZ
+  }
+  if (leftOwnership.directionRank !== rightOwnership.directionRank) {
+    return leftOwnership.directionRank - rightOwnership.directionRank
+  }
+  if (leftOwnership.roomId !== rightOwnership.roomId) {
+    return leftOwnership.roomId.localeCompare(rightOwnership.roomId)
+  }
+  return left.id.localeCompare(right.id)
+}
+
+function getComputeSegmentOwnershipOrder(segment: SplineWallGraph['segments'][string]) {
+  if (segment.wallKey) {
+    const [cellXText = '', cellZText = '', direction = ''] = segment.wallKey.split(':')
+    const cellX = Number.parseInt(cellXText, 10)
+    const cellZ = Number.parseInt(cellZText, 10)
+    if (Number.isFinite(cellX) && Number.isFinite(cellZ)) {
+      return {
+        rank: 0,
+        cellX,
+        cellZ,
+        directionRank: getComputeWallDirectionSortRank(direction),
+        roomId: segment.roomId ?? '',
+      }
+    }
+  }
+
+  return {
+    rank: segment.wallKey ? 1 : 2,
+    cellX: Number.POSITIVE_INFINITY,
+    cellZ: Number.POSITIVE_INFINITY,
+    directionRank: Number.POSITIVE_INFINITY,
+    roomId: segment.roomId ?? '',
+  }
+}
+
+function getComputeWallDirectionSortRank(direction: string) {
+  switch (direction) {
+    case 'north':
+      return 0
+    case 'east':
+      return 1
+    case 'south':
+      return 2
+    case 'west':
+      return 3
+    default:
+      return 4
+  }
 }
 
 function getSplineWallComputeCutoutShapeType(assetId: string | null) {

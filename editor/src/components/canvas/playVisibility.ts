@@ -503,6 +503,27 @@ export function getObjectVisibilityState(
   return cellVisibility
 }
 
+export function getRoomVisibilityState(
+  roomId: string,
+  paintedCells: PaintedCells,
+  getCellVisibility: (cellKey: string) => PlayVisibilityState,
+): PlayVisibilityState {
+  let visibility: PlayVisibilityState = 'hidden'
+
+  for (const [cellKey, record] of Object.entries(paintedCells)) {
+    if (record.roomId !== roomId) {
+      continue
+    }
+
+    visibility = maxVisibility(visibility, getCellVisibility(cellKey))
+    if (visibility === 'visible') {
+      return visibility
+    }
+  }
+
+  return visibility
+}
+
 export function computeVisibleCellKeys(
   paintedCells: PaintedCells,
   wallOpenings: Record<string, OpeningRecord>,

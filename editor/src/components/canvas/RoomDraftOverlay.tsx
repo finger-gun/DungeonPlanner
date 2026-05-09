@@ -13,6 +13,7 @@ import {
   setRoomDraftCorner,
   type RoomDraftState,
 } from '../../store/roomDraft'
+import type { RoomDraftHandleVisibility } from '../../store/roomDraftClip'
 import {
   resizeBoundsFromEdge,
   snapWorldToBoundary,
@@ -31,6 +32,10 @@ const EDGE_ORDER: RoomResizeEdge[] = ['north', 'south', 'east', 'west']
 type RoomDraftOverlayProps = {
   draft: RoomDraftState
   valid: boolean
+  previewPoints?: readonly (readonly [number, number])[]
+  centerPosition?: readonly [number, number, number]
+  handleVisibility?: RoomDraftHandleVisibility
+  invalidTitle?: string
   onChange: (draft: RoomDraftState) => void
   onCommit: () => void
   onCancel: () => void
@@ -43,6 +48,10 @@ type DragState =
 export function RoomDraftOverlay({
   draft,
   valid,
+  previewPoints: providedPreviewPoints,
+  centerPosition: providedCenterPosition,
+  handleVisibility,
+  invalidTitle,
   onChange,
   onCommit,
   onCancel,
@@ -64,8 +73,14 @@ export function RoomDraftOverlay({
     dragStateRef.current = dragState
   }, [dragState])
 
-  const previewPoints = useMemo(() => buildRoomDraftWorldPoints(draft), [draft])
-  const centerPosition = useMemo(() => getRoomDraftCenterWorldPosition(draft), [draft])
+  const previewPoints = useMemo(
+    () => providedPreviewPoints ?? buildRoomDraftWorldPoints(draft),
+    [draft, providedPreviewPoints],
+  )
+  const centerPosition = useMemo(
+    () => providedCenterPosition ?? getRoomDraftCenterWorldPosition(draft),
+    [draft, providedCenterPosition],
+  )
 
   const fillGeometry = useMemo(() => {
     if (previewPoints.length < 3) {
@@ -214,6 +229,9 @@ export function RoomDraftOverlay({
         </line>
       ) : null}
       {EDGE_ORDER.map((edge) => {
+        if (handleVisibility && !handleVisibility.edges[edge]) {
+          return null
+        }
         const position = getRoomDraftEdgeWorldPosition(draft, edge)
         return (
           <mesh
@@ -237,6 +255,9 @@ export function RoomDraftOverlay({
         )
       })}
       {CORNER_ORDER.map((corner) => {
+        if (handleVisibility && !handleVisibility.corners[corner]) {
+          return null
+        }
         const position = getRoomDraftCornerWorldPosition(draft, corner)
         return (
           <mesh
@@ -259,22 +280,26 @@ export function RoomDraftOverlay({
           </mesh>
         )
       })}
-      <group
+      <Html
+        occlude={false}
         position={[centerPosition[0], 0.06, centerPosition[2]]}
-        rotation={[-Math.PI / 2, 0, 0]}
+        distanceFactor={10}
+        zIndexRange={[120, 0]}
       >
-        <Html
-          transform
-          occlude={false}
-          distanceFactor={8}
+        <div
+          className="pointer-events-auto -translate-x-1/2 translate-y-3 flex items-center gap-2"
+          data-testid="room-draft-controls"
         >
-          <div className="pointer-events-auto flex items-center gap-2">
             <button
               type="button"
               aria-label="Commit draft room"
-              title={valid ? 'Commit draft room' : 'Draft overlaps another room'}
+              title={valid ? 'Commit draft room' : (invalidTitle ?? 'Draft overlaps another room')}
               className="flex h-10 w-10 items-center justify-center rounded-full border border-emerald-400/70 bg-slate-950/90 text-emerald-100 shadow-lg shadow-slate-950/35 transition hover:border-emerald-300 disabled:cursor-not-allowed disabled:border-slate-700 disabled:text-slate-500 disabled:opacity-60"
-              onClick={onCommit}
+              onPointerDown={(event) => {
+                event.preventDefault()
+                event.stopPropagation()
+                onCommit()
+              }}
               disabled={!valid}
             >
               <Check size={18} strokeWidth={2} />
@@ -284,13 +309,16 @@ export function RoomDraftOverlay({
               aria-label="Cancel draft room"
               title="Cancel draft room"
               className="flex h-10 w-10 items-center justify-center rounded-full border border-rose-400/70 bg-slate-950/90 text-rose-100 shadow-lg shadow-slate-950/35 transition hover:border-rose-300"
-              onClick={onCancel}
+              onPointerDown={(event) => {
+                event.preventDefault()
+                event.stopPropagation()
+                onCancel()
+              }}
             >
               <Trash2 size={18} strokeWidth={2} />
             </button>
-          </div>
-        </Html>
-      </group>
+        </div>
+      </Html>
     </group>
   )
 }
