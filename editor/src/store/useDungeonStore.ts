@@ -26,6 +26,7 @@ import {
   cloneSplineWallGraph,
   createEmptySplineWallGraph,
   hasSplineWallGraphPaths,
+  pruneSplineWallGraphRooms,
   removeSplineWallGraphNode,
   splitSplineWallGraphSegment,
   syncSplineWallGraphCutoutsFromOpenings,
@@ -1718,7 +1719,11 @@ function pruneInvalidConnectedProps(
 
     const connector = object.props.connector
     const supportCellKey = object.supportCellKey ?? getCellKey(object.cell)
-    if (connector === 'FREE' && changedCellKeys.has(supportCellKey) && !paintedCells[supportCellKey]) {
+    const consumesOccupancy = objectConsumesOccupancy(object.assetId, connector)
+    const anchorAffected =
+      changedCellKeys.has(supportCellKey)
+      || affectedAnchorKeys.has(object.cellKey)
+    if (!consumesOccupancy && anchorAffected && !isPropAnchorValid(object, paintedCells)) {
       invalidRootIds.add(object.id)
     }
   })
@@ -1851,6 +1856,12 @@ function reconcileRoomLayoutMutation(
     wallOpenings?: Record<string, OpeningRecord>
   },
 ) {
+  const validGraphRoomIds = new Set(
+    Object.values(paintedCells)
+      .map((record) => record.roomId)
+      .filter((roomId): roomId is string => typeof roomId === 'string' && roomId.length > 0),
+  )
+  const prunedSplineWallGraph = pruneSplineWallGraphRooms(current.splineWallGraph, validGraphRoomIds)
   const currentWithWallOpenings = {
     ...current,
     wallOpenings: options?.wallOpenings ?? current.wallOpenings,
@@ -1878,13 +1889,18 @@ function reconcileRoomLayoutMutation(
     wallSurfaceAssetIds,
     wallSurfaceProps,
     graphBackedRoomIds: new Set(
-      Object.values(current.splineWallGraph.paths)
+      Object.values(prunedSplineWallGraph.paths)
         .map((path) => path.roomId)
         .filter((roomId): roomId is string => Boolean(roomId)),
     ),
     selection: prunedSelection,
     createOpeningId: createObjectId,
   })
+  const splineWallGraph = syncOpeningCutoutsIntoSplineWallGraph(
+    prunedSplineWallGraph,
+    paintedCells,
+    wallOpenings,
+  )
 
   return {
     floorTileAssetIds,
@@ -1895,6 +1911,7 @@ function reconcileRoomLayoutMutation(
     selection,
     wallOpenings,
     innerWalls,
+    splineWallGraph,
   }
 }
 
@@ -2243,11 +2260,13 @@ export const useDungeonStore = create<DungeonState>()(
         floorTileAssetIds,
         wallSurfaceAssetIds,
         wallSurfaceProps,
+        splineWallGraph,
       } = reconcileRoomLayoutMutation(current, paintedCells, nextCells)
 
       return {
         ...current,
         paintedCells,
+        splineWallGraph,
         floorTileAssetIds,
         wallSurfaceAssetIds,
         wallSurfaceProps,
@@ -2313,10 +2332,11 @@ export const useDungeonStore = create<DungeonState>()(
         floorTileAssetIds,
         wallSurfaceAssetIds,
         wallSurfaceProps,
+        splineWallGraph: reconciledSplineWallGraph,
       } = reconcileRoomLayoutMutation(current, paintedCells, nextCells)
 
       const splineWallGraph = syncSplineWallGraphCutoutsFromOpenings(
-        upsertSplineWallGraphRoomPath(current.splineWallGraph, {
+        upsertSplineWallGraphRoomPath(reconciledSplineWallGraph, {
           roomId,
           layerId: current.activeLayerId,
           nodes: splineNodes,
@@ -2602,11 +2622,13 @@ export const useDungeonStore = create<DungeonState>()(
         floorTileAssetIds,
         wallSurfaceAssetIds,
         wallSurfaceProps,
+        splineWallGraph,
       } = reconcileRoomLayoutMutation(current, paintedCells, removedCells)
 
       return {
         ...current,
         paintedCells,
+        splineWallGraph,
         floorTileAssetIds,
         wallSurfaceAssetIds,
         wallSurfaceProps,
@@ -4017,6 +4039,18 @@ export const useDungeonStore = create<DungeonState>()(
     return id
   },
   removeRoom: (id) => {
+    const state = get()
+    const removedCells = Object.values(state.paintedCells)
+      .filter((record) => record.roomId === id)
+      .map((record) => record.cell)
+    if (removedCells.length > 0) {
+      queueFloorDirtyHint({
+        domains: ['tiles', 'walls', 'openings', 'props', 'lighting', 'renderPlan', 'occupancy'],
+        cells: removedCells,
+        fullRefresh: true,
+      })
+    }
+
     set((current) => {
       if (!current.rooms[id]) return current
       const previousSnapshot = cloneSnapshot(current)
@@ -4043,12 +4077,14 @@ export const useDungeonStore = create<DungeonState>()(
         floorTileAssetIds,
         wallSurfaceAssetIds,
         wallSurfaceProps,
+        splineWallGraph,
       } = reconcileRoomLayoutMutation(current, paintedCells, removedCells)
 
       return {
         ...current,
         rooms,
         paintedCells,
+        splineWallGraph,
         floorTileAssetIds,
         wallSurfaceAssetIds,
         wallSurfaceProps,
@@ -4092,10 +4128,12 @@ export const useDungeonStore = create<DungeonState>()(
         floorTileAssetIds,
         wallSurfaceAssetIds,
         wallSurfaceProps,
+        splineWallGraph,
       } = reconcileRoomLayoutMutation(current, paintedCells, changedCells)
       return {
         ...current,
         paintedCells,
+        splineWallGraph,
         floorTileAssetIds,
         wallSurfaceAssetIds,
         wallSurfaceProps,
@@ -4198,6 +4236,7 @@ export const useDungeonStore = create<DungeonState>()(
         floorTileAssetIds,
         wallSurfaceAssetIds,
         wallSurfaceProps,
+        splineWallGraph,
       } = reconcileRoomLayoutMutation(current, paintedCells, changedCells, {
         wallOpenings: remappedWallOpenings,
       })
@@ -4205,6 +4244,7 @@ export const useDungeonStore = create<DungeonState>()(
       return {
         ...current,
         paintedCells,
+        splineWallGraph,
         floorTileAssetIds,
         wallSurfaceAssetIds,
         wallSurfaceProps,
@@ -4289,11 +4329,13 @@ export const useDungeonStore = create<DungeonState>()(
         floorTileAssetIds,
         wallSurfaceAssetIds,
         wallSurfaceProps,
+        splineWallGraph,
       } = reconcileRoomLayoutMutation(current, paintedCells, changedCells)
 
       return {
         ...current,
         paintedCells,
+        splineWallGraph,
         floorTileAssetIds,
         wallSurfaceAssetIds,
         wallSurfaceProps,

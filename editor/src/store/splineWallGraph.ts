@@ -188,6 +188,19 @@ export function upsertSplineWallGraphRoomPath(
   return nextGraph
 }
 
+export function pruneSplineWallGraphRooms(
+  graph: SplineWallGraph,
+  validRoomIds: ReadonlySet<string>,
+): SplineWallGraph {
+  const nextGraph = cloneSplineWallGraph(graph)
+
+  Object.values(nextGraph.paths)
+    .filter((path) => path.roomId !== null && !validRoomIds.has(path.roomId))
+    .forEach((path) => deleteSplineWallGraphPath(nextGraph, path.id))
+
+  return nextGraph
+}
+
 export function getSplineWallSegmentMidpoint(
   graph: SplineWallGraph,
   segmentId: string,

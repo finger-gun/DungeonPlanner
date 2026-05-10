@@ -65,6 +65,23 @@ type RoomSplineWallCornerStyle = {
   amount: number
 }
 
+type SplineWallSharedSuppressedInterval = readonly [number, number]
+
+type StraightSplineWallSegmentReference = {
+  segmentId: string
+  roomId: string | null
+  start: WorldPoint
+  end: WorldPoint
+  tangent: WorldPoint
+}
+
+type SampledSplineWallSharedEdge = {
+  segmentId: string
+  roomId: string | null
+  startRatio: number
+  endRatio: number
+}
+
 // Match the scaled KayKit dungeon wall asset bounds (wall.glb at 0.5 scale):
 // 2.0 world units tall and 0.5 world units thick.
 export const DEFAULT_SPLINE_WALL_HEIGHT = 2.0
@@ -74,6 +91,7 @@ const DEFAULT_CURVE_SUBDIVISIONS = 6
 export const DEFAULT_SPLINE_WALL_UV_SCALE = GRID_SIZE
 export const SPLINE_WALL_GEOMETRY_EPSILON = 1e-5
 const MAX_SPLINE_WALL_MITER_SCALE = 2
+const SAMPLED_SPLINE_WALL_KEY_SCALE = 100000
 
 export function evaluateQuadraticBezierPoint(
   start: SplineBoundaryPoint,
@@ -196,10 +214,16 @@ export function buildRoomSplineWallChainsFromGraph(
   roomIds: ReadonlySet<string> | null = null,
   defaultWallHeight: number = DEFAULT_SPLINE_WALL_HEIGHT,
   respectCutouts: boolean = true,
+  geometryOptions: SplineWallGeometryOptions = {},
 ): RoomSplineWallChain[] {
   const sharedSegmentGroups = buildSharedSplineWallSegmentGroups(
     splineWallGraph,
     visibleLayerIds,
+  )
+  const sharedSuppressedIntervals = buildSharedSplineWallSegmentOverlapIntervals(
+    splineWallGraph,
+    visibleLayerIds,
+    geometryOptions,
   )
   return Object.values(splineWallGraph.paths)
     .filter((path) =>
@@ -212,6 +236,7 @@ export function buildRoomSplineWallChainsFromGraph(
       defaultWallHeight,
       respectCutouts,
       sharedSegmentGroups,
+      sharedSuppressedIntervals,
     ))
 }
 
@@ -238,6 +263,8 @@ export function buildRoomSplineWallMeshesFromGraph(
     suppressedWallKeys,
     roomIds,
     options.wallHeight ?? DEFAULT_SPLINE_WALL_HEIGHT,
+    true,
+    options,
   )
   return buildRoomSplineWallMeshesFromChains(chains, options)
 }
@@ -1046,6 +1073,7 @@ function buildPathSplineWallChains(
   defaultWallHeight: number,
   respectCutouts: boolean,
   sharedSegmentGroups: ReadonlyMap<string, SharedSplineWallSegmentGroup>,
+  sharedSuppressedIntervals: ReadonlyMap<string, readonly SplineWallSharedSuppressedInterval[]>,
 ): RoomSplineWallChain[] {
   return getPathSplineWallHeightBands(
     path,
@@ -1077,6 +1105,7 @@ function buildPathSplineWallChains(
             defaultWallHeight,
             respectCutouts,
             sharedSegmentGroups,
+            sharedSuppressedIntervals,
           )
         })
 
@@ -1286,6 +1315,100 @@ function buildSharedSplineWallSegmentGroups(
   return sharedSegmentGroups
 }
 
+function buildSharedSplineWallSegmentOverlapIntervals(
+  splineWallGraph: SplineWallGraph,
+  visibleLayerIds: ReadonlySet<string> | null,
+  options: SplineWallGeometryOptions,
+) {
+  const sharedEdgesByGeometryKey = new Map<string, SampledSplineWallSharedEdge[]>()
+
+  Object.values(splineWallGraph.paths).forEach((path) => {
+    if (visibleLayerIds && !visibleLayerIds.has(path.layerId)) {
+      return
+    }
+
+    const straightSegments = path.segmentIds
+      .map((segmentId) => buildStraightSplineWallSegmentReference(splineWallGraph, segmentId))
+      .filter((segment): segment is StraightSplineWallSegmentReference => Boolean(segment))
+    if (straightSegments.length === 0) {
+      return
+    }
+
+    const sampledPath = buildSampledSplineWallPathFromGraph(path, splineWallGraph, options)
+    const edgeCount = path.closed ? sampledPath.length : sampledPath.length - 1
+    for (let index = 0; index < edgeCount; index += 1) {
+      const start = sampledPath[index]
+      const end = sampledPath[(index + 1) % sampledPath.length]
+      if (!start || !end || distanceBetweenPoints(start, end) <= SPLINE_WALL_GEOMETRY_EPSILON) {
+        continue
+      }
+
+      const ownerSegment = findOwningStraightSplineWallSegment(
+        interpolateSplineBoundaryPoint(start, end, 0.5),
+        straightSegments,
+      )
+      if (!ownerSegment) {
+        continue
+      }
+
+      const geometryKey = buildCoincidentWorldSegmentKey(path.layerId, start, end)
+      const nextEdge = {
+        segmentId: ownerSegment.segmentId,
+        roomId: ownerSegment.roomId,
+        startRatio: projectWorldPointToSegmentRatio(start, ownerSegment.start, ownerSegment.end),
+        endRatio: projectWorldPointToSegmentRatio(end, ownerSegment.start, ownerSegment.end),
+      } satisfies SampledSplineWallSharedEdge
+      const existing = sharedEdgesByGeometryKey.get(geometryKey)
+      if (existing) {
+        existing.push(nextEdge)
+      } else {
+        sharedEdgesByGeometryKey.set(geometryKey, [nextEdge])
+      }
+    }
+  })
+
+  const suppressedIntervalsBySegment = new Map<string, SplineWallSharedSuppressedInterval[]>()
+  sharedEdgesByGeometryKey.forEach((edges) => {
+    const distinctRoomIds = new Set(
+      edges.map((edge) => edge.roomId ?? `segment:${edge.segmentId}`),
+    )
+    if (distinctRoomIds.size < 2) {
+      return
+    }
+
+    const ownerSegmentId = [...new Set(edges.map((edge) => edge.segmentId))]
+      .map((segmentId) => splineWallGraph.segments[segmentId])
+      .filter((segment): segment is SplineWallGraph['segments'][string] => Boolean(segment))
+      .sort(compareSplineWallSegmentOwnership)[0]?.id
+    if (!ownerSegmentId) {
+      return
+    }
+
+    edges.forEach((edge) => {
+      if (edge.segmentId === ownerSegmentId) {
+        return
+      }
+
+      const startRatio = Math.min(edge.startRatio, edge.endRatio)
+      const endRatio = Math.max(edge.startRatio, edge.endRatio)
+      if (endRatio - startRatio <= SPLINE_WALL_GEOMETRY_EPSILON) {
+        return
+      }
+
+      const nextIntervals = suppressedIntervalsBySegment.get(edge.segmentId) ?? []
+      nextIntervals.push([startRatio, endRatio])
+      suppressedIntervalsBySegment.set(edge.segmentId, nextIntervals)
+    })
+  })
+
+  return new Map(
+    [...suppressedIntervalsBySegment.entries()].map(([segmentId, intervals]) => [
+      segmentId,
+      mergeSplineWallSuppressedIntervals(intervals),
+    ]),
+  )
+}
+
 function buildCoincidentSegmentKey(
   layerId: string,
   start: SplineBoundaryPoint,
@@ -1409,6 +1532,7 @@ function buildPathSegmentEntries(
   defaultWallHeight: number,
   respectCutouts: boolean,
   sharedSegmentGroups: ReadonlyMap<string, SharedSplineWallSegmentGroup>,
+  sharedSuppressedIntervals: ReadonlyMap<string, readonly SplineWallSharedSuppressedInterval[]>,
 ): PathSplineWallSegmentEntry[] {
   const resolvedWallHeight = getResolvedSplineWallSegmentHeight(segment, defaultWallHeight)
   if (
@@ -1428,32 +1552,39 @@ function buildPathSegmentEntries(
     return [createPathSegmentEntry(wallKey, segment, start, end, 0, 1, true)]
   }
 
-  if (!respectCutouts) {
+  const overlapSuppressedIntervals = sharedSuppressedIntervals.get(segment.id) ?? []
+  if (!respectCutouts && overlapSuppressedIntervals.length === 0) {
     return [createPathSegmentEntry(wallKey, segment, start, end, 0, 1, false)]
   }
 
-  const cutoutIntervals = getMergedSplineWallCutoutIntervalsForBand(
-    sharedSegmentGroup
-      ? getSharedRenderableSegmentCutouts(splineWallGraph, sharedSegmentGroup.ownerSegmentId, sharedSegmentGroup.segmentIds)
-      : segment.cutouts,
-    bandBaseHeight,
-    bandTopHeight,
-    resolvedWallHeight,
-  )
-  if (cutoutIntervals.length === 0) {
+  const cutoutIntervals = respectCutouts
+    ? getMergedSplineWallCutoutIntervalsForBand(
+        sharedSegmentGroup
+          ? getSharedRenderableSegmentCutouts(splineWallGraph, sharedSegmentGroup.ownerSegmentId, sharedSegmentGroup.segmentIds)
+          : segment.cutouts,
+        bandBaseHeight,
+        bandTopHeight,
+        resolvedWallHeight,
+      )
+    : []
+  const suppressedIntervals = mergeSplineWallSuppressedIntervals([
+    ...overlapSuppressedIntervals,
+    ...cutoutIntervals,
+  ])
+  if (suppressedIntervals.length === 0) {
     return [createPathSegmentEntry(wallKey, segment, start, end, 0, 1, false)]
   }
 
   const entries: PathSplineWallSegmentEntry[] = []
   let cursor = 0
 
-  cutoutIntervals.forEach(([cutoutStart, cutoutEnd]) => {
-    if (cutoutStart > cursor + SPLINE_WALL_GEOMETRY_EPSILON) {
-      entries.push(createPathSegmentEntry(wallKey, segment, start, end, cursor, cutoutStart, false))
+  suppressedIntervals.forEach(([suppressedStart, suppressedEnd]) => {
+    if (suppressedStart > cursor + SPLINE_WALL_GEOMETRY_EPSILON) {
+      entries.push(createPathSegmentEntry(wallKey, segment, start, end, cursor, suppressedStart, false))
     }
 
-    entries.push(createPathSegmentEntry(wallKey, segment, start, end, cutoutStart, cutoutEnd, true))
-    cursor = cutoutEnd
+    entries.push(createPathSegmentEntry(wallKey, segment, start, end, suppressedStart, suppressedEnd, true))
+    cursor = suppressedEnd
   })
 
   if (cursor < 1 - SPLINE_WALL_GEOMETRY_EPSILON) {
@@ -1524,6 +1655,129 @@ function getMergedSplineWallCutoutIntervalsForBand(
     acc[acc.length - 1] = [previous[0], Math.max(previous[1], endRatio)]
     return acc
   }, [])
+}
+
+function buildStraightSplineWallSegmentReference(
+  splineWallGraph: SplineWallGraph,
+  segmentId: string,
+): StraightSplineWallSegmentReference | null {
+  const segment = splineWallGraph.segments[segmentId]
+  const startNode = splineWallGraph.nodes[segment?.startNodeId ?? '']
+  const endNode = splineWallGraph.nodes[segment?.endNodeId ?? '']
+  if (!segment || !startNode || !endNode) {
+    return null
+  }
+
+  const start = boundaryPointToWorldPoint(startNode.position)
+  const end = boundaryPointToWorldPoint(endNode.position)
+  return {
+    segmentId: segment.id,
+    roomId: segment.roomId,
+    start,
+    end,
+    tangent: normalizePoint(subtractPoints(end, start)),
+  }
+}
+
+function findOwningStraightSplineWallSegment(
+  midpoint: WorldPoint,
+  candidates: readonly StraightSplineWallSegmentReference[],
+): StraightSplineWallSegmentReference | null {
+  let owner: StraightSplineWallSegmentReference | null = null
+  let bestDistance = Number.POSITIVE_INFINITY
+  let bestAlignment = Number.NEGATIVE_INFINITY
+
+  candidates.forEach((candidate) => {
+    const closestPoint = closestWorldPointOnSegment(midpoint, candidate.start, candidate.end)
+    const distance = distanceBetweenPoints(midpoint, closestPoint)
+    if (distance > bestDistance + SPLINE_WALL_GEOMETRY_EPSILON) {
+      return
+    }
+
+    const offset = subtractPoints(midpoint, closestPoint)
+    const alignment = Math.abs(dot2D(normalizePoint(offset), candidate.tangent))
+    if (
+      distance < bestDistance - SPLINE_WALL_GEOMETRY_EPSILON
+      || alignment > bestAlignment + SPLINE_WALL_GEOMETRY_EPSILON
+    ) {
+      owner = candidate
+      bestDistance = distance
+      bestAlignment = alignment
+    }
+  })
+
+  return owner
+}
+
+function projectWorldPointToSegmentRatio(
+  point: WorldPoint,
+  start: WorldPoint,
+  end: WorldPoint,
+) {
+  const delta = subtractPoints(end, start)
+  const lengthSquared = dot2D(delta, delta)
+  if (lengthSquared <= SPLINE_WALL_GEOMETRY_EPSILON) {
+    return 0
+  }
+
+  return clampSplineWallRatio(dot2D(subtractPoints(point, start), delta) / lengthSquared)
+}
+
+function closestWorldPointOnSegment(
+  point: WorldPoint,
+  start: WorldPoint,
+  end: WorldPoint,
+): WorldPoint {
+  return interpolateSplineBoundaryPoint(
+    start,
+    end,
+    projectWorldPointToSegmentRatio(point, start, end),
+  )
+}
+
+function buildCoincidentWorldSegmentKey(
+  layerId: string,
+  start: WorldPoint,
+  end: WorldPoint,
+) {
+  const startKey = getWorldPointKey(start)
+  const endKey = getWorldPointKey(end)
+  return startKey <= endKey
+    ? `${layerId}:${startKey}|${endKey}`
+    : `${layerId}:${endKey}|${startKey}`
+}
+
+function getWorldPointKey(point: WorldPoint) {
+  return `${Math.round(point[0] * SAMPLED_SPLINE_WALL_KEY_SCALE)}:${Math.round(point[1] * SAMPLED_SPLINE_WALL_KEY_SCALE)}`
+}
+
+function mergeSplineWallSuppressedIntervals(
+  intervals: readonly SplineWallSharedSuppressedInterval[],
+) {
+  const normalized = intervals
+    .map(([startRatio, endRatio]) => [
+      clampSplineWallRatio(Math.min(startRatio, endRatio)),
+      clampSplineWallRatio(Math.max(startRatio, endRatio)),
+    ] as const)
+    .filter(([startRatio, endRatio]) => endRatio - startRatio > SPLINE_WALL_GEOMETRY_EPSILON)
+    .sort((left, right) => left[0] - right[0])
+
+  const merged: Array<[number, number]> = []
+  normalized.forEach(([startRatio, endRatio]) => {
+    const previous = merged.at(-1)
+    if (!previous || startRatio > previous[1] + SPLINE_WALL_GEOMETRY_EPSILON) {
+      merged.push([startRatio, endRatio])
+      return
+    }
+
+    previous[1] = Math.max(previous[1], endRatio)
+  })
+
+  return merged.map(([startRatio, endRatio]) => [startRatio, endRatio] as const)
+}
+
+function clampSplineWallRatio(value: number) {
+  return Math.min(Math.max(value, 0), 1)
 }
 
 function clampSplineWallHeight(value: number, resolvedWallHeight: number) {

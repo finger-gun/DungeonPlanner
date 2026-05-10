@@ -103,7 +103,6 @@ import {
 import { useRemovalAnimationBatches } from './useRemovalAnimationBatches'
 import { WALL_EXTRA_DELAY_MS } from './DungeonRoomShared'
 import { RoomDraftOverlay } from './RoomDraftOverlay'
-import { CursorInspectionLight } from './cursorInspectionLight'
 import {
   createRoomDraftFromStroke,
   type RoomDraftState,
@@ -126,7 +125,6 @@ export function Grid({ size = 120, playMode = false, bakedLightField = null }: G
   const { snap } = useSnapToGrid()
   const raycaster = useRaycaster(0)
   const { gl, camera, scene, invalidate } = useThree()
-  const hitPlaneRef = useRef<THREE.Mesh>(null)
   const surfaceRaycasterRef = useRef(new THREE.Raycaster())
   const surfacePointerRef = useRef(new THREE.Vector2())
   const {
@@ -255,7 +253,6 @@ export function Grid({ size = 120, playMode = false, bakedLightField = null }: G
   } | null>(null)
   const [hoveredTerrainCell, setHoveredTerrainCell] = useState<GridCell | null>(null)
   const [hoveredSurfaceHit, setHoveredSurfaceHit] = useState<PlacementSurfaceHit | null>(null)
-  const [hoveredInspectionHit, setHoveredInspectionHit] = useState<CursorInspectionHit | null>(null)
   const [strokeMode, setStrokeMode] = useState<'paint' | 'erase' | null>(null)
   const [strokeStartCell, setStrokeStartCell] = useState<GridCell | null>(null)
   const [strokeCurrentCell, setStrokeCurrentCell] = useState<GridCell | null>(null)
@@ -289,14 +286,12 @@ export function Grid({ size = 120, playMode = false, bakedLightField = null }: G
     } | null
     hoveredTerrainCell: GridCell | null
     hoveredSurfaceHit: PlacementSurfaceHit | null
-    hoveredInspectionHit: CursorInspectionHit | null
   }>({
     hoveredCell: null,
     hoveredPoint: null,
     hoveredRay: null,
     hoveredTerrainCell: null,
     hoveredSurfaceHit: null,
-    hoveredInspectionHit: null,
   })
   const hoverInteractionStateRef = useRef<{
     hoveredOpenWallKey: string | null
@@ -328,9 +323,8 @@ export function Grid({ size = 120, playMode = false, bakedLightField = null }: G
       hoveredRay,
       hoveredTerrainCell,
       hoveredSurfaceHit,
-      hoveredInspectionHit,
     }
-  }, [hoveredCell, hoveredInspectionHit, hoveredPoint, hoveredRay, hoveredSurfaceHit, hoveredTerrainCell])
+  }, [hoveredCell, hoveredPoint, hoveredRay, hoveredSurfaceHit, hoveredTerrainCell])
 
   useEffect(() => {
     hoverInteractionStateRef.current = {
@@ -472,7 +466,6 @@ export function Grid({ size = 120, playMode = false, bakedLightField = null }: G
         ] as [number, number, number],
       },
       surfaceHit: findPlacementSurfaceHit(intersections, paintedCells, placedObjects, mapMode),
-      inspectionHit: findCursorInspectionHit(intersections, hitPlaneRef.current),
     }
   }, [camera, gl.domElement, getSnappedHoverCell, mapMode, paintedCells, placedObjects, scene.children])
 
@@ -482,7 +475,6 @@ export function Grid({ size = 120, playMode = false, bakedLightField = null }: G
     const nextHoveredRay = resolved?.ray ?? null
     const nextHoveredTerrainCell = resolved?.terrainCell ?? null
     const nextHoveredSurfaceHit = resolved?.surfaceHit ?? null
-    const nextHoveredInspectionHit = resolved?.inspectionHit ?? null
     const current = hoverPreviewStateRef.current
 
     if (
@@ -490,8 +482,7 @@ export function Grid({ size = 120, playMode = false, bakedLightField = null }: G
       areHoverPointsEqual(current.hoveredPoint, nextHoveredPoint) &&
       areHoverRaysEqual(current.hoveredRay, nextHoveredRay) &&
       areGridCellsEqual(current.hoveredTerrainCell, nextHoveredTerrainCell) &&
-      arePlacementSurfaceHitsEqual(current.hoveredSurfaceHit, nextHoveredSurfaceHit) &&
-      areCursorInspectionHitsEqual(current.hoveredInspectionHit, nextHoveredInspectionHit)
+      arePlacementSurfaceHitsEqual(current.hoveredSurfaceHit, nextHoveredSurfaceHit)
     ) {
       return false
     }
@@ -502,7 +493,6 @@ export function Grid({ size = 120, playMode = false, bakedLightField = null }: G
       hoveredRay: nextHoveredRay,
       hoveredTerrainCell: nextHoveredTerrainCell,
       hoveredSurfaceHit: nextHoveredSurfaceHit,
-      hoveredInspectionHit: nextHoveredInspectionHit,
     }
 
     setHoveredCell(nextHoveredCell)
@@ -510,11 +500,9 @@ export function Grid({ size = 120, playMode = false, bakedLightField = null }: G
     setHoveredRay(nextHoveredRay)
     setHoveredTerrainCell(nextHoveredTerrainCell)
     setHoveredSurfaceHit(nextHoveredSurfaceHit)
-    setHoveredInspectionHit(nextHoveredInspectionHit)
     return true
   }, [
     setHoveredCell,
-    setHoveredInspectionHit,
     setHoveredPoint,
     setHoveredRay,
     setHoveredSurfaceHit,
@@ -1424,7 +1412,6 @@ export function Grid({ size = 120, playMode = false, bakedLightField = null }: G
         direction: [event.ray.direction.x, event.ray.direction.y, event.ray.direction.z],
       },
       surfaceHit: resolvePlacementSurfaceHit(event.nativeEvent),
-      inspectionHit: findCursorInspectionHit(event.intersections, hitPlaneRef.current),
     })
     const nextHoverInteraction = {
       hoveredOpenWallKey,
@@ -1920,7 +1907,6 @@ export function Grid({ size = 120, playMode = false, bakedLightField = null }: G
     <group>
       {/* Hit plane — always tracks cursor world pos; editing events only for build/place tools */}
         <mesh
-          ref={hitPlaneRef}
           rotation={[-Math.PI / 2, 0, 0]}
           onPointerMove={isNavigationTool ? updateCursorPosOnly : updateHoveredCell}
           onPointerOut={() => {
@@ -1931,7 +1917,6 @@ export function Grid({ size = 120, playMode = false, bakedLightField = null }: G
               hoveredRay: null,
               hoveredTerrainCell: null,
               hoveredSurfaceHit: null,
-              hoveredInspectionHit: null,
             }
             hoverInteractionStateRef.current = {
               hoveredOpenWallKey: null,
@@ -1942,7 +1927,6 @@ export function Grid({ size = 120, playMode = false, bakedLightField = null }: G
             setHoveredRay(null)
             setHoveredTerrainCell(null)
             setHoveredSurfaceHit(null)
-            setHoveredInspectionHit(null)
             invalidate()
           }
         }}
@@ -1952,11 +1936,6 @@ export function Grid({ size = 120, playMode = false, bakedLightField = null }: G
         <planeGeometry args={[size, size]} />
         <meshBasicMaterial transparent opacity={0} depthWrite={false} />
       </mesh>
-
-      <CursorInspectionLight
-        hoveredPoint={hoveredPoint}
-        hoveredInspectionHit={hoveredInspectionHit}
-      />
 
       {isOpenWallBrushMode && (
         <OpenPassageHitTargets
@@ -2594,11 +2573,6 @@ type PlacementSurfaceHit = {
   position: [number, number, number]
 }
 
-type CursorInspectionHit = {
-  position: [number, number, number]
-  normal: [number, number, number]
-}
-
 const WALL_CONNECTOR_DIRECTIONS: Array<{
   name: 'north' | 'south' | 'east' | 'west'
   delta: GridCell
@@ -2668,39 +2642,6 @@ function findPlacementSurfaceHit(
         intersection.point.x,
         intersection.point.y,
         intersection.point.z,
-      ],
-    }
-  }
-
-  return null
-}
-
-function findCursorInspectionHit(
-  intersections: THREE.Intersection[],
-  ignoredObject: THREE.Object3D | null,
-): CursorInspectionHit | null {
-  for (const intersection of intersections) {
-    if (ignoredObject && intersection.object === ignoredObject) {
-      continue
-    }
-
-    const faceNormal = intersection.face?.normal.clone()
-    if (!faceNormal) {
-      continue
-    }
-
-    const worldNormal = faceNormal.transformDirection(intersection.object.matrixWorld).normalize()
-
-    return {
-      position: [
-        intersection.point.x,
-        intersection.point.y,
-        intersection.point.z,
-      ],
-      normal: [
-        worldNormal.x,
-        worldNormal.y,
-        worldNormal.z,
       ],
     }
   }
@@ -2836,25 +2777,6 @@ function arePlacementSurfaceHitsEqual(
       left.position[0] === right.position[0] &&
       left.position[1] === right.position[1] &&
       left.position[2] === right.position[2]
-    )
-  )
-}
-
-function areCursorInspectionHitsEqual(
-  left: CursorInspectionHit | null,
-  right: CursorInspectionHit | null,
-) {
-  return (
-    left === right ||
-    (
-      left !== null &&
-      right !== null &&
-      left.position[0] === right.position[0] &&
-      left.position[1] === right.position[1] &&
-      left.position[2] === right.position[2] &&
-      left.normal[0] === right.normal[0] &&
-      left.normal[1] === right.normal[1] &&
-      left.normal[2] === right.normal[2]
     )
   )
 }

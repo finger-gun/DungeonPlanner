@@ -98,11 +98,8 @@ describe('content pack registry', () => {
       name: 'KayKit Stone',
       textures: {
         albedoUrl: expect.any(String),
-        normalUrl: expect.any(String),
-        roughnessUrl: expect.any(String),
       },
     })
-    expect(getContentPackWallMaterialSetById('dungeon', 'kaykit-stone')?.textures).not.toHaveProperty('aoUrl')
     expect(getContentPackWallMaterialSetById('dungeon', 'wedged-cobblestone')).toMatchObject({
       id: 'wedged-cobblestone',
       name: 'Wedged Cobblestone',

@@ -10,11 +10,13 @@ import {
 import { buildRoomDraftOccupancyPolygons, clipRoomDraft } from './roomDraftClip'
 import { createSplineWallQueryCache } from './splineWallQueries'
 import { upsertSplineWallGraphRoomPath } from './splineWallGraph'
+import { buildRoomSplineWallChainsFromGraph, buildSampledSplineWallFrames } from './splineWalls'
 import { useDungeonStore } from './useDungeonStore'
 import { getOpeningSegments } from './openingSegments'
 
 const TEST_IMAGE_DATA_URL =
   'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4////fwAJ+wP9KobjigAAAABJRU5ErkJggg=='
+const RENDERED_EDGE_KEY_SCALE = 100000
 
 function createTestGeneratedCharacter(name = 'Generated Test Player') {
   return useDungeonStore.getState().createGeneratedCharacter({
@@ -30,6 +32,75 @@ function createTestGeneratedCharacter(name = 'Generated Test Player') {
     width: 300,
     height: 600,
   })
+}
+
+function commitRoundedOverlapRoomPair() {
+  const existingDraft = setRoomDraftCorner(
+    setRoomDraftCorner(createRoomDraftFromStroke([0, 0], [2, 2]), 'ne', 'rounded', 1),
+    'se',
+    'rounded',
+    1,
+  )
+  const ownerRoomId = useDungeonStore.getState().commitDraftRoom({
+    cells: buildRoomDraftCells(existingDraft),
+    splineNodes: buildRoomDraftSplineNodes(existingDraft),
+  })
+  expect(ownerRoomId).toBeTruthy()
+
+  const state = useDungeonStore.getState()
+  const clipped = clipRoomDraft(
+    createRoomDraftFromStroke([2, 0], [4, 2]),
+    buildRoomDraftOccupancyPolygons(state.paintedCells, state.splineWallGraph),
+    new Set(Object.keys(state.paintedCells)),
+  )
+  expect(clipped.valid).toBe(true)
+  expect(clipped.commitCells.length).toBeGreaterThan(0)
+
+  const overlappingRoomId = useDungeonStore.getState().commitDraftRoom({
+    cells: clipped.commitCells,
+    splineNodes: clipped.splineNodes,
+  })
+  expect(overlappingRoomId).toBeTruthy()
+
+  return {
+    ownerRoomId: ownerRoomId!,
+    overlappingRoomId: overlappingRoomId!,
+  }
+}
+
+function collectDuplicatedRenderedWallEdges() {
+  const roomsByEdgeKey = new Map<string, Set<string>>()
+  const chains = buildRoomSplineWallChainsFromGraph(useDungeonStore.getState().splineWallGraph)
+
+  chains.forEach((chain) => {
+    const frames = buildSampledSplineWallFrames(chain)
+    const edgeCount = chain.closed ? frames.length : frames.length - 1
+    for (let index = 0; index < edgeCount; index += 1) {
+      const start = frames[index]?.position
+      const end = frames[(index + 1) % frames.length]?.position
+      if (!start || !end) {
+        continue
+      }
+
+      const edgeKey = buildRenderedEdgeKey(start, end)
+      const rooms = roomsByEdgeKey.get(edgeKey) ?? new Set<string>()
+      rooms.add(chain.roomId)
+      roomsByEdgeKey.set(edgeKey, rooms)
+    }
+  })
+
+  return [...roomsByEdgeKey.entries()]
+    .filter(([, rooms]) => rooms.size > 1)
+    .map(([edgeKey]) => edgeKey)
+}
+
+function buildRenderedEdgeKey(
+  start: readonly [number, number],
+  end: readonly [number, number],
+) {
+  const startKey = `${Math.round(start[0] * RENDERED_EDGE_KEY_SCALE)}:${Math.round(start[1] * RENDERED_EDGE_KEY_SCALE)}`
+  const endKey = `${Math.round(end[0] * RENDERED_EDGE_KEY_SCALE)}:${Math.round(end[1] * RENDERED_EDGE_KEY_SCALE)}`
+  return startKey <= endKey ? `${startKey}|${endKey}` : `${endKey}|${startKey}`
 }
 
 describe('useDungeonStore history', () => {
@@ -182,6 +253,57 @@ describe('useDungeonStore history', () => {
 
     expect(committedRoomId).toBeTruthy()
     expect(Object.keys(useDungeonStore.getState().rooms)).toHaveLength(2)
+  })
+
+  it('does not render duplicate wall spans when clipped graph-backed rooms share a rounded boundary', () => {
+    commitRoundedOverlapRoomPair()
+
+    expect(collectDuplicatedRenderedWallEdges()).toEqual([])
+  })
+
+  it('removes deleted graph-backed room wall paths and restores the remaining shared boundary', () => {
+    const { ownerRoomId, overlappingRoomId } = commitRoundedOverlapRoomPair()
+
+    useDungeonStore.getState().removeRoom(ownerRoomId)
+
+    const state = useDungeonStore.getState()
+    expect(state.rooms[ownerRoomId]).toBeUndefined()
+    expect(Object.values(state.splineWallGraph.paths).every((path) => path.roomId !== ownerRoomId)).toBe(true)
+
+    const chains = buildRoomSplineWallChainsFromGraph(state.splineWallGraph)
+    expect(chains).toHaveLength(1)
+    expect(chains[0]).toMatchObject({
+      roomId: overlappingRoomId,
+      closed: true,
+    })
+    expect(collectDuplicatedRenderedWallEdges()).toEqual([])
+  })
+
+  it('removes non-occupying props supported by a room when that room is deleted', () => {
+    useDungeonStore.getState().paintCells([[0, 0]])
+    const roomId = useDungeonStore.getState().paintedCells['0:0']?.roomId
+    expect(roomId).toBeTruthy()
+
+    const propId = useDungeonStore.getState().placeObject({
+      type: 'prop',
+      assetId: 'dungeon.props_book_brown',
+      position: [1.1, 0, 0.9],
+      rotation: [0, 0, 0],
+      props: {
+        connector: 'FLOOR',
+        direction: null,
+      },
+      cell: [0, 0],
+      cellKey: '0:0:floor',
+      supportCellKey: '0:0',
+    })
+    expect(propId).toBeTruthy()
+
+    useDungeonStore.getState().removeRoom(roomId!)
+
+    const state = useDungeonStore.getState()
+    expect(state.rooms[roomId!]).toBeUndefined()
+    expect(state.placedObjects[propId!]).toBeUndefined()
   })
 
   it('splits spline wall segments into new nodes and supports undo/redo', () => {
@@ -1631,6 +1753,32 @@ describe('useDungeonStore history', () => {
 
     const state = useDungeonStore.getState()
     expect(state.occupancy['0:0:floor']).toBeUndefined()
+    expect(state.placedObjects[propId!]).toBeUndefined()
+  })
+
+  it('removes a non-occupying floor prop when its support cell is erased', () => {
+    useDungeonStore.getState().paintCells([[0, 0]])
+
+    const propId = useDungeonStore.getState().placeObject({
+      type: 'prop',
+      assetId: 'dungeon.props_book_brown',
+      position: [1.1, 0, 0.9],
+      rotation: [0, 0, 0],
+      props: {
+        connector: 'FLOOR',
+        direction: null,
+      },
+      cell: [0, 0],
+      cellKey: '0:0:floor',
+      supportCellKey: '0:0',
+    })
+
+    expect(propId).toBeTruthy()
+    expect(useDungeonStore.getState().occupancy['0:0:floor']).toBeUndefined()
+
+    useDungeonStore.getState().eraseCells([[0, 0]])
+
+    const state = useDungeonStore.getState()
     expect(state.placedObjects[propId!]).toBeUndefined()
   })
 

@@ -212,6 +212,7 @@ export function packSplineWallComputePrototype({
     roomIds,
     options.wallHeight ?? DEFAULT_SPLINE_WALL_HEIGHT,
     false,
+    options,
   )
   const sampledChains: SplineWallComputePrototypeChain[] = chains
     .map((chain) => ({
