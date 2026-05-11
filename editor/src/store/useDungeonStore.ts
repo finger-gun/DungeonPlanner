@@ -99,7 +99,7 @@ export { getOpeningSegments } from './openingSegments'
 export type DungeonTool = 'move' | 'room' | 'prop' | 'character' | 'opening' | 'select' | 'play'
 export type CameraMode = 'orbit'
 export type CameraPreset = 'perspective' | 'isometric' | 'top-down' | 'classic'
-export type RoomEditMode = 'rooms' | 'walls' | 'floor-variants' | 'wall-variants'
+export type RoomEditMode = 'rooms' | 'walls' | 'floor-variants'
 export type RoomPaintMode = 'area' | 'paint' | 'resize'
 export type SelectedAssetIds = Record<ContentPackCategory, string | null>
 export type SurfaceBrushAssetIds = {

@@ -43,7 +43,6 @@ import {
 import { hasSplineWallGraphPaths, type SplineWallGraph } from '../../store/splineWallGraph'
 import { buildSplineWallGraphFromPaintedCells } from '../../store/splineWalls'
 import {
-  getCanonicalWallKey as getCanonicalWallKeyForGrid,
   getInheritedWallAssetIdForWallKey,
   isInterRoomBoundary,
   isWallBoundary,
@@ -172,7 +171,6 @@ export function Grid({ size = 120, playMode = false, bakedLightField = null }: G
   const paintOutdoorTerrainStyleCells = useDungeonStore((state) => state.paintOutdoorTerrainStyleCells)
   const eraseOutdoorTerrainStyleCells = useDungeonStore((state) => state.eraseOutdoorTerrainStyleCells)
   const setFloorTileAsset = useDungeonStore((state) => state.setFloorTileAsset)
-  const setWallSurfaceAsset = useDungeonStore((state) => state.setWallSurfaceAsset)
   const placeObject = useDungeonStore((state) => state.placeObject)
   const repositionObject = useDungeonStore((state) => state.repositionObject)
   const removeObjectAtCell = useDungeonStore((state) => state.removeObjectAtCell)
@@ -205,7 +203,6 @@ export function Grid({ size = 120, playMode = false, bakedLightField = null }: G
   const selectedCharacterAssetId = useDungeonStore((state) => state.selectedAssetIds.player)
   const selectedOpeningAssetId = useDungeonStore((state) => state.selectedAssetIds.opening)
   const selectedFloorBrushAssetId = surfaceBrushAssetIds.floor
-  const selectedWallBrushAssetId = surfaceBrushAssetIds.wall
   const wallConnectionMode = useDungeonStore((state) => state.wallConnectionMode)
   const selectedPropAsset = selectedPropAssetId
     ? getContentPackAssetById(selectedPropAssetId)
@@ -228,7 +225,6 @@ export function Grid({ size = 120, playMode = false, bakedLightField = null }: G
   const isUnifiedOpeningMode = tool === 'prop' && assetBrowser.category === 'openings'
   const isUnifiedSurfaceMode = tool === 'prop' && assetBrowser.category === 'surfaces'
   const isUnifiedFloorVariantMode = isUnifiedSurfaceMode && assetBrowser.subcategory !== 'walls'
-  const isUnifiedWallVariantMode = isUnifiedSurfaceMode && assetBrowser.subcategory === 'walls'
   const isFloorOpeningMode =
     (tool === 'opening' || isUnifiedOpeningMode) &&
     wallConnectionMode === 'door' &&
@@ -1752,23 +1748,6 @@ export function Grid({ size = 120, playMode = false, bakedLightField = null }: G
         return
       }
 
-      if (isUnifiedWallVariantMode || (tool === 'room' && roomEditMode === 'wall-variants')) {
-        const wallPlacement = hoveredPoint
-          ? getOpeningPlacement(1, hoveredPoint, paintedCells, false, openingPlacementGraph, openingQueryCache, null)
-          : getOpeningPlacement(1, point, paintedCells, false, openingPlacementGraph, openingQueryCache, null)
-        if (!wallPlacement?.valid) {
-          return
-        }
-
-        const wallKey = wallPlacement.wallKey
-        if (event.button === 0) {
-          setWallSurfaceAsset(wallKey, selectedWallBrushAssetId)
-        } else if (event.button === 2) {
-          setWallSurfaceAsset(wallKey, null)
-        }
-        return
-      }
-
       if (tool !== 'room') {
         return
       }
@@ -1879,19 +1858,10 @@ export function Grid({ size = 120, playMode = false, bakedLightField = null }: G
   )
   const eligibleOpenPassageWallKeys = new Set(eligibleOpenPassageWalls.map((wall) => wall.wallKey))
   const isFloorVariantMode = (tool === 'room' && roomEditMode === 'floor-variants') || isUnifiedFloorVariantMode
-  const isWallVariantMode = (tool === 'room' && roomEditMode === 'wall-variants') || isUnifiedWallVariantMode
   const isOpenWallBrushMode =
     (tool === 'opening' || isUnifiedOpeningMode) &&
     wallConnectionMode === 'open' &&
     !isFloorOpeningMode
-  const wallVariantPlacement = useMemo(
-    () => (
-      isWallVariantMode && hoveredPoint
-        ? getOpeningPlacement(1, hoveredPoint, paintedCells, false, openingPlacementGraph, openingQueryCache, null)
-        : null
-    ),
-    [hoveredPoint, isWallVariantMode, openingPlacementGraph, openingQueryCache, paintedCells],
-  )
   const activeHoveredOpenWallKey =
     hoveredOpenWallKey && eligibleOpenPassageWallKeys.has(hoveredOpenWallKey)
       ? hoveredOpenWallKey
@@ -2113,8 +2083,6 @@ export function Grid({ size = 120, playMode = false, bakedLightField = null }: G
             (tool === 'opening' || isUnifiedOpeningMode) ? wallConnectionPlacement : null
           }
           floorVariantAssetId={isFloorVariantMode ? selectedFloorBrushAssetId : null}
-          wallVariantAssetId={isWallVariantMode ? selectedWallBrushAssetId : null}
-          wallVariantPlacement={isWallVariantMode ? wallVariantPlacement : null}
           openingAssetId={
             (tool === 'opening' || isUnifiedOpeningMode) &&
             wallConnectionMode === 'door' &&
@@ -2128,12 +2096,11 @@ export function Grid({ size = 120, playMode = false, bakedLightField = null }: G
           hoveredOpenWallKey={activeHoveredOpenWallKey}
           openPassageBrushWallKeys={openPassageBrushWallKeys}
           eligibleOpenWallKeys={eligibleOpenPassageWallKeys}
-           paintedCells={paintedCells}
-           rooms={rooms}
-           floorTileAssetIds={floorTileAssetIds}
+          paintedCells={paintedCells}
+          rooms={rooms}
+          floorTileAssetIds={floorTileAssetIds}
           globalWallAssetId={globalWallAssetId}
           globalFloorAssetId={globalFloorAssetId}
-          wallSurfaceAssetIds={wallSurfaceAssetIds}
           mapMode={mapMode}
           outdoorTerrainHeights={outdoorTerrainHeights}
         />
@@ -2154,8 +2121,6 @@ function HoverPreview({
   propObjectProps,
   openingPlacement,
   floorVariantAssetId,
-  wallVariantAssetId,
-  wallVariantPlacement,
   openingAssetId,
   wallConnectionMode,
   wallConnectionRemovable,
@@ -2168,7 +2133,6 @@ function HoverPreview({
   floorTileAssetIds,
   globalWallAssetId,
   globalFloorAssetId,
-  wallSurfaceAssetIds,
   mapMode,
   outdoorTerrainHeights,
 }: {
@@ -2183,8 +2147,6 @@ function HoverPreview({
   propObjectProps: Record<string, unknown> | null
   openingPlacement: OpeningPlacement | SplineWallOpeningPlacement | null
   floorVariantAssetId: string | null
-  wallVariantAssetId: string | null
-  wallVariantPlacement: OpeningPlacement | null
   openingAssetId: string | null
   wallConnectionMode: WallConnectionMode
   wallConnectionRemovable: boolean
@@ -2197,7 +2159,6 @@ function HoverPreview({
   floorTileAssetIds: Record<string, string>
   globalWallAssetId: string | null
   globalFloorAssetId: string | null
-  wallSurfaceAssetIds: Record<string, string>
   mapMode: MapMode
   outdoorTerrainHeights: OutdoorTerrainHeightfield
 }) {
@@ -2270,32 +2231,6 @@ function HoverPreview({
     )
   }
 
-  if (wallVariantAssetId) {
-    if (!wallVariantPlacement?.valid) {
-      return null
-    }
-
-    const wallKey = wallVariantPlacement.wallKey
-    const effectiveWallAssetId = getWallAssetIdForWallKey(
-      wallKey,
-      paintedCells,
-      rooms,
-      globalWallAssetId,
-      wallSurfaceAssetIds,
-    )
-
-    return (
-      <group position={wallVariantPlacement.position} rotation={wallVariantPlacement.rotation}>
-        <ContentPackInstance
-          assetId={wallVariantAssetId}
-          variant="wall"
-          tint={effectiveWallAssetId === wallVariantAssetId ? '#22c55e' : '#7dd3fc'}
-          tintOpacity={0.26}
-        />
-      </group>
-    )
-  }
-
   if (openingPlacement || openingAssetId || hoveredOpenWallKey || openPassageBrushWallKeys.length > 0) {
     if (wallConnectionMode === 'open') {
       return (
@@ -2309,7 +2244,6 @@ function HoverPreview({
                 paintedCells,
                 rooms,
                 globalWallAssetId,
-                wallSurfaceAssetIds,
               )}
               color={OPEN_WALL_BRUSH_COLOR}
               opacity={0.34}
@@ -2326,7 +2260,6 @@ function HoverPreview({
                 paintedCells,
                 rooms,
                 globalWallAssetId,
-                wallSurfaceAssetIds,
               )}
               color={OPEN_WALL_HOVER_COLOR}
               opacity={0.24}
@@ -3156,15 +3089,13 @@ function getWallAssetIdForWallKey(
   paintedCells: Record<string, PaintedCellRecord>,
   rooms: Record<string, Room>,
   globalWallAssetId: string | null,
-  wallSurfaceAssetIds: Record<string, string>,
 ) {
-  const inheritedAssetId = getInheritedWallAssetIdForWallKey(
+  return getInheritedWallAssetIdForWallKey(
     wallKey,
     paintedCells,
     rooms,
     globalWallAssetId,
   )
-  return wallSurfaceAssetIds[getCanonicalWallKeyForGrid(wallKey, paintedCells) ?? ''] ?? inheritedAssetId
 }
 
 function WallSegmentHighlight({

@@ -262,6 +262,32 @@ describe('useDungeonStore history', () => {
     expect(collectDuplicatedRenderedWallEdges()).toEqual([])
   })
 
+  it('does not render duplicate wall spans when a new draft room shares walls with multiple graph-backed rooms', () => {
+    const leftRoomId = useDungeonStore.getState().commitDraftRoom({
+      cells: buildRoomDraftCells(createRoomDraftFromStroke([0, 0], [0, 0])),
+      splineNodes: buildRoomDraftSplineNodes(createRoomDraftFromStroke([0, 0], [0, 0])),
+    })
+    const rightRoomId = useDungeonStore.getState().commitDraftRoom({
+      cells: buildRoomDraftCells(createRoomDraftFromStroke([2, 0], [2, 0])),
+      splineNodes: buildRoomDraftSplineNodes(createRoomDraftFromStroke([2, 0], [2, 0])),
+    })
+    const topRoomId = useDungeonStore.getState().commitDraftRoom({
+      cells: buildRoomDraftCells(createRoomDraftFromStroke([1, 1], [1, 1])),
+      splineNodes: buildRoomDraftSplineNodes(createRoomDraftFromStroke([1, 1], [1, 1])),
+    })
+    const centerRoomId = useDungeonStore.getState().commitDraftRoom({
+      cells: buildRoomDraftCells(createRoomDraftFromStroke([1, 0], [1, 0])),
+      splineNodes: buildRoomDraftSplineNodes(createRoomDraftFromStroke([1, 0], [1, 0])),
+    })
+
+    expect(leftRoomId).toBeTruthy()
+    expect(rightRoomId).toBeTruthy()
+    expect(topRoomId).toBeTruthy()
+    expect(centerRoomId).toBeTruthy()
+    expect(Object.keys(useDungeonStore.getState().rooms)).toHaveLength(4)
+    expect(collectDuplicatedRenderedWallEdges()).toEqual([])
+  })
+
   it('removes deleted graph-backed room wall paths and restores the remaining shared boundary', () => {
     const { ownerRoomId, overlappingRoomId } = commitRoundedOverlapRoomPair()
 

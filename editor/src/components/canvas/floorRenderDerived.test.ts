@@ -10,7 +10,7 @@ import {
 } from './floorRenderDerived'
 
 describe('buildFloorRenderDerivedBundle', () => {
-  it('uses uniform pillar assets for room corners', () => {
+  it('returns only floor-derived entries after removing legacy wall rendering', () => {
     const derived = buildFloorDerivedBundle({
       floorId: 'floor-1',
       paintedCells: {
@@ -23,195 +23,11 @@ describe('buildFloorRenderDerivedBundle', () => {
         'room-a': {
           id: 'room-a',
           name: 'Room A',
-          layerId: 'visible',
-          floorAssetId: null,
-          wallAssetId: null,
-        },
-      },
-      wallOpenings: {},
-      innerWalls: {},
-      placedObjects: {},
-      floorTileAssetIds: {},
-      wallSurfaceAssetIds: {},
-      wallSurfaceProps: {},
-      globalFloorAssetId: 'dungeon.floor_floor_tile_small',
-      globalWallAssetId: 'dungeon.wall_wall',
-    } satisfies DungeonRoomData)
-
-    const bundle = buildFloorRenderDerivedBundle(derived, {
-      includeFloorReceivers: false,
-    })
-
-    expect(bundle.corners).toHaveLength(4)
-    expect(bundle.corners.every((corner) => corner.assetId === 'dungeon.props_pillars_pillar')).toBe(true)
-    expect(bundle.corners.every((corner) => corner.rotation[0] === 0 && corner.rotation[1] === 0 && corner.rotation[2] === 0)).toBe(true)
-  })
-
-  it('uses cave pillar assets for cave room corners', () => {
-    const derived = buildFloorDerivedBundle({
-      floorId: 'floor-1',
-      paintedCells: {
-        '0:0': { cell: [0, 0], layerId: 'visible', roomId: 'room-cave' },
-      },
-      layers: {
-        visible: { id: 'visible', name: 'Visible', visible: true, locked: false },
-      },
-      rooms: {
-        'room-cave': {
-          id: 'room-cave',
-          name: 'Cave Room',
-          layerId: 'visible',
-          roomSetId: 'cave',
-          floorAssetId: null,
-          wallAssetId: null,
-        },
-      },
-      wallOpenings: {},
-      innerWalls: {},
-      placedObjects: {},
-      floorTileAssetIds: {},
-      wallSurfaceAssetIds: {},
-      wallSurfaceProps: {},
-      globalFloorAssetId: 'dungeon.floor_floor_tile_small',
-      globalWallAssetId: 'dungeon.wall_wall',
-    } satisfies DungeonRoomData)
-
-    const bundle = buildFloorRenderDerivedBundle(derived, {
-      includeFloorReceivers: false,
-    })
-
-    expect(bundle.corners).toHaveLength(4)
-    expect(bundle.corners.every((corner) => corner.assetId === 'dungeon.props_pillars_cave_pillar')).toBe(true)
-    expect(bundle.walls).toHaveLength(4)
-    expect(bundle.walls.every((wall) => wall.assetId === 'dungeon.wall_wall_cave')).toBe(true)
-  })
-
-  it('skips legacy boundary wall and corner instances for graph-backed rooms', () => {
-    const derived = buildFloorDerivedBundle({
-      floorId: 'floor-1',
-      paintedCells: {
-        '0:0': { cell: [0, 0], layerId: 'visible', roomId: 'room-a' },
-      },
-      layers: {
-        visible: { id: 'visible', name: 'Visible', visible: true, locked: false },
-      },
-      rooms: {
-        'room-a': {
-          id: 'room-a',
-          name: 'Room A',
-          layerId: 'visible',
-          floorAssetId: null,
-          wallAssetId: null,
-        },
-      },
-      wallOpenings: {},
-      innerWalls: {},
-      placedObjects: {},
-      floorTileAssetIds: {},
-      wallSurfaceAssetIds: {},
-      wallSurfaceProps: {},
-      splineWallGraph: upsertSplineWallGraphRoomPath({ nodes: {}, segments: {}, paths: {} }, {
-        roomId: 'room-a',
-        layerId: 'visible',
-        nodes: [
-          { position: [0, 0], cornerMode: 'square', cornerAmount: 0 },
-          { position: [1, 0], cornerMode: 'square', cornerAmount: 0 },
-          { position: [1, 1], cornerMode: 'square', cornerAmount: 0 },
-          { position: [0, 1], cornerMode: 'square', cornerAmount: 0 },
-        ],
-      }),
-      globalFloorAssetId: 'dungeon.floor_floor_tile_small',
-      globalWallAssetId: 'dungeon.wall_wall',
-    } satisfies DungeonRoomData)
-
-    const bundle = buildFloorRenderDerivedBundle(derived, {
-      includeFloorReceivers: false,
-    })
-
-    expect(bundle.walls).toEqual([])
-    expect(bundle.corners).toEqual([])
-  })
-
-  it('keeps explicit wall overrides on graph-backed rooms in the legacy render bundle', () => {
-    const derived = buildFloorDerivedBundle({
-      floorId: 'floor-1',
-      paintedCells: {
-        '0:0': { cell: [0, 0], layerId: 'visible', roomId: 'room-a' },
-      },
-      layers: {
-        visible: { id: 'visible', name: 'Visible', visible: true, locked: false },
-      },
-      rooms: {
-        'room-a': {
-          id: 'room-a',
-          name: 'Room A',
-          layerId: 'visible',
-          floorAssetId: null,
-          wallAssetId: null,
-        },
-      },
-      wallOpenings: {},
-      innerWalls: {},
-      placedObjects: {},
-      floorTileAssetIds: {},
-      wallSurfaceAssetIds: {
-        '0:0:north': 'dungeon.wall_wall_window_closed',
-      },
-      wallSurfaceProps: {},
-      splineWallGraph: upsertSplineWallGraphRoomPath({ nodes: {}, segments: {}, paths: {} }, {
-        roomId: 'room-a',
-        layerId: 'visible',
-        nodes: [
-          { position: [0, 0], cornerMode: 'square', cornerAmount: 0 },
-          { position: [1, 0], cornerMode: 'square', cornerAmount: 0 },
-          { position: [1, 1], cornerMode: 'square', cornerAmount: 0 },
-          { position: [0, 1], cornerMode: 'square', cornerAmount: 0 },
-        ],
-      }),
-      globalFloorAssetId: 'dungeon.floor_floor_tile_small',
-      globalWallAssetId: 'dungeon.wall_wall',
-    } satisfies DungeonRoomData)
-
-    const bundle = buildFloorRenderDerivedBundle(derived, {
-      includeFloorReceivers: false,
-    })
-
-    expect(bundle.walls).toEqual([
-      expect.objectContaining({
-        key: '0:0:north',
-        assetId: 'dungeon.wall_wall_window_closed',
-        segmentKeys: ['0:0:north'],
-      }),
-    ])
-  })
-
-  it('uses dungeon pillars at mixed dungeon and cave wall joins', () => {
-    const derived = buildFloorDerivedBundle({
-      floorId: 'floor-1',
-      paintedCells: {
-        '0:0': { cell: [0, 0], layerId: 'visible', roomId: 'room-dungeon' },
-        '1:0': { cell: [1, 0], layerId: 'visible', roomId: 'room-cave' },
-      },
-      layers: {
-        visible: { id: 'visible', name: 'Visible', visible: true, locked: false },
-      },
-      rooms: {
-        'room-dungeon': {
-          id: 'room-dungeon',
-          name: 'Dungeon Room',
           layerId: 'visible',
           roomSetId: 'dungeon',
           floorAssetId: null,
           wallAssetId: null,
         },
-        'room-cave': {
-          id: 'room-cave',
-          name: 'Cave Room',
-          layerId: 'visible',
-          roomSetId: 'cave',
-          floorAssetId: null,
-          wallAssetId: null,
-        },
       },
       wallOpenings: {},
       innerWalls: {},
@@ -219,6 +35,16 @@ describe('buildFloorRenderDerivedBundle', () => {
       floorTileAssetIds: {},
       wallSurfaceAssetIds: {},
       wallSurfaceProps: {},
+      splineWallGraph: upsertSplineWallGraphRoomPath({ nodes: {}, segments: {}, paths: {} }, {
+        roomId: 'room-a',
+        layerId: 'visible',
+        nodes: [
+          { position: [0, 0], cornerMode: 'square', cornerAmount: 0 },
+          { position: [1, 0], cornerMode: 'square', cornerAmount: 0 },
+          { position: [1, 1], cornerMode: 'square', cornerAmount: 0 },
+          { position: [0, 1], cornerMode: 'square', cornerAmount: 0 },
+        ],
+      }),
       globalFloorAssetId: 'dungeon.floor_floor_tile_small',
       globalWallAssetId: 'dungeon.wall_wall',
     } satisfies DungeonRoomData)
@@ -227,26 +53,12 @@ describe('buildFloorRenderDerivedBundle', () => {
       includeFloorReceivers: false,
     })
 
-    expect(bundle.corners).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          key: '1:0:corner',
-          assetId: 'dungeon.props_pillars_pillar',
-        }),
-        expect.objectContaining({
-          key: '1:1:corner',
-          assetId: 'dungeon.props_pillars_pillar',
-        }),
-        expect.objectContaining({
-          key: '2:0:corner',
-          assetId: 'dungeon.props_pillars_cave_pillar',
-        }),
-        expect.objectContaining({
-          key: '2:1:corner',
-          assetId: 'dungeon.props_pillars_cave_pillar',
-        }),
-      ]),
-    )
+    expect(bundle.floorGroups.length).toBeGreaterThan(0)
+    expect(Object.keys(bundle).sort()).toEqual([
+      'floorGroups',
+      'floorSurfaceEntries',
+      'visibleFloorReceiverCells',
+    ])
   })
 
   it('skips floor receiver planning when edit-mode receiver work is disabled', () => {

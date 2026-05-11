@@ -92,7 +92,7 @@ export function RoomToolPanel() {
     )
 
   useEffect(() => {
-    if (roomEditMode === 'floor-variants' || roomEditMode === 'wall-variants') {
+    if (roomEditMode === 'floor-variants') {
       setRoomEditMode('rooms')
     }
   }, [roomEditMode, setRoomEditMode])
@@ -354,7 +354,7 @@ export function RoomToolPanel() {
         <section className="rounded-2xl border border-stone-800 bg-stone-950/50 p-4 text-sm leading-6 text-stone-400">
           <p className="font-medium text-stone-300">Room Tool</p>
           <p className="mt-1 text-xs">Left-drag to paint rooms. Right-drag to erase.</p>
-          <p className="text-xs">Use Props for floor and wall variant brushes.</p>
+          <p className="text-xs">Use Props for floor brushes and openings.</p>
         </section>
       )}
 
@@ -366,7 +366,7 @@ export function RoomToolPanel() {
               ? roomEditMode === 'walls'
                 ? 'Amber node handles appear in the scene while Walls mode is active. Click or drag them to select and reshape the active floor boundary, press Delete to remove the selected node, or click blue split handles to insert new nodes.'
                 : 'A spline wall graph is active for this floor. Switch to Walls mode to select, drag, remove, and split spline wall nodes directly in the scene.'
-              : 'Convert the current painted room boundaries into an editable spline wall graph before moving away from the legacy grid wall layout.'}
+              : 'Convert the current painted room boundaries into an editable spline wall graph to edit curved and custom wall shapes directly.'}
           </p>
           <div className="mt-4 flex flex-wrap gap-1.5">
             <CompactPillButton

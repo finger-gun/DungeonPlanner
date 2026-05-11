@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { upsertSplineWallGraphRoomPath } from '../../store/splineWallGraph'
 import {
+  buildSpeculativeRoomTileEntries,
   buildRemovedRoomTileEntries,
   buildTransientRoomEntrySignature,
   expandRoomMutationCells,
@@ -147,5 +148,50 @@ describe('roomMutationAnimations', () => {
     })
 
     expect(removalEntries.some((entry) => entry.key === 'floor:2:0')).toBe(false)
+  })
+
+  it('does not emit preview legacy walls on shared boundaries with graph-backed rooms', () => {
+    const splineWallGraph = upsertSplineWallGraphRoomPath({ nodes: {}, segments: {}, paths: {} }, {
+      roomId: 'room-graph',
+      layerId: 'layer-1',
+      nodes: [
+        { position: [1, 0], cornerMode: 'square', cornerAmount: 0 },
+        { position: [2, 0], cornerMode: 'square', cornerAmount: 0 },
+        { position: [2, 1], cornerMode: 'square', cornerAmount: 0 },
+        { position: [1, 1], cornerMode: 'square', cornerAmount: 0 },
+      ],
+    })
+
+    const entries = buildSpeculativeRoomTileEntries({
+      activeLayerId: 'layer-1',
+      activeRoomSetId: 'dungeon',
+      bakedLightField: null,
+      buildStartedAt: 1000,
+      cells: [[0, 0]],
+      floorTileAssetIds: {},
+      globalFloorAssetId: 'dungeon.floor_floor_tile_small',
+      globalWallAssetId: 'dungeon.wall_wall',
+      innerWalls: {},
+      originCell: [0, 0],
+      paintedCells: {
+        '1:0': { cell: [1, 0], layerId: 'layer-1', roomId: 'room-graph' },
+      },
+      rooms: {
+        'room-graph': {
+          id: 'room-graph',
+          name: 'Graph Room',
+          layerId: 'layer-1',
+          roomSetId: 'dungeon',
+          floorAssetId: null,
+          wallAssetId: null,
+        },
+      },
+      splineWallGraph,
+      wallOpenings: {},
+      wallSurfaceAssetIds: {},
+      wallSurfaceProps: {},
+    })
+
+    expect(entries.some((entry) => entry.key === '0:0:east')).toBe(false)
   })
 })

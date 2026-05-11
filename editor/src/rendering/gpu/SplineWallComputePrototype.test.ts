@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { createEmptySplineWallGraph } from '../../store/splineWallGraph'
+import { createEmptySplineWallGraph, upsertSplineWallGraphRoomPath } from '../../store/splineWallGraph'
 import {
   buildRoomSplineWallMeshesFromGraph,
   buildSplineWallGraphFromPaintedCells,
@@ -577,6 +577,92 @@ describe('SplineWallComputePrototype', () => {
     expect(countDegenerateTriangles(extractedGeometry.indices)).toBe(0)
   })
 
+  it('matches CPU wall ownership when packing a single room from adjacent graph rooms', () => {
+    const splineWallGraph = buildSplineWallGraphFromPaintedCells({
+      '0:0': { cell: [0, 0], layerId: 'default', roomId: 'room-a' },
+      '1:0': { cell: [1, 0], layerId: 'default', roomId: 'room-b' },
+    })
+
+    const prototype = prepareSplineWallComputePrototype({
+      floorId: 'floor-spline-shared-owner',
+      splineWallGraph,
+      visibleLayerIds: new Set(['default']),
+      suppressedWallKeys: new Set(),
+      roomIds: new Set(['room-b']),
+      cornerRadius: 0,
+      curveSubdivisions: 1,
+      wallHeight: 2.4,
+      wallThickness: 0.2,
+      workgroupSize: 8,
+    })
+
+    expect(prototype).not.toBeNull()
+
+    populateSplineWallComputePrototypeFallbackOutputs(prototype!.packed)
+    const extractedGeometry = extractSplineWallComputePrototypeGeometry(prototype!.packed)
+    const cpuGeometry = buildRoomSplineWallMeshesFromGraph(
+      splineWallGraph,
+      new Set(['default']),
+      new Set(),
+      new Set(['room-b']),
+      {
+        cornerRadius: 0,
+        curveSubdivisions: 1,
+        wallHeight: 2.4,
+        wallThickness: 0.2,
+      },
+    )[0]
+
+    expect(cpuGeometry).toBeTruthy()
+    expect(roundBuffer(extractedGeometry.positions)).toEqual(roundBuffer(cpuGeometry!.positions))
+    expect(roundBuffer(extractedGeometry.normals)).toEqual(roundBuffer(cpuGeometry!.normals))
+    expect(roundBuffer(extractedGeometry.uvs)).toEqual(roundBuffer(cpuGeometry!.uvs))
+    expect([...extractedGeometry.indices]).toEqual([...cpuGeometry!.indices])
+  })
+
+  it('matches CPU wall ownership for a room that partially shares boundaries with multiple neighbors', () => {
+    const splineWallGraph = createEmptySplineWallGraph()
+    upsertRectangleRoom(splineWallGraph, 'room-left', 0, 0, 1, 3)
+    upsertRectangleRoom(splineWallGraph, 'room-top', 1, 2, 3, 3)
+    upsertRectangleRoom(splineWallGraph, 'room-center', 1, 1, 2, 2)
+
+    const prototype = prepareSplineWallComputePrototype({
+      floorId: 'floor-spline-shared-partial',
+      splineWallGraph,
+      visibleLayerIds: new Set(['default']),
+      suppressedWallKeys: new Set(),
+      roomIds: new Set(['room-left']),
+      cornerRadius: 0,
+      curveSubdivisions: 1,
+      wallHeight: 2.4,
+      wallThickness: 0.2,
+      workgroupSize: 8,
+    })
+
+    expect(prototype).not.toBeNull()
+
+    populateSplineWallComputePrototypeFallbackOutputs(prototype!.packed)
+    const extractedGeometry = extractSplineWallComputePrototypeGeometry(prototype!.packed)
+    const cpuGeometry = buildRoomSplineWallMeshesFromGraph(
+      splineWallGraph,
+      new Set(['default']),
+      new Set(),
+      new Set(['room-left']),
+      {
+        cornerRadius: 0,
+        curveSubdivisions: 1,
+        wallHeight: 2.4,
+        wallThickness: 0.2,
+      },
+    )[0]
+
+    expect(cpuGeometry).toBeTruthy()
+    expect(roundBuffer(extractedGeometry.positions)).toEqual(roundBuffer(cpuGeometry!.positions))
+    expect(roundBuffer(extractedGeometry.normals)).toEqual(roundBuffer(cpuGeometry!.normals))
+    expect(roundBuffer(extractedGeometry.uvs)).toEqual(roundBuffer(cpuGeometry!.uvs))
+    expect([...extractedGeometry.indices]).toEqual([...cpuGeometry!.indices])
+  })
+
   it('packs long cutout-heavy chains without overflowing the call stack', () => {
     const splineWallGraph = createEmptySplineWallGraph()
     splineWallGraph.nodes['node-a'] = {
@@ -638,6 +724,30 @@ describe('SplineWallComputePrototype', () => {
 
 function roundBuffer(buffer: ArrayLike<number>) {
   return Array.from(buffer).map((value) => Number(value.toFixed(4)))
+}
+
+function upsertRectangleRoom(
+  splineWallGraph: ReturnType<typeof createEmptySplineWallGraph>,
+  roomId: string,
+  minX: number,
+  minZ: number,
+  maxX: number,
+  maxZ: number,
+) {
+  const nextGraph = upsertSplineWallGraphRoomPath(splineWallGraph, {
+    roomId,
+    layerId: 'default',
+    nodes: [
+      { position: [minX, minZ], cornerMode: 'square', cornerAmount: 0 },
+      { position: [maxX, minZ], cornerMode: 'square', cornerAmount: 0 },
+      { position: [maxX, maxZ], cornerMode: 'square', cornerAmount: 0 },
+      { position: [minX, maxZ], cornerMode: 'square', cornerAmount: 0 },
+    ],
+  })
+
+  Object.assign(splineWallGraph.nodes, nextGraph.nodes)
+  Object.assign(splineWallGraph.segments, nextGraph.segments)
+  Object.assign(splineWallGraph.paths, nextGraph.paths)
 }
 
 function countDegenerateTriangles(indices: Uint32Array) {

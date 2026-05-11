@@ -2,24 +2,15 @@ import { getContentPackAssetById } from '../../content-packs/registry'
 import { useDungeonStore } from '../../store/useDungeonStore'
 import { SelectedOpeningInspector } from './SelectedOpeningInspector'
 import { SelectedPropInspector } from './SelectedPropInspector'
-import { SelectedWallInspector } from './SelectedWallInspector'
-import {
-  getSelectedWallAsset,
-  getSelectedWallKey,
-  getSelectedWallProps,
-} from './SelectedWallInspectorShared'
 
 export function SelectToolPanel() {
   const selection = useDungeonStore((state) => state.selection)
   const selectedObject = useDungeonStore((state) =>
     selection ? state.placedObjects[selection] : null,
   )
-  const selectedWallKey = useDungeonStore((state) => getSelectedWallKey(selection, state))
-  const selectedWallAsset = useDungeonStore((state) => getSelectedWallAsset(selection, state))
   const selectedOpening = useDungeonStore((state) =>
     selection ? state.wallOpenings[selection] : null,
   )
-  const selectedWallProps = useDungeonStore((state) => getSelectedWallProps(selection, state))
   const removeSelectedObject = useDungeonStore((state) => state.removeSelectedObject)
   const removeOpening = useDungeonStore((state) => state.removeOpening)
 
@@ -35,19 +26,6 @@ export function SelectToolPanel() {
           asset={objectAsset}
           onDelete={removeSelectedObject}
           title={isCharacterSelection ? 'Selected Character' : 'Selected Prop'}
-        />
-      </div>
-    )
-  }
-
-  if (selectedWallKey && selectedWallAsset && selectedWallProps) {
-    return (
-      <div className="space-y-4">
-        <SelectedWallInspector
-          wallKey={selectedWallKey}
-          asset={selectedWallAsset}
-          wallProps={selectedWallProps}
-          title="Selected Wall Variant"
         />
       </div>
     )
@@ -69,7 +47,7 @@ export function SelectToolPanel() {
   return (
     <section className="rounded-2xl border border-stone-800 bg-stone-950/50 p-4 text-xs leading-6 text-stone-400">
       <p className="font-medium text-stone-300">Select Tool</p>
-      <p className="mt-1">Click a prop, character, opening, or wall variant in the scene to inspect it.</p>
+      <p className="mt-1">Click a prop, character, or opening in the scene to inspect it.</p>
       <p>Press <kbd>R</kbd> to rotate, <kbd>Esc</kbd> to deselect, and <kbd>Del</kbd> to delete.</p>
     </section>
   )

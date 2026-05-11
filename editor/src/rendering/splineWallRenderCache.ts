@@ -338,6 +338,10 @@ function resolveAffectedSplineWallRoomIds({
   }
 
   if (mode === 'graph') {
+    if (dirtyInfo.dirtyCellKeys.length > 0) {
+      return collectSplineWallGraphRoomIds(splineWallGraph)
+    }
+
     const roomIds = new Set(
       Object.values(splineWallGraph.segments)
         .filter((segment) => segment.wallKey && dirtyInfo.dirtyWallKeys.includes(segment.wallKey))
@@ -360,6 +364,15 @@ function resolveAffectedSplineWallRoomIds({
   const roomIds = new Set(
     dirtyInfo.dirtyCellKeys
       .map((cellKey) => paintedCells[cellKey]?.roomId)
+      .filter((roomId): roomId is string => typeof roomId === 'string' && roomId.length > 0),
+  )
+  return roomIds.size > 0 ? roomIds : null
+}
+
+function collectSplineWallGraphRoomIds(splineWallGraph: SplineWallGraph) {
+  const roomIds = new Set(
+    Object.values(splineWallGraph.paths)
+      .map((path) => path.roomId)
       .filter((roomId): roomId is string => typeof roomId === 'string' && roomId.length > 0),
   )
   return roomIds.size > 0 ? roomIds : null

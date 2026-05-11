@@ -1,48 +1,20 @@
-import { getContentPackAssetById, getContentPackRoomSetById } from '../../content-packs/registry'
 import type { ContentPackModelTransform } from '../../content-packs/types'
-import { GRID_SIZE, cellToWorldPosition, getCellKey, type GridCell } from '../../hooks/useSnapToGrid'
+import { cellToWorldPosition, getCellKey, type GridCell } from '../../hooks/useSnapToGrid'
 import type { FloorDirtyInfo } from '../../store/floorDirtyDomains'
 import type { SplineWallGraph } from '../../store/splineWallGraph'
-import { getInnerWallOwnerRecord } from '../../store/manualWalls'
 import { buildWallOpeningDerivedState } from '../../store/derived/wallOpeningDerived'
 import {
   buildFloorRenderPlan,
   type FloorRenderGroup,
   type FloorSurfacePlacement,
 } from '../../store/floorSurfaceLayout'
-import {
-  collectBoundaryWallSegments,
-  getInheritedWallAssetIdForRoom,
-  getWallOwnerRecord,
-  getInheritedWallAssetIdForWallKey,
-  wallKeyToWorldPosition,
-  type BoundaryWallSegment,
-} from '../../store/wallSegments'
 import type { InnerWallRecord, Layer, OpeningRecord, PaintedCells, Room } from '../../store/useDungeonStore'
 import type { FloorDerivedBundle } from '../../store/derived/floorDerived'
-import { deriveWallCornersFromSegments, type WallCornerInstance } from './wallCornerLayout'
-import { getWallSpanInteriorLightDirections } from './wallLighting'
 import { DEFAULT_RENDER_BATCH_CHUNK_SIZE, getRenderBatchChunkKeyForCell } from './batchDescriptors'
 import {
   getFloorChunkKeysForCells,
   getFloorChunkKeysForRect,
 } from '../../store/floorChunkKeys'
-
-export type RoomWallInstance = {
-  key: string
-  assetId: string | null
-  segmentKeys: string[]
-  source: 'boundary' | 'inner'
-  position: [number, number, number]
-  rotation: [number, number, number]
-  bakedLightDirection?: [number, number, number]
-  bakedLightDirectionSecondary?: [number, number, number]
-  objectProps?: Record<string, unknown>
-}
-
-export type RoomCornerRenderInstance = WallCornerInstance & {
-  assetId: string | null
-}
 
 export type FloorReceiverCellInput = {
   cell: GridCell
@@ -52,20 +24,10 @@ export type FloorReceiverCellInput = {
   receiverTransformOverride?: ContentPackModelTransform
 }
 
-type BoundaryWallSegmentWithAsset = BoundaryWallSegment & {
-  assetId: string | null
-  source: 'boundary' | 'inner'
-}
-
-const ROOM_SET_CONTENT_PACK_ID = 'dungeon'
-const DEFAULT_WALL_CORNER_PILLAR_ASSET_ID = 'dungeon.props_pillars_pillar'
-
 export type FloorRenderDerivedBundle = {
   floorGroups: FloorRenderGroup[]
   floorSurfaceEntries: FloorSurfacePlacement[]
   visibleFloorReceiverCells: FloorReceiverCellInput[]
-  walls: RoomWallInstance[]
-  corners: RoomCornerRenderInstance[]
 }
 
 export type FloorRenderChunkBundle = FloorRenderDerivedBundle & {
@@ -134,7 +96,6 @@ export function buildFloorRenderDerivedBundleFromInput(
     includeFloorReceivers?: boolean
   },
 ): FloorRenderDerivedBundle {
-  const graphBackedRoomIds = getGraphBackedRoomIds(input.splineWallGraph)
   const floorRenderPlan = buildFloorRenderPlan(
     input.visiblePaintedCellRecords,
     input.rooms,
@@ -149,25 +110,6 @@ export function buildFloorRenderDerivedBundleFromInput(
     visibleFloorReceiverCells: options?.includeFloorReceivers === false
       ? []
       : deriveFloorReceiverCells(floorRenderPlan),
-    walls: deriveWallInstances(
-      input.visiblePaintedCellRecords,
-      input.rooms,
-      input.globalWallAssetId,
-      input.wallSurfaceAssetIds,
-      input.wallSurfaceProps,
-      input.wallOpeningDerivedState.suppressedWallKeys,
-      input.innerWalls,
-      graphBackedRoomIds,
-    ),
-    corners: deriveVisibleWallCorners(
-      input.visiblePaintedCellRecords,
-      input.rooms,
-      input.globalWallAssetId,
-      input.wallSurfaceAssetIds,
-      input.wallOpeningDerivedState.suppressedWallKeys,
-      input.innerWalls,
-      graphBackedRoomIds,
-    ),
   }
 }
 
@@ -225,8 +167,6 @@ export function buildFloorRenderDerivedBundleForChunk(
       isCellInFloorRenderRect(placement.anchorCell, targetRect)),
     visibleFloorReceiverCells: localBundle.visibleFloorReceiverCells.filter((cell) =>
       isCellInFloorRenderRect(cell.cell, targetRect)),
-    walls: localBundle.walls.filter((wall) => getChunkKeyForWallInstance(wall) === chunkKey),
-    corners: localBundle.corners.filter((corner) => getChunkKeyForCornerInstance(corner) === chunkKey),
   }
 }
 
@@ -327,8 +267,6 @@ export function flattenFloorRenderChunkCache(
     accumulator.floorGroups.push(...bundle.floorGroups)
     accumulator.floorSurfaceEntries.push(...bundle.floorSurfaceEntries)
     accumulator.visibleFloorReceiverCells.push(...bundle.visibleFloorReceiverCells)
-    accumulator.walls.push(...bundle.walls)
-    accumulator.corners.push(...bundle.corners)
     return accumulator
   }, createEmptyFloorRenderDerivedBundle())
 }
@@ -401,256 +339,6 @@ function deriveFloorReceiverCells(plan: ReturnType<typeof buildFloorRenderPlan>)
   ]
 }
 
-function deriveWallInstances(
-  paintedCells: PaintedCells,
-  rooms: Record<string, Room>,
-  globalWallAssetId: string | null,
-  wallSurfaceAssetIds: Record<string, string>,
-  wallSurfaceProps: Record<string, Record<string, unknown>>,
-  suppressedWallKeys: Set<string>,
-  innerWalls: Record<string, InnerWallRecord>,
-  graphBackedRoomIds: ReadonlySet<string>,
-): RoomWallInstance[] {
-  const wallSegments = collectRenderableWallSegments(
-    paintedCells,
-    rooms,
-    globalWallAssetId,
-    wallSurfaceAssetIds,
-    suppressedWallKeys,
-    innerWalls,
-    graphBackedRoomIds,
-  )
-
-  const groups = new Map<string, BoundaryWallSegmentWithAsset[]>()
-  wallSegments.forEach((segment) => {
-    const [xPart, zPart] = segment.key.split(':')
-    const lineKey =
-      segment.direction === 'north' || segment.direction === 'south'
-        ? `${segment.direction}:${zPart}`
-        : `${segment.direction}:${xPart}`
-    const groupKey = `${segment.source}|${segment.assetId ?? 'none'}|${lineKey}`
-    if (!groups.has(groupKey)) {
-      groups.set(groupKey, [])
-    }
-    groups.get(groupKey)!.push(segment)
-  })
-
-  const walls: RoomWallInstance[] = []
-  groups.forEach((segments) => {
-    const sorted = [...segments].sort((left, right) => left.index - right.index)
-    let runStart = 0
-
-    while (runStart < sorted.length) {
-      let runEnd = runStart + 1
-      while (runEnd < sorted.length && sorted[runEnd].index === sorted[runEnd - 1].index + 1) {
-        runEnd += 1
-      }
-
-      const run = sorted.slice(runStart, runEnd)
-      const wallSpan = getContentPackAssetById(run[0]?.assetId ?? '')?.metadata?.wallSpan ?? 1
-      let offset = 0
-
-      while (offset < run.length) {
-        const remaining = run.length - offset
-        const span = remaining >= wallSpan ? wallSpan : 1
-        const segmentKeys = run.slice(offset, offset + span).map((segment) => segment.key)
-        const transform = getWallSpanWorldTransform(segmentKeys)
-        if (transform) {
-          const interiorDirections = getWallSpanInteriorLightDirections(segmentKeys, paintedCells)
-          const persistedProps = segmentKeys[0] ? wallSurfaceProps[segmentKeys[0]] : undefined
-          const objectProps =
-            wallSpan > 1
-              ? { ...(persistedProps ?? {}), span }
-              : persistedProps
-          walls.push({
-            key: segmentKeys.join('|'),
-            assetId: run[offset]?.assetId ?? null,
-            segmentKeys,
-            source: run[offset]?.source ?? 'boundary',
-            position: transform.position,
-            rotation: transform.rotation,
-            bakedLightDirection: interiorDirections.primary,
-            bakedLightDirectionSecondary: interiorDirections.secondary,
-            ...(objectProps ? { objectProps } : {}),
-          })
-        }
-
-        offset += span
-      }
-
-      runStart = runEnd
-    }
-  })
-
-  return walls
-}
-
-function deriveVisibleWallCorners(
-  paintedCells: PaintedCells,
-  rooms: Record<string, Room>,
-  globalWallAssetId: string | null,
-  wallSurfaceAssetIds: Record<string, string>,
-  suppressedWallKeys: Set<string>,
-  innerWalls: Record<string, InnerWallRecord>,
-  graphBackedRoomIds: ReadonlySet<string>,
-): RoomCornerRenderInstance[] {
-  const wallSegments = collectRenderableWallSegments(
-    paintedCells,
-    rooms,
-    globalWallAssetId,
-    wallSurfaceAssetIds,
-    suppressedWallKeys,
-    innerWalls,
-    graphBackedRoomIds,
-  )
-  const wallAssetIdsByKey = new Map(wallSegments.map((segment) => [segment.key, segment.assetId]))
-
-  return deriveWallCornersFromSegments(wallSegments).map((corner) => ({
-    ...corner,
-    assetId: getPillarAssetIdForCorner(corner.wallKeys, wallAssetIdsByKey, paintedCells, rooms),
-  }))
-}
-
-function getPillarAssetIdForCorner(
-  wallKeys: readonly string[],
-  wallAssetIdsByKey: ReadonlyMap<string, string | null>,
-  paintedCells: PaintedCells,
-  rooms: Record<string, Room>,
-) {
-  const distinctWallAssetIds = new Set(
-    wallKeys
-      .map((wallKey) => wallAssetIdsByKey.get(wallKey))
-      .filter((assetId): assetId is string => Boolean(assetId)),
-  )
-  if (distinctWallAssetIds.size > 1) {
-    return DEFAULT_WALL_CORNER_PILLAR_ASSET_ID
-  }
-
-  const distinctPillarAssetIds = new Set<string>()
-
-  for (const wallKey of wallKeys) {
-    const ownerRecord = getWallOwnerRecord(wallKey, paintedCells)
-    if (!ownerRecord?.roomId) {
-      continue
-    }
-
-    const room = rooms[ownerRecord.roomId]
-    const roomSet = getContentPackRoomSetById(ROOM_SET_CONTENT_PACK_ID, room?.roomSetId)
-    if (roomSet?.pillarAssetId) {
-      distinctPillarAssetIds.add(roomSet.pillarAssetId)
-    }
-  }
-
-  if (distinctPillarAssetIds.size === 1) {
-    return [...distinctPillarAssetIds][0] ?? DEFAULT_WALL_CORNER_PILLAR_ASSET_ID
-  }
-
-  return DEFAULT_WALL_CORNER_PILLAR_ASSET_ID
-}
-
-function collectRenderableWallSegments(
-  paintedCells: PaintedCells,
-  rooms: Record<string, Room>,
-  globalWallAssetId: string | null,
-  wallSurfaceAssetIds: Record<string, string>,
-  suppressedWallKeys: Set<string>,
-  innerWalls: Record<string, InnerWallRecord>,
-  graphBackedRoomIds: ReadonlySet<string>,
-) {
-  const boundarySegments = collectBoundaryWallSegments(paintedCells, { suppressedWallKeys }).flatMap((segment) => {
-    const explicitAssetId = wallSurfaceAssetIds[segment.key] ?? null
-    const assetId = explicitAssetId
-      ?? getInheritedWallAssetIdForWallKey(segment.key, paintedCells, rooms, globalWallAssetId)
-    const ownerRecord = getWallOwnerRecord(segment.key, paintedCells)
-
-    if (
-      ownerRecord?.roomId
-      && graphBackedRoomIds.has(ownerRecord.roomId)
-      && !explicitAssetId
-      && !isInteractiveWallAsset(assetId)
-    ) {
-      return []
-    }
-
-    return [{
-      ...segment,
-      source: 'boundary' as const,
-      assetId,
-    }]
-  })
-
-  const explicitInnerSegments = Object.keys(innerWalls).flatMap<BoundaryWallSegmentWithAsset>((wallKey) => {
-    const ownerRecord = getInnerWallOwnerRecord(wallKey, paintedCells)
-    if (!ownerRecord) {
-      return []
-    }
-
-    const room = ownerRecord.roomId ? rooms[ownerRecord.roomId] : null
-    const parts = wallKey.split(':')
-    const direction = parts[2] as BoundaryWallSegment['direction']
-    const index =
-      direction === 'north' || direction === 'south'
-        ? ownerRecord.cell[0]
-        : ownerRecord.cell[1]
-
-    return [{
-      key: wallKey,
-      direction,
-      index,
-      source: 'inner' as const,
-      assetId: getInheritedWallAssetIdForRoom(room, globalWallAssetId),
-    }]
-  })
-
-  return [...boundarySegments, ...explicitInnerSegments]
-}
-
-function getGraphBackedRoomIds(splineWallGraph: SplineWallGraph | null | undefined) {
-  return new Set(
-    Object.values(splineWallGraph?.paths ?? {})
-      .map((path) => path.roomId)
-      .filter((roomId): roomId is string => Boolean(roomId)),
-  )
-}
-
-function isInteractiveWallAsset(assetId: string | null) {
-  return Boolean(getContentPackAssetById(assetId ?? '')?.getPlayModeNextProps)
-}
-
-function getWallSpanWorldTransform(
-  wallKeys: string[],
-): { position: [number, number, number]; rotation: [number, number, number] } | null {
-  if (wallKeys.length === 0) {
-    return null
-  }
-
-  const transforms = wallKeys
-    .map((wallKey) => wallKeyToWorldPosition(wallKey))
-    .filter((transform): transform is NonNullable<ReturnType<typeof wallKeyToWorldPosition>> => Boolean(transform))
-
-  if (transforms.length === 0) {
-    return null
-  }
-
-  const position = transforms.reduce<[number, number, number]>(
-    (accumulator, transform) => [
-      accumulator[0] + transform.position[0],
-      accumulator[1] + transform.position[1],
-      accumulator[2] + transform.position[2],
-    ],
-    [0, 0, 0],
-  )
-
-  return {
-    position: [
-      position[0] / transforms.length,
-      position[1] / transforms.length,
-      position[2] / transforms.length,
-    ],
-    rotation: transforms[0].rotation,
-  }
-}
-
 type FloorRenderRect = {
   minCellX: number
   maxCellX: number
@@ -663,8 +351,6 @@ function createEmptyFloorRenderDerivedBundle(): FloorRenderDerivedBundle {
     floorGroups: [],
     floorSurfaceEntries: [],
     visibleFloorReceiverCells: [],
-    walls: [],
-    corners: [],
   }
 }
 
@@ -792,25 +478,4 @@ function parseWallCellKey(wallKey: string): GridCell | null {
   }
 
   return [cellX, cellZ]
-}
-
-function getChunkKeyForWallInstance(wall: Pick<RoomWallInstance, 'segmentKeys' | 'position'>) {
-  const wallCell = wall.segmentKeys[0] ? parseWallCellKey(wall.segmentKeys[0]) : null
-  if (wallCell) {
-    return getRenderBatchChunkKeyForCell(wallCell)
-  }
-
-  return getRenderBatchChunkKeyForCell([Math.round(wall.position[0]), Math.round(wall.position[2])])
-}
-
-function getChunkKeyForCornerInstance(corner: Pick<RoomCornerRenderInstance, 'key' | 'position'>) {
-  const cornerCell = parseCellKey(corner.key)
-  if (cornerCell) {
-    return getRenderBatchChunkKeyForCell(cornerCell)
-  }
-
-  return getRenderBatchChunkKeyForCell([
-    Math.round(corner.position[0] / GRID_SIZE),
-    Math.round(corner.position[2] / GRID_SIZE),
-  ])
 }

@@ -71,8 +71,6 @@ export function SplineWallLayer({
   layers,
   rooms,
   wallOpenings,
-  wallSurfaceAssetIds,
-  wallSurfaceProps,
   globalWallAssetId,
   bakedLightField = null,
   visibility,
@@ -84,8 +82,6 @@ export function SplineWallLayer({
   layers: Record<string, Layer>
   rooms: Record<string, Room>
   wallOpenings: Record<string, OpeningRecord>
-  wallSurfaceAssetIds: Record<string, string>
-  wallSurfaceProps: Record<string, Record<string, unknown>>
   globalWallAssetId: string | null
   bakedLightField?: BakedFloorLightField | null
   visibility: PlayVisibility
@@ -106,13 +102,10 @@ export function SplineWallLayer({
   const [dragNodeState, setDragNodeState] = useState<SplineNodeDragState | null>(null)
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null)
   const lastDispatchedComputeKeysRef = useRef(new Map<string, string>())
-  const graphSuppressedWallKeys = useMemo(
-    () => buildSplineSuppressedWallSegmentSet({}, wallSurfaceAssetIds, wallSurfaceProps),
-    [wallSurfaceAssetIds, wallSurfaceProps],
-  )
+  const graphSuppressedWallKeys = useMemo(() => new Set<string>(), [])
   const legacySuppressedWallKeys = useMemo(
-    () => buildSplineSuppressedWallSegmentSet(wallOpenings, wallSurfaceAssetIds, wallSurfaceProps),
-    [wallOpenings, wallSurfaceAssetIds, wallSurfaceProps],
+    () => buildSplineSuppressedWallSegmentSet(wallOpenings),
+    [wallOpenings],
   )
   const suppressedWallKeys = Object.keys(splineWallGraph.paths).length > 0
     ? graphSuppressedWallKeys
@@ -202,6 +195,10 @@ export function SplineWallLayer({
   )
   const computeDispatchRoomIds = useMemo(() => {
     if (!dirtyInfo || dirtyInfo.fullRefresh) {
+      return visibleGraphRoomIds
+    }
+
+    if (dirtyInfo.dirtyCellKeys.length > 0) {
       return visibleGraphRoomIds
     }
 
@@ -823,14 +820,8 @@ function SplineWallNodeHandles({
 
 function buildSplineSuppressedWallSegmentSet(
   wallOpenings: Record<string, OpeningRecord>,
-  wallSurfaceAssetIds: Record<string, string>,
-  wallSurfaceProps: Record<string, Record<string, unknown>>,
 ) {
-  const suppressed = buildOpenWallSegmentSet(wallOpenings, wallSurfaceAssetIds, wallSurfaceProps)
-  for (const wallKey of Object.keys(wallSurfaceAssetIds)) {
-    suppressed.add(wallKey)
-  }
-  return suppressed
+  return buildOpenWallSegmentSet(wallOpenings)
 }
 
 function snapSplineNodePosition(position: [number, number]): [number, number] {

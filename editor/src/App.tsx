@@ -15,7 +15,6 @@ import { RoomPaintModePanel } from './components/editor/RoomPaintModePanel'
 import { PropToolPanel } from './components/editor/PropToolPanel'
 import { CharacterToolPanel } from './components/editor/CharacterToolPanel'
 import { SelectToolPanel } from './components/editor/SelectToolPanel'
-import { getSelectedWallAssetId } from './components/editor/SelectedWallInspectorShared'
 import { ScenePanel } from './components/editor/ScenePanel'
 import {
   getDebugCameraPose,
@@ -285,7 +284,6 @@ function App() {
   const selectedOpening = useDungeonStore((state) =>
     selection ? state.wallOpenings[selection] : null,
   )
-  const selectedWallAssetId = useDungeonStore((state) => getSelectedWallAssetId(selection, state))
   const showRoomFloorMaskDebug = useDungeonStore((state) => state.showRoomFloorMaskDebug)
   const showSplineWallCutoutDebug = useDungeonStore((state) => state.showSplineWallCutoutDebug)
   const showLensFocusDebugPoint = useDungeonStore((state) => state.showLensFocusDebugPoint)
@@ -309,7 +307,6 @@ function App() {
     assetBrowser,
     selectedObject,
     selectedOpening,
-    selectedWallAssetId,
   })
   const debugAsset = debugAssetId ? getContentPackAssetById(debugAssetId) : null
   const debugAssetSourcePath = debugAssetId ? getContentPackAssetSourcePath(debugAssetId) : null
@@ -763,7 +760,7 @@ function App() {
                   ? 'Left-drag to raise stepped terrain · right-drag to lower stepped terrain into pits and trenches'
                   : 'Left-drag to paint nature with the selected style · right-drag to erase nature areas'
               : roomPaintMode === 'paint'
-                ? 'Paint rooms cell-by-cell · release to commit the stroke · right-drag to erase · use Props for floor and wall variants'
+                ? 'Paint rooms cell-by-cell · release to commit the stroke · right-drag to erase · use Props for floor surfaces and openings'
                 : roomPaintMode === 'resize'
                   ? 'Click a room to show resize handles · drag edges or corners to reshape it · press Delete to remove the selected room'
                   : 'Drag to draft a room footprint · release to place blue edit anchors · drag corners to round them, hold Ctrl for diagonals, then commit in-scene'
