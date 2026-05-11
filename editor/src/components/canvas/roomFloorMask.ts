@@ -3,6 +3,7 @@ import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js
 import { GRID_SIZE, cellToWorldPosition, type GridCell } from '../../hooks/useSnapToGrid'
 import type { Layer, PaintedCellRecord } from '../../store/useDungeonStore'
 import type { SplineWallGraph } from '../../store/splineWallGraph'
+import { createSplineWallQueryCache } from '../../store/splineWallQueries'
 import { buildSplineWallMaskPathFromGraph, type SplineMaskWorldPoint } from '../../store/splineWalls'
 
 const DEFAULT_MASK_Y = 0.001
@@ -59,6 +60,48 @@ export function buildRoomFloorMaskData({
       .map((record) => record.cell),
     polygons,
   }
+}
+
+export function buildRoomFloorMaskDataByRoomId({
+  paintedCellRecords,
+  layers,
+  splineWallGraph,
+}: {
+  paintedCellRecords: readonly PaintedCellRecord[]
+  layers: Record<string, Layer>
+  splineWallGraph: SplineWallGraph | null | undefined
+}) {
+  const visibleLayerIds = new Set(
+    Object.values(layers)
+      .filter((layer) => layer.visible !== false)
+      .map((layer) => layer.id),
+  )
+  const roomIds = new Set(
+    paintedCellRecords
+      .map((record) => record.roomId)
+      .filter((roomId): roomId is string => typeof roomId === 'string' && roomId.length > 0),
+  )
+  if (!splineWallGraph || roomIds.size === 0) {
+    return {} as Record<string, RoomFloorMaskData>
+  }
+
+  const roomQueryCache = createSplineWallQueryCache(splineWallGraph, {
+    visibleLayerIds,
+    roomIds,
+  })
+  return Object.fromEntries(
+    Object.entries(roomQueryCache.rooms).flatMap(([roomId, room]) => {
+      const polygons = room.polygons
+        .filter((polygon) => polygon.length >= 3)
+        .map((points, index) => ({
+          key: `${roomId}:${index}`,
+          points,
+        }))
+      return polygons.length > 0
+        ? [[roomId, { legacyCells: [], polygons }]]
+        : []
+    }),
+  )
 }
 
 export function buildRoomFloorMaskGeometry(

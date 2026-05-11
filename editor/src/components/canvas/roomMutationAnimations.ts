@@ -2,6 +2,7 @@ import { cellToWorldPosition, getCellKey, type GridCell } from '../../hooks/useS
 import type { BakedFloorLightField } from '../../rendering/dungeonLightField'
 import { MAX_BUILD_STAGGER_MS } from '../../store/buildAnimations'
 import { buildWallOpeningDerivedState } from '../../store/derived/wallOpeningDerived'
+import type { SplineWallGraph } from '../../store/splineWallGraph'
 import type {
   InnerWallRecord,
   OpeningRecord,
@@ -23,6 +24,7 @@ export type RoomAnimationStateInput = {
   innerWalls: Record<string, InnerWallRecord>
   paintedCells: Record<string, PaintedCellRecord>
   rooms: Record<string, Room>
+  splineWallGraph?: SplineWallGraph
   wallOpenings: Record<string, OpeningRecord>
   wallSurfaceAssetIds: Record<string, string>
   wallSurfaceProps: Record<string, Record<string, unknown>>
@@ -41,6 +43,7 @@ export function buildSpeculativeRoomTileEntries({
   originCell,
   paintedCells,
   rooms,
+  splineWallGraph,
   wallOpenings,
   wallSurfaceAssetIds,
   wallSurfaceProps,
@@ -86,6 +89,7 @@ export function buildSpeculativeRoomTileEntries({
     wallSurfaceProps,
     wallOpeningDerivedState: buildWallOpeningDerivedState(wallOpenings),
     innerWalls,
+    splineWallGraph,
   }, {
     includeFloorReceivers: false,
   })
@@ -192,6 +196,7 @@ function buildAnimatedRoomTileEntriesForState({
   originCell,
   paintedCells,
   rooms,
+  splineWallGraph,
   wallOpenings,
   wallSurfaceAssetIds,
   wallSurfaceProps,
@@ -211,6 +216,7 @@ function buildAnimatedRoomTileEntriesForState({
     wallSurfaceProps,
     wallOpeningDerivedState: buildWallOpeningDerivedState(wallOpenings),
     innerWalls,
+    splineWallGraph,
   }, {
     includeFloorReceivers: false,
   })

@@ -241,6 +241,48 @@ describe('buildBatchDescriptors', () => {
     expect(masked.batched[0]?.bucketKey).not.toBe(unmasked.batched[0]?.bucketKey)
   })
 
+  it('separates floor batches for different room floor mask runtimes', () => {
+    const resolveSpy = vi.spyOn(tileAssetResolution, 'resolveBatchedTileAsset')
+    resolveSpy.mockImplementation(() => ({
+      assetUrl: '/assets/floor.glb',
+      transformKey: 'default',
+      receiveShadow: true,
+    }))
+
+    const entry: StaticTileEntry = {
+      key: 'floor:0:0',
+      assetId: 'floor-tile',
+      position: [0, 0, 0],
+      rotation: [0, 0, 0],
+      variant: 'floor',
+      visibility: 'visible',
+      variantKey: '0:0',
+    }
+    const otherRoomFloorMaskRuntime: RoomFloorMaskRuntime = {
+      ...roomFloorMaskRuntime,
+      signature: 'room-floor-mask:other',
+    }
+
+    const first = buildBatchDescriptors([entry], {
+      floorId: 'floor-1',
+      fogOfWarEnabled: false,
+      useLineOfSightPostMask: false,
+      lightFlickerEnabled: false,
+      roomFloorMaskRuntime,
+    })
+    const second = buildBatchDescriptors([entry], {
+      floorId: 'floor-1',
+      fogOfWarEnabled: false,
+      useLineOfSightPostMask: false,
+      lightFlickerEnabled: false,
+      roomFloorMaskRuntime: otherRoomFloorMaskRuntime,
+    })
+
+    expect(first.batched[0]?.bucketKey).toContain('room-floor-mask:room-floor-mask:test')
+    expect(second.batched[0]?.bucketKey).toContain('room-floor-mask:room-floor-mask:other')
+    expect(first.batched[0]?.bucketKey).not.toBe(second.batched[0]?.bucketKey)
+  })
+
   it('changes wall render signatures when dynamic point lights toggle', () => {
     const resolveSpy = vi.spyOn(tileAssetResolution, 'resolveBatchedTileAsset')
     resolveSpy.mockImplementation(() => ({

@@ -8,11 +8,16 @@ export const contentPacks = [dungeonContentPack, kaykitContentPack]
 
 export const contentPackAssets = contentPacks.flatMap((pack) => pack.assets)
 
-const contentPackById = new Map(contentPacks.map((pack) => [pack.id, pack]))
-const assetById = new Map(contentPackAssets.map((asset) => [asset.id, asset]))
+function getStaticContentPacks() {
+  return [dungeonContentPack, kaykitContentPack]
+}
+
+function getStaticContentPackAssets() {
+  return getStaticContentPacks().flatMap((pack) => pack.assets)
+}
 
 export function getContentPackById(id: string): ContentPack | null {
-  return contentPackById.get(id) ?? null
+  return getStaticContentPacks().find((pack) => pack.id === id) ?? null
 }
 
 export function getContentPackRoomSets(contentPackId: string) {
@@ -52,19 +57,21 @@ export function getDefaultContentPackWallMaterialSetId(contentPackId: string) {
 }
 
 export function getContentPackAssetById(id: string) {
-  return warnIfUsesDeprecatedConnectsTo(assetById.get(id) ?? getRuntimeAssetById(id))
+  return warnIfUsesDeprecatedConnectsTo(
+    getStaticContentPackAssets().find((asset) => asset.id === id) ?? getRuntimeAssetById(id),
+  )
 }
 
 export function getContentPackAssetsByCategory(category: ContentPackCategory) {
   return [
-    ...contentPackAssets.filter((asset) => asset.category === category),
+    ...getStaticContentPackAssets().filter((asset) => asset.category === category),
     ...getRuntimeAssetsByCategory(category),
   ].map((asset) => warnIfUsesDeprecatedConnectsTo(asset))
 }
 
 export function getDefaultAssetIdByCategory(category: ContentPackCategory) {
   // Check if any content pack has a default for this category
-  for (const pack of contentPacks) {
+  for (const pack of getStaticContentPacks()) {
     const defaultAsset = pack.defaultAssets?.[category]
     if (defaultAsset) {
       // Verify the asset actually exists

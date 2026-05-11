@@ -151,7 +151,7 @@ describe('SplineWallComputePrototype', () => {
     ])
   })
 
-  it('collapses triangles for window-style cutouts', () => {
+  it('remeshes front and back faces for window-style cutouts', () => {
     const splineWallGraph = createEmptySplineWallGraph()
     splineWallGraph.nodes['node-a'] = {
       id: 'node-a',
@@ -213,7 +213,7 @@ describe('SplineWallComputePrototype', () => {
 
     populateSplineWallComputePrototypeFallbackOutputs(prototype!.packed)
     const extractedGeometry = extractSplineWallComputePrototypeGeometry(prototype!.packed)
-    expect(countDegenerateTriangles(extractedGeometry.indices)).toBeGreaterThan(0)
+    expect(countDegenerateTriangles(extractedGeometry.indices)).toBe(0)
     expect(countLiveTrianglesInsideBox(extractedGeometry, {
       minX: 0.7,
       maxX: 1.3,
@@ -308,6 +308,7 @@ describe('SplineWallComputePrototype', () => {
 
     populateSplineWallComputePrototypeFallbackOutputs(prototype!.packed)
     const extractedGeometry = extractSplineWallComputePrototypeGeometry(prototype!.packed)
+    expect(countDegenerateTriangles(extractedGeometry.indices)).toBe(0)
     expect(countLiveTrianglesInsideBox(extractedGeometry, {
       minX: 0.8,
       maxX: 1.2,
@@ -573,7 +574,7 @@ describe('SplineWallComputePrototype', () => {
 
     populateSplineWallComputePrototypeFallbackOutputs(prototype!.packed)
     const extractedGeometry = extractSplineWallComputePrototypeGeometry(prototype!.packed)
-    expect(countDegenerateTriangles(extractedGeometry.indices)).toBeGreaterThan(0)
+    expect(countDegenerateTriangles(extractedGeometry.indices)).toBe(0)
   })
 
   it('packs long cutout-heavy chains without overflowing the call stack', () => {

@@ -1,8 +1,15 @@
 import { GRID_SIZE, getCellKey, type GridCell } from '../hooks/useSnapToGrid'
 import type { PaintedCellsLike, SplineWallGraph } from './splineWallGraph'
-import { hasSplineWallGraphPaths } from './splineWallGraph'
+import {
+  createEmptySplineWallGraph,
+  hasSplineWallGraphPaths,
+  upsertSplineWallGraphRoomPath,
+} from './splineWallGraph'
 import { createSplineWallQueryCache } from './splineWallQueries'
-import { buildSplineWallGraphFromPaintedCells } from './splineWalls'
+import {
+  buildSampledSplineWallPathFromGraph,
+  buildSplineWallGraphFromPaintedCells,
+} from './splineWalls'
 import {
   buildRoomDraftCells,
   buildRoomDraftSplineNodes,
@@ -21,6 +28,13 @@ type Rect2 = {
   maxX: number
   minY: number
   maxY: number
+}
+
+export type PolygonGridBounds = {
+  minX: number
+  maxX: number
+  minZ: number
+  maxZ: number
 }
 
 type DirectedSegment = {
@@ -50,6 +64,11 @@ export type RoomDraftClipResult = {
   handleVisibility: RoomDraftHandleVisibility
   controlPosition: [number, number, number]
 }
+
+export type RoomSplineNodeClipResult = Pick<
+  RoomDraftClipResult,
+  'previewPoints' | 'commitCells' | 'splineNodes' | 'valid' | 'hasOverlap' | 'invalidReason'
+>
 
 const ROOM_DRAFT_CLIP_EPSILON = 1e-5
 const ROOM_DRAFT_CLIP_KEY_SCALE = 10000
@@ -90,43 +109,27 @@ export function clipRoomDraft(
   occupiedCellKeys?: ReadonlySet<string>,
 ): RoomDraftClipResult {
   const rawPreviewPoints = sanitizePolygon(buildRoomDraftWorldPoints(draft))
-  if (rawPreviewPoints.length < 3) {
-    return buildInvalidClipResult(draft, rawPreviewPoints, false, 'empty')
+  const clipped = clipRoomPolygon(
+    rawPreviewPoints,
+    occupancyPolygons,
+    occupiedCellKeys,
+    buildRoomDraftCells(draft),
+    buildRoomDraftSplineNodes(draft),
+  )
+  if (!clipped.valid) {
+    return buildInvalidClipResult(
+      draft,
+      rawPreviewPoints,
+      clipped.hasOverlap,
+      clipped.invalidReason ?? 'empty',
+    )
   }
 
-  let clippedPreviewPoints = rawPreviewPoints
-  let hasOverlap = false
-
-  for (const occupancyPolygon of occupancyPolygons) {
-    const normalizedOccupancyPolygon = sanitizePolygon(occupancyPolygon)
-    if (
-      normalizedOccupancyPolygon.length < 3
-      || !doBoundsOverlap(getBoundsForPoints(clippedPreviewPoints), getBoundsForPoints(normalizedOccupancyPolygon))
-    ) {
-      continue
-    }
-
-    const nextPolygons = subtractSimplePolygon(clippedPreviewPoints, normalizedOccupancyPolygon)
-    if (nextPolygons.length === 1 && arePolygonsEquivalent(nextPolygons[0]!, clippedPreviewPoints)) {
-      continue
-    }
-
-    hasOverlap = true
-    if (nextPolygons.length === 0) {
-      return buildInvalidClipResult(draft, rawPreviewPoints, true, 'empty')
-    }
-    if (nextPolygons.length !== 1) {
-      return buildInvalidClipResult(draft, rawPreviewPoints, true, 'disconnected')
-    }
-
-    clippedPreviewPoints = nextPolygons[0]!
-  }
-
-  if (!hasOverlap) {
+  if (!clipped.hasOverlap) {
     return {
-      previewPoints: rawPreviewPoints,
-      commitCells: buildRoomDraftCells(draft),
-      splineNodes: buildRoomDraftSplineNodes(draft),
+      previewPoints: clipped.previewPoints,
+      commitCells: clipped.commitCells,
+      splineNodes: clipped.splineNodes,
       valid: true,
       hasOverlap: false,
       invalidReason: null,
@@ -135,24 +138,48 @@ export function clipRoomDraft(
     }
   }
 
-  const commitCells = filterOccupiedCommitCells(
-    buildCoveredCellsForPolygon(clippedPreviewPoints, draft.bounds),
-    occupiedCellKeys,
-  )
-  if (commitCells.length === 0) {
+  if (clipped.commitCells.length === 0) {
     return buildInvalidClipResult(draft, rawPreviewPoints, true, 'empty')
   }
 
   return {
-    previewPoints: clippedPreviewPoints,
-    commitCells,
-    splineNodes: buildSplineNodesFromPolygon(clippedPreviewPoints),
+    previewPoints: clipped.previewPoints,
+    commitCells: clipped.commitCells,
+    splineNodes: clipped.splineNodes,
     valid: true,
     hasOverlap: true,
     invalidReason: null,
-    handleVisibility: buildHandleVisibility(draft, clippedPreviewPoints),
-    controlPosition: resolveControlPosition(commitCells, clippedPreviewPoints, draft),
+    handleVisibility: buildHandleVisibility(draft, clipped.previewPoints),
+    controlPosition: resolveControlPosition(clipped.commitCells, clipped.previewPoints, draft),
   }
+}
+
+export function clipRoomSplineNodes(
+  splineNodes: readonly RoomDraftSplineNodeInput[],
+  occupancyPolygons: readonly RoomDraftOccupancyPolygon[],
+  occupiedCellKeys?: ReadonlySet<string>,
+): RoomSplineNodeClipResult {
+  const rawPreviewPoints = buildRoomPreviewPointsFromSplineNodes(splineNodes)
+  if (rawPreviewPoints.length < 3) {
+    return {
+      previewPoints: rawPreviewPoints,
+      commitCells: [],
+      splineNodes: [],
+      valid: false,
+      hasOverlap: false,
+      invalidReason: 'empty',
+    }
+  }
+
+  const clipped = clipRoomPolygon(
+    rawPreviewPoints,
+    occupancyPolygons,
+    occupiedCellKeys,
+    buildCoveredCellsForPolygon(rawPreviewPoints, getBoundsForPolygon(rawPreviewPoints)),
+    cloneRoomDraftSplineNodes(splineNodes),
+  )
+
+  return clipped
 }
 
 function filterOccupiedCommitCells(
@@ -263,9 +290,9 @@ function roundBoundaryUnit(value: number) {
   return Math.round(value * ROOM_DRAFT_CLIP_KEY_SCALE) / ROOM_DRAFT_CLIP_KEY_SCALE
 }
 
-function buildCoveredCellsForPolygon(
-  polygon: readonly Point2[],
-  bounds: RoomDraftState['bounds'],
+export function buildCoveredCellsForPolygon(
+  polygon: readonly (readonly [number, number])[],
+  bounds: PolygonGridBounds,
 ): GridCell[] {
   const cells: GridCell[] = []
 
@@ -283,6 +310,133 @@ function buildCoveredCellsForPolygon(
   }
 
   return cells
+}
+
+function clipRoomPolygon(
+  rawPreviewPoints: readonly Point2[],
+  occupancyPolygons: readonly RoomDraftOccupancyPolygon[],
+  occupiedCellKeys: ReadonlySet<string> | undefined,
+  fallbackCommitCells: readonly GridCell[],
+  fallbackSplineNodes: readonly RoomDraftSplineNodeInput[],
+): RoomSplineNodeClipResult {
+  if (rawPreviewPoints.length < 3) {
+    return {
+      previewPoints: rawPreviewPoints,
+      commitCells: [],
+      splineNodes: [],
+      valid: false,
+      hasOverlap: false,
+      invalidReason: 'empty',
+    }
+  }
+
+  let clippedPreviewPoints = rawPreviewPoints
+  let hasOverlap = false
+
+  for (const occupancyPolygon of occupancyPolygons) {
+    const normalizedOccupancyPolygon = sanitizePolygon(occupancyPolygon)
+    if (
+      normalizedOccupancyPolygon.length < 3
+      || !doBoundsOverlap(getBoundsForPoints(clippedPreviewPoints), getBoundsForPoints(normalizedOccupancyPolygon))
+    ) {
+      continue
+    }
+
+    const nextPolygons = subtractSimplePolygon(clippedPreviewPoints, normalizedOccupancyPolygon)
+    if (nextPolygons.length === 1 && arePolygonsEquivalent(nextPolygons[0]!, clippedPreviewPoints)) {
+      continue
+    }
+
+    hasOverlap = true
+    if (nextPolygons.length === 0) {
+      return {
+        previewPoints: rawPreviewPoints,
+        commitCells: [],
+        splineNodes: [],
+        valid: false,
+        hasOverlap: true,
+        invalidReason: 'empty',
+      }
+    }
+    if (nextPolygons.length !== 1) {
+      return {
+        previewPoints: rawPreviewPoints,
+        commitCells: [],
+        splineNodes: [],
+        valid: false,
+        hasOverlap: true,
+        invalidReason: 'disconnected',
+      }
+    }
+
+    clippedPreviewPoints = nextPolygons[0]!
+  }
+
+  if (!hasOverlap) {
+    const commitCells = filterOccupiedCommitCells([...fallbackCommitCells], occupiedCellKeys)
+    return {
+      previewPoints: rawPreviewPoints,
+      commitCells,
+      splineNodes: cloneRoomDraftSplineNodes(fallbackSplineNodes),
+      valid: commitCells.length > 0,
+      hasOverlap: false,
+      invalidReason: commitCells.length > 0 ? null : 'empty',
+    }
+  }
+
+  const commitCells = filterOccupiedCommitCells(
+    buildCoveredCellsForPolygon(clippedPreviewPoints, getBoundsForPolygon(clippedPreviewPoints)),
+    occupiedCellKeys,
+  )
+  return {
+    previewPoints: clippedPreviewPoints,
+    commitCells,
+    splineNodes: buildSplineNodesFromPolygon(clippedPreviewPoints),
+    valid: commitCells.length > 0,
+    hasOverlap: true,
+    invalidReason: commitCells.length > 0 ? null : 'empty',
+  }
+}
+
+function buildRoomPreviewPointsFromSplineNodes(splineNodes: readonly RoomDraftSplineNodeInput[]) {
+  if (splineNodes.length < 3) {
+    return []
+  }
+
+  const graph = upsertSplineWallGraphRoomPath(createEmptySplineWallGraph(), {
+    roomId: 'preview-room',
+    layerId: 'default',
+    nodes: cloneRoomDraftSplineNodes(splineNodes),
+    closed: true,
+  })
+  const path = graph.paths['preview-room:path:0']
+  if (!path) {
+    return []
+  }
+
+  return sanitizePolygon(buildSampledSplineWallPathFromGraph(path, graph))
+}
+
+function cloneRoomDraftSplineNodes(
+  splineNodes: readonly RoomDraftSplineNodeInput[],
+): RoomDraftSplineNodeInput[] {
+  return splineNodes.map((node) => ({
+    position: [...node.position] as [number, number],
+    cornerMode: node.cornerMode,
+    cornerAmount: node.cornerAmount,
+  }))
+}
+
+function getBoundsForPolygon(
+  polygon: readonly Point2[],
+): RoomDraftState['bounds'] {
+  const bounds = getBoundsForPoints(polygon)
+  return {
+    minX: Math.floor(bounds.minX / GRID_SIZE),
+    maxX: Math.ceil(bounds.maxX / GRID_SIZE) - 1,
+    minZ: Math.floor(bounds.minY / GRID_SIZE),
+    maxZ: Math.ceil(bounds.maxY / GRID_SIZE) - 1,
+  }
 }
 
 function subtractSimplePolygon(

@@ -52,6 +52,9 @@ type SplineWallComputePrototypeCutout = {
   archBaseHeight: number
   radius: number
   shapeType: number
+  segmentLength: number
+  wallBaseHeight: number
+  wallTopHeight: number
 }
 
 export type SplineWallComputePrototypeDebugCutout = SplineWallComputePrototypeCutout
@@ -111,6 +114,7 @@ export type SplineWallComputePrototypePackedJob = {
   indexCount: number
   uvScale: number
   chainRoomIds: string[]
+  cutouts: SplineWallComputePrototypeCutout[]
   buffers: SplineWallComputePrototypePackedBuffers
 }
 
@@ -307,6 +311,7 @@ export function packSplineWallComputePrototype({
     indexCount: indexData.length,
     uvScale,
     chainRoomIds: sampledChains.map((chain) => chain.roomId),
+    cutouts,
     buffers: {
       chainRanges: {
         format: 'ivec4',
@@ -618,15 +623,23 @@ export function extractSplineWallComputePrototypeGeometry(
     return baseGeometry
   }
 
-  const cutoutLiningGeometry = buildSplineWallComputePrototypeCutoutLiningGeometry(
-    collectSplineWallComputePrototypePackedCutouts(packed),
+  const cutoutFaceGeometry = buildSplineWallComputePrototypeCutoutFaceGeometry(
+    packed.cutouts,
     packed.uvScale,
   )
-  if (cutoutLiningGeometry.indices.length === 0) {
+  const cutoutLiningGeometry = buildSplineWallComputePrototypeCutoutLiningGeometry(
+    packed.cutouts,
+    packed.uvScale,
+  )
+  if (cutoutFaceGeometry.indices.length === 0 && cutoutLiningGeometry.indices.length === 0) {
     return baseGeometry
   }
 
-  return mergeSplineWallComputePrototypeGeometryData([baseGeometry, cutoutLiningGeometry])
+  return mergeSplineWallComputePrototypeGeometryData([
+    baseGeometry,
+    cutoutFaceGeometry,
+    cutoutLiningGeometry,
+  ])
 }
 
 export function collectSplineWallComputePrototypeDebugCutouts(
@@ -716,6 +729,9 @@ export function collectSplineWallComputePrototypeDebugCutouts(
           archBaseHeight,
           radius,
           shapeType: radius > SPLINE_WALL_GEOMETRY_EPSILON ? shapeType : SPLINE_WALL_COLLAPSE_SHAPE_RECTANGLE,
+          segmentLength: length,
+          wallBaseHeight: 0,
+          wallTopHeight: resolvedWallHeight,
         } satisfies SplineWallComputePrototypeCutout]
       })
     })
@@ -1075,35 +1091,320 @@ export function applySplineWallComputePrototypeTriangleCollapse(
   }
 }
 
-function collectSplineWallComputePrototypePackedCutouts(
-  packed: SplineWallComputePrototypePackedJob,
-) {
-  const cutouts: SplineWallComputePrototypeCutout[] = []
+type SplineWallComputePrototypeCutoutFaceGroup = {
+  origin: readonly [number, number]
+  tangent: readonly [number, number]
+  halfThickness: number
+  segmentLength: number
+  wallBaseHeight: number
+  wallTopHeight: number
+  cutouts: SplineWallComputePrototypeCutout[]
+}
 
-  for (let cutoutIndex = 0; cutoutIndex < packed.cutoutCount; cutoutIndex += 1) {
-    const frameOffset = cutoutIndex * 4
-    cutouts.push({
-      origin: [
-        packed.buffers.cutoutFrameData.data[frameOffset] ?? 0,
-        packed.buffers.cutoutFrameData.data[frameOffset + 1] ?? 0,
-      ],
-      tangent: [
-        packed.buffers.cutoutFrameData.data[frameOffset + 2] ?? 1,
-        packed.buffers.cutoutFrameData.data[frameOffset + 3] ?? 0,
-      ],
-      startDistance: packed.buffers.cutoutBoundsData.data[frameOffset] ?? 0,
-      endDistance: packed.buffers.cutoutBoundsData.data[frameOffset + 1] ?? 0,
-      bottomHeight: packed.buffers.cutoutBoundsData.data[frameOffset + 2] ?? 0,
-      topHeight: packed.buffers.cutoutBoundsData.data[frameOffset + 3] ?? 0,
-      halfThickness: packed.buffers.cutoutMetaData.data[frameOffset] ?? 0,
-      archBaseHeight: packed.buffers.cutoutMetaData.data[frameOffset + 1]
-        ?? (packed.buffers.cutoutBoundsData.data[frameOffset + 3] ?? 0),
-      radius: packed.buffers.cutoutMetaData.data[frameOffset + 2] ?? 0,
-      shapeType: packed.buffers.cutoutTypeData.data[cutoutIndex] ?? SPLINE_WALL_COLLAPSE_SHAPE_RECTANGLE,
+type SplineWallComputePrototypeFaceBoundary =
+  | { kind: 'outer', side: 'left' | 'right' }
+  | { kind: 'cutout', side: 'left' | 'right', cutout: SplineWallComputePrototypeCutout }
+
+type SplineWallComputePrototypeOpenInterval = {
+  start: number
+  end: number
+  leftBoundary: SplineWallComputePrototypeFaceBoundary
+  rightBoundary: SplineWallComputePrototypeFaceBoundary
+}
+
+type SplineWallComputePrototypeSolidInterval = {
+  leftBoundary: SplineWallComputePrototypeFaceBoundary
+  rightBoundary: SplineWallComputePrototypeFaceBoundary
+}
+
+function buildSplineWallComputePrototypeCutoutFaceGeometry(
+  cutouts: readonly SplineWallComputePrototypeCutout[],
+  uvScale: number,
+): SplineWallGeometryData {
+  if (cutouts.length === 0) {
+    return createEmptySplineWallComputePrototypeGeometryData()
+  }
+
+  const faceGroups = buildSplineWallComputePrototypeCutoutFaceGroups(cutouts)
+  if (faceGroups.length === 0) {
+    return createEmptySplineWallComputePrototypeGeometryData()
+  }
+
+  const positions: number[] = []
+  const normals: number[] = []
+  const uvs: number[] = []
+  const indices: number[] = []
+
+  faceGroups.forEach((group) => {
+    const heightLevels = buildSplineWallComputePrototypeCutoutFaceHeightLevels(group)
+    if (heightLevels.length < 2) {
+      return
+    }
+
+    for (let levelIndex = 0; levelIndex < heightLevels.length - 1; levelIndex += 1) {
+      const bandBaseHeight = heightLevels[levelIndex] ?? group.wallBaseHeight
+      const bandTopHeight = heightLevels[levelIndex + 1] ?? group.wallTopHeight
+      if (bandTopHeight - bandBaseHeight <= SPLINE_WALL_GEOMETRY_EPSILON) {
+        continue
+      }
+
+      const sampleHeight = (bandBaseHeight + bandTopHeight) / 2
+      const solidIntervals = buildSplineWallComputePrototypeSolidIntervalsForFaceBand(group, sampleHeight)
+      solidIntervals.forEach((interval) => {
+        const startDistanceBottom = getSplineWallComputePrototypeFaceBoundaryDistance(group, interval.leftBoundary, bandBaseHeight)
+        const startDistanceTop = getSplineWallComputePrototypeFaceBoundaryDistance(group, interval.leftBoundary, bandTopHeight)
+        const endDistanceBottom = getSplineWallComputePrototypeFaceBoundaryDistance(group, interval.rightBoundary, bandBaseHeight)
+        const endDistanceTop = getSplineWallComputePrototypeFaceBoundaryDistance(group, interval.rightBoundary, bandTopHeight)
+        if (
+          Math.max(
+            endDistanceBottom - startDistanceBottom,
+            endDistanceTop - startDistanceTop,
+          ) <= SPLINE_WALL_GEOMETRY_EPSILON
+        ) {
+          return
+        }
+
+        appendSplineWallComputePrototypeWorldQuad(
+          positions,
+          normals,
+          uvs,
+          indices,
+          getSplineWallComputePrototypeCutoutWorldPoint(
+            group.cutouts[0]!,
+            startDistanceBottom,
+            group.halfThickness,
+            bandBaseHeight,
+          ),
+          getSplineWallComputePrototypeCutoutWorldPoint(
+            group.cutouts[0]!,
+            startDistanceTop,
+            group.halfThickness,
+            bandTopHeight,
+          ),
+          getSplineWallComputePrototypeCutoutWorldPoint(
+            group.cutouts[0]!,
+            endDistanceBottom,
+            group.halfThickness,
+            bandBaseHeight,
+          ),
+          getSplineWallComputePrototypeCutoutWorldPoint(
+            group.cutouts[0]!,
+            endDistanceTop,
+            group.halfThickness,
+            bandTopHeight,
+          ),
+          [startDistanceBottom / uvScale, bandBaseHeight / uvScale],
+          [startDistanceTop / uvScale, bandTopHeight / uvScale],
+          [endDistanceBottom / uvScale, bandBaseHeight / uvScale],
+          [endDistanceTop / uvScale, bandTopHeight / uvScale],
+        )
+
+        appendSplineWallComputePrototypeWorldQuad(
+          positions,
+          normals,
+          uvs,
+          indices,
+          getSplineWallComputePrototypeCutoutWorldPoint(
+            group.cutouts[0]!,
+            endDistanceBottom,
+            -group.halfThickness,
+            bandBaseHeight,
+          ),
+          getSplineWallComputePrototypeCutoutWorldPoint(
+            group.cutouts[0]!,
+            endDistanceTop,
+            -group.halfThickness,
+            bandTopHeight,
+          ),
+          getSplineWallComputePrototypeCutoutWorldPoint(
+            group.cutouts[0]!,
+            startDistanceBottom,
+            -group.halfThickness,
+            bandBaseHeight,
+          ),
+          getSplineWallComputePrototypeCutoutWorldPoint(
+            group.cutouts[0]!,
+            startDistanceTop,
+            -group.halfThickness,
+            bandTopHeight,
+          ),
+          [endDistanceBottom / uvScale, bandBaseHeight / uvScale],
+          [endDistanceTop / uvScale, bandTopHeight / uvScale],
+          [startDistanceBottom / uvScale, bandBaseHeight / uvScale],
+          [startDistanceTop / uvScale, bandTopHeight / uvScale],
+        )
+      })
+    }
+  })
+
+  return {
+    positions: new Float32Array(positions),
+    normals: new Float32Array(normals),
+    uvs: new Float32Array(uvs),
+    indices: new Uint32Array(indices),
+  }
+}
+
+function buildSplineWallComputePrototypeCutoutFaceGroups(
+  cutouts: readonly SplineWallComputePrototypeCutout[],
+) {
+  const groups = new Map<string, SplineWallComputePrototypeCutoutFaceGroup>()
+
+  cutouts.forEach((cutout) => {
+    const key = [
+      cutout.origin[0].toFixed(6),
+      cutout.origin[1].toFixed(6),
+      cutout.tangent[0].toFixed(6),
+      cutout.tangent[1].toFixed(6),
+      cutout.halfThickness.toFixed(6),
+      cutout.segmentLength.toFixed(6),
+      cutout.wallBaseHeight.toFixed(6),
+      cutout.wallTopHeight.toFixed(6),
+    ].join(':')
+    const existing = groups.get(key)
+    if (existing) {
+      existing.cutouts.push(cutout)
+      return
+    }
+
+    groups.set(key, {
+      origin: cutout.origin,
+      tangent: cutout.tangent,
+      halfThickness: cutout.halfThickness,
+      segmentLength: cutout.segmentLength,
+      wallBaseHeight: cutout.wallBaseHeight,
+      wallTopHeight: cutout.wallTopHeight,
+      cutouts: [cutout],
+    })
+  })
+
+  return [...groups.values()]
+}
+
+function buildSplineWallComputePrototypeCutoutFaceHeightLevels(
+  group: SplineWallComputePrototypeCutoutFaceGroup,
+) {
+  const levels = new Set<number>([group.wallBaseHeight, group.wallTopHeight])
+
+  group.cutouts.forEach((cutout) => {
+    buildSplineWallComputePrototypeCutoutProfilePath(cutout).forEach((point) => {
+      levels.add(clampSplineWallComputeValue(point.height, group.wallBaseHeight, group.wallTopHeight))
+    })
+  })
+
+  return [...levels]
+    .sort((left, right) => left - right)
+    .filter((height, index, values) =>
+      index === 0 || Math.abs(height - (values[index - 1] ?? height)) > SPLINE_WALL_GEOMETRY_EPSILON)
+}
+
+function buildSplineWallComputePrototypeSolidIntervalsForFaceBand(
+  group: SplineWallComputePrototypeCutoutFaceGroup,
+  sampleHeight: number,
+) {
+  const openIntervals = group.cutouts
+    .map((cutout) => getSplineWallComputePrototypeOpenIntervalAtHeight(cutout, sampleHeight))
+    .filter((interval): interval is SplineWallComputePrototypeOpenInterval => interval !== null)
+    .sort((left, right) => left.start - right.start)
+
+  const mergedIntervals: SplineWallComputePrototypeOpenInterval[] = []
+  openIntervals.forEach((interval) => {
+    const previous = mergedIntervals.at(-1)
+    if (!previous || interval.start > previous.end + SPLINE_WALL_GEOMETRY_EPSILON) {
+      mergedIntervals.push(interval)
+      return
+    }
+
+    if (interval.end > previous.end) {
+      previous.end = interval.end
+      previous.rightBoundary = interval.rightBoundary
+    }
+  })
+
+  const solidIntervals: SplineWallComputePrototypeSolidInterval[] = []
+  let solidStart = 0
+  let leftBoundary: SplineWallComputePrototypeFaceBoundary = { kind: 'outer', side: 'left' }
+
+  mergedIntervals.forEach((interval) => {
+    if (interval.start > solidStart + SPLINE_WALL_GEOMETRY_EPSILON) {
+      solidIntervals.push({
+        leftBoundary,
+        rightBoundary: interval.leftBoundary,
+      })
+    }
+
+    solidStart = Math.max(solidStart, interval.end)
+    leftBoundary = interval.rightBoundary
+  })
+
+  if (solidStart < group.segmentLength - SPLINE_WALL_GEOMETRY_EPSILON) {
+    solidIntervals.push({
+      leftBoundary,
+      rightBoundary: { kind: 'outer', side: 'right' },
     })
   }
 
-  return cutouts
+  return solidIntervals
+}
+
+function getSplineWallComputePrototypeOpenIntervalAtHeight(
+  cutout: SplineWallComputePrototypeCutout,
+  height: number,
+): SplineWallComputePrototypeOpenInterval | null {
+  if (
+    height < cutout.bottomHeight - SPLINE_WALL_GEOMETRY_EPSILON
+    || height > cutout.topHeight + SPLINE_WALL_GEOMETRY_EPSILON
+  ) {
+    return null
+  }
+
+  const start = getSplineWallComputePrototypeCutoutBoundaryDistance(cutout, 'left', height)
+  const end = getSplineWallComputePrototypeCutoutBoundaryDistance(cutout, 'right', height)
+  if (end - start <= SPLINE_WALL_GEOMETRY_EPSILON) {
+    return null
+  }
+
+  return {
+    start,
+    end,
+    leftBoundary: { kind: 'cutout', side: 'left', cutout },
+    rightBoundary: { kind: 'cutout', side: 'right', cutout },
+  }
+}
+
+function getSplineWallComputePrototypeFaceBoundaryDistance(
+  group: SplineWallComputePrototypeCutoutFaceGroup,
+  boundary: SplineWallComputePrototypeFaceBoundary,
+  height: number,
+) {
+  if (boundary.kind === 'outer') {
+    return boundary.side === 'left' ? 0 : group.segmentLength
+  }
+
+  return getSplineWallComputePrototypeCutoutBoundaryDistance(boundary.cutout, boundary.side, height)
+}
+
+function getSplineWallComputePrototypeCutoutBoundaryDistance(
+  cutout: SplineWallComputePrototypeCutout,
+  side: 'left' | 'right',
+  height: number,
+) {
+  if (
+    cutout.shapeType === SPLINE_WALL_COLLAPSE_SHAPE_ARCHED
+    && cutout.radius > SPLINE_WALL_GEOMETRY_EPSILON
+    && height > cutout.archBaseHeight + SPLINE_WALL_GEOMETRY_EPSILON
+  ) {
+    const centerDistance = (cutout.startDistance + cutout.endDistance) / 2
+    const clampedDy = Math.max(0, Math.min(height - cutout.archBaseHeight, cutout.radius))
+    const dx = Math.sqrt(Math.max((cutout.radius * cutout.radius) - (clampedDy * clampedDy), 0))
+    return side === 'left'
+      ? centerDistance - dx
+      : centerDistance + dx
+  }
+
+  return side === 'left'
+    ? cutout.startDistance
+    : cutout.endDistance
 }
 
 function buildSplineWallComputePrototypeCutoutLiningGeometry(
@@ -1451,6 +1752,7 @@ function buildSplineWallComputeChainGeometry(
   const vertexSurfaceData: number[] = []
   const vertexNormalData: number[] = []
   const indexData: number[] = []
+  const cutoutFaceGroups = buildSplineWallComputePrototypeCutoutFaceGroups(cutouts)
 
   const appendVertex = (descriptor: SplineWallComputePrototypeVertexDescriptor) => {
     vertexPathData.push(descriptor.pathIndex, 0, 0, 0)
@@ -1501,6 +1803,11 @@ function buildSplineWallComputeChainGeometry(
     const wallThicknessV = wallThickness / uvScale
     const currentHalfThickness = halfThickness * currentFrame.offsetScale
     const nextHalfThickness = halfThickness * nextFrame.offsetScale
+    const cutoutFaceGroup = findSplineWallComputePrototypeCutoutFaceGroupForFrames(
+      currentFrame,
+      nextFrame,
+      cutoutFaceGroups,
+    )
 
     for (let bandIndex = 0; bandIndex < heightLevels.length - 1; bandIndex += 1) {
       const bandBaseHeight = heightLevels[bandIndex] ?? wallBaseHeight
@@ -1512,75 +1819,77 @@ function buildSplineWallComputeChainGeometry(
       const bandBaseV = bandBaseHeight / uvScale
       const bandTopV = bandTopHeight / uvScale
 
-      appendQuad(
-        {
-          pathIndex: currentPathIndex,
-          lateralOffset: currentHalfThickness,
-          height: bandBaseHeight,
-          u: startU,
-          v: bandBaseV,
-          normalBasis: [1, 0, 0],
-        },
-        {
-          pathIndex: currentPathIndex,
-          lateralOffset: currentHalfThickness,
-          height: bandTopHeight,
-          u: startU,
-          v: bandTopV,
-          normalBasis: [1, 0, 0],
-        },
-        {
-          pathIndex: nextPathIndex,
-          lateralOffset: nextHalfThickness,
-          height: bandBaseHeight,
-          u: endU,
-          v: bandBaseV,
-          normalBasis: [1, 0, 0],
-        },
-        {
-          pathIndex: nextPathIndex,
-          lateralOffset: nextHalfThickness,
-          height: bandTopHeight,
-          u: endU,
-          v: bandTopV,
-          normalBasis: [1, 0, 0],
-        },
-      )
+      if (!cutoutFaceGroup) {
+        appendQuad(
+          {
+            pathIndex: currentPathIndex,
+            lateralOffset: currentHalfThickness,
+            height: bandBaseHeight,
+            u: startU,
+            v: bandBaseV,
+            normalBasis: [1, 0, 0],
+          },
+          {
+            pathIndex: currentPathIndex,
+            lateralOffset: currentHalfThickness,
+            height: bandTopHeight,
+            u: startU,
+            v: bandTopV,
+            normalBasis: [1, 0, 0],
+          },
+          {
+            pathIndex: nextPathIndex,
+            lateralOffset: nextHalfThickness,
+            height: bandBaseHeight,
+            u: endU,
+            v: bandBaseV,
+            normalBasis: [1, 0, 0],
+          },
+          {
+            pathIndex: nextPathIndex,
+            lateralOffset: nextHalfThickness,
+            height: bandTopHeight,
+            u: endU,
+            v: bandTopV,
+            normalBasis: [1, 0, 0],
+          },
+        )
 
-      appendQuad(
-        {
-          pathIndex: nextPathIndex,
-          lateralOffset: -nextHalfThickness,
-          height: bandBaseHeight,
-          u: endU,
-          v: bandBaseV,
-          normalBasis: [-1, 0, 0],
-        },
-        {
-          pathIndex: nextPathIndex,
-          lateralOffset: -nextHalfThickness,
-          height: bandTopHeight,
-          u: endU,
-          v: bandTopV,
-          normalBasis: [-1, 0, 0],
-        },
-        {
-          pathIndex: currentPathIndex,
-          lateralOffset: -currentHalfThickness,
-          height: bandBaseHeight,
-          u: startU,
-          v: bandBaseV,
-          normalBasis: [-1, 0, 0],
-        },
-        {
-          pathIndex: currentPathIndex,
-          lateralOffset: -currentHalfThickness,
-          height: bandTopHeight,
-          u: startU,
-          v: bandTopV,
-          normalBasis: [-1, 0, 0],
-        },
-      )
+        appendQuad(
+          {
+            pathIndex: nextPathIndex,
+            lateralOffset: -nextHalfThickness,
+            height: bandBaseHeight,
+            u: endU,
+            v: bandBaseV,
+            normalBasis: [-1, 0, 0],
+          },
+          {
+            pathIndex: nextPathIndex,
+            lateralOffset: -nextHalfThickness,
+            height: bandTopHeight,
+            u: endU,
+            v: bandTopV,
+            normalBasis: [-1, 0, 0],
+          },
+          {
+            pathIndex: currentPathIndex,
+            lateralOffset: -currentHalfThickness,
+            height: bandBaseHeight,
+            u: startU,
+            v: bandBaseV,
+            normalBasis: [-1, 0, 0],
+          },
+          {
+            pathIndex: currentPathIndex,
+            lateralOffset: -currentHalfThickness,
+            height: bandTopHeight,
+            u: startU,
+            v: bandTopV,
+            normalBasis: [-1, 0, 0],
+          },
+        )
+      }
     }
 
     appendQuad(
@@ -1742,6 +2051,37 @@ function buildSplineWallComputeChainGeometry(
     vertexCount: vertexPathData.length / 4,
     indexCount: indexData.length,
   }
+}
+
+function findSplineWallComputePrototypeCutoutFaceGroupForFrames(
+  currentFrame: SampledSplineWallFrame,
+  nextFrame: SampledSplineWallFrame,
+  faceGroups: readonly SplineWallComputePrototypeCutoutFaceGroup[],
+) {
+  if (faceGroups.length === 0) {
+    return null
+  }
+
+  const midpoint: [number, number] = [
+    (currentFrame.position[0] + nextFrame.position[0]) / 2,
+    (currentFrame.position[1] + nextFrame.position[1]) / 2,
+  ]
+
+  for (const group of faceGroups) {
+    const localX = midpoint[0] - group.origin[0]
+    const localZ = midpoint[1] - group.origin[1]
+    const localDistance = (localX * group.tangent[0]) + (localZ * group.tangent[1])
+    const localDepth = (localX * -group.tangent[1]) + (localZ * group.tangent[0])
+    if (
+      localDistance >= -SPLINE_WALL_GEOMETRY_EPSILON
+      && localDistance <= group.segmentLength + SPLINE_WALL_GEOMETRY_EPSILON
+      && Math.abs(localDepth) <= 1e-4
+    ) {
+      return group
+    }
+  }
+
+  return null
 }
 
 function distanceBetweenFrames(left: SampledSplineWallFrame, right: SampledSplineWallFrame) {

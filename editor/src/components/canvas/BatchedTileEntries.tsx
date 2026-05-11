@@ -257,23 +257,27 @@ function ResolvedBatchedTileEntries({
         return []
       }
 
-      return descriptor.entries
+      return descriptor.entries.map((entry) => ({
+        entry,
+        useLineOfSightPostMask: descriptor.useLineOfSightPostMask,
+        useRoomFloorMask: descriptor.useRoomFloorMask,
+        roomFloorMaskRuntime: descriptor.roomFloorMaskRuntime ?? null,
+        dynamicPointLightsActive: descriptor.dynamicPointLightsActive,
+      }))
     }),
     [descriptors.batched, scenesByUrl],
   )
 
   return (
     <>
-      {sourceKind === 'static' && unresolvedEntries.map((entry) => (
+      {sourceKind === 'static' && unresolvedEntries.map((fallbackEntry) => (
         <FallbackTileEntry
-          key={entry.key}
-          entry={entry}
-          useLineOfSightPostMask={descriptorUsesPostMask(descriptors)}
-          useRoomFloorMask={descriptors.batched.some((descriptor) => descriptor.useRoomFloorMask)}
-          roomFloorMaskRuntime={
-            descriptors.batched.find((descriptor) => descriptor.variant === 'floor')?.roomFloorMaskRuntime ?? null
-          }
-          dynamicPointLightsActive={descriptors.batched.some((descriptor) => descriptor.dynamicPointLightsActive)}
+          key={fallbackEntry.entry.key}
+          entry={fallbackEntry.entry}
+          useLineOfSightPostMask={fallbackEntry.useLineOfSightPostMask}
+          useRoomFloorMask={fallbackEntry.useRoomFloorMask}
+          roomFloorMaskRuntime={fallbackEntry.roomFloorMaskRuntime}
+          dynamicPointLightsActive={fallbackEntry.dynamicPointLightsActive}
         />
       ))}
     </>
@@ -355,9 +359,6 @@ function subtractStringSets(
   return values.filter((value) => !removals.has(value))
 }
 
-function descriptorUsesPostMask(descriptors: ReturnType<typeof buildBatchDescriptors>) {
-  return descriptors.batched[0]?.useLineOfSightPostMask ?? false
-}
 
 function partitionTileEntriesByChunk(entries: readonly StaticTileEntry[]): BatchedTileEntryChunk[] {
   const groupedEntries = new Map<string, StaticTileEntry[]>()

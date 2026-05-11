@@ -61,7 +61,7 @@ function buildBucketKey(
   entry: ResolvedStaticTileEntry,
   usesGpuFog: boolean,
   lightFlickerEnabled: boolean,
-  useRoomFloorMask: boolean,
+  roomFloorMaskRuntime: RoomFloorMaskRuntime | null,
 ): string {
   const useBakedFlicker =
     lightFlickerEnabled
@@ -80,7 +80,9 @@ function buildBucketKey(
       : 'unlit',
     entry.bakedLightDirectionSecondary ? 'double-direction' : 'single-direction',
     useBakedFlicker ? 'flicker' : 'steady',
-    useRoomFloorMask && entry.variant === 'floor' ? 'room-floor-mask' : 'no-room-floor-mask',
+    roomFloorMaskRuntime && entry.variant === 'floor'
+      ? `room-floor-mask:${roomFloorMaskRuntime.signature}`
+      : 'no-room-floor-mask',
   ].join('|')
 }
 
@@ -263,8 +265,8 @@ export function buildBatchDescriptors(
       resolvedOptions.floorId,
       entry,
       usesGpuFog,
-        resolvedOptions.lightFlickerEnabled,
-        resolvedOptions.roomFloorMaskRuntime != null,
+      resolvedOptions.lightFlickerEnabled,
+      resolvedOptions.roomFloorMaskRuntime ?? null,
       )
     if (!bucketMap.has(bucketKey)) {
       bucketMap.set(bucketKey, [])

@@ -61,7 +61,7 @@ describe('SplineWallComputeRuntime', () => {
     expect(geometry.indices).toHaveLength(72)
   })
 
-  it('runs the collapse pass and reads back mutated indices for cutouts', async () => {
+  it('dispatches remeshed cutouts without index readback', async () => {
     const splineWallGraph = createEmptySplineWallGraph()
     splineWallGraph.nodes['node-a'] = {
       id: 'node-a',
@@ -137,10 +137,10 @@ describe('SplineWallComputeRuntime', () => {
 
     expect(computeAsync).toHaveBeenCalledTimes(2)
     expect(getArrayBufferAsync).toHaveBeenCalledTimes(3)
-    expect(countDegenerateTriangles(geometry.indices)).toBeGreaterThan(0)
+    expect(countDegenerateTriangles(geometry.indices)).toBe(0)
   })
 
-  it('reapplies collapse after readback when async compute leaves indices unchanged', async () => {
+  it('keeps remeshed cutouts stable when async compute leaves indices unchanged', async () => {
     const splineWallGraph = createWindowCutoutSplineWallGraph()
     const prototype = prepareSplineWallComputePrototype({
       floorId: 'floor-spline-runtime-window-readback',
@@ -177,7 +177,7 @@ describe('SplineWallComputeRuntime', () => {
 
     expect(computeAsync).toHaveBeenCalledTimes(2)
     expect(getArrayBufferAsync).toHaveBeenCalledTimes(3)
-    expect(countDegenerateTriangles(geometry.indices)).toBeGreaterThan(0)
+    expect(countDegenerateTriangles(geometry.indices)).toBe(0)
   })
 })
 

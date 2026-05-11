@@ -24,6 +24,9 @@ type MaskBounds = {
 }
 
 type SupportedCanvas = HTMLCanvasElement | OffscreenCanvas
+type MaskImageData = {
+  data: Uint8ClampedArray
+}
 
 export function buildRoomFloorMaskRuntime(maskData: RoomFloorMaskData): RoomFloorMaskRuntime | null {
   const bounds = getRoomFloorMaskBounds(maskData)
@@ -72,6 +75,7 @@ export function buildRoomFloorMaskRuntime(maskData: RoomFloorMaskData): RoomFloo
     context.closePath()
     context.fill()
   })
+  solidifyMaskCoverage(context, width, height)
 
   const texture = new THREE.CanvasTexture(canvas)
   texture.name = 'room-floor-mask'
@@ -193,4 +197,26 @@ function createMaskCanvas(width: number, height: number): SupportedCanvas | null
 
 function clampMaskTextureSize(size: number) {
   return Math.max(MIN_MASK_TEXTURE_SIZE, Math.min(MAX_MASK_TEXTURE_SIZE, size))
+}
+
+type ImageDataContext = Pick<
+  CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D,
+  'getImageData' | 'putImageData'
+>
+
+function solidifyMaskCoverage(context: ImageDataContext, width: number, height: number) {
+  const imageData = context.getImageData(0, 0, width, height)
+  solidifyMaskCoveragePixels(imageData)
+  context.putImageData(imageData, 0, 0)
+}
+
+export function solidifyMaskCoveragePixels(imageData: MaskImageData) {
+  for (let index = 0; index < imageData.data.length; index += 4) {
+    const coverage = imageData.data[index] ?? 0
+    const nextCoverage = coverage > 0 ? 255 : 0
+    imageData.data[index] = nextCoverage
+    imageData.data[index + 1] = nextCoverage
+    imageData.data[index + 2] = nextCoverage
+    imageData.data[index + 3] = 255
+  }
 }

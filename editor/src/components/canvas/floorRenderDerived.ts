@@ -140,6 +140,7 @@ export function buildFloorRenderDerivedBundleFromInput(
     input.rooms,
     input.globalFloorAssetId,
     input.floorTileAssetIds,
+    input.splineWallGraph,
   )
 
   return {
@@ -375,13 +376,12 @@ function hasDirtyRenderScope(dirtyInfo: FloorDirtyInfo | null | undefined) {
 function deriveFloorReceiverCells(plan: ReturnType<typeof buildFloorRenderPlan>): FloorReceiverCellInput[] {
   return [
     ...plan.baseGroups.flatMap((group) => group.cells.map((cell) => {
-      const cellKey = getCellKey(cell)
       return {
         cell,
-        cellKey,
-        assetId: plan.effectiveAssetIdsByCellKey[cellKey] ?? group.floorAssetId,
+        cellKey: getCellKey(cell),
+        assetId: group.floorAssetId,
         receiverTransformOverride: {
-          rotation: plan.effectiveRotationsByCellKey[cellKey] ?? group.rotation,
+          rotation: group.rotation,
         },
       }
     })),

@@ -4055,12 +4055,9 @@ export const useDungeonStore = create<DungeonState>()(
       if (!current.rooms[id]) return current
       const previousSnapshot = cloneSnapshot(current)
 
-      // Collect and erase all cells belonging to this room
       const paintedCells = { ...current.paintedCells }
-      const removedCells: GridCell[] = []
       Object.entries(paintedCells).forEach(([key, record]) => {
         if (record.roomId === id) {
-          removedCells.push(record.cell)
           delete paintedCells[key]
         }
       })

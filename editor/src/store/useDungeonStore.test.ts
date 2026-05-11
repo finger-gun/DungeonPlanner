@@ -48,8 +48,9 @@ function commitRoundedOverlapRoomPair() {
   expect(ownerRoomId).toBeTruthy()
 
   const state = useDungeonStore.getState()
+  const overlapDraft = createRoomDraftFromStroke([2, 0], [4, 2])
   const clipped = clipRoomDraft(
-    createRoomDraftFromStroke([2, 0], [4, 2]),
+    overlapDraft,
     buildRoomDraftOccupancyPolygons(state.paintedCells, state.splineWallGraph),
     new Set(Object.keys(state.paintedCells)),
   )
@@ -269,6 +270,16 @@ describe('useDungeonStore history', () => {
     const state = useDungeonStore.getState()
     expect(state.rooms[ownerRoomId]).toBeUndefined()
     expect(Object.values(state.splineWallGraph.paths).every((path) => path.roomId !== ownerRoomId)).toBe(true)
+    expect(
+      Object.values(state.paintedCells)
+        .filter((record) => record.roomId === overlappingRoomId)
+        .map((record) => record.cell)
+        .sort(([leftX, leftZ], [rightX, rightZ]) => leftZ - rightZ || leftX - rightX),
+    ).toEqual([
+      [3, 0], [4, 0],
+      [3, 1], [4, 1],
+      [3, 2], [4, 2],
+    ])
 
     const chains = buildRoomSplineWallChainsFromGraph(state.splineWallGraph)
     expect(chains).toHaveLength(1)

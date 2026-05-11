@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import { getMetadataConnectors } from './connectors'
+import { dungeonContentPack } from './dungeon'
 import {
   getContentPackAssetById,
+  getContentPackAssetsByCategory,
   getContentPackRoomSetById,
   getContentPackWallMaterialSetById,
   getDefaultAssetIdByCategory,
@@ -377,6 +379,43 @@ describe('content pack registry', () => {
     })
 
     syncGeneratedCharacterAssets({})
+  })
+
+  it('reads authored asset replacements from the live pack definition', () => {
+    const assetId = 'dungeon.props_bookcase_double'
+    const assetIndex = dungeonContentPack.assets.findIndex((asset) => asset.id === assetId)
+    expect(assetIndex).toBeGreaterThanOrEqual(0)
+
+    const originalAsset = dungeonContentPack.assets[assetIndex]
+    expect(originalAsset).toBeDefined()
+    if (!originalAsset) {
+      return
+    }
+
+    const replacementAsset = {
+      ...originalAsset,
+      metadata: {
+        ...originalAsset.metadata,
+        connectors: [
+          { type: 'WALL', point: [0, 0, 0.875] as const, rotation: [0, 0, 0] as const },
+          { type: 'FLOOR', point: [0, 0, 0] as const },
+        ],
+      },
+    } satisfies typeof originalAsset
+
+    try {
+      dungeonContentPack.assets[assetIndex] = replacementAsset
+
+      expect(getMetadataConnectors(getContentPackAssetById(assetId)?.metadata)).toEqual([
+        { type: 'WALL', point: [0, 0, 0.875], rotation: [0, 0, 0] },
+        { type: 'FLOOR', point: [0, 0, 0] },
+      ])
+      expect(
+        getContentPackAssetsByCategory('prop').find((asset) => asset.id === assetId),
+      ).toBe(replacementAsset)
+    } finally {
+      dungeonContentPack.assets[assetIndex] = originalAsset
+    }
   })
 
   it('registers the dungeon pack floor, wall, and expanded prop assets', () => {
