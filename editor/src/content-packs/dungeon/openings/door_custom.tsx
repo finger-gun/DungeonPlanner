@@ -1,9 +1,6 @@
 import { createDungeonAsset } from '../shared/createDungeonAsset'
 
 const DOOR_CUSTOM_SCALE = 0.5
-const DOOR_CUSTOM_SOURCE_CENTER_X = 18
-const DOOR_CUSTOM_SOURCE_MIN_Y = 28
-const DOOR_CUSTOM_FACE_OFFSET = 0.057
 
 export const dungeonDoorCustomAsset = createDungeonAsset({
   id: 'core.opening_door_custom',
@@ -12,11 +9,7 @@ export const dungeonDoorCustomAsset = createDungeonAsset({
   category: 'opening',
   modelName: 'door_custom',
   transform: {
-    position: [
-      -DOOR_CUSTOM_SOURCE_CENTER_X * DOOR_CUSTOM_SCALE,
-      -DOOR_CUSTOM_SOURCE_MIN_Y * DOOR_CUSTOM_SCALE,
-      DOOR_CUSTOM_FACE_OFFSET,
-    ],
+    position: [0, 0, 0],
     rotation: [0, 0, 0],
     scale: DOOR_CUSTOM_SCALE,
   },

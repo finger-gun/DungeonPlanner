@@ -341,6 +341,112 @@ describe('SplineWallComputePrototype', () => {
       minZ: -0.05,
       maxZ: 0.05,
     })).toBeGreaterThan(0)
+    expect(countLiveTrianglesInsideBox(extractedGeometry, {
+      minX: 0.34,
+      maxX: 0.47,
+      minY: 0.2,
+      maxY: 1.1,
+      minZ: 0.09,
+      maxZ: 0.11,
+    })).toBeGreaterThan(0)
+    expect(countLiveTrianglesInsideBox(extractedGeometry, {
+      minX: 1.53,
+      maxX: 1.66,
+      minY: 0.2,
+      maxY: 1.1,
+      minZ: 0.09,
+      maxZ: 0.11,
+    })).toBeGreaterThan(0)
+    expect(countLiveTrianglesInsideBox(extractedGeometry, {
+      minX: 0.34,
+      maxX: 0.47,
+      minY: 0.2,
+      maxY: 1.1,
+      minZ: -0.11,
+      maxZ: -0.09,
+    })).toBeGreaterThan(0)
+    expect(countLiveTrianglesInsideBox(extractedGeometry, {
+      minX: 1.53,
+      maxX: 1.66,
+      minY: 0.2,
+      maxY: 1.1,
+      minZ: -0.11,
+      maxZ: -0.09,
+    })).toBeGreaterThan(0)
+  })
+
+  it('follows rounded segment curvature when generating arched door cutouts', () => {
+    const splineWallGraph = upsertSplineWallGraphRoomPath(createEmptySplineWallGraph(), {
+      roomId: 'room-rounded-door',
+      layerId: 'default',
+      nodes: [
+        { position: [0, 0], cornerMode: 'rounded', cornerAmount: 2 },
+        { position: [4, 0], cornerMode: 'square', cornerAmount: 0 },
+        { position: [4, 4], cornerMode: 'square', cornerAmount: 0 },
+        { position: [0, 4], cornerMode: 'square', cornerAmount: 0 },
+      ],
+    })
+    const segmentId = 'room-rounded-door:path:0:segment:0'
+    splineWallGraph.segments[segmentId]!.cutouts = [{
+      id: 'cutout-door-rounded',
+      kind: 'door',
+      startRatio: 0.08,
+      endRatio: 0.42,
+      bottomHeight: 0,
+      topHeight: 1.42,
+      assetId: 'core.opening_door_custom',
+      openingId: 'opening-door-rounded',
+      objectProps: {},
+    }]
+
+    const debugCutouts = collectSplineWallComputePrototypeDebugCutouts(
+      splineWallGraph,
+      new Set(['default']),
+      null,
+      {
+        wallHeight: 2.4,
+        wallThickness: 0.2,
+        curveSubdivisions: 8,
+      },
+    )
+    expect(debugCutouts).toHaveLength(1)
+    expect(debugCutouts[0]?.pathEdges.length).toBeGreaterThan(2)
+    expect(Math.abs(
+      (debugCutouts[0]?.pathEdges[0]?.normal[0] ?? 0)
+      - (debugCutouts[0]?.pathEdges.at(-1)?.normal[0] ?? 0),
+    )).toBeGreaterThan(0.2)
+
+    const prototype = prepareSplineWallComputePrototype({
+      floorId: 'floor-spline-rounded-door',
+      splineWallGraph,
+      visibleLayerIds: new Set(['default']),
+      suppressedWallKeys: new Set(),
+      curveSubdivisions: 8,
+      wallHeight: 2.4,
+      wallThickness: 0.2,
+    })
+
+    expect(prototype).not.toBeNull()
+
+    populateSplineWallComputePrototypeFallbackOutputs(prototype!.packed)
+    const extractedGeometry = extractSplineWallComputePrototypeGeometry(prototype!.packed)
+
+    expect(countLiveTrianglesInsideBox(extractedGeometry, {
+      minX: 1.9,
+      maxX: 2.1,
+      minY: 0.2,
+      maxY: 1.1,
+      minZ: 1.9,
+      maxZ: 2.1,
+    })).toBe(0)
+    expect(countLiveTrianglesInsideBox(extractedGeometry, {
+      minX: 1.0,
+      maxX: 1.35,
+      minY: 0.2,
+      maxY: 1.1,
+      minZ: 1.0,
+      maxZ: 1.35,
+    })).toBeGreaterThan(0)
   })
 
   it('collects cutout debug data in world-space dimensions', () => {

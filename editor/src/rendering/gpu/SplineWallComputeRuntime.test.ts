@@ -7,6 +7,7 @@ import {
   dispatchSplineWallComputePrototype,
 } from './SplineWallComputeRuntime'
 import {
+  extractSplineWallComputePrototypeGeometry,
   prepareSplineWallComputePrototype,
   populateSplineWallComputePrototypeFallbackOutputs,
 } from './SplineWallComputePrototype'
@@ -61,7 +62,7 @@ describe('SplineWallComputeRuntime', () => {
     expect(geometry.indices).toHaveLength(72)
   })
 
-  it('dispatches remeshed cutouts without index readback', async () => {
+  it('routes cutout prototypes through direct fallback extraction', async () => {
     const splineWallGraph = createEmptySplineWallGraph()
     splineWallGraph.nodes['node-a'] = {
       id: 'node-a',
@@ -135,14 +136,14 @@ describe('SplineWallComputeRuntime', () => {
       getArrayBufferAsync,
     }, prototype!)
 
-    expect(computeAsync).toHaveBeenCalledTimes(2)
-    expect(getArrayBufferAsync).toHaveBeenCalledTimes(3)
+    expect(computeAsync).not.toHaveBeenCalled()
+    expect(getArrayBufferAsync).not.toHaveBeenCalled()
     expect(countDegenerateTriangles(geometry.indices)).toBe(0)
   })
 
-  it('keeps remeshed cutouts stable when async compute leaves indices unchanged', async () => {
+  it('matches direct fallback geometry for cutout prototypes', async () => {
     const splineWallGraph = createWindowCutoutSplineWallGraph()
-    const prototype = prepareSplineWallComputePrototype({
+    const dispatchedPrototype = prepareSplineWallComputePrototype({
       floorId: 'floor-spline-runtime-window-readback',
       splineWallGraph,
       visibleLayerIds: new Set(['default']),
@@ -153,31 +154,40 @@ describe('SplineWallComputeRuntime', () => {
       wallThickness: 0.2,
       workgroupSize: 8,
     })
+    const fallbackPrototype = prepareSplineWallComputePrototype({
+      floorId: 'floor-spline-runtime-window-readback-fallback',
+      splineWallGraph,
+      visibleLayerIds: new Set(['default']),
+      suppressedWallKeys: new Set(),
+      cornerRadius: 0,
+      curveSubdivisions: 1,
+      wallHeight: 2.4,
+      wallThickness: 0.2,
+      workgroupSize: 8,
+    })
 
-    expect(prototype).not.toBeNull()
-    const originalIndices = new Int32Array(prototype!.packed.buffers.indexData.data)
-    let invocation = 0
+    expect(dispatchedPrototype).not.toBeNull()
+    expect(fallbackPrototype).not.toBeNull()
     const computeAsync = vi.fn(async () => {
-      invocation += 1
-      if (invocation === 1) {
-        populateSplineWallComputePrototypeFallbackOutputs(prototype!.packed)
-        prototype!.packed.buffers.indexData.data.set(originalIndices)
-      }
+      throw new Error('cutout prototype should not dispatch compute')
     })
     const getArrayBufferAsync = vi.fn(async (attribute) => {
-      if (attribute === prototype!.dispatch.bufferAttributes.indexData) {
-        throw new Error('index readback should not happen')
-      }
-      return cloneStorageBufferAttributeArray(attribute).buffer
+      throw new Error(`cutout prototype should not read back ${String(attribute)}`)
     })
     const geometry = await dispatchSplineWallComputePrototype({
       computeAsync,
       getArrayBufferAsync,
-    }, prototype!)
+    }, dispatchedPrototype!)
+    populateSplineWallComputePrototypeFallbackOutputs(fallbackPrototype!.packed)
+    const fallbackGeometry = extractSplineWallComputePrototypeGeometry(fallbackPrototype!.packed)
 
-    expect(computeAsync).toHaveBeenCalledTimes(2)
-    expect(getArrayBufferAsync).toHaveBeenCalledTimes(3)
+    expect(computeAsync).not.toHaveBeenCalled()
+    expect(getArrayBufferAsync).not.toHaveBeenCalled()
     expect(countDegenerateTriangles(geometry.indices)).toBe(0)
+    expect(Array.from(geometry.positions)).toEqual(Array.from(fallbackGeometry.positions))
+    expect(Array.from(geometry.normals)).toEqual(Array.from(fallbackGeometry.normals))
+    expect(Array.from(geometry.uvs)).toEqual(Array.from(fallbackGeometry.uvs))
+    expect(Array.from(geometry.indices)).toEqual(Array.from(fallbackGeometry.indices))
   })
 })
 

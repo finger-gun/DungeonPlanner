@@ -1,7 +1,7 @@
 import type { StorageBufferAttribute } from 'three/webgpu'
 import {
-  applySplineWallComputePrototypeTriangleCollapse,
   extractSplineWallComputePrototypeGeometry,
+  populateSplineWallComputePrototypeFallbackOutputs,
   type PreparedSplineWallComputePrototype,
 } from './SplineWallComputePrototype'
 
@@ -28,6 +28,11 @@ export async function dispatchSplineWallComputePrototype(
   renderer: SplineWallComputeRenderer,
   prototype: PreparedSplineWallComputePrototype,
 ) {
+  if (prototype.packed.cutoutCount > 0) {
+    populateSplineWallComputePrototypeFallbackOutputs(prototype.packed)
+    return extractSplineWallComputePrototypeGeometry(prototype.packed)
+  }
+
   const { computeNode, collapseComputeNode } = prototype.dispatch
   if (!computeNode) {
     return extractSplineWallComputePrototypeGeometry(prototype.packed)
@@ -54,9 +59,6 @@ export async function dispatchSplineWallComputePrototype(
   copyBufferIntoTypedArray(prototype.packed.buffers.outputPositionData.data, positionsBuffer)
   copyBufferIntoTypedArray(prototype.packed.buffers.outputNormalData.data, normalsBuffer)
   copyBufferIntoTypedArray(prototype.packed.buffers.outputUvData.data, uvsBuffer)
-  if (prototype.packed.cutoutCount > 0) {
-    applySplineWallComputePrototypeTriangleCollapse(prototype.packed)
-  }
 
   return extractSplineWallComputePrototypeGeometry(prototype.packed)
 }
