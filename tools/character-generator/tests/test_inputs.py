@@ -5,7 +5,13 @@ from textwrap import dedent
 import pytest
 
 from character_generator.inputs import load_input_items, load_yaml_config
-from character_generator.cli import ConsoleStatusReporter, _resolve_base_prompt, build_parser, build_runtime_config
+from character_generator.cli import (
+    ConsoleStatusReporter,
+    _preview_with_kitten,
+    _resolve_base_prompt,
+    build_parser,
+    build_runtime_config,
+)
 from character_generator.types import PromptItem
 
 
@@ -178,6 +184,18 @@ def test_build_runtime_config_reads_guidance_scale_from_yaml(tmp_path: Path) -> 
     assert runtime_config.guidance_scale == 3.0
 
 
+def test_build_runtime_config_reads_num_inference_steps_from_yaml(tmp_path: Path) -> None:
+    config_path = tmp_path / "characters.yaml"
+    config_path.write_text("num_inference_steps: 8\n", encoding="utf-8")
+
+    parser = build_parser()
+    args = parser.parse_args(["--config-file", str(config_path)])
+
+    runtime_config = build_runtime_config(args)
+
+    assert runtime_config.num_inference_steps == 8
+
+
 def test_build_runtime_config_reads_dimensions_from_yaml(tmp_path: Path) -> None:
     config_path = tmp_path / "characters.yaml"
     config_path.write_text("width: 512\nheight: 512\n", encoding="utf-8")
@@ -189,6 +207,45 @@ def test_build_runtime_config_reads_dimensions_from_yaml(tmp_path: Path) -> None
 
     assert runtime_config.width == 512
     assert runtime_config.height == 512
+
+
+def test_build_runtime_config_reads_preview_kitten_flag() -> None:
+    parser = build_parser()
+    args = parser.parse_args(["--preview-kitten"])
+
+    runtime_config = build_runtime_config(args)
+
+    assert runtime_config.preview_kitten is True
+
+
+def test_preview_with_kitten_runs_kitten_icat(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    image_path = tmp_path / "preview.png"
+    image_path.write_bytes(b"png")
+    captured = {}
+
+    monkeypatch.setattr("shutil.which", lambda command: "/usr/bin/kitten" if command == "kitten" else None)
+
+    def fake_run(command: list[str], check: bool) -> None:
+        captured["command"] = command
+        captured["check"] = check
+
+    monkeypatch.setattr("subprocess.run", fake_run)
+
+    _preview_with_kitten(image_path)
+
+    assert captured == {
+        "command": ["/usr/bin/kitten", "icat", str(image_path)],
+        "check": True,
+    }
+
+
+def test_preview_with_kitten_requires_command_on_path(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    image_path = tmp_path / "preview.png"
+    image_path.write_bytes(b"png")
+    monkeypatch.setattr("shutil.which", lambda command: None)
+
+    with pytest.raises(RuntimeError, match="requires the 'kitten' command"):
+        _preview_with_kitten(image_path)
 
 
 def test_build_runtime_config_reads_max_combinations_and_pack_metadata_from_yaml(tmp_path: Path) -> None:
@@ -221,3 +278,10 @@ def test_build_runtime_config_reads_max_combinations_and_pack_metadata_from_yaml
     assert runtime_config.pack.tags == ("undead", "zombies")
     assert runtime_config.pack.kind == "npc"
     assert runtime_config.pack.size == "XL"
+
+
+def test_build_parser_defaults_to_sdnq_z_image_model() -> None:
+    parser = build_parser()
+    args = parser.parse_args([])
+
+    assert args.image_model_id == "Disty0/Z-Image-Turbo-SDNQ-uint4-svd-r32"

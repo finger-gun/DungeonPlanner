@@ -144,6 +144,58 @@ describe('App sidebar drawer', () => {
     expect(debugPanel).toHaveStyle({ right: '16px' })
   })
 
+  it('toggles prop probe visualization from the debug panel', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+
+    fireEvent.keyDown(window, { key: 'F12', ctrlKey: true, shiftKey: true })
+
+    expect(useDungeonStore.getState().showPropProbeDebug).toBe(false)
+
+    await user.click(screen.getByRole('button', { name: /visualize prop probes/i }))
+
+    expect(useDungeonStore.getState().showPropProbeDebug).toBe(true)
+  })
+
+  it('toggles chunk bounds visualization from the debug panel', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+
+    fireEvent.keyDown(window, { key: 'F12', ctrlKey: true, shiftKey: true })
+
+    expect(useDungeonStore.getState().showChunkDebugOverlay).toBe(false)
+
+    await user.click(screen.getByRole('button', { name: /visualize chunk bounds/i }))
+
+    expect(useDungeonStore.getState().showChunkDebugOverlay).toBe(true)
+  })
+
+  it('toggles x10 build animation slow mode from the debug panel', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+
+    fireEvent.keyDown(window, { key: 'F12', ctrlKey: true, shiftKey: true })
+
+    expect(useDungeonStore.getState().slowBuildAnimationDebug).toBe(false)
+
+    await user.click(screen.getByRole('button', { name: /slow build animation x10/i }))
+
+    expect(useDungeonStore.getState().slowBuildAnimationDebug).toBe(true)
+  })
+
+  it('toggles build performance tracing from the debug panel', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+
+    fireEvent.keyDown(window, { key: 'F12', ctrlKey: true, shiftKey: true })
+
+    expect(useDungeonStore.getState().buildPerformanceTracingEnabled).toBe(false)
+
+    await user.click(screen.getByRole('button', { name: /trace build performance/i }))
+
+    expect(useDungeonStore.getState().buildPerformanceTracingEnabled).toBe(true)
+  })
+
   it('keeps the sidebar off-canvas in play mode without rendering the drawer tab', () => {
     useDungeonStore.getState().setTool('play')
     render(<App />)
@@ -164,6 +216,41 @@ describe('App sidebar drawer', () => {
     expect(screen.getByTestId('editor-right-panel-shell')).toHaveAttribute('data-sidebar-panel', 'settings')
     expect(screen.queryByText('Scene Graph')).not.toBeInTheDocument()
     expect(screen.queryByText('Layers')).not.toBeInTheDocument()
+  })
+
+  it('does not use the raw room delete shortcut while resize mode is active', () => {
+    render(<App />)
+
+    useDungeonStore.setState({
+      tool: 'room',
+      roomPaintMode: 'resize',
+      selectedRoomId: 'room-1',
+    })
+
+    const removeSelectedRoom = vi.fn()
+    useDungeonStore.setState({ removeSelectedRoom })
+
+    fireEvent.keyDown(window, { key: 'Delete' })
+
+    expect(removeSelectedRoom).not.toHaveBeenCalled()
+  })
+
+  it('updates the room hint text to match the active context tool', () => {
+    useDungeonStore.setState({
+      tool: 'room',
+      roomEditMode: 'rooms',
+      roomPaintMode: 'area',
+    })
+    render(<App />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Paint' }))
+    expect(screen.getByText(/paint rooms cell-by-cell/i)).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Resize' }))
+    expect(screen.getByText(/show resize handles/i)).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Inner walls' }))
+    expect(screen.getByText(/inner wall editing/i)).toBeInTheDocument()
   })
 
   it('closes settings from play mode with the back button', async () => {

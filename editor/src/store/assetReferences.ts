@@ -1,9 +1,15 @@
-import { getContentPackAssetById, getDefaultAssetIdByCategory } from '../content-packs/registry'
+import {
+  getContentPackAssetById,
+  getContentPackRoomSetById,
+  getDefaultAssetIdByCategory,
+  getDefaultContentPackRoomSetId,
+} from '../content-packs/registry'
 import type { ContentPackCategory } from '../content-packs/types'
 import type { DungeonObjectRecord, FloorRecord, OpeningRecord, Room, SelectedAssetIds } from './useDungeonStore'
 
 type SnapshotAssetState = {
   selectedAssetIds?: SelectedAssetIds
+  activeRoomSetId?: string
   rooms: Record<string, Room>
   wallOpenings: Record<string, OpeningRecord>
   placedObjects: Record<string, DungeonObjectRecord>
@@ -33,11 +39,17 @@ export function sanitizeSnapshotAssetReferences<T extends SnapshotAssetState>(sn
           selectedAssetIds: sanitizeSelectedAssetIds(snapshot.selectedAssetIds),
         }
       : {}),
+    ...(typeof snapshot.activeRoomSetId === 'string'
+      ? {
+          activeRoomSetId: sanitizeActiveRoomSetId(snapshot.activeRoomSetId),
+        }
+      : {}),
     rooms: Object.fromEntries(
       Object.entries(snapshot.rooms).map(([roomId, room]) => [
         roomId,
         {
           ...room,
+          roomSetId: sanitizeRoomSetId(room.roomSetId),
           floorAssetId: sanitizeRoomAssetId(room.floorAssetId, 'floor'),
           wallAssetId: sanitizeRoomAssetId(room.wallAssetId, 'wall'),
         },
@@ -104,12 +116,28 @@ function sanitizeOpeningAssetId(assetId: string | null) {
   return isValidAssetId(mappedAssetId, 'opening') ? mappedAssetId : null
 }
 
+function sanitizeActiveRoomSetId(roomSetId: string) {
+  return isValidRoomSetId(roomSetId)
+    ? roomSetId
+    : (getDefaultContentPackRoomSetId('dungeon') ?? 'dungeon')
+}
+
+function sanitizeRoomSetId(roomSetId: string | null | undefined) {
+  if (!roomSetId) {
+    return null
+  }
+
+  return isValidRoomSetId(roomSetId) ? roomSetId : null
+}
+
 function sanitizeOpeningRecord(opening: OpeningRecord): OpeningRecord {
   const assetId = sanitizeOpeningAssetId(opening.assetId)
   if (!assetId) {
     return {
       ...opening,
       assetId,
+      objectProps: { ...(opening.objectProps ?? {}) },
+      source: opening.source === 'generated' ? 'generated' : 'manual',
     }
   }
 
@@ -117,7 +145,9 @@ function sanitizeOpeningRecord(opening: OpeningRecord): OpeningRecord {
   return {
     ...opening,
     assetId,
+    objectProps: { ...(opening.objectProps ?? {}) },
     width: asset?.metadata?.openingWidth ?? 1,
+    source: opening.source === 'generated' ? 'generated' : 'manual',
   }
 }
 
@@ -128,6 +158,10 @@ function isValidAssetId(assetId: string | null, category: ContentPackCategory) {
 
   const asset = getContentPackAssetById(assetId)
   return asset?.category === category
+}
+
+function isValidRoomSetId(roomSetId: string) {
+  return Boolean(getContentPackRoomSetById('dungeon', roomSetId))
 }
 
 function mapLegacyAssetId(assetId: string | null, category: ContentPackCategory) {

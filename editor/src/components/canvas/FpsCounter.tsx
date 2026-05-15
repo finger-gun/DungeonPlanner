@@ -11,6 +11,7 @@ export function FpsMeterNode() {
   const last = useRef(performance.now())
 
   useFrame(() => {
+    // Only update FPS when actually rendering (continuous render is active)
     frames.current++
     const now = performance.now()
     const elapsed = now - last.current

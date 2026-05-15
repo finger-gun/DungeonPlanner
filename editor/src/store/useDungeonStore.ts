@@ -3,14 +3,13 @@ import { createJSONStorage, persist } from 'zustand/middleware'
 import {
   getContentPackAssetById,
   getContentPackAssetsByCategory,
+  getDefaultContentPackRoomSetId,
   getDefaultAssetIdByCategory,
 } from '../content-packs/registry'
 import { getCellKey, type GridCell } from '../hooks/useSnapToGrid'
 import type { AssetBrowserCategory, AssetBrowserSubcategory, ContentPackCategory, PropConnector } from '../content-packs/types'
-import { getAssetBrowserCategory, getAssetBrowserSubcategory } from '../content-packs/browserMetadata'
-import { createGeneratedCharacterAssetId, syncGeneratedCharacterAssets } from '../content-packs/runtimeRegistry'
+import { syncGeneratedCharacterAssets } from '../content-packs/runtimeRegistry'
 import {
-  createDefaultGeneratedCharacterInput,
   normalizeGeneratedCharacterRecord,
   type CreateGeneratedCharacterInput,
   type GeneratedCharacterRecord,
@@ -24,6 +23,7 @@ import {
   getCanonicalInnerWallKey,
   type InnerWallRecord,
 } from './manualWalls'
+import { reconcileProceduralRoomLayout } from './proceduralRoomLayout'
 import { getCanonicalWallKey, getInheritedWallAssetIdForWallKey } from './wallSegments'
 import {
   getRoomBounds,
@@ -55,10 +55,26 @@ import {
 } from './outdoorTerrain'
 import {
   collectOverlappingFloorSurfaceAnchors,
+  createFloorSurfacePlacement,
   findFloorSurfaceAnchorAtCell,
+  getFloorTileSpan,
   getInheritedFloorAssetIdForCellKey,
   isFloorSurfacePlacementValid,
 } from './floorSurfaceLayout'
+import {
+  ALL_FLOOR_DIRTY_DOMAINS,
+  applyFloorDirtyMutation,
+  createFloorDirtyInfo,
+  syncFloorDirtyState,
+  type FloorDirtyDomainKey,
+  type FloorDirtyHint,
+  type FloorDirtyState,
+} from './floorDirtyDomains'
+import { getFloorChunkKeysForCells } from './floorChunkKeys'
+import { createDungeonStoreEditorUiActions } from './domains/dungeonStoreEditorUiDomain'
+import { createDungeonStoreGeneratedCharacterActions } from './domains/dungeonStoreGeneratedCharactersDomain'
+import { createDungeonStoreLayerActions } from './domains/dungeonStoreLayerDomain'
+import { createDungeonStoreViewActions } from './domains/dungeonStoreViewDomain'
 
 export type { InnerWallRecord } from './manualWalls'
 
@@ -68,6 +84,7 @@ export type DungeonTool = 'move' | 'room' | 'prop' | 'character' | 'opening' | '
 export type CameraMode = 'orbit'
 export type CameraPreset = 'perspective' | 'isometric' | 'top-down' | 'classic'
 export type RoomEditMode = 'rooms' | 'walls' | 'floor-variants' | 'wall-variants'
+export type RoomPaintMode = 'area' | 'paint' | 'resize'
 export type SelectedAssetIds = Record<ContentPackCategory, string | null>
 export type SurfaceBrushAssetIds = {
   floor: string | null
@@ -102,6 +119,7 @@ export type Room = {
   id: string
   name: string
   layerId: string
+  roomSetId?: string | null
   /** null = inherit global floor asset */
   floorAssetId: string | null
   /** null = inherit global wall asset */
@@ -147,10 +165,14 @@ export type OpeningRecord = {
   width: 1 | 2 | 3
   /** Whether the opening is flipped 180° (front/back swap) */
   flipped?: boolean
+  objectProps?: Record<string, unknown>
   layerId: string
+  source?: OpeningSource
 }
 
-type PlaceOpeningInput = Pick<OpeningRecord, 'assetId' | 'wallKey' | 'width' | 'flipped'>
+export type OpeningSource = 'manual' | 'generated'
+
+type PlaceOpeningInput = Pick<OpeningRecord, 'assetId' | 'wallKey' | 'width' | 'flipped' | 'objectProps' | 'source'>
 
 export type DungeonObjectType = 'prop' | 'player'
 
@@ -184,6 +206,7 @@ type DungeonSnapshot = {
   innerWalls: Record<string, InnerWallRecord>
   occupancy: Record<string, string>
   tool: DungeonTool
+  activeRoomSetId: string
   selectedAssetIds: SelectedAssetIds
   selection: string | null
   layers: Record<string, Layer>
@@ -225,6 +248,27 @@ type MutableObjectMaps = {
 
 type MoveObjectInput = Pick<DungeonObjectRecord, 'position' | 'cell' | 'cellKey'>
 
+type RepositionObjectInput = Pick<DungeonObjectRecord, 'position' | 'rotation' | 'cell' | 'cellKey'> & {
+  props?: Record<string, unknown>
+  localPosition?: DungeonObjectRecord['localPosition']
+  localRotation?: DungeonObjectRecord['localRotation']
+  parentObjectId?: DungeonObjectRecord['parentObjectId']
+  supportCellKey?: DungeonObjectRecord['supportCellKey']
+}
+
+export type PickedUpObjectState = {
+  objectId: string
+  type: DungeonObjectType
+  assetId: string
+  props: Record<string, unknown>
+  floorRotationIndex: number
+}
+
+export type ObjectMoveDragPointer = {
+  clientX: number
+  clientY: number
+}
+
 export type SceneLighting = {
   intensity: number // multiplier applied to all scene lights, 0–2
 }
@@ -242,7 +286,7 @@ export type PostProcessingSettings = {
 export type WallConnectionMode = 'wall' | 'door' | 'open'
 export type FloorViewMode = 'active' | 'scene'
 
-type DungeonState = DungeonSnapshot & {
+export type DungeonState = DungeonSnapshot & {
   mapMode: MapMode
   outdoorTimeOfDay: number
   defaultOutdoorTerrainStyle: OutdoorTerrainStyle
@@ -260,6 +304,7 @@ type DungeonState = DungeonSnapshot & {
   isObjectDragActive: boolean
   isRoomResizeHandleActive: boolean
   roomEditMode: RoomEditMode
+  roomPaintMode: RoomPaintMode
   wallConnectionMode: WallConnectionMode
   wallConnectionWidth: 1 | 2 | 3
   selectedRoomId: string | null
@@ -270,7 +315,11 @@ type DungeonState = DungeonSnapshot & {
   showLosDebugMask: boolean
   showLosDebugRays: boolean
   showLensFocusDebugPoint: boolean
+  showChunkDebugOverlay: boolean
   showProjectionDebugMesh: boolean
+  showPropProbeDebug: boolean
+  slowBuildAnimationDebug: boolean
+  buildPerformanceTracingEnabled: boolean
   floorViewMode: FloorViewMode
   generatedCharacters: Record<string, GeneratedCharacterRecord>
   characterSheet: CharacterSheetState
@@ -279,8 +328,13 @@ type DungeonState = DungeonSnapshot & {
   cameraPreset: CameraPreset | null
   previousCameraPreset: CameraPreset | null
   objectLightPreviewOverrides: Record<string, ObjectLightOverrides>
+  objectScalePreviewOverrides: Record<string, number>
+  objectRotationPreviewOverrides: Record<string, DungeonObjectRecord['rotation']>
+  pickedUpObject: PickedUpObjectState | null
+  objectMoveDragPointer: ObjectMoveDragPointer | null
   history: HistoryEntry[]
   future: HistoryEntry[]
+  floorDirtyDomains: FloorDirtyState
   paintCells: (cells: GridCell[]) => number
   eraseCells: (cells: GridCell[]) => number
   paintBlockedCells: (cells: GridCell[]) => number
@@ -290,8 +344,14 @@ type DungeonState = DungeonSnapshot & {
   eraseOutdoorTerrainStyleCells: (cells: GridCell[]) => number
   placeObject: (input: PlaceObjectInput) => string | null
   moveObject: (id: string, input: MoveObjectInput) => boolean
+  repositionObject: (id: string, input: RepositionObjectInput) => boolean
   setObjectProps: (id: string, props: Record<string, unknown>) => boolean
+  setObjectScalePreview: (id: string, scale: number | null) => void
+  setObjectRotationPreview: (id: string, rotation: DungeonObjectRecord['rotation'] | null) => void
   setObjectLightPreview: (id: string, overrides: ObjectLightOverrides | null) => void
+  pickUpObject: (id: string) => boolean
+  cancelPickedUpObject: () => void
+  setObjectMoveDragPointer: (pointer: ObjectMoveDragPointer | null) => void
   mergeExploredCells: (cellKeys: string[]) => void
   clearExploredCells: () => void
   removeObject: (id: string) => void
@@ -306,6 +366,8 @@ type DungeonState = DungeonSnapshot & {
   selectRoom: (id: string | null) => void
   setRoomResizeHandleActive: (active: boolean) => void
   setRoomEditMode: (mode: RoomEditMode) => void
+  setRoomPaintMode: (mode: RoomPaintMode) => void
+  setActiveRoomSetId: (roomSetId: string) => void
   setWallConnectionMode: (mode: WallConnectionMode) => void
   setWallConnectionWidth: (width: 1 | 2 | 3) => void
   setInnerWallSegments: (wallKeys: string[], present: boolean) => number
@@ -333,9 +395,15 @@ type DungeonState = DungeonSnapshot & {
   setShowLosDebugMask: (show: boolean) => void
   setShowLosDebugRays: (show: boolean) => void
   setShowLensFocusDebugPoint: (show: boolean) => void
+  setShowChunkDebugOverlay: (show: boolean) => void
   setShowProjectionDebugMesh: (show: boolean) => void
+  setShowPropProbeDebug: (show: boolean) => void
+  setSlowBuildAnimationDebug: (show: boolean) => void
+  setBuildPerformanceTracingEnabled: (show: boolean) => void
   lightEffectsEnabled: boolean
   setLightEffectsEnabled: (enabled: boolean) => void
+  lightFlickerEnabled: boolean
+  setLightFlickerEnabled: (enabled: boolean) => void
   particleEffectsEnabled: boolean
   setParticleEffectsEnabled: (enabled: boolean) => void
   setFloorViewMode: (mode: FloorViewMode) => void
@@ -386,6 +454,7 @@ type DungeonState = DungeonSnapshot & {
   placeOpenPassages: (wallKeys: string[]) => void
   restoreOpenPassages: (wallKeys: string[]) => number
   setOpeningAsset: (id: string, assetId: string | null) => boolean
+  setOpeningProps: (id: string, props: Record<string, unknown>) => boolean
   removeOpening: (id: string) => void
   // Persistence
   dungeonName: string
@@ -409,6 +478,8 @@ const CONNECTOR_DIRECTIONS: Array<{
 ]
 
 const DEFAULT_LAYER_ID = 'default'
+const ROOM_SET_CONTENT_PACK_ID = 'dungeon'
+const FALLBACK_ROOM_SET_ID = 'dungeon'
 const SURROUNDING_FOREST_TAG = 'surrounding-forest'
 const DEFAULT_OUTDOOR_TERRAIN_PROFILES: Record<OutdoorTerrainType, OutdoorTerrainProfile> = {
   mixed: { density: 'medium', overpaintRegenerate: false },
@@ -442,6 +513,10 @@ const DENSITY_SECONDARY_CHANCE: Record<OutdoorTerrainDensity, number> = {
 
 function createDefaultLayer(): Layer {
   return { id: DEFAULT_LAYER_ID, name: 'Default', visible: true, locked: false }
+}
+
+function getDefaultRoomSetId() {
+  return getDefaultContentPackRoomSetId(ROOM_SET_CONTENT_PACK_ID) ?? FALLBACK_ROOM_SET_ID
 }
 
 function cloneSnapshot(snapshot: DungeonSnapshot): DungeonSnapshot {
@@ -501,13 +576,20 @@ function cloneSnapshot(snapshot: DungeonSnapshot): DungeonSnapshot {
       ]),
     ),
     wallOpenings: Object.fromEntries(
-      Object.entries(snapshot.wallOpenings).map(([id, opening]) => [id, { ...opening }]),
+      Object.entries(snapshot.wallOpenings).map(([id, opening]) => [
+        id,
+        {
+          ...opening,
+          objectProps: { ...(opening.objectProps ?? {}) },
+        },
+      ]),
     ),
     innerWalls: Object.fromEntries(
       Object.entries(snapshot.innerWalls).map(([wallKey, innerWall]) => [wallKey, { ...innerWall }]),
     ),
     occupancy: { ...snapshot.occupancy },
     tool: snapshot.tool,
+    activeRoomSetId: snapshot.activeRoomSetId,
     selectedAssetIds: { ...snapshot.selectedAssetIds },
     selection: snapshot.selection,
     layers: Object.fromEntries(
@@ -562,6 +644,8 @@ function serializeCurrentDungeonState(state: DungeonState) {
     outdoorTerrainHeights: state.outdoorTerrainHeights,
     sceneLighting: state.sceneLighting,
     postProcessing: state.postProcessing,
+    lightFlickerEnabled: state.lightFlickerEnabled,
+    activeRoomSetId: state.activeRoomSetId,
     layers: state.layers,
     layerOrder: state.layerOrder,
     activeLayerId: state.activeLayerId,
@@ -621,6 +705,7 @@ function cloneSnapshotForObjectPlacement(snapshot: DungeonSnapshot): DungeonSnap
     innerWalls: snapshot.innerWalls,
     occupancy: { ...snapshot.occupancy },
     tool: snapshot.tool,
+    activeRoomSetId: snapshot.activeRoomSetId,
     selectedAssetIds: { ...snapshot.selectedAssetIds },
     selection: snapshot.selection,
     layers: snapshot.layers,
@@ -781,6 +866,11 @@ function objectConsumesOccupancy(assetId: string | null, connector: unknown) {
   return connector !== 'FREE'
 }
 
+function getFloorRotationIndexFromRotation(rotationY: number) {
+  const quarterTurns = Math.round(rotationY / (Math.PI / 2))
+  return ((quarterTurns % 4) + 4) % 4
+}
+
 function createEmptySnapshot(): DungeonSnapshot {
   const defaultLayer = createDefaultLayer()
   return {
@@ -797,6 +887,7 @@ function createEmptySnapshot(): DungeonSnapshot {
     innerWalls: {},
     occupancy: {},
     tool: 'select',
+    activeRoomSetId: getDefaultRoomSetId(),
     selectedAssetIds: {
       floor: getDefaultAssetIdByCategory('floor'),
       wall: getDefaultAssetIdByCategory('wall'),
@@ -1223,7 +1314,9 @@ function addOpeningRecord(
     wallKey: input.wallKey,
     width: input.width,
     flipped: input.flipped ?? false,
+    objectProps: input.objectProps ? { ...input.objectProps } : {},
     layerId,
+    source: input.source ?? 'manual',
   }
 
   return id
@@ -1271,6 +1364,51 @@ function collectAffectedAnchorKeys(changedCells: GridCell[]) {
   })
 
   return affectedKeys
+}
+
+function collectAffectedWallKeys(changedCells: GridCell[]) {
+  const affectedKeys = new Set<string>()
+
+  changedCells.forEach((cell) => {
+    const cellKey = getCellKey(cell)
+
+    CONNECTOR_DIRECTIONS.forEach(({ name, delta, opposite }) => {
+      affectedKeys.add(`${cellKey}:${name}`)
+
+      const neighbor: GridCell = [cell[0] + delta[0], cell[1] + delta[1]]
+      affectedKeys.add(`${getCellKey(neighbor)}:${opposite}`)
+    })
+  })
+
+  return affectedKeys
+}
+
+function getFloorRenderInvalidationHaloCells(floorTileAssetIds: Record<string, string>) {
+  return Math.max(
+    1,
+    ...Object.values(floorTileAssetIds).map((assetId) => {
+      const span = getFloorTileSpan(assetId)
+      return Math.max(span.gridWidth - 1, span.gridHeight - 1)
+    }),
+  )
+}
+
+function buildLocalizedRoomPaintDirtyHint(
+  current: Pick<DungeonSnapshot, 'floorTileAssetIds'>,
+  changedCells: GridCell[],
+): FloorDirtyHint {
+  const dirtyChunkKeys = getFloorChunkKeysForCells(changedCells)
+  const dirtyRenderChunkKeys = getFloorChunkKeysForCells(changedCells, {
+    haloCells: getFloorRenderInvalidationHaloCells(current.floorTileAssetIds),
+  })
+
+  return {
+    cells: changedCells,
+    chunkKeys: dirtyChunkKeys,
+    renderChunkKeys: dirtyRenderChunkKeys,
+    lightChunkKeys: dirtyChunkKeys,
+    wallKeys: collectAffectedWallKeys(changedCells),
+  }
 }
 
 function isAnchorDirection(value: unknown): value is AnchorDirection {
@@ -1433,11 +1571,21 @@ function pruneInvalidConnectedProps(
   changedCells: GridCell[],
 ) {
   const affectedAnchorKeys = collectAffectedAnchorKeys(changedCells)
+  const affectedWallKeys = collectAffectedWallKeys(changedCells)
   const changedCellKeys = new Set(changedCells.map((cell) => getCellKey(cell)))
-  const placedObjects = { ...current.placedObjects }
-  const occupancy = { ...current.occupancy }
+  let placedObjects = current.placedObjects
+  let occupancy = current.occupancy
   let selection = current.selection
   const invalidRootIds = new Set<string>()
+
+  const ensureMutableObjectMaps = () => {
+    if (placedObjects === current.placedObjects) {
+      placedObjects = { ...current.placedObjects }
+    }
+    if (occupancy === current.occupancy) {
+      occupancy = { ...current.occupancy }
+    }
+  }
 
   affectedAnchorKeys.forEach((anchorKey) => {
     const objectId = occupancy[anchorKey]
@@ -1466,18 +1614,8 @@ function pruneInvalidConnectedProps(
   })
 
   invalidRootIds.forEach((objectId) => {
+    ensureMutableObjectMaps()
     const removedIds = removeObjectHierarchy({ placedObjects, occupancy }, objectId)
-    if (selection && removedIds.has(selection)) {
-      selection = null
-    }
-  })
-
-  Object.values(placedObjects).forEach((object) => {
-    if (!object.parentObjectId || placedObjects[object.parentObjectId]) {
-      return
-    }
-
-    const removedIds = removeObjectHierarchy({ placedObjects, occupancy }, object.id)
     if (selection && removedIds.has(selection)) {
       selection = null
     }
@@ -1486,9 +1624,13 @@ function pruneInvalidConnectedProps(
   // Also prune openings whose wall segments are no longer valid boundaries.
   // A segment is valid if: the cell is painted AND the neighbour is either
   // unpainted (exterior wall) OR painted-but-different-room (inter-room wall).
-  const wallOpenings = { ...current.wallOpenings }
+  let wallOpenings = current.wallOpenings
   Object.values(wallOpenings).forEach((opening) => {
     const segments = getOpeningSegments(opening.wallKey, opening.width)
+    if (!segments.some((segment) => affectedWallKeys.has(segment))) {
+      return
+    }
+
     const stillValid = segments.every((segKey) => {
       const parts = segKey.split(':')
       const cell: GridCell = [parseInt(parts[0]), parseInt(parts[1])]
@@ -1502,12 +1644,25 @@ function pruneInvalidConnectedProps(
       return !neighborRecord ||
         (cellRecord.roomId ?? null) !== (neighborRecord.roomId ?? null)
     })
-    if (!stillValid) delete wallOpenings[opening.id]
+    if (!stillValid) {
+      if (wallOpenings === current.wallOpenings) {
+        wallOpenings = { ...current.wallOpenings }
+      }
+      delete wallOpenings[opening.id]
+    }
   })
 
-  const innerWalls = Object.fromEntries(
-    Object.entries(current.innerWalls).filter(([wallKey]) => Boolean(getCanonicalInnerWallKey(wallKey, paintedCells))),
-  )
+  let innerWalls = current.innerWalls
+  affectedWallKeys.forEach((wallKey) => {
+    if (!innerWalls[wallKey] || getCanonicalInnerWallKey(wallKey, paintedCells)) {
+      return
+    }
+
+    if (innerWalls === current.innerWalls) {
+      innerWalls = { ...current.innerWalls }
+    }
+    delete innerWalls[wallKey]
+  })
 
   return { placedObjects, occupancy, selection, wallOpenings, innerWalls }
 }
@@ -1515,19 +1670,134 @@ function pruneInvalidConnectedProps(
 function pruneInvalidSurfaceOverrides(
   current: Pick<DungeonSnapshot, 'floorTileAssetIds' | 'wallSurfaceAssetIds' | 'wallSurfaceProps'>,
   paintedCells: PaintedCells,
+  changedCells: GridCell[],
 ) {
-  const floorTileAssetIds = Object.fromEntries(
-    Object.entries(current.floorTileAssetIds).filter(([cellKey, assetId]) =>
-      isFloorSurfacePlacementValid(cellKey, assetId, paintedCells)),
-  )
-  const wallSurfaceAssetIds = Object.fromEntries(
-    Object.entries(current.wallSurfaceAssetIds).filter(([wallKey]) => getCanonicalWallKey(wallKey, paintedCells) === wallKey),
-  )
-  const wallSurfaceProps = Object.fromEntries(
-    Object.entries(current.wallSurfaceProps).filter(([wallKey]) => getCanonicalWallKey(wallKey, paintedCells) === wallKey),
-  )
+  const changedCellKeys = new Set(changedCells.map((cell) => getCellKey(cell)))
+  const affectedWallKeys = collectAffectedWallKeys(changedCells)
+  let floorTileAssetIds = current.floorTileAssetIds
+  let wallSurfaceAssetIds = current.wallSurfaceAssetIds
+  let wallSurfaceProps = current.wallSurfaceProps
+
+  changedCellKeys.forEach((cellKey) => {
+    const affectedAnchorKeys = collectFloorSurfaceAnchorsForCellChange(
+      cellKey,
+      floorTileAssetIds,
+    )
+
+    affectedAnchorKeys.forEach((anchorCellKey) => {
+      const assetId = floorTileAssetIds[anchorCellKey]
+      if (!assetId || isFloorSurfacePlacementValid(anchorCellKey, assetId, paintedCells)) {
+        return
+      }
+
+      if (floorTileAssetIds === current.floorTileAssetIds) {
+        floorTileAssetIds = { ...current.floorTileAssetIds }
+      }
+      delete floorTileAssetIds[anchorCellKey]
+    })
+  })
+
+  affectedWallKeys.forEach((wallKey) => {
+    if (
+      wallSurfaceAssetIds[wallKey]
+      && getCanonicalWallKey(wallKey, paintedCells) !== wallKey
+    ) {
+      if (wallSurfaceAssetIds === current.wallSurfaceAssetIds) {
+        wallSurfaceAssetIds = { ...current.wallSurfaceAssetIds }
+      }
+      delete wallSurfaceAssetIds[wallKey]
+    }
+
+    if (
+      wallSurfaceProps[wallKey]
+      && getCanonicalWallKey(wallKey, paintedCells) !== wallKey
+    ) {
+      if (wallSurfaceProps === current.wallSurfaceProps) {
+        wallSurfaceProps = { ...current.wallSurfaceProps }
+      }
+      delete wallSurfaceProps[wallKey]
+    }
+  })
 
   return { floorTileAssetIds, wallSurfaceAssetIds, wallSurfaceProps }
+}
+
+function reconcileRoomLayoutMutation(
+  current: Pick<
+    DungeonSnapshot,
+    | 'placedObjects'
+    | 'occupancy'
+    | 'selection'
+    | 'wallOpenings'
+    | 'innerWalls'
+    | 'floorTileAssetIds'
+    | 'wallSurfaceAssetIds'
+    | 'wallSurfaceProps'
+  >,
+  paintedCells: PaintedCells,
+  changedCells: GridCell[],
+  options?: {
+    wallOpenings?: Record<string, OpeningRecord>
+  },
+) {
+  const currentWithWallOpenings = {
+    ...current,
+    wallOpenings: options?.wallOpenings ?? current.wallOpenings,
+  }
+  const {
+    placedObjects,
+    occupancy,
+    selection: prunedSelection,
+    wallOpenings: prunedWallOpenings,
+    innerWalls,
+  } = pruneInvalidConnectedProps(currentWithWallOpenings, paintedCells, changedCells)
+  const { floorTileAssetIds, wallSurfaceAssetIds, wallSurfaceProps } = pruneInvalidSurfaceOverrides(
+    current,
+    paintedCells,
+    changedCells,
+  )
+  const {
+    wallOpenings,
+    wallSurfaceAssetIds: proceduralWallSurfaceAssetIds,
+    wallSurfaceProps: proceduralWallSurfaceProps,
+    selection,
+  } = reconcileProceduralRoomLayout({
+    paintedCells,
+    wallOpenings: prunedWallOpenings,
+    wallSurfaceAssetIds,
+    wallSurfaceProps,
+    selection: prunedSelection,
+    createOpeningId: createObjectId,
+  })
+
+  return {
+    floorTileAssetIds,
+    wallSurfaceAssetIds: proceduralWallSurfaceAssetIds,
+    wallSurfaceProps: proceduralWallSurfaceProps,
+    placedObjects,
+    occupancy,
+    selection,
+    wallOpenings,
+    innerWalls,
+  }
+}
+
+function collectFloorSurfaceAnchorsForCellChange(
+  cellKey: string,
+  floorTileAssetIds: Record<string, string>,
+) {
+  const affectedAnchorKeys = new Set<string>()
+
+  Object.entries(floorTileAssetIds).forEach(([anchorCellKey, assetId]) => {
+    const placement = createFloorSurfacePlacement(anchorCellKey, assetId)
+    if (!placement?.coveredCellKeys.includes(cellKey)) {
+      return
+    }
+
+    affectedAnchorKeys.add(anchorCellKey)
+  })
+
+  return affectedAnchorKeys
 }
 
 const FALLBACK_PERSIST_STORAGE: Storage = {
@@ -1559,11 +1829,175 @@ function getPersistStorage() {
   return FALLBACK_PERSIST_STORAGE
 }
 
+function deriveChangedFloorDirtyDomains(
+  previous: DungeonState,
+  next: DungeonState,
+) {
+  const domains = new Set<FloorDirtyDomainKey>()
+
+  if (previous.activeFloorId !== next.activeFloorId) {
+    ALL_FLOOR_DIRTY_DOMAINS.forEach((domain) => {
+      domains.add(domain)
+    })
+    return domains
+  }
+
+  if (previous.paintedCells !== next.paintedCells) {
+    domains.add('tiles')
+    domains.add('walls')
+    domains.add('lighting')
+    domains.add('renderPlan')
+  }
+  if (previous.blockedCells !== next.blockedCells) {
+    domains.add('blocked')
+  }
+  if (
+    previous.outdoorTerrainHeights !== next.outdoorTerrainHeights
+    || previous.outdoorTerrainStyleCells !== next.outdoorTerrainStyleCells
+    || previous.mapMode !== next.mapMode
+  ) {
+    domains.add('terrain')
+  }
+  if (previous.rooms !== next.rooms) {
+    domains.add('tiles')
+    domains.add('walls')
+    domains.add('lighting')
+    domains.add('renderPlan')
+  }
+  if (previous.wallOpenings !== next.wallOpenings) {
+    domains.add('openings')
+    domains.add('lighting')
+    domains.add('renderPlan')
+  }
+  if (previous.innerWalls !== next.innerWalls) {
+    domains.add('walls')
+    domains.add('lighting')
+    domains.add('renderPlan')
+  }
+  if (previous.placedObjects !== next.placedObjects) {
+    domains.add('props')
+    domains.add('lighting')
+  }
+  if (previous.floorTileAssetIds !== next.floorTileAssetIds) {
+    domains.add('tiles')
+    domains.add('renderPlan')
+  }
+  if (previous.wallSurfaceAssetIds !== next.wallSurfaceAssetIds) {
+    domains.add('walls')
+    domains.add('renderPlan')
+  }
+  if (previous.wallSurfaceProps !== next.wallSurfaceProps) {
+    domains.add('walls')
+    domains.add('openings')
+    domains.add('lighting')
+    domains.add('renderPlan')
+  }
+  if (previous.layers !== next.layers) {
+    domains.add('layerVisibility')
+    domains.add('lighting')
+    domains.add('renderPlan')
+  }
+  if (previous.occupancy !== next.occupancy) {
+    domains.add('occupancy')
+  }
+  if (previous.selectedAssetIds.floor !== next.selectedAssetIds.floor) {
+    domains.add('tiles')
+    domains.add('renderPlan')
+  }
+  if (previous.selectedAssetIds.wall !== next.selectedAssetIds.wall) {
+    domains.add('walls')
+    domains.add('renderPlan')
+  }
+
+  return domains
+}
+
+function applyTrackedFloorDirtyDomains(
+  previous: DungeonState,
+  next: DungeonState,
+  hint: FloorDirtyHint | null,
+) {
+  const floorId = hint?.floorId ?? next.activeFloorId
+  const domains = deriveChangedFloorDirtyDomains(previous, next)
+  hint?.domains?.forEach((domain) => {
+    domains.add(domain)
+  })
+
+  return {
+    ...next,
+    floorDirtyDomains: applyFloorDirtyMutation({
+      floorDirtyState: next.floorDirtyDomains,
+      floorIds: next.floorOrder,
+      floorId,
+      domains,
+      hint: previous.activeFloorId !== next.activeFloorId
+        ? { ...hint, fullRefresh: true }
+        : hint,
+    }),
+  }
+}
+
+function mergeFloorDirtyHints(
+  previousHint: FloorDirtyHint | null,
+  nextHint: FloorDirtyHint,
+): FloorDirtyHint {
+  if (!previousHint) {
+    return nextHint
+  }
+
+  return {
+    floorId: nextHint.floorId ?? previousHint.floorId,
+    domains: [...new Set([...(previousHint.domains ?? []), ...(nextHint.domains ?? [])])],
+    cells: [...(previousHint.cells ?? []), ...(nextHint.cells ?? [])],
+    chunkKeys: [...(previousHint.chunkKeys ?? []), ...(nextHint.chunkKeys ?? [])],
+    renderChunkKeys: [...(previousHint.renderChunkKeys ?? []), ...(nextHint.renderChunkKeys ?? [])],
+    lightChunkKeys: [...(previousHint.lightChunkKeys ?? []), ...(nextHint.lightChunkKeys ?? [])],
+    wallKeys: [...(previousHint.wallKeys ?? []), ...(nextHint.wallKeys ?? [])],
+    objectIds: [...(previousHint.objectIds ?? []), ...(nextHint.objectIds ?? [])],
+    fullRefresh: previousHint.fullRefresh || nextHint.fullRefresh,
+  }
+}
+
 export const useDungeonStore = create<DungeonState>()(
   persist(
     (set, get) => {
   const INITIAL_FLOOR_ID = 'floor-1'
   const initialSnapshot = createEmptySnapshot()
+  const baseSet = set
+  let pendingFloorDirtyHint: FloorDirtyHint | null = null
+  const queueFloorDirtyHint = (hint: FloorDirtyHint) => {
+    pendingFloorDirtyHint = mergeFloorDirtyHints(pendingFloorDirtyHint, hint)
+  }
+
+  const trackedSet: typeof set = (partial, replace) => {
+    const computeNextState = (current: DungeonState) => {
+      const hint = pendingFloorDirtyHint
+      pendingFloorDirtyHint = null
+      const resolved = typeof partial === 'function'
+        ? partial(current)
+        : partial
+      if (resolved === current) {
+        return current
+      }
+
+      const next = typeof partial === 'function'
+        ? resolved as DungeonState
+        : {
+            ...current,
+            ...(resolved as Partial<DungeonState>),
+          }
+
+      return applyTrackedFloorDirtyDomains(current, next as DungeonState, hint)
+    }
+
+    if (replace === true) {
+      baseSet(computeNextState, true)
+      return
+    }
+
+    baseSet(computeNextState)
+  }
+  set = trackedSet
 
   return ({
   ...initialSnapshot,
@@ -1585,6 +2019,7 @@ export const useDungeonStore = create<DungeonState>()(
   isObjectDragActive: false,
   isRoomResizeHandleActive: false,
   roomEditMode: 'rooms' as RoomEditMode,
+  roomPaintMode: 'area' as RoomPaintMode,
   wallConnectionMode: 'door' as WallConnectionMode,
   wallConnectionWidth: 1 as 1 | 2 | 3,
   selectedRoomId: null,
@@ -1598,8 +2033,13 @@ export const useDungeonStore = create<DungeonState>()(
   showLosDebugMask: false,
   showLosDebugRays: false,
   showLensFocusDebugPoint: false,
+  showChunkDebugOverlay: false,
   showProjectionDebugMesh: false,
+  showPropProbeDebug: false,
+  slowBuildAnimationDebug: false,
+  buildPerformanceTracingEnabled: false,
   lightEffectsEnabled: true,
+  lightFlickerEnabled: true,
   particleEffectsEnabled: true,
   floorViewMode: 'active' as FloorViewMode,
   generatedCharacters: {},
@@ -1613,8 +2053,15 @@ export const useDungeonStore = create<DungeonState>()(
   cameraPreset: null,
   previousCameraPreset: null,
   objectLightPreviewOverrides: {},
+  objectScalePreviewOverrides: {},
+  objectRotationPreviewOverrides: {},
+  pickedUpObject: null,
+  objectMoveDragPointer: null,
   history: [],
   future: [],
+  floorDirtyDomains: {
+    [INITIAL_FLOOR_ID]: createFloorDirtyInfo(),
+  },
   floors: {
     [INITIAL_FLOOR_ID]: {
       id: INITIAL_FLOOR_ID,
@@ -1636,6 +2083,7 @@ export const useDungeonStore = create<DungeonState>()(
     }
 
     const previousSnapshot = cloneSnapshotForObjectPlacement(state)
+    queueFloorDirtyHint(buildLocalizedRoomPaintDirtyHint(state, nextCells))
 
     set((current) => {
       // Auto-create a room for the new cells
@@ -1647,6 +2095,7 @@ export const useDungeonStore = create<DungeonState>()(
           id: roomId,
           name: roomName,
           layerId: current.activeLayerId,
+          roomSetId: current.activeRoomSetId,
           floorAssetId: null,
           wallAssetId: null,
         },
@@ -1668,11 +2117,10 @@ export const useDungeonStore = create<DungeonState>()(
         selection,
         wallOpenings,
         innerWalls,
-      } = pruneInvalidConnectedProps(current, paintedCells, nextCells)
-      const { floorTileAssetIds, wallSurfaceAssetIds, wallSurfaceProps } = pruneInvalidSurfaceOverrides(
-        current,
-        paintedCells,
-      )
+        floorTileAssetIds,
+        wallSurfaceAssetIds,
+        wallSurfaceProps,
+      } = reconcileRoomLayoutMutation(current, paintedCells, nextCells)
 
       return {
         ...current,
@@ -1708,6 +2156,10 @@ export const useDungeonStore = create<DungeonState>()(
     }
 
     const previousSnapshot = cloneSnapshot(state)
+    queueFloorDirtyHint({
+      domains: ['blocked', 'terrain', 'props', 'occupancy'],
+      cells: nextCells,
+    })
     set((current) => {
       const blockedCells = { ...current.blockedCells }
       let placedObjects = { ...current.placedObjects }
@@ -1760,6 +2212,10 @@ export const useDungeonStore = create<DungeonState>()(
     }
 
     const previousSnapshot = cloneSnapshot(state)
+    queueFloorDirtyHint({
+      domains: ['blocked', 'terrain', 'props', 'occupancy'],
+      cells,
+    })
     set((current) => {
       const blockedCells = { ...current.blockedCells }
       const placedObjects = { ...current.placedObjects }
@@ -1795,6 +2251,10 @@ export const useDungeonStore = create<DungeonState>()(
     const previousSnapshot = cloneSnapshot(state)
     const sculptMode = mode ?? state.outdoorTerrainSculptMode
     const targetCellKeys = new Set(cells.map((cell) => getCellKey(cell)))
+    queueFloorDirtyHint({
+      domains: ['terrain', 'props'],
+      cells,
+    })
 
     set((current) => {
       const outdoorTerrainHeights = applyOutdoorTerrainSculpt(
@@ -1842,6 +2302,10 @@ export const useDungeonStore = create<DungeonState>()(
     }
 
     const previousSnapshot = cloneSnapshot(state)
+    queueFloorDirtyHint({
+      domains: ['terrain'],
+      cells: nextCells,
+    })
     set((current) => {
       if (current.mapMode !== 'outdoor') {
         return current
@@ -1877,6 +2341,10 @@ export const useDungeonStore = create<DungeonState>()(
     }
 
     const previousSnapshot = cloneSnapshot(state)
+    queueFloorDirtyHint({
+      domains: ['terrain'],
+      cells,
+    })
     set((current) => {
       if (current.mapMode !== 'outdoor') {
         return current
@@ -1905,6 +2373,10 @@ export const useDungeonStore = create<DungeonState>()(
     }
 
     const previousSnapshot = cloneSnapshot(state)
+    queueFloorDirtyHint({
+      domains: ['tiles', 'walls', 'openings', 'props', 'lighting', 'renderPlan', 'occupancy'],
+      cells,
+    })
 
     set((current) => {
       const paintedCells = { ...current.paintedCells }
@@ -1923,11 +2395,10 @@ export const useDungeonStore = create<DungeonState>()(
         selection,
         wallOpenings,
         innerWalls,
-      } = pruneInvalidConnectedProps(current, paintedCells, removedCells)
-      const { floorTileAssetIds, wallSurfaceAssetIds, wallSurfaceProps } = pruneInvalidSurfaceOverrides(
-        current,
-        paintedCells,
-      )
+        floorTileAssetIds,
+        wallSurfaceAssetIds,
+        wallSurfaceProps,
+      } = reconcileRoomLayoutMutation(current, paintedCells, removedCells)
 
       return {
         ...current,
@@ -2029,6 +2500,11 @@ export const useDungeonStore = create<DungeonState>()(
       selectionBefore: state.selection,
       selectionAfter: nextSelection,
     })
+    queueFloorDirtyHint({
+      domains: ['props', 'lighting', 'occupancy'],
+      cells: [input.cell],
+      objectIds: changedObjectIds,
+    })
 
     set((current) => ({
       ...current,
@@ -2059,7 +2535,6 @@ export const useDungeonStore = create<DungeonState>()(
     }
 
     const consumesOccupancy = objectConsumesOccupancy(object.assetId, object.props.connector)
-
     const isOutdoorPlayerMove = state.mapMode === 'outdoor' && object.type === 'player'
 
     if (state.mapMode !== 'outdoor' && !state.paintedCells[getCellKey(input.cell)]) {
@@ -2076,9 +2551,7 @@ export const useDungeonStore = create<DungeonState>()(
       occupant !== null &&
       isSurroundingGeneratedObject(occupant)
     if (occupantId && occupantId !== id) {
-      if (ignoresOccupant) {
-        // Let players move across generated outdoor surroundings without deleting the scenery.
-      } else {
+      if (!ignoresOccupant) {
         return false
       }
     }
@@ -2130,12 +2603,163 @@ export const useDungeonStore = create<DungeonState>()(
       selectionBefore: state.selection,
       selectionAfter: id,
     })
+    queueFloorDirtyHint({
+      domains: ['props', 'lighting', 'occupancy'],
+      cells: [object.cell, input.cell],
+      objectIds: changedObjectIds,
+    })
 
     set((current) => ({
       ...current,
       placedObjects,
       occupancy,
       selection: id,
+      history: [...current.history, historyEntry],
+      future: [],
+    }))
+
+    return true
+  },
+  repositionObject: (id, input) => {
+    const state = get()
+    const object = state.placedObjects[id]
+
+    if (!object) {
+      return false
+    }
+
+    const movingIds = collectDescendantIds(state.placedObjects, id)
+    const nextParentObjectId = input.parentObjectId ?? null
+    if (nextParentObjectId) {
+      if (!state.placedObjects[nextParentObjectId] || movingIds.has(nextParentObjectId)) {
+        return false
+      }
+    }
+
+    const nextProps = input.props ? { ...input.props } : object.props
+    const supportCellKey = input.supportCellKey ?? getCellKey(input.cell)
+    if (state.mapMode !== 'outdoor' && !state.paintedCells[supportCellKey]) {
+      return false
+    }
+    if (
+      state.mapMode === 'outdoor' &&
+      !nextParentObjectId &&
+      object.type !== 'player' &&
+      state.blockedCells[getCellKey(input.cell)]
+    ) {
+      return false
+    }
+
+    const previousConsumesOccupancy = objectConsumesOccupancy(object.assetId, object.props.connector)
+    const consumesOccupancy = objectConsumesOccupancy(object.assetId, nextProps.connector)
+    const occupantId = consumesOccupancy ? state.occupancy[input.cellKey] : null
+    if (occupantId && occupantId !== id && movingIds.has(occupantId)) {
+      return false
+    }
+
+    const groundedOutdoorObject =
+      state.mapMode === 'outdoor' &&
+      !nextParentObjectId &&
+      (object.type === 'player' || nextProps.connector === 'FLOOR' || nextProps.connector === 'FREE')
+    const nextPositionY = groundedOutdoorObject
+      ? getOutdoorTerrainCellHeight(state.outdoorTerrainHeights, input.cell)
+      : input.position[1]
+
+    const unchanged =
+      object.cellKey === input.cellKey &&
+      object.cell[0] === input.cell[0] &&
+      object.cell[1] === input.cell[1] &&
+      object.position[0] === input.position[0] &&
+      object.position[1] === nextPositionY &&
+      object.position[2] === input.position[2] &&
+      object.rotation[0] === input.rotation[0] &&
+      object.rotation[1] === input.rotation[1] &&
+      object.rotation[2] === input.rotation[2] &&
+      JSON.stringify(object.props) === JSON.stringify(nextProps) &&
+      (object.parentObjectId ?? null) === nextParentObjectId &&
+      (object.supportCellKey ?? getCellKey(object.cell)) === supportCellKey &&
+      JSON.stringify(object.localPosition ?? null) === JSON.stringify(input.localPosition ?? null) &&
+      JSON.stringify(object.localRotation ?? null) === JSON.stringify(input.localRotation ?? null)
+
+    if (unchanged) {
+      return true
+    }
+
+    const placedObjects = { ...state.placedObjects }
+    const occupancy = { ...state.occupancy }
+    const changedObjectIds = new Set<string>(movingIds)
+    const occupant = occupantId ? state.placedObjects[occupantId] : null
+    const ignoresOccupant =
+      state.mapMode === 'outdoor' &&
+      object.type === 'player' &&
+      occupant !== null &&
+      isSurroundingGeneratedObject(occupant)
+
+    if (occupantId && occupantId !== id && !ignoresOccupant) {
+      collectDescendantIds(state.placedObjects, occupantId).forEach((objectId) => {
+        changedObjectIds.add(objectId)
+      })
+      removeObjectHierarchy({ placedObjects, occupancy }, occupantId)
+    }
+
+    placedObjects[id] = {
+      ...object,
+      position: [input.position[0], nextPositionY, input.position[2]] as DungeonObjectRecord['position'],
+      rotation: [...input.rotation] as DungeonObjectRecord['rotation'],
+      props: nextProps,
+      localPosition: input.localPosition
+        ? [...input.localPosition] as DungeonObjectRecord['localPosition']
+        : input.localPosition ?? null,
+      localRotation: input.localRotation
+        ? [...input.localRotation] as DungeonObjectRecord['localRotation']
+        : input.localRotation ?? null,
+      parentObjectId: nextParentObjectId,
+      supportCellKey,
+      cell: [...input.cell] as GridCell,
+      cellKey: input.cellKey,
+    }
+
+    if (previousConsumesOccupancy && occupancy[object.cellKey] === id) {
+      delete occupancy[object.cellKey]
+    }
+    if (consumesOccupancy) {
+      occupancy[input.cellKey] = id
+    }
+
+    updateDescendantWorldTransforms(placedObjects, id)
+
+    const historyEntry = buildObjectHistoryEntry({
+      beforePlacedObjects: state.placedObjects,
+      afterPlacedObjects: placedObjects,
+      beforeOccupancy: state.occupancy,
+      afterOccupancy: occupancy,
+      changedObjectIds,
+      selectionBefore: state.selection,
+      selectionAfter: id,
+    })
+    queueFloorDirtyHint({
+      domains: ['props', 'lighting', 'occupancy'],
+      cells: [object.cell, input.cell],
+      objectIds: changedObjectIds,
+    })
+
+    set((current) => ({
+      ...current,
+      placedObjects,
+      occupancy,
+      selection: id,
+      isObjectDragActive:
+        current.pickedUpObject?.objectId === id
+          ? false
+          : current.isObjectDragActive,
+      objectRotationPreviewOverrides: Object.fromEntries(
+        Object.entries(current.objectRotationPreviewOverrides).filter(([key]) => key !== id),
+      ),
+      pickedUpObject: current.pickedUpObject?.objectId === id ? null : current.pickedUpObject,
+      objectMoveDragPointer:
+        current.pickedUpObject?.objectId === id
+          ? null
+          : current.objectMoveDragPointer,
       history: [...current.history, historyEntry],
       future: [],
     }))
@@ -2169,10 +2793,21 @@ export const useDungeonStore = create<DungeonState>()(
       selectionBefore: state.selection,
       selectionAfter: state.selection,
     })
+    queueFloorDirtyHint({
+      domains: ['props', 'lighting'],
+      cells: [object.cell],
+      objectIds: [id],
+    })
 
     set((current) => ({
       ...current,
       placedObjects,
+      objectScalePreviewOverrides: Object.fromEntries(
+        Object.entries(current.objectScalePreviewOverrides).filter(([key]) => key !== id),
+      ),
+      objectRotationPreviewOverrides: Object.fromEntries(
+        Object.entries(current.objectRotationPreviewOverrides).filter(([key]) => key !== id),
+      ),
       objectLightPreviewOverrides: Object.fromEntries(
         Object.entries(current.objectLightPreviewOverrides).filter(([key]) => key !== id),
       ),
@@ -2181,6 +2816,68 @@ export const useDungeonStore = create<DungeonState>()(
     }))
 
     return true
+  },
+  setObjectScalePreview: (id, scale) => {
+    set((current) => {
+      if (scale === null) {
+        if (current.objectScalePreviewOverrides[id] === undefined) {
+          return current
+        }
+
+        return {
+          ...current,
+          objectScalePreviewOverrides: Object.fromEntries(
+            Object.entries(current.objectScalePreviewOverrides).filter(([key]) => key !== id),
+          ),
+        }
+      }
+
+      if (current.objectScalePreviewOverrides[id] === scale) {
+        return current
+      }
+
+      return {
+        ...current,
+        objectScalePreviewOverrides: {
+          ...current.objectScalePreviewOverrides,
+          [id]: scale,
+        },
+      }
+    })
+  },
+  setObjectRotationPreview: (id, rotation) => {
+    set((current) => {
+      if (rotation === null) {
+        if (current.objectRotationPreviewOverrides[id] === undefined) {
+          return current
+        }
+
+        return {
+          ...current,
+          objectRotationPreviewOverrides: Object.fromEntries(
+            Object.entries(current.objectRotationPreviewOverrides).filter(([key]) => key !== id),
+          ),
+        }
+      }
+
+      const existing = current.objectRotationPreviewOverrides[id]
+      if (
+        existing &&
+        existing[0] === rotation[0] &&
+        existing[1] === rotation[1] &&
+        existing[2] === rotation[2]
+      ) {
+        return current
+      }
+
+      return {
+        ...current,
+        objectRotationPreviewOverrides: {
+          ...current.objectRotationPreviewOverrides,
+          [id]: [...rotation] as DungeonObjectRecord['rotation'],
+        },
+      }
+    })
   },
   setObjectLightPreview: (id, overrides) => {
     set((current) => {
@@ -2203,6 +2900,64 @@ export const useDungeonStore = create<DungeonState>()(
           ...current.objectLightPreviewOverrides,
           [id]: overrides,
         },
+      }
+    })
+  },
+  pickUpObject: (id) => {
+    const state = get()
+    const object = state.placedObjects[id]
+    if (!object?.assetId) {
+      return false
+    }
+
+    const nextPickedUpObject: PickedUpObjectState = {
+      objectId: id,
+      type: object.type,
+      assetId: object.assetId,
+      props: { ...object.props },
+      floorRotationIndex: getFloorRotationIndexFromRotation(object.rotation[1]),
+    }
+
+    set((current) => ({
+      ...current,
+      pickedUpObject: nextPickedUpObject,
+      objectMoveDragPointer: null,
+      objectScalePreviewOverrides: Object.fromEntries(
+        Object.entries(current.objectScalePreviewOverrides).filter(([key]) => key !== id),
+      ),
+      objectRotationPreviewOverrides: Object.fromEntries(
+        Object.entries(current.objectRotationPreviewOverrides).filter(([key]) => key !== id),
+      ),
+    }))
+
+    return true
+  },
+  cancelPickedUpObject: () => {
+    set((current) => (
+      current.pickedUpObject === null
+        ? current
+        : {
+            ...current,
+            isObjectDragActive: false,
+            pickedUpObject: null,
+            objectMoveDragPointer: null,
+          }
+    ))
+  },
+  setObjectMoveDragPointer: (pointer) => {
+    set((current) => {
+      if (
+        current.objectMoveDragPointer?.clientX === pointer?.clientX &&
+        current.objectMoveDragPointer?.clientY === pointer?.clientY
+      ) {
+        return current
+      }
+
+      return {
+        ...current,
+        objectMoveDragPointer: pointer
+          ? { clientX: pointer.clientX, clientY: pointer.clientY }
+          : null,
       }
     })
   },
@@ -2251,6 +3006,7 @@ export const useDungeonStore = create<DungeonState>()(
     if (!state.placedObjects[id]) {
       return
     }
+    const removedRootObject = state.placedObjects[id]
     const placedObjects = { ...state.placedObjects }
     const occupancy = { ...state.occupancy }
     const removedIds = removeObjectHierarchy({ placedObjects, occupancy }, id)
@@ -2264,12 +3020,35 @@ export const useDungeonStore = create<DungeonState>()(
       selectionBefore: state.selection,
       selectionAfter: nextSelection,
     })
+    queueFloorDirtyHint({
+      domains: ['props', 'lighting', 'occupancy'],
+      cells: removedRootObject ? [removedRootObject.cell] : undefined,
+      objectIds: removedIds,
+    })
 
     set((current) => ({
       ...current,
       placedObjects,
       occupancy,
       selection: nextSelection,
+      isObjectDragActive:
+        current.pickedUpObject && removedIds.has(current.pickedUpObject.objectId)
+          ? false
+          : current.isObjectDragActive,
+      pickedUpObject:
+        current.pickedUpObject && removedIds.has(current.pickedUpObject.objectId)
+          ? null
+          : current.pickedUpObject,
+      objectMoveDragPointer:
+        current.pickedUpObject && removedIds.has(current.pickedUpObject.objectId)
+          ? null
+          : current.objectMoveDragPointer,
+      objectScalePreviewOverrides: Object.fromEntries(
+        Object.entries(current.objectScalePreviewOverrides).filter(([key]) => !removedIds.has(key)),
+      ),
+      objectRotationPreviewOverrides: Object.fromEntries(
+        Object.entries(current.objectRotationPreviewOverrides).filter(([key]) => !removedIds.has(key)),
+      ),
       history: [...current.history, historyEntry],
       future: [],
     }))
@@ -2317,6 +3096,11 @@ export const useDungeonStore = create<DungeonState>()(
           ? Math.PI
           : Math.PI / 2
       const previousSnapshot = cloneSnapshotForObjectPlacement(state)
+      queueFloorDirtyHint({
+        domains: ['props', 'lighting'],
+        cells: [selectedObject.cell],
+        objectIds: [selection],
+      })
 
       set((current) => {
         const currentSelection = current.placedObjects[selection]
@@ -2357,10 +3141,36 @@ export const useDungeonStore = create<DungeonState>()(
 
     const selectedOpening = state.wallOpenings[selection]
     if (!selectedOpening || !selectedOpening.assetId) {
+      const selectedWallSurfaceAssetId = state.wallSurfaceAssetIds[selection]
+      if (!selectedWallSurfaceAssetId) {
+        return
+      }
+
+      const previousSnapshot = cloneSnapshot(state)
+      queueFloorDirtyHint({
+        domains: ['walls', 'lighting', 'renderPlan'],
+        wallKeys: [selection],
+      })
+      set((current) => ({
+        ...current,
+        wallSurfaceProps: {
+          ...current.wallSurfaceProps,
+          [selection]: {
+            ...(current.wallSurfaceProps[selection] ?? {}),
+            flipped: !((current.wallSurfaceProps[selection] ?? {}).flipped === true),
+          },
+        },
+        history: [...current.history, previousSnapshot],
+        future: [],
+      }))
       return
     }
 
     const previousSnapshot = cloneSnapshot(state)
+    queueFloorDirtyHint({
+      domains: ['openings', 'walls', 'renderPlan'],
+      wallKeys: [selectedOpening.wallKey],
+    })
     set((current) => ({
       ...current,
       wallOpenings: {
@@ -2374,104 +3184,11 @@ export const useDungeonStore = create<DungeonState>()(
       future: [],
     }))
   },
-  clearSelection: () => {
-    set((state) => (
-      state.selection === null && state.selectedRoomId === null
-        ? state
-        : {
-            ...state,
-            selection: null,
-            selectedRoomId: null,
-          }
-    ))
-  },
-  selectObject: (id) => {
-    set((state) => ({
-      ...state,
-      selection: id,
-    }))
-  },
-  setTool: (tool) => {
-    const state = get()
-    const normalizedTool = tool === 'opening' ? 'prop' : tool
-
-    if (tool === 'opening') {
-      get().focusAssetBrowserForAsset(state.selectedAssetIds.opening)
-    }
-
-    if (state.tool === normalizedTool) {
-      return
-    }
-
-    const previousSnapshot = cloneSnapshot(state)
-
-    set((current) => ({
-      ...current,
-      tool: normalizedTool,
-      isRoomResizeHandleActive: normalizedTool === 'room' ? current.isRoomResizeHandleActive : false,
-      previousCameraPreset: normalizedTool === 'room'
-        ? current.activeCameraMode
-        : current.previousCameraPreset,
-      cameraPreset: normalizedTool === 'room'
-        ? 'top-down'
-        : (current.previousCameraPreset ? current.previousCameraPreset : current.cameraPreset),
-      activeCameraMode: normalizedTool === 'room'
-        ? 'top-down'
-        : (current.previousCameraPreset ? current.previousCameraPreset : current.activeCameraMode),
-      roomEditMode: normalizedTool === 'room' ? 'rooms' : current.roomEditMode,
-      history: [...current.history, previousSnapshot],
-      future: [],
-    }))
-  },
-  setMapMode: (mode) => {
-    set((state) => (state.mapMode === mode
-      ? state
-      : {
-          ...state,
-          mapMode: mode,
-          tool: mode === 'outdoor' && state.tool === 'opening' ? 'prop' : state.tool,
-          roomEditMode: 'rooms',
-          outdoorBrushMode: mode === 'outdoor' ? state.outdoorBrushMode : 'surroundings',
-        }))
-  },
-  selectRoom: (id) => {
-    set((current) => ({
-      ...current,
-      selectedRoomId: id,
-    }))
-  },
-  setRoomResizeHandleActive: (active) => {
-    set((current) => current.isRoomResizeHandleActive === active
-      ? current
-      : {
-          ...current,
-          isRoomResizeHandleActive: active,
-        })
-  },
-  setRoomEditMode: (mode) => {
-    set((current) => current.roomEditMode === mode
-      ? current
-      : {
-          ...current,
-          roomEditMode: mode,
-        })
-  },
-  setWallConnectionMode: (mode) => {
-    set((current) => current.wallConnectionMode === mode
-      ? current
-      : {
-          ...current,
-          wallConnectionMode: mode,
-        })
-  },
-  setWallConnectionWidth: (width) => {
-    set((current) => current.wallConnectionWidth === width
-      ? current
-      : {
-          ...current,
-          wallConnectionWidth: width,
-        })
-  },
+  ...createDungeonStoreEditorUiActions({
+    set,
+    get,
+    cloneSnapshot,
+  }),
   setInnerWallSegments: (wallKeys, present) => {
     const state = get()
     const nextWallKeys = [...new Set(
@@ -2493,6 +3210,10 @@ export const useDungeonStore = create<DungeonState>()(
     }
 
     const previousSnapshot = cloneSnapshot(state)
+    queueFloorDirtyHint({
+      domains: ['walls', 'lighting', 'renderPlan'],
+      wallKeys: changedWallKeys,
+    })
 
     set((current) => {
       const innerWalls = { ...current.innerWalls }
@@ -2519,87 +3240,6 @@ export const useDungeonStore = create<DungeonState>()(
 
     return changedWallKeys.length
   },
-  setSelectedAsset: (category, assetId) => {
-    const state = get()
-
-    if (state.selectedAssetIds[category] === assetId) {
-      return
-    }
-
-    const previousSnapshot = cloneSnapshot(state)
-
-    set((current) => {
-      const selectedAsset = getContentPackAssetById(assetId)
-      const nextBrowserState =
-        (category === 'prop' || category === 'opening') && selectedAsset
-          ? {
-              category: getAssetBrowserCategory(selectedAsset),
-              subcategory: getAssetBrowserSubcategory(selectedAsset),
-            }
-          : current.assetBrowser
-
-      return {
-      ...current,
-      selectedAssetIds: {
-        ...current.selectedAssetIds,
-        [category]: assetId,
-      },
-      assetBrowser: nextBrowserState,
-      history: [...current.history, previousSnapshot],
-      future: [],
-    }})
-  },
-  setSurfaceBrushAsset: (category, assetId) => {
-    set((current) => current.surfaceBrushAssetIds[category] === assetId
-      ? current
-      : {
-          ...current,
-          surfaceBrushAssetIds: {
-            ...current.surfaceBrushAssetIds,
-            [category]: assetId,
-          },
-          assetBrowser: {
-            category: 'surfaces',
-            subcategory: category === 'floor' ? 'floors' : 'walls',
-          },
-        })
-  },
-  setAssetBrowserCategory: (category) => {
-    set((current) => current.assetBrowser.category === category
-      ? current
-      : {
-          ...current,
-          assetBrowser: {
-            category,
-            subcategory: category === 'surfaces' ? 'floors' : null,
-          },
-        })
-  },
-  setAssetBrowserSubcategory: (subcategory) => {
-    set((current) => current.assetBrowser.subcategory === subcategory
-      ? current
-      : {
-          ...current,
-          assetBrowser: {
-            ...current.assetBrowser,
-            subcategory,
-          },
-        })
-  },
-  focusAssetBrowserForAsset: (assetId) => {
-    const asset = assetId ? getContentPackAssetById(assetId) : null
-    if (!asset) {
-      return
-    }
-
-    set((current) => ({
-      ...current,
-      assetBrowser: {
-        category: getAssetBrowserCategory(asset),
-        subcategory: getAssetBrowserSubcategory(asset),
-      },
-    }))
-  },
   setFloorTileAsset: (cellKey, assetId) => {
     const state = get()
     const cellRecord = state.paintedCells[cellKey]
@@ -2622,6 +3262,10 @@ export const useDungeonStore = create<DungeonState>()(
       }
 
       const previousSnapshot = cloneSnapshot(state)
+      queueFloorDirtyHint({
+        domains: ['tiles', 'renderPlan'],
+        cells: [owningAnchorKey],
+      })
       set((current) => {
         const floorTileAssetIds = { ...current.floorTileAssetIds }
         delete floorTileAssetIds[owningAnchorKey]
@@ -2656,6 +3300,10 @@ export const useDungeonStore = create<DungeonState>()(
     }
 
     const previousSnapshot = cloneSnapshot(state)
+    queueFloorDirtyHint({
+      domains: ['tiles', 'renderPlan'],
+      cells: [cellKey, ...overlappingAnchorKeys],
+    })
     set((current) => {
       const floorTileAssetIds = { ...current.floorTileAssetIds }
       overlappingAnchorKeys.forEach((anchorKey) => {
@@ -2692,6 +3340,10 @@ export const useDungeonStore = create<DungeonState>()(
     }
 
     const previousSnapshot = cloneSnapshot(state)
+    queueFloorDirtyHint({
+      domains: ['walls', 'lighting', 'renderPlan'],
+      wallKeys: [canonicalWallKey],
+    })
     set((current) => {
       const wallSurfaceAssetIds = { ...current.wallSurfaceAssetIds }
       const wallSurfaceProps = { ...current.wallSurfaceProps }
@@ -2727,6 +3379,10 @@ export const useDungeonStore = create<DungeonState>()(
     }
 
     const previousSnapshot = cloneSnapshot(state)
+    queueFloorDirtyHint({
+      domains: ['walls', 'openings', 'lighting', 'renderPlan'],
+      wallKeys: [canonicalWallKey],
+    })
     set((current) => {
       if (!getCanonicalWallKey(canonicalWallKey, current.paintedCells)) {
         return current
@@ -2744,276 +3400,21 @@ export const useDungeonStore = create<DungeonState>()(
     })
     return true
   },
-  setPaintingStrokeActive: (active) => {
-    set((state) => {
-      if (state.isPaintingStrokeActive === active) {
-        return state
-      }
-
-      return {
-        ...state,
-        isPaintingStrokeActive: active,
-      }
-    })
-  },
-  setObjectDragActive: (active) => {
-    set((state) => {
-      if (state.isObjectDragActive === active) {
-        return state
-      }
-
-      return {
-        ...state,
-        isObjectDragActive: active,
-      }
-    })
-  },
-  setSceneLightingIntensity: (intensity) => {
-    set((state) => ({ ...state, sceneLighting: { ...state.sceneLighting, intensity } }))
-  },
-  setPostProcessing: (settings) => {
-    set((state) => ({
-      ...state,
-      postProcessing: normalizePostProcessingSettings({ ...state.postProcessing, ...settings }),
-    }))
-  },
-  setOutdoorTimeOfDay: (value) => {
-    const clamped = Math.max(0, Math.min(1, value))
-    set((state) => ({ ...state, outdoorTimeOfDay: clamped }))
-  },
-  setOutdoorTerrainDensity: (value) => {
-    set((state) => {
-      if (state.outdoorTerrainDensity === value) {
-        return state
-      }
-
-      return {
-        ...state,
-        outdoorTerrainDensity: value,
-        outdoorTerrainProfiles: {
-          ...state.outdoorTerrainProfiles,
-          [state.outdoorTerrainType]: {
-            ...getOutdoorTerrainProfile(state.outdoorTerrainType, state.outdoorTerrainProfiles),
-            density: value,
-          },
-        },
-      }
-    })
-  },
-  setOutdoorTerrainType: (value) => {
-    set((state) => {
-      if (state.outdoorTerrainType === value) {
-        return state
-      }
-      const nextProfile = getOutdoorTerrainProfile(value, state.outdoorTerrainProfiles)
-      return {
-        ...state,
-        outdoorTerrainType: value,
-        outdoorTerrainDensity: nextProfile.density,
-        outdoorOverpaintRegenerate: nextProfile.overpaintRegenerate,
-      }
-    })
-  },
-  setOutdoorOverpaintRegenerate: (value) => {
-    set((state) => {
-      if (state.outdoorOverpaintRegenerate === value) {
-        return state
-      }
-
-      return {
-        ...state,
-        outdoorOverpaintRegenerate: value,
-        outdoorTerrainProfiles: {
-          ...state.outdoorTerrainProfiles,
-          [state.outdoorTerrainType]: {
-            ...getOutdoorTerrainProfile(state.outdoorTerrainType, state.outdoorTerrainProfiles),
-            overpaintRegenerate: value,
-          },
-        },
-      }
-    })
-  },
-  setOutdoorBrushMode: (value) => {
-    set((state) => (state.outdoorBrushMode === value ? state : { ...state, outdoorBrushMode: value }))
-  },
-  setOutdoorTerrainSculptMode: (value) => {
-    set((state) => (state.outdoorTerrainSculptMode === value
-      ? state
-      : { ...state, outdoorTerrainSculptMode: value }))
-  },
-  setDefaultOutdoorTerrainStyle: (value) => {
-    set((state) => (state.defaultOutdoorTerrainStyle === value
-      ? state
-      : { ...state, defaultOutdoorTerrainStyle: value }))
-  },
-  setOutdoorTerrainStyleBrush: (value) => {
-    set((state) => (state.outdoorTerrainStyleBrush === value
-      ? state
-      : { ...state, outdoorTerrainStyleBrush: value }))
-  },
-  setShowGrid: (show) => {
-    set((state) => ({ ...state, showGrid: show }))
-  },
-  setShowLosDebugMask: (show) => {
-    set((state) => ({ ...state, showLosDebugMask: show }))
-  },
-  setShowLosDebugRays: (show) => {
-    set((state) => ({ ...state, showLosDebugRays: show }))
-  },
-  setShowLensFocusDebugPoint: (show) => {
-    set((state) => ({ ...state, showLensFocusDebugPoint: show }))
-  },
-  setShowProjectionDebugMesh: (show) => {
-    set((state) => ({ ...state, showProjectionDebugMesh: show }))
-  },
-  setLightEffectsEnabled: (enabled) => {
-    set((state) => ({ ...state, lightEffectsEnabled: enabled }))
-  },
-  setParticleEffectsEnabled: (enabled) => {
-    set((state) => ({ ...state, particleEffectsEnabled: enabled }))
-  },
-  setFloorViewMode: (mode) => {
-    set((state) => (state.floorViewMode === mode ? state : { ...state, floorViewMode: mode }))
-  },
-  createGeneratedCharacter: (input) => {
-    const recordId = createObjectId()
-    const assetId = createGeneratedCharacterAssetId(recordId)
-    const timestamp = new Date().toISOString()
-    const nextRecord = normalizeGeneratedCharacterRecord(assetId, {
-      ...createDefaultGeneratedCharacterInput(),
-      ...input,
-      assetId,
-      createdAt: timestamp,
-      updatedAt: timestamp,
-    })
-
-    set((current) => ({
-      ...current,
-      generatedCharacters: {
-        ...current.generatedCharacters,
-        [assetId]: nextRecord,
-      },
-    }))
-    syncGeneratedCharacterAssets(get().generatedCharacters)
-    return assetId
-  },
-  createGeneratedCharacterDraft: () => {
-    return get().createGeneratedCharacter(createDefaultGeneratedCharacterInput())
-  },
-  ingestGeneratedCharacters: (records) => {
-    if (records.length === 0) {
-      return
-    }
-
-    set((current) => ({
-      ...current,
-      generatedCharacters: {
-        ...current.generatedCharacters,
-        ...Object.fromEntries(
-          records.map((record) => [
-            record.assetId,
-            normalizeGeneratedCharacterRecord(record.assetId, {
-              ...current.generatedCharacters[record.assetId],
-              ...record,
-            }),
-          ]),
-        ),
-      },
-    }))
-    syncGeneratedCharacterAssets(get().generatedCharacters)
-  },
-  updateGeneratedCharacter: (assetId, input) => {
-    const state = get()
-    const existing = state.generatedCharacters[assetId]
-    if (!existing) {
-      return false
-    }
-
-    const nextRecord = normalizeGeneratedCharacterRecord(assetId, {
-      ...existing,
-      ...input,
-      assetId,
-      createdAt: existing.createdAt,
-      updatedAt: new Date().toISOString(),
-    })
-
-    set((current) => ({
-      ...current,
-      generatedCharacters: {
-        ...current.generatedCharacters,
-        [assetId]: nextRecord,
-      },
-    }))
-    syncGeneratedCharacterAssets(get().generatedCharacters)
-    return true
-  },
-  removeGeneratedCharacter: (assetId) => {
-    const state = get()
-    if (!state.generatedCharacters[assetId]) {
-      return true
-    }
-    if (isGeneratedCharacterInUse(assetId, state)) {
-      return false
-    }
-
-    set((current) => {
-      const generatedCharacters = { ...current.generatedCharacters }
-      delete generatedCharacters[assetId]
-      return {
-        ...current,
-        generatedCharacters,
-        characterSheet: current.characterSheet.assetId === assetId
-          ? { open: false, assetId: null }
-          : current.characterSheet,
-        selectedAssetIds: {
-          ...current.selectedAssetIds,
-          ...(current.selectedAssetIds.prop === assetId
-            ? {
-                prop: getDefaultAssetIdByCategory('prop'),
-              }
-            : {}),
-          ...(current.selectedAssetIds.player === assetId
-            ? {
-                player: getDefaultAssetIdByCategory('player'),
-              }
-            : {}),
-        },
-      }
-    })
-    syncGeneratedCharacterAssets(get().generatedCharacters)
-    return true
-  },
-  openCharacterSheet: (assetId) => {
-    set((state) => ({
-      ...state,
-      characterSheet: {
-        open: true,
-        assetId,
-      },
-    }))
-  },
-  closeCharacterSheet: () => {
-    set((state) => (
-      state.characterSheet.open
-        ? {
-            ...state,
-            characterSheet: {
-              open: false,
-              assetId: null,
-            },
-          }
-        : state
-    ))
-  },
-  setFpsLimit: (limit) => {
-    set((state) => ({ ...state, fpsLimit: limit }))
-  },
-  setCameraPreset: (preset) => {
-    set((state) => ({ ...state, cameraPreset: preset, activeCameraMode: preset }))
-  },
-  clearCameraPreset: () => {
-    set((state) => ({ ...state, cameraPreset: null }))
-  },
+  ...createDungeonStoreViewActions({
+    set,
+    getOutdoorTerrainProfile,
+  }),
+  ...createDungeonStoreGeneratedCharacterActions({
+    set,
+    get,
+    isGeneratedCharacterInUse,
+  }),
+  ...createDungeonStoreLayerActions({
+    set,
+    cloneSnapshot,
+    defaultLayerId: DEFAULT_LAYER_ID,
+    createObjectId,
+  }),
   undo: () => {
     const state = get()
     const previous = state.history.at(-1)
@@ -3069,6 +3470,10 @@ export const useDungeonStore = create<DungeonState>()(
     }))
   },
   reset: () => {
+      queueFloorDirtyHint({
+        domains: ALL_FLOOR_DIRTY_DOMAINS,
+        fullRefresh: true,
+      })
       set((state) => ({
         ...state,
         ...createEmptySnapshot(),
@@ -3099,6 +3504,13 @@ export const useDungeonStore = create<DungeonState>()(
         activeCameraMode: 'perspective',
         cameraPreset: null,
         objectLightPreviewOverrides: {},
+        objectScalePreviewOverrides: {},
+        objectRotationPreviewOverrides: {},
+        pickedUpObject: null,
+        objectMoveDragPointer: null,
+        lightEffectsEnabled: true,
+        lightFlickerEnabled: true,
+        particleEffectsEnabled: true,
         history: [],
       future: [],
     }))
@@ -3107,6 +3519,11 @@ export const useDungeonStore = create<DungeonState>()(
   newDungeon: (mode = 'indoor') => {
     const INITIAL_ID = 'floor-1'
     const fresh = createEmptySnapshot()
+    queueFloorDirtyHint({
+      floorId: INITIAL_ID,
+      domains: ALL_FLOOR_DIRTY_DOMAINS,
+      fullRefresh: true,
+    })
     set({
       // Snapshot (rooms, cells, objects, etc.)
          ...fresh,
@@ -3136,17 +3553,28 @@ export const useDungeonStore = create<DungeonState>()(
        floorViewMode: 'active',
       characterSheet: { open: false, assetId: null },
       assetBrowser: createDefaultAssetBrowserState(),
-      activeCameraMode: 'perspective',
-      cameraPreset: 'perspective', // triggers camera to home position
-      objectLightPreviewOverrides: {},
-       // Settings reset to defaults
-       sceneLighting: { intensity: 1 },
+       activeCameraMode: 'perspective',
+       cameraPreset: 'perspective', // triggers camera to home position
+        objectLightPreviewOverrides: {},
+        objectScalePreviewOverrides: {},
+        objectRotationPreviewOverrides: {},
+        pickedUpObject: null,
+        objectMoveDragPointer: null,
+         // Settings reset to defaults
+        sceneLighting: { intensity: 1 },
          postProcessing: { ...DEFAULT_POST_PROCESSING_SETTINGS },
         showGrid: true,
         showLosDebugMask: false,
         showLosDebugRays: false,
         showLensFocusDebugPoint: false,
+        showChunkDebugOverlay: false,
         showProjectionDebugMesh: false,
+        showPropProbeDebug: false,
+        slowBuildAnimationDebug: false,
+        buildPerformanceTracingEnabled: false,
+        lightEffectsEnabled: true,
+        lightFlickerEnabled: true,
+        particleEffectsEnabled: true,
         // Undo/redo cleared
       history: [],
       future: [],
@@ -3169,75 +3597,6 @@ export const useDungeonStore = create<DungeonState>()(
   },
 
 
-  addLayer: (name) => {
-    const id = createObjectId()
-    set((current) => {
-      const previousSnapshot = cloneSnapshot(current)
-      return {
-        ...current,
-        layers: { ...current.layers, [id]: { id, name, visible: true, locked: false } },
-        layerOrder: [...current.layerOrder, id],
-        history: [...current.history, previousSnapshot],
-        future: [],
-      }
-    })
-    return id
-  },
-  removeLayer: (id) => {
-    set((current) => {
-      if (Object.keys(current.layers).length <= 1) return current
-      const previousSnapshot = cloneSnapshot(current)
-      const paintedCells = { ...current.paintedCells }
-      Object.entries(paintedCells).forEach(([key, record]) => {
-        if (record.layerId === id) {
-          paintedCells[key] = { ...record, layerId: DEFAULT_LAYER_ID }
-        }
-      })
-      const placedObjects = { ...current.placedObjects }
-      Object.entries(placedObjects).forEach(([objId, obj]) => {
-        if (obj.layerId === id) placedObjects[objId] = { ...obj, layerId: DEFAULT_LAYER_ID }
-      })
-      const rooms = { ...current.rooms }
-      Object.entries(rooms).forEach(([roomId, room]) => {
-        if (room.layerId === id) rooms[roomId] = { ...room, layerId: DEFAULT_LAYER_ID }
-      })
-      const layers = { ...current.layers }
-      delete layers[id]
-      return {
-        ...current,
-        layers,
-        layerOrder: current.layerOrder.filter((lid) => lid !== id),
-        activeLayerId: current.activeLayerId === id ? DEFAULT_LAYER_ID : current.activeLayerId,
-        paintedCells,
-        placedObjects,
-        rooms,
-        history: [...current.history, previousSnapshot],
-        future: [],
-      }
-    })
-  },
-  renameLayer: (id, name) => {
-    set((current) => ({
-      ...current,
-      layers: { ...current.layers, [id]: { ...current.layers[id], name } },
-    }))
-  },
-  setLayerVisible: (id, visible) => {
-    set((current) => ({
-      ...current,
-      layers: { ...current.layers, [id]: { ...current.layers[id], visible } },
-    }))
-  },
-  setLayerLocked: (id, locked) => {
-    set((current) => ({
-      ...current,
-      layers: { ...current.layers, [id]: { ...current.layers[id], locked } },
-    }))
-  },
-  setActiveLayer: (id) => {
-    set((current) => ({ ...current, activeLayerId: id }))
-  },
-
   // ── Room actions ───────────────────────────────────────────────────────────
   createRoom: (name) => {
     const id = createObjectId()
@@ -3247,7 +3606,14 @@ export const useDungeonStore = create<DungeonState>()(
         ...current,
         rooms: {
           ...current.rooms,
-          [id]: { id, name, layerId: current.activeLayerId, floorAssetId: null, wallAssetId: null },
+          [id]: {
+            id,
+            name,
+            layerId: current.activeLayerId,
+            roomSetId: current.activeRoomSetId,
+            floorAssetId: null,
+            wallAssetId: null,
+          },
         },
         history: [...current.history, previousSnapshot],
         future: [],
@@ -3273,16 +3639,16 @@ export const useDungeonStore = create<DungeonState>()(
       const rooms = { ...current.rooms }
       delete rooms[id]
 
-      const { placedObjects, occupancy, selection, wallOpenings, innerWalls } =
-        pruneInvalidConnectedProps(
-          current,
-          paintedCells,
-          removedCells,
-        )
-      const { floorTileAssetIds, wallSurfaceAssetIds, wallSurfaceProps } = pruneInvalidSurfaceOverrides(
-        current,
-        paintedCells,
-      )
+      const {
+        placedObjects,
+        occupancy,
+        selection,
+        wallOpenings,
+        innerWalls,
+        floorTileAssetIds,
+        wallSurfaceAssetIds,
+        wallSurfaceProps,
+      } = reconcileRoomLayoutMutation(current, paintedCells, removedCells)
 
       return {
         ...current,
@@ -3309,6 +3675,10 @@ export const useDungeonStore = create<DungeonState>()(
     }))
   },
   assignCellsToRoom: (cellKeys, roomId) => {
+    queueFloorDirtyHint({
+      domains: ['tiles', 'walls', 'openings', 'props', 'lighting', 'renderPlan', 'occupancy'],
+      cells: cellKeys,
+    })
     set((current) => {
       const previousSnapshot = cloneSnapshot(current)
       const paintedCells = { ...current.paintedCells }
@@ -3324,11 +3694,10 @@ export const useDungeonStore = create<DungeonState>()(
         selection,
         wallOpenings,
         innerWalls,
-      } = pruneInvalidConnectedProps(current, paintedCells, changedCells)
-      const { floorTileAssetIds, wallSurfaceAssetIds, wallSurfaceProps } = pruneInvalidSurfaceOverrides(
-        current,
-        paintedCells,
-      )
+        floorTileAssetIds,
+        wallSurfaceAssetIds,
+        wallSurfaceProps,
+      } = reconcileRoomLayoutMutation(current, paintedCells, changedCells)
       return {
         ...current,
         paintedCells,
@@ -3376,6 +3745,10 @@ export const useDungeonStore = create<DungeonState>()(
     }
 
     const previousSnapshot = cloneSnapshot(state)
+    queueFloorDirtyHint({
+      domains: ['tiles', 'walls', 'openings', 'props', 'lighting', 'renderPlan', 'occupancy'],
+      fullRefresh: true,
+    })
 
     set((current) => {
       const currentRoom = current.rooms[roomId]
@@ -3421,16 +3794,18 @@ export const useDungeonStore = create<DungeonState>()(
         }),
       )
 
-      const { placedObjects, occupancy, selection, wallOpenings, innerWalls } =
-        pruneInvalidConnectedProps(
-          { ...current, wallOpenings: remappedWallOpenings },
-          paintedCells,
-          changedCells,
-        )
-      const { floorTileAssetIds, wallSurfaceAssetIds, wallSurfaceProps } = pruneInvalidSurfaceOverrides(
-        current,
-        paintedCells,
-      )
+      const {
+        placedObjects,
+        occupancy,
+        selection,
+        wallOpenings,
+        innerWalls,
+        floorTileAssetIds,
+        wallSurfaceAssetIds,
+        wallSurfaceProps,
+      } = reconcileRoomLayoutMutation(current, paintedCells, changedCells, {
+        wallOpenings: remappedWallOpenings,
+      })
 
       return {
         ...current,
@@ -3475,6 +3850,10 @@ export const useDungeonStore = create<DungeonState>()(
     }
 
     const previousSnapshot = cloneSnapshot(state)
+    queueFloorDirtyHint({
+      domains: ['tiles', 'walls', 'openings', 'props', 'lighting', 'renderPlan', 'occupancy'],
+      fullRefresh: true,
+    })
 
     set((current) => {
       const currentRoom = current.rooms[roomId]
@@ -3506,12 +3885,16 @@ export const useDungeonStore = create<DungeonState>()(
         }
       })
 
-      const { placedObjects, occupancy, selection, wallOpenings, innerWalls } =
-        pruneInvalidConnectedProps(current, paintedCells, changedCells)
-      const { floorTileAssetIds, wallSurfaceAssetIds, wallSurfaceProps } = pruneInvalidSurfaceOverrides(
-        current,
-        paintedCells,
-      )
+      const {
+        placedObjects,
+        occupancy,
+        selection,
+        wallOpenings,
+        innerWalls,
+        floorTileAssetIds,
+        wallSurfaceAssetIds,
+        wallSurfaceProps,
+      } = reconcileRoomLayoutMutation(current, paintedCells, changedCells)
 
       return {
         ...current,
@@ -3532,12 +3915,20 @@ export const useDungeonStore = create<DungeonState>()(
     return true
   },
   setRoomFloorAsset: (roomId, assetId) => {
+    queueFloorDirtyHint({
+      domains: ['tiles', 'renderPlan'],
+      fullRefresh: true,
+    })
     set((current) => ({
       ...current,
       rooms: { ...current.rooms, [roomId]: { ...current.rooms[roomId], floorAssetId: assetId } },
     }))
   },
   setRoomWallAsset: (roomId, assetId) => {
+    queueFloorDirtyHint({
+      domains: ['walls', 'renderPlan'],
+      fullRefresh: true,
+    })
     set((current) => ({
       ...current,
       rooms: { ...current.rooms, [roomId]: { ...current.rooms[roomId], wallAssetId: assetId } },
@@ -3614,6 +4005,11 @@ export const useDungeonStore = create<DungeonState>()(
       future: [],
     }
 
+    queueFloorDirtyHint({
+      floorId: id,
+      domains: ALL_FLOOR_DIRTY_DOMAINS,
+      fullRefresh: true,
+    })
     set((current) => ({
       ...current,
       // Activate new floor
@@ -3645,6 +4041,11 @@ export const useDungeonStore = create<DungeonState>()(
     if (state.activeFloorId === id) {
       const targetId = newOrder[0]
       const target = newFloors[targetId]
+      queueFloorDirtyHint({
+        floorId: targetId,
+        domains: ALL_FLOOR_DIRTY_DOMAINS,
+        fullRefresh: true,
+      })
 
       // Save current floor back (we're about to discard it but keep others consistent)
       set((current) => ({
@@ -3688,6 +4089,11 @@ export const useDungeonStore = create<DungeonState>()(
       history: [...state.history],
       future: [...state.future],
     }
+    queueFloorDirtyHint({
+      floorId: id,
+      domains: ALL_FLOOR_DIRTY_DOMAINS,
+      fullRefresh: true,
+    })
 
     set((current) => ({
       ...current,
@@ -3726,6 +4132,11 @@ export const useDungeonStore = create<DungeonState>()(
       if (isActive) {
         if (state.occupancy[cellKey]) return
         const staircaseId = createObjectId()
+        queueFloorDirtyHint({
+          domains: ['props', 'lighting', 'occupancy'],
+          cells: [cell],
+          objectIds: [staircaseId],
+        })
         set((current) => ({
           ...current,
           placedObjects: {
@@ -3816,6 +4227,10 @@ export const useDungeonStore = create<DungeonState>()(
 
   placeOpening: (input) => {
     let openingId: string | null = null
+    queueFloorDirtyHint({
+      domains: ['openings', 'walls', 'lighting', 'renderPlan'],
+      wallKeys: [input.wallKey],
+    })
     set((current) => {
       const previousSnapshot = cloneSnapshot(current)
       const wallOpenings = { ...current.wallOpenings }
@@ -3833,6 +4248,10 @@ export const useDungeonStore = create<DungeonState>()(
     if (wallKeys.length === 0) {
       return
     }
+    queueFloorDirtyHint({
+      domains: ['openings', 'walls', 'lighting', 'renderPlan'],
+      wallKeys,
+    })
 
     set((current) => {
       const previousSnapshot = cloneSnapshot(current)
@@ -3841,7 +4260,7 @@ export const useDungeonStore = create<DungeonState>()(
       wallKeys.forEach((wallKey) => {
         addOpeningRecord(
           wallOpenings,
-          { assetId: null, wallKey, width: 1, flipped: false },
+          { assetId: null, wallKey, width: 1, flipped: false, source: 'manual' },
           current.activeLayerId,
         )
       })
@@ -3858,6 +4277,10 @@ export const useDungeonStore = create<DungeonState>()(
     if (wallKeys.length === 0) {
       return 0
     }
+    queueFloorDirtyHint({
+      domains: ['openings', 'walls', 'lighting', 'renderPlan'],
+      wallKeys,
+    })
 
     let removedCount = 0
     set((current) => {
@@ -3894,6 +4317,10 @@ export const useDungeonStore = create<DungeonState>()(
     }
 
     const previousSnapshot = cloneSnapshot(state)
+    queueFloorDirtyHint({
+      domains: ['openings', 'renderPlan'],
+      wallKeys: [opening.wallKey],
+    })
     set((current) => {
       const currentOpening = current.wallOpenings[id]
       if (!currentOpening) {
@@ -3915,7 +4342,52 @@ export const useDungeonStore = create<DungeonState>()(
     })
     return true
   },
+  setOpeningProps: (id, props) => {
+    const state = get()
+    const opening = state.wallOpenings[id]
+    if (!opening) {
+      return false
+    }
+
+    const currentProps = opening.objectProps ?? {}
+    if (JSON.stringify(currentProps) === JSON.stringify(props)) {
+      return true
+    }
+
+    const previousSnapshot = cloneSnapshot(state)
+    queueFloorDirtyHint({
+      domains: ['openings', 'walls', 'lighting', 'renderPlan'],
+      wallKeys: [opening.wallKey],
+    })
+    set((current) => {
+      const currentOpening = current.wallOpenings[id]
+      if (!currentOpening) {
+        return current
+      }
+
+      return {
+        ...current,
+        wallOpenings: {
+          ...current.wallOpenings,
+          [id]: {
+            ...currentOpening,
+            objectProps: { ...props },
+          },
+        },
+        history: [...current.history, previousSnapshot],
+        future: [],
+      }
+    })
+    return true
+  },
   removeOpening: (id) => {
+    const opening = get().wallOpenings[id]
+    if (opening) {
+      queueFloorDirtyHint({
+        domains: ['openings', 'walls', 'lighting', 'renderPlan'],
+        wallKeys: [opening.wallKey],
+      })
+    }
     set((current) => {
       if (!current.wallOpenings[id]) return current
       const previousSnapshot = cloneSnapshot(current)
@@ -3958,6 +4430,11 @@ export const useDungeonStore = create<DungeonState>()(
     const terrainType = parsed.outdoorTerrainType ?? 'mixed'
     const terrainProfiles = normalizeOutdoorTerrainProfiles(parsed.outdoorTerrainProfiles)
     const terrainProfile = getOutdoorTerrainProfile(terrainType, terrainProfiles)
+      queueFloorDirtyHint({
+        floorId: activeFloorId,
+        domains: ALL_FLOOR_DIRTY_DOMAINS,
+        fullRefresh: true,
+      })
       set((current) => ({
         ...current,
         ...parsed,
@@ -3989,6 +4466,10 @@ export const useDungeonStore = create<DungeonState>()(
         activeCameraMode: 'perspective',
         cameraPreset: null,
         objectLightPreviewOverrides: {},
+        objectScalePreviewOverrides: {},
+        objectRotationPreviewOverrides: {},
+        pickedUpObject: null,
+        objectMoveDragPointer: null,
       history: [],
       future: [],
       floors,
@@ -4034,9 +4515,11 @@ export const useDungeonStore = create<DungeonState>()(
         outdoorTerrainSculptStep: state.outdoorTerrainSculptStep,
         outdoorTerrainSculptRadius: state.outdoorTerrainSculptRadius,
         outdoorTerrainStyleBrush: state.outdoorTerrainStyleBrush,
+        activeRoomSetId: state.activeRoomSetId,
         selectedAssetIds: state.selectedAssetIds,
         generatedCharacters: state.generatedCharacters,
         lightEffectsEnabled: state.lightEffectsEnabled,
+        lightFlickerEnabled: state.lightFlickerEnabled,
         floors: state.floors,
         floorOrder: state.floorOrder,
         activeFloorId: state.activeFloorId,
@@ -4074,9 +4557,14 @@ export const useDungeonStore = create<DungeonState>()(
           state.postProcessing as Partial<PostProcessingSettings> | undefined,
         )
         state.lightEffectsEnabled = state.lightEffectsEnabled ?? true
+        state.lightFlickerEnabled = state.lightFlickerEnabled ?? true
         state.particleEffectsEnabled = state.particleEffectsEnabled ?? true
         state.generatedCharacters = normalizeGeneratedCharacters(
           state.generatedCharacters as Record<string, Partial<GeneratedCharacterRecord>> | undefined,
+        )
+        state.floorDirtyDomains = syncFloorDirtyState(
+          state.floorDirtyDomains,
+          state.floorOrder ?? Object.keys(state.floors ?? {}),
         )
         syncGeneratedCharacterAssets(state.generatedCharacters)
       },

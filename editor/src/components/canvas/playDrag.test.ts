@@ -10,6 +10,7 @@ describe('playDrag terrain support', () => {
     const dragState = createPlayDragState({
       id: 'player-1',
       assetId: 'generated.player.test',
+      props: {},
       rotation: [0, 0, 0],
       position: [1, 0, 1],
       cell: [0, 0],
@@ -27,6 +28,7 @@ describe('playDrag terrain support', () => {
     const dragState = updatePlayDragState({
       objectId: 'player-1',
       assetId: 'generated.player.test',
+      objectProps: {},
       rotation: [0, 0, 0],
       originCell: [0, 0],
       positionY: 0,
@@ -55,6 +57,7 @@ describe('playDrag terrain support', () => {
     const dragState = updatePlayDragState({
       objectId: 'player-1',
       assetId: 'generated.player.test',
+      objectProps: {},
       rotation: [0, 0, 0],
       originCell: [0, 0],
       positionY: 0,

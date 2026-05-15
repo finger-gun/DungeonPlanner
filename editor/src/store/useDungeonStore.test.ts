@@ -51,6 +51,19 @@ describe('useDungeonStore history', () => {
     expect(Object.keys(state.paintedCells)).toHaveLength(2)
   })
 
+  it('assigns the active room set to newly created rooms', () => {
+    const state = useDungeonStore.getState()
+    state.setActiveRoomSetId('cave')
+    state.paintCells([[0, 0]])
+
+    const roomId = useDungeonStore.getState().paintedCells['0:0']?.roomId
+    expect(roomId).toBeTruthy()
+    expect(useDungeonStore.getState().rooms[roomId!]?.roomSetId).toBe('cave')
+
+    const manualRoomId = useDungeonStore.getState().createRoom('Manual Room')
+    expect(useDungeonStore.getState().rooms[manualRoomId]?.roomSetId).toBe('cave')
+  })
+
   it('keeps pixelation disabled by default and allows toggling it', () => {
     expect(useDungeonStore.getState().postProcessing.pixelateEnabled).toBe(false)
     expect(useDungeonStore.getState().postProcessing.pixelSize).toBe(6)
@@ -60,6 +73,46 @@ describe('useDungeonStore history', () => {
 
     expect(useDungeonStore.getState().postProcessing.pixelateEnabled).toBe(true)
     expect(useDungeonStore.getState().postProcessing.pixelSize).toBe(10)
+  })
+
+  it('updates view and performance preferences through the extracted settings domain', () => {
+    const state = useDungeonStore.getState()
+
+    state.setShowGrid(false)
+    state.setLightFlickerEnabled(false)
+    state.setFpsLimit(120)
+    state.setCameraPreset('top-down')
+    state.clearCameraPreset()
+
+    const nextState = useDungeonStore.getState()
+    expect(nextState.showGrid).toBe(false)
+    expect(nextState.lightFlickerEnabled).toBe(false)
+    expect(nextState.fpsLimit).toBe(120)
+    expect(nextState.activeCameraMode).toBe('top-down')
+    expect(nextState.cameraPreset).toBeNull()
+  })
+
+  it('updates layer state through the extracted layer domain', () => {
+    const state = useDungeonStore.getState()
+    const layerId = state.addLayer('Lighting')
+
+    state.renameLayer(layerId, 'Lights')
+    state.setLayerVisible(layerId, false)
+    state.setLayerLocked(layerId, true)
+    state.setActiveLayer(layerId)
+
+    let nextState = useDungeonStore.getState()
+    expect(nextState.layers[layerId]).toMatchObject({
+      name: 'Lights',
+      visible: false,
+      locked: true,
+    })
+    expect(nextState.activeLayerId).toBe(layerId)
+
+    state.removeLayer(layerId)
+    nextState = useDungeonStore.getState()
+    expect(nextState.layers[layerId]).toBeUndefined()
+    expect(nextState.activeLayerId).toBe('default')
   })
 
   it('creates an outdoor map with surrounding paint defaults', () => {
@@ -622,6 +675,17 @@ describe('useDungeonStore history', () => {
     expect(useDungeonStore.getState().floorTileAssetIds).toEqual({})
   })
 
+  it('removes multi-tile floor variants when a covered non-anchor cell is erased', () => {
+    const state = useDungeonStore.getState()
+    state.paintCells([[0, 0], [1, 0], [0, 1], [1, 1]])
+
+    expect(state.setFloorTileAsset('0:0', 'dungeon.floor_floor_tile_large')).toBe(true)
+
+    state.eraseCells([[1, 1]])
+
+    expect(useDungeonStore.getState().floorTileAssetIds).toEqual({})
+  })
+
   it('reanchors overlapping multi-tile floor variants to the latest stamp', () => {
     const state = useDungeonStore.getState()
     state.paintCells([
@@ -911,6 +975,36 @@ describe('useDungeonStore history', () => {
     expect(useDungeonStore.getState().showLensFocusDebugPoint).toBe(false)
   })
 
+  it('toggles the chunk debug overlay visibility flag', () => {
+    expect(useDungeonStore.getState().showChunkDebugOverlay).toBe(false)
+
+    useDungeonStore.getState().setShowChunkDebugOverlay(true)
+    expect(useDungeonStore.getState().showChunkDebugOverlay).toBe(true)
+
+    useDungeonStore.getState().setShowChunkDebugOverlay(false)
+    expect(useDungeonStore.getState().showChunkDebugOverlay).toBe(false)
+  })
+
+  it('toggles the prop probe debug visibility flag', () => {
+    expect(useDungeonStore.getState().showPropProbeDebug).toBe(false)
+
+    useDungeonStore.getState().setShowPropProbeDebug(true)
+    expect(useDungeonStore.getState().showPropProbeDebug).toBe(true)
+
+    useDungeonStore.getState().setShowPropProbeDebug(false)
+    expect(useDungeonStore.getState().showPropProbeDebug).toBe(false)
+  })
+
+  it('toggles the build performance tracing debug flag', () => {
+    expect(useDungeonStore.getState().buildPerformanceTracingEnabled).toBe(false)
+
+    useDungeonStore.getState().setBuildPerformanceTracingEnabled(true)
+    expect(useDungeonStore.getState().buildPerformanceTracingEnabled).toBe(true)
+
+    useDungeonStore.getState().setBuildPerformanceTracingEnabled(false)
+    expect(useDungeonStore.getState().buildPerformanceTracingEnabled).toBe(false)
+  })
+
   it('tracks transient object light previews outside persisted object props', () => {
     useDungeonStore.getState().setObjectLightPreview('torch-1', {
       intensity: 3,
@@ -928,13 +1022,103 @@ describe('useDungeonStore history', () => {
     expect(useDungeonStore.getState().objectLightPreviewOverrides['torch-1']).toBeUndefined()
   })
 
-  it('switches to top-down view when entering room mode', () => {
+  it('tracks transient scale previews and picked-up objects outside persisted object props', () => {
+    useDungeonStore.getState().setObjectScalePreview('prop-1', 1.4)
+    expect(useDungeonStore.getState().objectScalePreviewOverrides['prop-1']).toBe(1.4)
+
+    useDungeonStore.getState().setObjectScalePreview('prop-1', null)
+    expect(useDungeonStore.getState().objectScalePreviewOverrides['prop-1']).toBeUndefined()
+
+    useDungeonStore.getState().setObjectRotationPreview('prop-1', [0, Math.PI / 3, 0])
+    expect(useDungeonStore.getState().objectRotationPreviewOverrides['prop-1']).toEqual([0, Math.PI / 3, 0])
+
+    useDungeonStore.getState().setObjectRotationPreview('prop-1', null)
+    expect(useDungeonStore.getState().objectRotationPreviewOverrides['prop-1']).toBeUndefined()
+
+    useDungeonStore.getState().setObjectMoveDragPointer({ clientX: 120, clientY: 160 })
+    expect(useDungeonStore.getState().objectMoveDragPointer).toEqual({ clientX: 120, clientY: 160 })
+
+    useDungeonStore.getState().paintCells([[0, 0]])
+    const assetId = useDungeonStore.getState().selectedAssetIds.prop
+    const placedId = useDungeonStore.getState().placeObject({
+      type: 'prop',
+      assetId,
+      position: [1, 0, 1],
+      rotation: [0, Math.PI / 2, 0],
+      props: { connector: 'FLOOR', direction: null, instanceScale: 1.4 },
+      cell: [0, 0],
+      cellKey: '0:0:floor',
+      supportCellKey: '0:0',
+    })
+
+    expect(placedId).toBeTruthy()
+    expect(useDungeonStore.getState().pickUpObject(placedId!)).toBe(true)
+    expect(useDungeonStore.getState().pickedUpObject).toMatchObject({
+      objectId: placedId,
+      assetId,
+      floorRotationIndex: 1,
+      props: { connector: 'FLOOR', direction: null, instanceScale: 1.4 },
+    })
+
+    useDungeonStore.getState().setObjectDragActive(true)
+    useDungeonStore.getState().cancelPickedUpObject()
+    expect(useDungeonStore.getState().pickedUpObject).toBeNull()
+    expect(useDungeonStore.getState().objectMoveDragPointer).toBeNull()
+    expect(useDungeonStore.getState().isObjectDragActive).toBe(false)
+  })
+
+  it('repositions picked-up props without losing their existing props', () => {
+    useDungeonStore.getState().paintCells([[0, 0], [1, 0]])
+    const assetId = useDungeonStore.getState().selectedAssetIds.prop
+    const placedId = useDungeonStore.getState().placeObject({
+      type: 'prop',
+      assetId,
+      position: [1, 0, 1],
+      rotation: [0, 0, 0],
+      props: { connector: 'FLOOR', direction: null, instanceScale: 1.35 },
+      cell: [0, 0],
+      cellKey: '0:0:floor',
+      supportCellKey: '0:0',
+    })
+
+    expect(placedId).toBeTruthy()
+    expect(useDungeonStore.getState().pickUpObject(placedId!)).toBe(true)
+
+    const moved = useDungeonStore.getState().repositionObject(placedId!, {
+      position: [3, 0, 1],
+      rotation: [0, Math.PI / 2, 0],
+      cell: [1, 0],
+      cellKey: '1:0:floor',
+      props: { connector: 'FLOOR', direction: null, instanceScale: 1.35, tintColor: '#ffaa33' },
+      supportCellKey: '1:0',
+      parentObjectId: null,
+      localPosition: null,
+      localRotation: null,
+    })
+
+    expect(moved).toBe(true)
+    const movedObject = useDungeonStore.getState().placedObjects[placedId!]
+    expect(movedObject?.position).toEqual([3, 0, 1])
+    expect(movedObject?.rotation[1]).toBe(Math.PI / 2)
+    expect(movedObject?.cellKey).toBe('1:0:floor')
+    expect(movedObject?.props).toMatchObject({
+      connector: 'FLOOR',
+      direction: null,
+      instanceScale: 1.35,
+      tintColor: '#ffaa33',
+    })
+    expect(useDungeonStore.getState().pickedUpObject).toBeNull()
+  })
+
+  it('keeps the current camera mode when entering room mode', () => {
+    useDungeonStore.getState().setCameraPreset('classic')
+    useDungeonStore.getState().clearCameraPreset()
     useDungeonStore.getState().setTool('room')
 
     const state = useDungeonStore.getState()
     expect(state.tool).toBe('room')
-    expect(state.cameraPreset).toBe('top-down')
-    expect(state.activeCameraMode).toBe('top-down')
+    expect(state.cameraPreset).toBeNull()
+    expect(state.activeCameraMode).toBe('classic')
   })
 
   it('resizes a selected room footprint on the grid', () => {
@@ -1404,6 +1588,21 @@ describe('useDungeonStore wall openings', () => {
     })
   })
 
+  it('updates opening props without changing the opening asset', () => {
+    const id = useDungeonStore.getState().placeOpening({
+      assetId: 'core.opening_door_wall_1',
+      wallKey: '0:0:north',
+      width: 1,
+      flipped: false,
+    })
+
+    expect(useDungeonStore.getState().setOpeningProps(id!, { open: true })).toBe(true)
+    expect(useDungeonStore.getState().wallOpenings[id!]).toMatchObject({
+      assetId: 'core.opening_door_wall_1',
+      objectProps: { open: true },
+    })
+  })
+
   it('places an open passage without an asset mesh', () => {
     const id = useDungeonStore.getState().placeOpening({
       assetId: null,
@@ -1467,6 +1666,7 @@ describe('useDungeonStore wall openings', () => {
     let state = useDungeonStore.getState()
     expect(Object.values(state.wallOpenings)).toHaveLength(2)
     expect(Object.values(state.wallOpenings).every((opening) => opening.assetId === null)).toBe(true)
+    expect(Object.values(state.wallOpenings).every((opening) => opening.source === 'manual')).toBe(true)
 
     state.undo()
     state = useDungeonStore.getState()
@@ -1497,6 +1697,83 @@ describe('useDungeonStore wall openings', () => {
     state.redo()
     state = useDungeonStore.getState()
     expect(Object.keys(state.wallOpenings)).toHaveLength(1)
+  })
+
+  it('auto-generates an open passage when two rooms share a single wall segment', () => {
+    const state = useDungeonStore.getState()
+    state.paintCells([[0, 0]])
+    state.paintCells([[1, 0]])
+
+    const openings = Object.values(useDungeonStore.getState().wallOpenings)
+    expect(openings).toHaveLength(1)
+    expect(openings[0]).toMatchObject({
+      assetId: null,
+      wallKey: '0:0:east',
+      width: 1,
+      source: 'generated',
+    })
+  })
+
+  it('auto-generates a centered one-wide door when two rooms share multiple wall segments', () => {
+    const state = useDungeonStore.getState()
+    state.paintCells([[0, 0], [0, 1], [0, 2]])
+    state.paintCells([[1, 0], [1, 1], [1, 2]])
+
+    expect(useDungeonStore.getState().wallOpenings).toEqual({})
+    expect(useDungeonStore.getState().wallSurfaceAssetIds).toMatchObject({
+      '0:1:east': 'dungeon.wall_wall_doorway',
+    })
+    expect(useDungeonStore.getState().wallSurfaceProps['0:1:east']).toMatchObject({
+      generatedConnector: true,
+    })
+  })
+
+  it('preserves manual openings instead of generating overlapping connectors', () => {
+    const state = useDungeonStore.getState()
+    state.paintCells([[0, 0], [0, 1], [0, 2]])
+    state.placeOpening({
+      assetId: 'core.opening_door_wall_1',
+      wallKey: '0:1:east',
+      width: 1,
+      flipped: false,
+    })
+    state.paintCells([[1, 0], [1, 1], [1, 2]])
+
+    const openings = Object.values(useDungeonStore.getState().wallOpenings)
+    expect(openings).toHaveLength(1)
+    expect(openings[0]).toMatchObject({
+      assetId: 'core.opening_door_wall_1',
+      wallKey: '0:1:east',
+      source: 'manual',
+    })
+  })
+
+  it('updates generated connectors when a shared boundary shrinks', () => {
+    const state = useDungeonStore.getState()
+    state.paintCells([[0, 0], [0, 1]])
+    state.paintCells([[1, 0], [1, 1]])
+
+    const rightRoomId = useDungeonStore.getState().paintedCells['1:0']?.roomId
+    expect(rightRoomId).toBeTruthy()
+    expect(useDungeonStore.getState().wallSurfaceAssetIds).toMatchObject({
+      '0:0:east': 'dungeon.wall_wall_doorway',
+    })
+
+    useDungeonStore.getState().resizeRoom(rightRoomId!, {
+      minX: 1,
+      maxX: 1,
+      minZ: 0,
+      maxZ: 0,
+    })
+
+    const openings = Object.values(useDungeonStore.getState().wallOpenings)
+    expect(openings).toHaveLength(1)
+    expect(openings[0]).toMatchObject({
+      assetId: null,
+      wallKey: '0:0:east',
+      source: 'generated',
+    })
+    expect(useDungeonStore.getState().wallSurfaceAssetIds['0:0:east']).toBeUndefined()
   })
 
   it('adds and removes inner wall segments in a single history step', () => {
@@ -1650,6 +1927,168 @@ describe('useDungeonStore floors', () => {
     expect(useDungeonStore.getState().floorOrder).toHaveLength(before)
     const floor1 = Object.values(useDungeonStore.getState().floors).find((f) => f.level === 1)!
     expect(Object.keys(floor1.snapshot.placedObjects)).toHaveLength(1)
+  })
+})
+
+describe('useDungeonStore floor dirty domains', () => {
+  beforeEach(() => {
+    useDungeonStore.getState().reset()
+  })
+
+  it('records bounded dirty metadata for room painting', () => {
+    const floorId = useDungeonStore.getState().activeFloorId
+    const initial = useDungeonStore.getState().floorDirtyDomains[floorId]
+
+    useDungeonStore.getState().paintCells([
+      [0, 0],
+      [1, 0],
+    ])
+
+    const next = useDungeonStore.getState().floorDirtyDomains[floorId]
+    expect(next.tilesVersion).toBeGreaterThan(initial.tilesVersion)
+    expect(next.wallsVersion).toBeGreaterThan(initial.wallsVersion)
+    expect(next.openingsVersion).toBe(initial.openingsVersion)
+    expect(next.lightingVersion).toBeGreaterThan(initial.lightingVersion)
+    expect(next.renderPlanVersion).toBeGreaterThan(initial.renderPlanVersion)
+    expect(next.propsVersion).toBe(initial.propsVersion)
+    expect(next.occupancyVersion).toBe(initial.occupancyVersion)
+    expect(next.dirtyCellRect).toEqual({
+      minCellX: 0,
+      maxCellX: 1,
+      minCellZ: 0,
+      maxCellZ: 0,
+    })
+    expect(next.dirtyCellKeys).toEqual(['0:0', '1:0'])
+    expect(next.dirtyChunkKeys).toEqual(['0:0'])
+    expect(next.dirtyRenderChunkKeys).toEqual(['-1:-1', '-1:0', '0:-1', '0:0'])
+    expect(next.dirtyLightChunkKeys).toEqual(['0:0'])
+    expect(next.dirtyWallKeys).toEqual([
+      '-1:0:east',
+      '0:-1:north',
+      '0:0:east',
+      '0:0:north',
+      '0:0:south',
+      '0:0:west',
+      '0:1:south',
+      '1:-1:north',
+      '1:0:east',
+      '1:0:north',
+      '1:0:south',
+      '1:0:west',
+      '1:1:south',
+      '2:0:west',
+    ])
+    expect(next.fullRefresh).toBe(false)
+  })
+
+  it('publishes explicit render chunk keys for room paints at chunk boundaries', () => {
+    const floorId = useDungeonStore.getState().activeFloorId
+
+    useDungeonStore.getState().paintCells([[8, 0]])
+
+    const next = useDungeonStore.getState().floorDirtyDomains[floorId]
+    expect(next.dirtyChunkKeys).toEqual(['1:0'])
+    expect(next.dirtyRenderChunkKeys).toEqual(['0:-1', '0:0', '1:-1', '1:0'])
+    expect(next.dirtyLightChunkKeys).toEqual(['1:0'])
+  })
+
+  it('expands room paint render chunks to cover large floor surface halos', () => {
+    const floorId = useDungeonStore.getState().activeFloorId
+
+    useDungeonStore.getState().paintCells([
+      [0, 0], [1, 0], [2, 0], [3, 0],
+      [0, 1], [1, 1], [2, 1], [3, 1],
+      [0, 2], [1, 2], [2, 2], [3, 2],
+      [0, 3], [1, 3], [2, 3], [3, 3],
+    ])
+    expect(
+      useDungeonStore.getState().setFloorTileAsset('0:0', 'dungeon.floor_floor_tile_extralarge_grates'),
+    ).toBe(true)
+
+    useDungeonStore.getState().paintCells([[6, 0]])
+
+    const next = useDungeonStore.getState().floorDirtyDomains[floorId]
+    expect(next.dirtyChunkKeys).toEqual(['0:0'])
+    expect(next.dirtyRenderChunkKeys).toEqual(['0:-1', '0:0', '1:-1', '1:0'])
+    expect(next.dirtyLightChunkKeys).toEqual(['0:0'])
+  })
+
+  it('preserves distant openings, props, and surface overrides by reference during local room paints', () => {
+    useDungeonStore.getState().paintCells([[10, 0]])
+
+    const objectId = useDungeonStore.getState().placeObject({
+      type: 'prop',
+      assetId: 'core.props_wall_torch',
+      position: [21, 0, 1],
+      rotation: [0, 0, 0],
+      props: { connector: 'WALL', direction: 'north' },
+      cell: [10, 0],
+      cellKey: '10:0:north',
+    })
+    const openingId = useDungeonStore.getState().placeOpening({
+      assetId: 'core.opening_door_wall_1',
+      wallKey: '10:0:north',
+      width: 1,
+      flipped: false,
+    })
+
+    expect(objectId).toBeTruthy()
+    expect(openingId).toBeTruthy()
+    expect(useDungeonStore.getState().setFloorTileAsset('10:0', 'kaykit.floor_tile_small_broken_a')).toBe(true)
+    expect(useDungeonStore.getState().setWallSurfaceAsset('10:0:north', 'core.wall')).toBe(true)
+    expect(useDungeonStore.getState().setWallSurfaceProps('10:0:north', { open: true })).toBe(true)
+
+    const before = useDungeonStore.getState()
+
+    useDungeonStore.getState().paintCells([[0, 0]])
+
+    const after = useDungeonStore.getState()
+    expect(after.placedObjects).toBe(before.placedObjects)
+    expect(after.wallOpenings).toBe(before.wallOpenings)
+    expect(after.floorTileAssetIds).toBe(before.floorTileAssetIds)
+    expect(after.wallSurfaceAssetIds).toBe(before.wallSurfaceAssetIds)
+    expect(after.wallSurfaceProps).toBe(before.wallSurfaceProps)
+    expect(after.placedObjects[objectId!]).toBe(before.placedObjects[objectId!])
+    expect(after.wallOpenings[openingId!]).toBe(before.wallOpenings[openingId!])
+  })
+
+  it('tracks affected objects and local cells for prop placement', () => {
+    useDungeonStore.getState().paintCells([[0, 0]])
+    const floorId = useDungeonStore.getState().activeFloorId
+    const initial = useDungeonStore.getState().floorDirtyDomains[floorId]
+
+    const objectId = useDungeonStore.getState().placeObject({
+      type: 'prop',
+      assetId: 'core.props_table_small',
+      position: [1, 0, 1],
+      rotation: [0, 0, 0],
+      props: { connector: 'FLOOR', direction: null },
+      cell: [0, 0],
+      cellKey: '0:0:floor',
+    })
+
+    const next = useDungeonStore.getState().floorDirtyDomains[floorId]
+    expect(objectId).toBeTruthy()
+    expect(next.propsVersion).toBeGreaterThan(initial.propsVersion)
+    expect(next.lightingVersion).toBeGreaterThan(initial.lightingVersion)
+    expect(next.occupancyVersion).toBeGreaterThan(initial.occupancyVersion)
+    expect(next.affectedObjectIds).toContain(objectId)
+    expect(next.dirtyCellRect).toEqual({
+      minCellX: 0,
+      maxCellX: 0,
+      minCellZ: 0,
+      maxCellZ: 0,
+    })
+  })
+
+  it('marks full refreshes when the active floor snapshot is replaced', () => {
+    useDungeonStore.getState().paintCells([[0, 0]])
+    useDungeonStore.getState().newDungeon('outdoor')
+
+    const next = useDungeonStore.getState().floorDirtyDomains['floor-1']
+    expect(next.fullRefresh).toBe(true)
+    expect(next.sequence).toBeGreaterThan(0)
+    expect(next.dirtyCellRect).toBeNull()
   })
 })
 

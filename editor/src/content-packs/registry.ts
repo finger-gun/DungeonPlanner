@@ -1,14 +1,35 @@
 import { dungeonContentPack } from './dungeon'
 import { warnIfUsesDeprecatedConnectsTo } from './deprecations'
 import { kaykitContentPack } from './kaykit'
-import type { ContentPackCategory } from './types'
+import type { ContentPack, ContentPackCategory } from './types'
 import { getRuntimeAssetById, getRuntimeAssetsByCategory } from './runtimeRegistry'
 
 export const contentPacks = [dungeonContentPack, kaykitContentPack]
 
 export const contentPackAssets = contentPacks.flatMap((pack) => pack.assets)
 
+const contentPackById = new Map(contentPacks.map((pack) => [pack.id, pack]))
 const assetById = new Map(contentPackAssets.map((asset) => [asset.id, asset]))
+
+export function getContentPackById(id: string): ContentPack | null {
+  return contentPackById.get(id) ?? null
+}
+
+export function getContentPackRoomSets(contentPackId: string) {
+  return getContentPackById(contentPackId)?.roomSets ?? []
+}
+
+export function getContentPackRoomSetById(contentPackId: string, roomSetId: string | null | undefined) {
+  if (!roomSetId) {
+    return null
+  }
+
+  return getContentPackRoomSets(contentPackId).find((roomSet) => roomSet.id === roomSetId) ?? null
+}
+
+export function getDefaultContentPackRoomSetId(contentPackId: string) {
+  return getContentPackRoomSets(contentPackId)[0]?.id ?? null
+}
 
 export function getContentPackAssetById(id: string) {
   return warnIfUsesDeprecatedConnectsTo(assetById.get(id) ?? getRuntimeAssetById(id))

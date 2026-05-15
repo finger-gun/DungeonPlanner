@@ -13,6 +13,10 @@ type WebGpuRuntime = {
 
 let webGpuRuntimePromise: Promise<WebGpuRuntime> | null = null
 
+function enableLocalClipping(renderer: object) {
+  Reflect.set(renderer, 'localClippingEnabled', true)
+}
+
 function loadWebGpuRuntime() {
   if (!webGpuRuntimePromise) {
     webGpuRuntimePromise = Promise.all([
@@ -68,6 +72,7 @@ export async function createWebGpuRenderer(props: THREE.WebGLRendererParameters)
   }
 
   renderer.lighting = new TiledLighting(MAX_FORWARD_PLUS_POINT_LIGHTS, FORWARD_PLUS_TILE_SIZE)
+  enableLocalClipping(renderer)
   renderer.shadowMap.enabled = true
   renderer.shadowMap.type = THREE.PCFSoftShadowMap
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))

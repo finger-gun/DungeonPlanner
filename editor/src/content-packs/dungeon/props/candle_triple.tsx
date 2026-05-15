@@ -1,35 +1,47 @@
-import { createDungeonAsset } from '../shared/createDungeonAsset'
+import { createGenericColorSwatch, DUNGEON_COLOR_SWATCHES } from '../shared/dungeonColorAtlas'
 import { DUNGEON_PROP_TRANSFORM } from '../shared/dungeonConstants'
 import { createDungeonFlameEffectGetter, createDungeonFlameLightGetter } from '../shared/flame'
 
-export const dungeonCandleTripleAsset = createDungeonAsset({
+export const dungeonCandleTripleAsset = createGenericColorSwatch({
   id: 'dungeon.props_candle_triple',
   slug: 'dungeon-props-candle-triple',
   name: 'Dungeon Candle Triple',
-  category: 'prop',
   modelName: 'candle_triple',
+  sourceCells: [[0, 3]],
+  variants: DUNGEON_COLOR_SWATCHES,
+  defaultVariantId: 'ivory',
   transform: DUNGEON_PROP_TRANSFORM,
   metadata: {
+    snapsTo: 'FREE',
     connectors: [
       {
         point: [0, 0, 0],
         type: 'FLOOR',
+      },
+      {
+        point: [0, 0, 0],
+        type: 'SURFACE',
       },
     ],
     blocksLineOfSight: false,
   },
   getLight: createDungeonFlameLightGetter({
     light: {
-      intensity: 0.95,
-      distance: 5,
-      offset: [0, 0.62, 0],
+      intensity: 0.5,
+      distance: 3.5,
+      offset: [0, 0.35, 0],
     },
   }),
   getEffect: createDungeonFlameEffectGetter({
     emitters: [
-      { offset: [-0.14, 0.52, -0.05], scale: 0.32, intensity: 0.5 },
-      { offset: [0.12, 0.6, 0.04], scale: 0.42, intensity: 0.68 },
-      { offset: [0, 0.48, 0.12], scale: 0.28, intensity: 0.44 },
+      { offset: [0, 0.34, 0], scale: 0.15, intensity: 0.5 },
+      { offset: [0.11, 0.4, -0.02], scale: 0.15, intensity: 0.5 },
+      { offset: [0.1, 0.3, 0.07], scale: 0.15, intensity: 0.5 },
+
     ],
   }),
+  getPlayModeNextProps: (objectProps) => {
+    const lit = objectProps.lit !== false
+    return { lit: !lit }
+  },
 })

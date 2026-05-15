@@ -1,13 +1,13 @@
-import { createDungeonAsset } from '../shared/createDungeonAsset'
-import { DUNGEON_PROP_TRANSFORM } from '../shared/dungeonConstants'
+import { createGenericColorSwatch, DUNGEON_COLOR_SWATCHES } from '../shared/dungeonColorAtlas'
 
-export const dungeonBookBrownAsset = createDungeonAsset({
+export const dungeonBookBrownAsset = createGenericColorSwatch({
   id: 'dungeon.props_book_brown',
   slug: 'dungeon-props-book-brown',
   name: 'Dungeon Book Brown',
-  category: 'prop',
   modelName: 'book_brown',
-  transform: DUNGEON_PROP_TRANSFORM,
+  sourceCells: [[6, 0]],
+  variants: DUNGEON_COLOR_SWATCHES,
+  defaultVariantId: 'brown',
   metadata: {
     connectors: [
       {

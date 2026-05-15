@@ -37,30 +37,34 @@ test.describe('Dungeon editor smoke flow', () => {
     await page.goto('/')
     await waitForDebugBridge(page)
 
-    const counter = page.getByTestId('placement-counter')
-    await expect(counter).toContainText('0 room cells')
+    const undoButton = page.getByRole('button', { name: 'Undo' })
+    await expect(undoButton).toBeDisabled()
 
     await page.evaluate(() => window.__DUNGEON_DEBUG__?.placeAtCell([0, 0], 'room'))
-    await expect(counter).toContainText('1 room cell')
+    await expect(undoButton).toBeEnabled()
 
     await page.evaluate(() => window.__DUNGEON_DEBUG__?.removeAtCell([0, 0], 'room'))
-    await expect(counter).toContainText('0 room cells')
+    await expect(undoButton).toBeEnabled()
   })
 
   test('undo and redo work from the toolbar', async ({ page }) => {
     await page.goto('/')
     await waitForDebugBridge(page)
 
-    const counter = page.getByTestId('placement-counter')
+    const undoButton = page.getByRole('button', { name: 'Undo' })
+    const redoButton = page.getByRole('button', { name: 'Redo' })
 
     await page.evaluate(() => window.__DUNGEON_DEBUG__?.paintRectangle([0, 0], [1, 1]))
-    await expect(counter).toContainText('4 room cells')
+    await expect(undoButton).toBeEnabled()
+    await expect(redoButton).toBeDisabled()
 
-    await page.getByRole('button', { name: 'Undo' }).click()
-    await expect(counter).toContainText('0 room cells')
+    await undoButton.click()
+    await expect(undoButton).toBeDisabled()
+    await expect(redoButton).toBeEnabled()
 
-    await page.getByRole('button', { name: 'Redo' }).click()
-    await expect(counter).toContainText('4 room cells')
+    await redoButton.click()
+    await expect(undoButton).toBeEnabled()
+    await expect(redoButton).toBeDisabled()
   })
 
   test('select tool clicks do not lock the camera', async ({ page }) => {

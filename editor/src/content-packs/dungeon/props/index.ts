@@ -46,13 +46,9 @@ import { dungeonBookcaseSingleAsset } from "./bookcase_single"
 import { dungeonBookcaseSingleDecoratedaAsset } from "./bookcase_single_decoratedA"
 import { dungeonBookcaseSingleDecoratedbAsset } from "./bookcase_single_decoratedB"
 import { dungeonBottleABrownAsset } from "./bottle_A_brown"
-import { dungeonBottleAGreenAsset } from "./bottle_A_green"
 import { dungeonBottleALabeledBrownAsset } from "./bottle_A_labeled_brown"
-import { dungeonBottleALabeledGreenAsset } from "./bottle_A_labeled_green"
 import { dungeonBottleBBrownAsset } from "./bottle_B_brown"
-import { dungeonBottleBGreenAsset } from "./bottle_B_green"
 import { dungeonBottleCBrownAsset } from "./bottle_C_brown"
-import { dungeonBottleCGreenAsset } from "./bottle_C_green"
 import { dungeonBoxLargeAsset } from "./box_large"
 import { dungeonBoxSmallAsset } from "./box_small"
 import { dungeonBoxSmallDecoratedAsset } from "./box_small_decorated"
@@ -65,9 +61,7 @@ import { dungeonCandleThinAsset } from "./candle_thin"
 import { dungeonCandleTripleAsset } from "./candle_triple"
 import { dungeonChairAsset } from "./chair"
 import { dungeonChestAsset } from "./chest"
-import { dungeonChestGoldAsset } from "./chest_gold"
 import { dungeonChestLargeAsset } from "./chest_large"
-import { dungeonChestLargeGoldAsset } from "./chest_large_gold"
 import { dungeonChestMimicAsset } from "./chest_mimic"
 import { dungeonCoinAsset } from "./coin"
 import { dungeonCoinStackLargeAsset } from "./coin_stack_large"
@@ -126,14 +120,8 @@ import { dungeonTableSmallDecoratedCAsset } from "./table_small_decorated_C"
 import { dungeonTorchAsset } from "./torch"
 import { dungeonTorchMountedAsset } from "./torch_mounted"
 import { dungeonTrunkLargeAAsset } from "./trunk_large_A"
-import { dungeonTrunkLargeBAsset } from "./trunk_large_B"
-import { dungeonTrunkLargeCAsset } from "./trunk_large_C"
 import { dungeonTrunkMediumAAsset } from "./trunk_medium_A"
-import { dungeonTrunkMediumBAsset } from "./trunk_medium_B"
-import { dungeonTrunkMediumCAsset } from "./trunk_medium_C"
 import { dungeonTrunkSmallAAsset } from "./trunk_small_A"
-import { dungeonTrunkSmallBAsset } from "./trunk_small_B"
-import { dungeonTrunkSmallCAsset } from "./trunk_small_C"
 
 export const dungeonPropAssets: ContentPackAsset[] = [
   ...dungeonBannersAssets,
@@ -166,13 +154,9 @@ export const dungeonPropAssets: ContentPackAsset[] = [
   dungeonBookcaseSingleDecoratedaAsset,
   dungeonBookcaseSingleDecoratedbAsset,
   dungeonBottleABrownAsset,
-  dungeonBottleAGreenAsset,
   dungeonBottleALabeledBrownAsset,
-  dungeonBottleALabeledGreenAsset,
   dungeonBottleBBrownAsset,
-  dungeonBottleBGreenAsset,
   dungeonBottleCBrownAsset,
-  dungeonBottleCGreenAsset,
   dungeonBoxLargeAsset,
   dungeonBoxSmallAsset,
   dungeonBoxSmallDecoratedAsset,
@@ -185,9 +169,7 @@ export const dungeonPropAssets: ContentPackAsset[] = [
   dungeonCandleTripleAsset,
   dungeonChairAsset,
   dungeonChestAsset,
-  dungeonChestGoldAsset,
   dungeonChestLargeAsset,
-  dungeonChestLargeGoldAsset,
   dungeonChestMimicAsset,
   dungeonCoinAsset,
   dungeonCoinStackLargeAsset,
@@ -263,12 +245,6 @@ export const dungeonPropAssets: ContentPackAsset[] = [
   dungeonScaffoldPillarsConnectedAsset,
   dungeonScaffoldPillarsConnectedTorchAsset,
   dungeonTrunkLargeAAsset,
-  dungeonTrunkLargeBAsset,
-  dungeonTrunkLargeCAsset,
   dungeonTrunkMediumAAsset,
-  dungeonTrunkMediumBAsset,
-  dungeonTrunkMediumCAsset,
   dungeonTrunkSmallAAsset,
-  dungeonTrunkSmallBAsset,
-  dungeonTrunkSmallCAsset,
 ]

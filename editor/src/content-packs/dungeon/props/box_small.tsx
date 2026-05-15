@@ -1,13 +1,13 @@
-import { createDungeonAsset } from '../shared/createDungeonAsset'
-import { DUNGEON_PROP_TRANSFORM } from '../shared/dungeonConstants'
+import { createGenericColorSwatch, DUNGEON_COLOR_SWATCHES } from '../shared/dungeonColorAtlas'
 
-export const dungeonBoxSmallAsset = createDungeonAsset({
+export const dungeonBoxSmallAsset = createGenericColorSwatch({
   id: 'dungeon.props_box_small',
   slug: 'dungeon-props-box-small',
   name: 'Dungeon Box Small',
-  category: 'prop',
   modelName: 'box_small',
-  transform: DUNGEON_PROP_TRANSFORM,
+  sourceCells: [[4, 0]],
+  variants: DUNGEON_COLOR_SWATCHES,
+  defaultVariantId: 'orange',
   metadata: {
     snapsTo: 'FREE',
     propSurface: true,

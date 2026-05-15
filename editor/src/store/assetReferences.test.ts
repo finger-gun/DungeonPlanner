@@ -10,6 +10,7 @@ import {
 function createSnapshot() {
   return {
     tool: 'select' as const,
+    activeRoomSetId: 'dungeon',
     selectedAssetIds: {
       floor: 'missing.floor',
       wall: 'missing.wall',

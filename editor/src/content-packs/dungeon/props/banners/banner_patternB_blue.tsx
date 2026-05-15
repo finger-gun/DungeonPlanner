@@ -1,21 +1,10 @@
-import { createDungeonAsset } from '../../shared/createDungeonAsset'
-import { DUNGEON_PROP_TRANSFORM } from '../../shared/dungeonConstants'
+import { createDungeonBannerColorSwatchAsset } from './bannerColorVariants'
 
-export const dungeonBannerPatternbBlueAsset = createDungeonAsset({
+export const dungeonBannerPatternbBlueAsset = createDungeonBannerColorSwatchAsset({
   id: 'dungeon.props_banners_banner_patternB_blue',
   slug: 'dungeon-props-banners-banner-patternB-blue',
   name: 'Dungeon Banner Patternb Blue',
-  category: 'prop',
   modelName: 'banner_patternB_blue',
-  transform: DUNGEON_PROP_TRANSFORM,
-  metadata: {
-    snapsTo: 'GRID',
-    connectors: [
-      {
-        point: [0, 0, 0.5],
-        type: 'WALL',
-      },
-    ],
-    blocksLineOfSight: false,
-  },
+  sourceCells: [[6, 2]],
+  defaultVariantId: 'blue',
 })

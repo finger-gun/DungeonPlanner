@@ -1,6 +1,6 @@
 import * as THREE from 'three'
 
-type CompatibleNodeMaterial = THREE.Material & Pick<
+export type CompatibleNodeMaterial = THREE.Material & Pick<
   THREE.MeshStandardMaterial,
   | 'name'
   | 'color'
@@ -104,6 +104,64 @@ export function createStandardCompatibleMaterial(parameters: THREE.MeshStandardM
   return material
 }
 
+export function synchronizeCompatibleMaterialProperties(
+  source: CompatibleNodeMaterial,
+  target: CompatibleNodeMaterial,
+) {
+  target.name = source.name
+  target.color.copy(source.color)
+  target.roughness = source.roughness
+  target.metalness = source.metalness
+  target.map = source.map
+  target.lightMap = source.lightMap
+  target.lightMapIntensity = source.lightMapIntensity
+  target.aoMap = source.aoMap
+  target.aoMapIntensity = source.aoMapIntensity
+  target.emissive.copy(source.emissive)
+  target.emissiveIntensity = source.emissiveIntensity
+  target.emissiveMap = source.emissiveMap
+  target.bumpMap = source.bumpMap
+  target.bumpScale = source.bumpScale
+  target.normalMap = source.normalMap
+  target.normalMapType = source.normalMapType
+  target.normalScale.copy(source.normalScale)
+  target.displacementMap = source.displacementMap
+  target.displacementScale = source.displacementScale
+  target.displacementBias = source.displacementBias
+  target.roughnessMap = source.roughnessMap
+  target.metalnessMap = source.metalnessMap
+  target.alphaMap = source.alphaMap
+  target.envMap = source.envMap
+  target.envMapIntensity = source.envMapIntensity
+  target.wireframe = source.wireframe
+  target.flatShading = source.flatShading
+  target.fog = source.fog
+  target.transparent = source.transparent
+  target.opacity = source.opacity
+  target.alphaTest = source.alphaTest
+  target.side = source.side
+  target.blending = source.blending
+  target.blendSrc = source.blendSrc
+  target.blendDst = source.blendDst
+  target.blendEquation = source.blendEquation
+  target.premultipliedAlpha = source.premultipliedAlpha
+  target.depthTest = source.depthTest
+  target.depthWrite = source.depthWrite
+  target.polygonOffset = source.polygonOffset
+  target.polygonOffsetFactor = source.polygonOffsetFactor
+  target.polygonOffsetUnits = source.polygonOffsetUnits
+  target.dithering = source.dithering
+  target.toneMapped = source.toneMapped
+  target.visible = source.visible
+  target.vertexColors = source.vertexColors
+  target.forceSinglePass = source.forceSinglePass
+  target.shadowSide = source.shadowSide
+  target.clipShadows = source.clipShadows
+  target.clippingPlanes = source.clippingPlanes
+  target.alphaToCoverage = source.alphaToCoverage
+  target.userData = { ...source.userData }
+}
+
 function upgradeStandardMaterial(material: THREE.Material) {
   if (!isPlainMeshStandardMaterial(material)) {
     return material
@@ -115,58 +173,7 @@ function upgradeStandardMaterial(material: THREE.Material) {
 function createMeshStandardNodeMaterial(material: THREE.MeshStandardMaterial) {
   const NodeMaterialCtor = getMeshStandardNodeMaterialCtor()
   const upgraded = new NodeMaterialCtor()
-  upgraded.name = material.name
-  upgraded.color.copy(material.color)
-  upgraded.roughness = material.roughness
-  upgraded.metalness = material.metalness
-  upgraded.map = material.map
-  upgraded.lightMap = material.lightMap
-  upgraded.lightMapIntensity = material.lightMapIntensity
-  upgraded.aoMap = material.aoMap
-  upgraded.aoMapIntensity = material.aoMapIntensity
-  upgraded.emissive.copy(material.emissive)
-  upgraded.emissiveIntensity = material.emissiveIntensity
-  upgraded.emissiveMap = material.emissiveMap
-  upgraded.bumpMap = material.bumpMap
-  upgraded.bumpScale = material.bumpScale
-  upgraded.normalMap = material.normalMap
-  upgraded.normalMapType = material.normalMapType
-  upgraded.normalScale.copy(material.normalScale)
-  upgraded.displacementMap = material.displacementMap
-  upgraded.displacementScale = material.displacementScale
-  upgraded.displacementBias = material.displacementBias
-  upgraded.roughnessMap = material.roughnessMap
-  upgraded.metalnessMap = material.metalnessMap
-  upgraded.alphaMap = material.alphaMap
-  upgraded.envMap = material.envMap
-  upgraded.envMapIntensity = material.envMapIntensity
-  upgraded.wireframe = material.wireframe
-  upgraded.flatShading = material.flatShading
-  upgraded.fog = material.fog
-  upgraded.transparent = material.transparent
-  upgraded.opacity = material.opacity
-  upgraded.alphaTest = material.alphaTest
-  upgraded.side = material.side
-  upgraded.blending = material.blending
-  upgraded.blendSrc = material.blendSrc
-  upgraded.blendDst = material.blendDst
-  upgraded.blendEquation = material.blendEquation
-  upgraded.premultipliedAlpha = material.premultipliedAlpha
-  upgraded.depthTest = material.depthTest
-  upgraded.depthWrite = material.depthWrite
-  upgraded.polygonOffset = material.polygonOffset
-  upgraded.polygonOffsetFactor = material.polygonOffsetFactor
-  upgraded.polygonOffsetUnits = material.polygonOffsetUnits
-  upgraded.dithering = material.dithering
-  upgraded.toneMapped = material.toneMapped
-  upgraded.visible = material.visible
-  upgraded.vertexColors = material.vertexColors
-  upgraded.forceSinglePass = material.forceSinglePass
-  upgraded.shadowSide = material.shadowSide
-  upgraded.clipShadows = material.clipShadows
-  upgraded.clippingPlanes = material.clippingPlanes
-  upgraded.alphaToCoverage = material.alphaToCoverage
-  upgraded.userData = { ...material.userData }
+  synchronizeCompatibleMaterialProperties(material, upgraded)
   return upgraded
 }
 

@@ -2,14 +2,21 @@ import { useEffect, useRef } from 'react'
 import { useFrame, useThree } from '@react-three/fiber'
 import * as THREE from 'three'
 import { useDungeonStore, type CameraPreset } from '../../store/useDungeonStore'
+import {
+  captureHmrCameraState,
+  readHmrCameraState,
+  writeHmrCameraState,
+} from './cameraHmrState'
+import {
+  makeOrthoCamera,
+  syncOrthoCameraFrustum,
+  usesOrthographicProjection,
+} from './cameraProjection'
 
 const LERP_FACTOR = 0.08
 
 const ISO_DIST = 16
 const PERSP_DIST = Math.sqrt(9 * 9 + 11 * 11 + 9 * 9)
-
-// Half-height in world units visible at ortho zoom=1 (covers ~20 tiles vertically at GRID_SIZE=2)
-const ORTHO_FRUSTUM = 20
 
 type SphericalDest = {
   r: number
@@ -38,19 +45,11 @@ function lerpAngle(a: number, b: number, t: number): number {
   return a + diff * t
 }
 
-function makeOrthoCamera(aspect: number): THREE.OrthographicCamera {
-  const f = ORTHO_FRUSTUM
-  return new THREE.OrthographicCamera(-f * aspect, f * aspect, f, -f, 0.1, 300)
-}
-
-function usesOrthographicProjection(preset: CameraPreset) {
-  return preset === 'isometric' || preset === 'top-down' || preset === 'classic'
-}
-
 export function CameraPresetManager() {
-  const { camera, set, size, scene, controls } = useThree()
+  const { camera, set, size, scene, controls, invalidate } = useThree()
   const cameraPreset = useDungeonStore((state) => state.cameraPreset)
   const clearCameraPreset = useDungeonStore((state) => state.clearCameraPreset)
+  const activeCameraMode = useDungeonStore((state) => state.activeCameraMode)
 
   const destRef        = useRef<SphericalDest | null>(null)
   const perspCamRef    = useRef<THREE.PerspectiveCamera | null>(null)
@@ -58,6 +57,9 @@ export function CameraPresetManager() {
   const isOrthoActive  = useRef(false)
   const raycasterRef   = useRef(new THREE.Raycaster())
   const targetOrbitPosRef = useRef<THREE.Vector3 | null>(null)
+  const hmrRestoreStateRef = useRef(
+    import.meta.hot ? readHmrCameraState(import.meta.hot.data) : null,
+  )
 
   // Capture the original perspective camera once on mount
   useEffect(() => {
@@ -72,13 +74,29 @@ export function CameraPresetManager() {
     const cam = orthoCamRef.current
     if (!cam || !isOrthoActive.current) return
     const aspect = size.width / size.height
-    const f = ORTHO_FRUSTUM
-    cam.left   = -f * aspect
-    cam.right  =  f * aspect
-    cam.top    =  f
-    cam.bottom = -f
+    syncOrthoCameraFrustum(cam, aspect)
     cam.updateProjectionMatrix()
   }, [size])
+
+  useEffect(() => {
+    if (!import.meta.hot) {
+      return
+    }
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const orbitControls = controls as any
+    return import.meta.hot.dispose((data) => {
+      if (!orbitControls?.target || !(camera instanceof THREE.Camera)) {
+        writeHmrCameraState(data, null)
+        return
+      }
+
+      writeHmrCameraState(
+        data,
+        captureHmrCameraState(camera, orbitControls.target as THREE.Vector3, activeCameraMode),
+      )
+    })
+  }, [activeCameraMode, camera, controls])
 
   useEffect(() => {
     if (!cameraPreset) return
@@ -120,12 +138,7 @@ export function CameraPresetManager() {
       if (!orthoCamRef.current) {
         orthoCamRef.current = makeOrthoCamera(aspect)
       } else {
-        // Ensure frustum matches current viewport
-        const f = ORTHO_FRUSTUM
-        orthoCamRef.current.left   = -f * aspect
-        orthoCamRef.current.right  =  f * aspect
-        orthoCamRef.current.top    =  f
-        orthoCamRef.current.bottom = -f
+        syncOrthoCameraFrustum(orthoCamRef.current, aspect)
       }
       const ortho = orthoCamRef.current
       
@@ -162,12 +175,55 @@ export function CameraPresetManager() {
   }, [cameraPreset, clearCameraPreset, camera, set, size, scene, controls])
 
   useFrame((state) => {
+    const hmrRestore = hmrRestoreStateRef.current
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const orbitControls = state.controls as any
+
+    if (hmrRestore && orbitControls?.target) {
+      const wantsOrthographic = hmrRestore.projection === 'orthographic'
+      const hasOrthographicCamera = state.camera instanceof THREE.OrthographicCamera
+
+      if (wantsOrthographic !== hasOrthographicCamera) {
+        if (wantsOrthographic) {
+          const aspect = size.width / size.height
+          if (!orthoCamRef.current) {
+            orthoCamRef.current = makeOrthoCamera(aspect)
+          } else {
+            syncOrthoCameraFrustum(orthoCamRef.current, aspect)
+          }
+          orthoCamRef.current.position.copy(state.camera.position)
+          orthoCamRef.current.quaternion.copy(state.camera.quaternion)
+          set({ camera: orthoCamRef.current })
+          isOrthoActive.current = true
+        } else if (perspCamRef.current) {
+          perspCamRef.current.position.copy(state.camera.position)
+          perspCamRef.current.quaternion.copy(state.camera.quaternion)
+          set({ camera: perspCamRef.current })
+          isOrthoActive.current = false
+        }
+        return
+      }
+
+      orbitControls.target.set(...hmrRestore.target)
+      state.camera.position.set(...hmrRestore.position)
+
+      if (state.camera instanceof THREE.PerspectiveCamera) {
+        state.camera.fov = hmrRestore.fov ?? state.camera.fov
+      } else if (state.camera instanceof THREE.OrthographicCamera) {
+        state.camera.zoom = hmrRestore.zoom ?? state.camera.zoom
+      }
+
+      state.camera.updateProjectionMatrix()
+      orbitControls.update()
+      invalidate()
+      hmrRestoreStateRef.current = null
+      return
+    }
+
     if (!destRef.current) return
 
     const dest         = destRef.current
     const activeCamera = state.camera
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const orbitControls = state.controls as any
     
     // Force orbit target to our stored target position during animation
     // This prevents orbit controls from resetting it
@@ -228,7 +284,7 @@ export function CameraPresetManager() {
       destRef.current = null
       targetOrbitPosRef.current = null // Clear stored target when animation completes
     }
-  })
+  }, -1)
 
   return null
 }

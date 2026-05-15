@@ -109,7 +109,7 @@ describe('SelectToolPanel', () => {
     })
   })
 
-  it('does not expose opening editing in the select tool', () => {
+  it('lets select mode open a selected wall opening', () => {
     const openingId = 'opening-1'
     useDungeonStore.setState((state) => ({
       ...state,
@@ -129,9 +129,12 @@ describe('SelectToolPanel', () => {
 
     render(<SelectToolPanel />)
 
-    expect(screen.getByText('Select Tool')).toBeInTheDocument()
-    expect(screen.queryByText('Selected Connection')).not.toBeInTheDocument()
+    expect(screen.getByText('Selected Opening')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Open' }))
+
     expect(useDungeonStore.getState().wallOpenings[openingId]?.assetId).toBe('core.opening_door_wall_1')
+    expect(useDungeonStore.getState().wallOpenings[openingId]?.objectProps).toMatchObject({ open: true })
   })
 
   it('toggles selected interactive wall state from the inspector', () => {

@@ -1,9 +1,10 @@
-import { useMemo, useRef } from 'react'
-import { useFrame } from '@react-three/fiber'
+import { useEffect, useMemo, useRef } from 'react'
+import { useFrame, useThree } from '@react-three/fiber'
 import * as THREE from 'three'
 import { useGLTF } from '../../../../rendering/useGLTF'
 import { cloneSceneWithNodeMaterials } from '../../../../rendering/nodeMaterialUtils'
 import type { ContentPackComponentProps } from '../../../types'
+import { advanceDoorAngle } from './doorAnimation'
 import {
   createDungeonWallAsset,
   resolveDungeonWallAssetResources,
@@ -30,6 +31,7 @@ function DungeonWallDoorwayScaffoldVariant({ objectProps, ...props }: ContentPac
   const kind = objectProps?.kind === 'corner' ? 'corner' : 'wall'
   const modelUrl = kind === 'corner' ? cornerAssetUrl : assetUrl
   const gltf = useGLTF(modelUrl)
+  const invalidate = useThree((state) => state.invalidate)
   const doorPivotRef = useRef<THREE.Group>(null)
   const scene = useMemo(() => createDoorSceneSetup(gltf.scene), [gltf.scene])
   const transform = kind === 'corner'
@@ -37,17 +39,27 @@ function DungeonWallDoorwayScaffoldVariant({ objectProps, ...props }: ContentPac
     : WALL_DEFAULT_TRANSFORM
   const targetDoorAngle = kind === 'wall' && objectProps?.open === true ? DOOR_OPEN_ANGLE : 0
 
+  useEffect(() => {
+    if (kind === 'wall' && scene.doorLeaf) {
+      invalidate()
+    }
+  }, [invalidate, kind, scene.doorLeaf, targetDoorAngle])
+
   useFrame((_, delta) => {
     if (!doorPivotRef.current || kind !== 'wall' || !scene.doorLeaf) {
       return
     }
 
-    doorPivotRef.current.rotation.y = THREE.MathUtils.damp(
+    const { nextAngle, needsInvalidate } = advanceDoorAngle(
       doorPivotRef.current.rotation.y,
       targetDoorAngle,
-      DOOR_ANIMATION_SPEED,
       delta,
+      DOOR_ANIMATION_SPEED,
     )
+    doorPivotRef.current.rotation.y = nextAngle
+    if (needsInvalidate) {
+      invalidate()
+    }
   })
 
   return (
@@ -93,8 +105,16 @@ export const dungeonWallDoorwayScaffoldAsset = createDungeonWallAsset({
   id: 'dungeon.wall_wall_doorway_scaffold',
   slug: 'dungeon-wall-wall-doorway-scaffold',
   name: 'Dungeon Wall Doorway Scaffold',
+  category: 'opening',
   modelName: 'wall_doorway_scaffold',
   Component: DungeonWallDoorwayScaffoldVariant,
+  metadata: {
+    snapsTo: 'GRID',
+    openingWidth: 1,
+    openingKind: 'door',
+    connectors: [{ point: [0, 0, 0], type: 'WALL' }],
+    browserSubcategory: 'doors',
+  },
   getPlayModeNextProps: (objectProps) => ({
     open: objectProps.open !== true,
   }),

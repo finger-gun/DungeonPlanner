@@ -4,8 +4,11 @@
  * Format versioning: increment CURRENT_VERSION and add a migration in
  * `migrateFile` whenever the schema changes in a breaking way.
  */
-import { getDefaultAssetIdByCategory } from '../content-packs/registry'
-import { getContentPackAssetById } from '../content-packs/registry'
+import {
+  getContentPackAssetById,
+  getDefaultAssetIdByCategory,
+  getDefaultContentPackRoomSetId,
+} from '../content-packs/registry'
 import { sanitizePersistedAssetReferences } from './assetReferences'
 import {
   DEFAULT_POST_PROCESSING_SETTINGS,
@@ -37,7 +40,9 @@ import {
   OUTDOOR_TERRAIN_STYLES,
 } from './outdoorTerrainStyles'
 
-const CURRENT_VERSION = 16
+const CURRENT_VERSION = 20
+const ROOM_SET_CONTENT_PACK_ID = 'dungeon'
+const FALLBACK_ROOM_SET_ID = 'dungeon'
 
 // ── Serialized shapes (compact, no redundant keys) ────────────────────────────
 
@@ -66,7 +71,9 @@ type SerializedOpening = {
   wallKey: string
   width: 1 | 2 | 3
   flipped: boolean
+  objectProps?: Record<string, unknown>
   layerId: string
+  source?: 'manual' | 'generated'
 }
 
 type SerializedFloor = {
@@ -102,6 +109,7 @@ type SerializedFloor = {
   openings: SerializedOpening[]
   innerWalls?: string[]
   nextRoomNumber: number
+  activeRoomSetId?: string
 }
 
 export type DungeonFile = {
@@ -115,6 +123,7 @@ export type DungeonFile = {
   outdoorTerrainType?: OutdoorTerrainType
   outdoorOverpaintRegenerate?: boolean
   sceneLighting: { intensity: number }
+  lightFlickerEnabled: boolean
   postProcessing: {
     enabled: boolean
     pixelateEnabled: boolean
@@ -141,6 +150,7 @@ export type SerializableState = {
   outdoorTerrainType?: OutdoorTerrainType
   outdoorOverpaintRegenerate?: boolean
   sceneLighting: { intensity: number }
+  lightFlickerEnabled?: boolean
   postProcessing: {
     enabled: boolean
     pixelateEnabled: boolean
@@ -168,6 +178,7 @@ export type SerializableState = {
   innerWalls: Record<string, InnerWallRecord>
   occupancy: Record<string, string>
   nextRoomNumber: number
+  activeRoomSetId?: string
   // Multi-floor data
   floors?: Record<string, FloorRecord>
   floorOrder?: string[]
@@ -197,6 +208,7 @@ function serializeFloorData(
     wallOpenings: Record<string, OpeningRecord>
     innerWalls: Record<string, InnerWallRecord>
     nextRoomNumber: number
+    activeRoomSetId?: string
   },
 ): SerializedFloor {
   return {
@@ -231,10 +243,14 @@ function serializeFloorData(
     })),
     openings: Object.values(snapshot.wallOpenings).map((o) => ({
       id: o.id, assetId: o.assetId, wallKey: o.wallKey, width: o.width,
-      flipped: o.flipped ?? false, layerId: o.layerId,
+      flipped: o.flipped ?? false,
+      objectProps: { ...(o.objectProps ?? {}) },
+      layerId: o.layerId,
+      source: o.source ?? 'manual',
     })),
     innerWalls: Object.values(snapshot.innerWalls).map((innerWall) => innerWall.wallKey),
     nextRoomNumber: snapshot.nextRoomNumber,
+    activeRoomSetId: snapshot.activeRoomSetId,
   }
 }
 
@@ -266,9 +282,10 @@ export function serializeDungeon(state: SerializableState): string {
       wallSurfaceProps: state.wallSurfaceProps,
       placedObjects: state.placedObjects,
       wallOpenings: state.wallOpenings,
-      innerWalls: state.innerWalls,
-      nextRoomNumber: state.nextRoomNumber,
-    }))
+       innerWalls: state.innerWalls,
+       nextRoomNumber: state.nextRoomNumber,
+       activeRoomSetId: state.activeRoomSetId,
+     }))
   }
 
   const activeFloorId = state.activeFloorId ?? (state.floorOrder?.[0] ?? 'floor-1')
@@ -284,6 +301,7 @@ export function serializeDungeon(state: SerializableState): string {
     outdoorTerrainType: state.outdoorTerrainType ?? 'mixed',
     outdoorOverpaintRegenerate: state.outdoorOverpaintRegenerate ?? false,
     sceneLighting: { intensity: state.sceneLighting.intensity },
+    lightFlickerEnabled: state.lightFlickerEnabled ?? true,
     postProcessing: { ...state.postProcessing },
     activeFloorId,
     floorOrder,
@@ -501,6 +519,68 @@ export function deserializeDungeon(json: string): SerializableState | null {
     }
   }
 
+  if (version < 17) {
+    const r = raw as Record<string, unknown>
+    raw = {
+      ...r,
+      lightFlickerEnabled: typeof r.lightFlickerEnabled === 'boolean' ? r.lightFlickerEnabled : true,
+    }
+  }
+
+  if (version < 18 && Array.isArray((raw as Record<string, unknown>).floors)) {
+    const r = raw as Record<string, unknown>
+    raw = {
+      ...r,
+      floors: (r.floors as unknown[]).map((floor) =>
+        isObject(floor)
+          ? {
+              ...floor,
+              openings: Array.isArray(floor.openings)
+                ? floor.openings.map((opening) =>
+                    isObject(opening) && opening.source !== 'generated'
+                      ? { ...opening, source: 'manual' }
+                      : opening,
+                  )
+                : [],
+            }
+          : floor,
+      ),
+    }
+  }
+
+  if (version < 19 && Array.isArray((raw as Record<string, unknown>).floors)) {
+    const r = raw as Record<string, unknown>
+    raw = {
+      ...r,
+      floors: (r.floors as unknown[]).map((floor) =>
+        isObject(floor)
+          ? {
+              ...floor,
+              openings: Array.isArray(floor.openings)
+                ? floor.openings.map((opening) =>
+                    isObject(opening) && !isObject(opening.objectProps)
+                      ? { ...opening, objectProps: {} }
+                      : opening,
+                  )
+                : [],
+            }
+          : floor,
+      ),
+    }
+  }
+
+  if (version < 20 && Array.isArray((raw as Record<string, unknown>).floors)) {
+    const r = raw as Record<string, unknown>
+    raw = {
+      ...r,
+      floors: (r.floors as unknown[]).map((floor) =>
+        isObject(floor) && typeof floor.activeRoomSetId !== 'string'
+          ? { ...floor, activeRoomSetId: getDefaultRoomSetId() }
+          : floor,
+      ),
+    }
+  }
+
   return parseFile(raw as Record<string, unknown>)
 }
 
@@ -524,6 +604,7 @@ function parseFloorData(raw: Record<string, unknown>): {
   innerWalls: Record<string, InnerWallRecord>
   occupancy: Record<string, string>
   nextRoomNumber: number
+  activeRoomSetId: string
 } {
   const layers: Record<string, Layer> = {}
   const layersArr = Array.isArray(raw.layers) ? (raw.layers as unknown[]) : []
@@ -558,6 +639,7 @@ function parseFloorData(raw: Record<string, unknown>): {
       id: requireString(r, 'id'),
       name: requireString(r, 'name'),
       layerId: typeof r.layerId === 'string' ? r.layerId : 'default',
+      roomSetId: typeof r.roomSetId === 'string' ? r.roomSetId : null,
       floorAssetId: typeof r.floorAssetId === 'string' ? r.floorAssetId : null,
       wallAssetId: typeof r.wallAssetId === 'string' ? r.wallAssetId : null,
     }
@@ -681,7 +763,9 @@ function parseFloorData(raw: Record<string, unknown>): {
       assetId: typeof o.assetId === 'string' ? o.assetId : null,
       wallKey, width,
       flipped: o.flipped === true,
+      objectProps: isObject(o.objectProps) ? (o.objectProps as Record<string, unknown>) : {},
       layerId: typeof o.layerId === 'string' && layers[o.layerId] ? o.layerId : 'default',
+      source: o.source === 'generated' ? 'generated' : 'manual',
     }
   }
 
@@ -707,6 +791,8 @@ function parseFloorData(raw: Record<string, unknown>): {
     occupancy,
     nextRoomNumber: typeof raw.nextRoomNumber === 'number' && raw.nextRoomNumber >= 1
       ? raw.nextRoomNumber : 1,
+    activeRoomSetId:
+      typeof raw.activeRoomSetId === 'string' ? raw.activeRoomSetId : getDefaultRoomSetId(),
   }
 }
 
@@ -738,6 +824,7 @@ function parseFile(raw: Record<string, unknown>): SerializableState | null {
         snapshot: {
           ...data,
           tool: 'select' as const,
+          activeRoomSetId: data.activeRoomSetId,
           selectedAssetIds: {
             floor: getDefaultAssetIdByCategory('floor'),
             wall: getDefaultAssetIdByCategory('wall'),
@@ -765,13 +852,19 @@ function parseFile(raw: Record<string, unknown>): SerializableState | null {
       const fallbackId = 'floor-1'
       floors[fallbackId] = {
         id: fallbackId, name: 'Ground Floor', level: 0,
-        snapshot: { ...activeFloorData, tool: 'select', selectedAssetIds: {
-          floor: getDefaultAssetIdByCategory('floor'),
-          wall: getDefaultAssetIdByCategory('wall'),
-          prop: getDefaultAssetIdByCategory('prop'),
-          opening: getDefaultAssetIdByCategory('opening'),
-          player: getDefaultAssetIdByCategory('player'),
-        }, selection: null },
+        snapshot: {
+          ...activeFloorData,
+          tool: 'select',
+          activeRoomSetId: activeFloorData.activeRoomSetId,
+          selectedAssetIds: {
+            floor: getDefaultAssetIdByCategory('floor'),
+            wall: getDefaultAssetIdByCategory('wall'),
+            prop: getDefaultAssetIdByCategory('prop'),
+            opening: getDefaultAssetIdByCategory('opening'),
+            player: getDefaultAssetIdByCategory('player'),
+          },
+          selection: null,
+        },
         history: [], future: [],
       }
     }
@@ -800,6 +893,7 @@ function parseFile(raw: Record<string, unknown>): SerializableState | null {
       sceneLighting: {
         intensity: typeof sceneLightingRaw.intensity === 'number' ? sceneLightingRaw.intensity : 1,
       },
+      lightFlickerEnabled: raw.lightFlickerEnabled !== false,
       postProcessing: normalizePostProcessingSettings(ppRaw),
       // Active floor working state (spread into top-level for the store)
       ...activeFloorData,
@@ -868,6 +962,10 @@ function parseOutdoorTerrainProfiles(value: unknown): Partial<Record<OutdoorTerr
     rocks: parseProfile(value.rocks),
     'dead-forest': parseProfile(value['dead-forest']),
   }
+}
+
+function getDefaultRoomSetId() {
+  return getDefaultContentPackRoomSetId(ROOM_SET_CONTENT_PACK_ID) ?? FALLBACK_ROOM_SET_ID
 }
 
 // Suppress "unused import" — kept for completeness in registry-aware migrations

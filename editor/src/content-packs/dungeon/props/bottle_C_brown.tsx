@@ -1,13 +1,13 @@
-import { createDungeonAsset } from '../shared/createDungeonAsset'
-import { DUNGEON_PROP_TRANSFORM } from '../shared/dungeonConstants'
+import { createGenericColorSwatch, DUNGEON_COLOR_SWATCHES } from '../shared/dungeonColorAtlas'
 
-export const dungeonBottleCBrownAsset = createDungeonAsset({
+export const dungeonBottleCBrownAsset = createGenericColorSwatch({
   id: 'dungeon.props_bottle_C_brown',
   slug: 'dungeon-props-bottle-C-brown',
   name: 'Dungeon Bottle C Brown',
-  category: 'prop',
   modelName: 'bottle_C_brown',
-  transform: DUNGEON_PROP_TRANSFORM,
+  sourceCells: [[6, 0]],
+  variants: DUNGEON_COLOR_SWATCHES,
+  defaultVariantId: 'brown',
   metadata: {
     connectors: [
       {

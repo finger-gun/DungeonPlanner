@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { getMetadataConnectors } from './connectors'
-import { getContentPackAssetById, getDefaultAssetIdByCategory } from './registry'
+import { getContentPackAssetById, getContentPackRoomSetById, getDefaultAssetIdByCategory } from './registry'
 import { syncGeneratedCharacterAssets } from './runtimeRegistry'
 
 describe('content pack registry', () => {
@@ -56,7 +56,7 @@ describe('content pack registry', () => {
     expect(asset.getPlayModeNextProps?.({ open: true })).toEqual({ open: false })
   })
 
-  it('registers the scaffold dungeon wall doorway as a play-toggleable wall', () => {
+  it('registers the scaffold dungeon wall doorway as a play-toggleable opening', () => {
     const asset = getContentPackAssetById('dungeon.wall_wall_doorway_scaffold')
 
     if (!asset) {
@@ -66,6 +66,41 @@ describe('content pack registry', () => {
 
     expect(asset.getPlayModeNextProps?.({})).toEqual({ open: true })
     expect(asset.getPlayModeNextProps?.({ open: true })).toEqual({ open: false })
+    expect(asset.category).toBe('opening')
+    expect(asset.metadata?.openingKind).toBe('door')
+  })
+
+  it('registers the timber frame room set with scaffold walls and scaffold doors', () => {
+    expect(getContentPackRoomSetById('dungeon', 'timber-frame')).toMatchObject({
+      id: 'timber-frame',
+      name: 'Timber Frame',
+      previewWallAssetId: 'dungeon.wall_wall_scaffold',
+      wallAssetId: 'dungeon.wall_wall_scaffold',
+      pillarAssetId: 'dungeon.props_pillars_pillar',
+      openingAssetId: 'dungeon.wall_wall_doorway_scaffold',
+      floor: {
+        kind: 'single',
+        assetId: 'dungeon.floor_floor_tile_small',
+      },
+    })
+  })
+
+  it('registers scaffold and opening wall variants as wall openings in the doors browser section', () => {
+    for (const assetId of [
+      'dungeon.wall_wall_open_scaffold',
+      'dungeon.wall_wall_opening',
+    ]) {
+      const asset = getContentPackAssetById(assetId)
+
+      if (!asset) {
+        expect(asset).toBeNull()
+        continue
+      }
+
+      expect(asset.category).toBe('opening')
+      expect(asset.metadata?.openingKind).toBe('passage')
+      expect(asset.metadata?.browserSubcategory).toBe('doors')
+    }
   })
 
   it('registers dungeon torches as play-toggleable flame props', () => {
@@ -105,6 +140,146 @@ describe('content pack registry', () => {
       expect(asset.getPlayModeNextProps?.({ lit: false })).toEqual({ lit: true })
       expect(asset.getLight?.({})).toMatchObject({ flicker: true })
       expect(asset.getLight?.({ lit: false })).toBeNull()
+    }
+  })
+
+  it('registers banner props with color variant metadata', () => {
+    const asset = getContentPackAssetById('dungeon.props_banners_banner_blue')
+
+    if (!asset) {
+      expect(asset).toBeNull()
+      return
+    }
+
+    expect(asset.metadata?.atlasColorVariants).toMatchObject({
+      propKey: 'colorVariant',
+      defaultVariantId: 'blue',
+    })
+    expect(asset.metadata?.atlasColorVariants?.variants).toHaveLength(31)
+  })
+
+  it('registers patterned and shield banner props with color variant metadata', () => {
+    for (const assetId of [
+      'dungeon.props_banners_banner_patternA_blue',
+      'dungeon.props_banners_banner_patternB_blue',
+      'dungeon.props_banners_banner_patternC_blue',
+      'dungeon.props_banners_banner_shield_blue',
+      'dungeon.props_banners_banner_thin_blue',
+      'dungeon.props_banners_banner_triple_blue',
+    ]) {
+      const asset = getContentPackAssetById(assetId)
+
+      if (!asset) {
+        expect(asset).toBeNull()
+        continue
+      }
+
+      expect(asset.metadata?.atlasColorVariants).toMatchObject({
+        propKey: 'colorVariant',
+        defaultVariantId: 'blue',
+      })
+      expect(asset.metadata?.atlasColorVariants?.variants).toHaveLength(31)
+    }
+  })
+
+  it('does not register redundant color sibling assets for swatch-enabled families', () => {
+    for (const assetId of [
+      'dungeon.props_banners_banner_brown',
+      'dungeon.props_banners_banner_green',
+      'dungeon.props_banners_banner_red',
+      'dungeon.props_banners_banner_white',
+      'dungeon.props_banners_banner_yellow',
+      'dungeon.props_banners_banner_patternA_brown',
+      'dungeon.props_banners_banner_patternA_green',
+      'dungeon.props_banners_banner_patternA_red',
+      'dungeon.props_banners_banner_patternA_white',
+      'dungeon.props_banners_banner_patternA_yellow',
+      'dungeon.props_banners_banner_patternB_brown',
+      'dungeon.props_banners_banner_patternB_green',
+      'dungeon.props_banners_banner_patternB_red',
+      'dungeon.props_banners_banner_patternB_white',
+      'dungeon.props_banners_banner_patternB_yellow',
+      'dungeon.props_banners_banner_patternC_brown',
+      'dungeon.props_banners_banner_patternC_green',
+      'dungeon.props_banners_banner_patternC_red',
+      'dungeon.props_banners_banner_patternC_white',
+      'dungeon.props_banners_banner_patternC_yellow',
+      'dungeon.props_banners_banner_shield_brown',
+      'dungeon.props_banners_banner_shield_green',
+      'dungeon.props_banners_banner_shield_red',
+      'dungeon.props_banners_banner_shield_white',
+      'dungeon.props_banners_banner_shield_yellow',
+      'dungeon.props_banners_banner_thin_brown',
+      'dungeon.props_banners_banner_thin_green',
+      'dungeon.props_banners_banner_thin_red',
+      'dungeon.props_banners_banner_thin_white',
+      'dungeon.props_banners_banner_thin_yellow',
+      'dungeon.props_banners_banner_triple_brown',
+      'dungeon.props_banners_banner_triple_green',
+      'dungeon.props_banners_banner_triple_red',
+      'dungeon.props_banners_banner_triple_white',
+      'dungeon.props_banners_banner_triple_yellow',
+      'dungeon.props_bottle_A_green',
+      'dungeon.props_bottle_B_green',
+      'dungeon.props_bottle_A_labeled_green',
+      'dungeon.props_bottle_C_green',
+      'dungeon.props_trunk_large_B',
+      'dungeon.props_trunk_large_C',
+      'dungeon.props_trunk_medium_B',
+      'dungeon.props_trunk_medium_C',
+      'dungeon.props_trunk_small_B',
+      'dungeon.props_trunk_small_C',
+      'dungeon.props_chest_gold',
+      'dungeon.props_chest_large_gold',
+    ]) {
+      expect(getContentPackAssetById(assetId)).toBeNull()
+    }
+  })
+
+  it('registers the dungeon chair with color variant metadata', () => {
+    const asset = getContentPackAssetById('dungeon.props_chair')
+
+    if (!asset) {
+      expect(asset).toBeNull()
+      return
+    }
+
+    expect(asset.metadata?.atlasColorVariants).toMatchObject({
+      propKey: 'colorVariant',
+      defaultVariantId: 'default',
+    })
+    expect(asset.metadata?.atlasColorVariants?.variants).toHaveLength(32)
+  })
+
+  it('registers requested dungeon props with color variant metadata', () => {
+    for (const assetId of [
+      'dungeon.props_chest',
+      'dungeon.props_trunk_large_A',
+      'dungeon.props_trunk_medium_A',
+      'dungeon.props_trunk_small_A',
+      'dungeon.props_box_small',
+      'dungeon.props_box_large',
+      'dungeon.props_book_brown',
+      'dungeon.props_candle',
+      'dungeon.props_candle_lit',
+      'dungeon.props_candle_thin',
+      'dungeon.props_candle_thin_lit',
+      'dungeon.props_bottle_A_brown',
+      'dungeon.props_bottle_B_brown',
+      'dungeon.props_bottle_A_labeled_brown',
+      'dungeon.props_bottle_C_brown',
+    ]) {
+      const asset = getContentPackAssetById(assetId)
+
+      if (!asset) {
+        expect(asset).toBeNull()
+        continue
+      }
+
+      expect(asset.metadata?.atlasColorVariants).toMatchObject({
+        propKey: 'colorVariant',
+      })
+      expect(asset.metadata?.atlasColorVariants?.variants).toHaveLength(32)
     }
   })
 

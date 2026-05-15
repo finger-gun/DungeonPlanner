@@ -3,7 +3,9 @@ import type { Dispatch, SetStateAction } from 'react'
 import { useThree, type ThreeEvent } from '@react-three/fiber'
 import * as THREE from 'three'
 import { GRID_SIZE, type GridCell } from '../../hooks/useSnapToGrid'
+import type { BakedFloorLightField } from '../../rendering/dungeonLightField'
 import { useDungeonStore } from '../../store/useDungeonStore'
+import { BatchedTileEntries } from './BatchedTileEntries'
 import { getCornerHandleLayout, getEdgeProps } from './roomResizeHandleLayout'
 import {
   getRoomBoundaryRuns,
@@ -25,6 +27,17 @@ import {
   type RoomResizeCorner,
   type RoomResizeEdge,
 } from '../../store/roomResize'
+import { getTileGpuStreamMountId } from './TileGpuStreamContextShared'
+import {
+  buildRemovedRoomTileEntries,
+  expandRoomMutationCells,
+  type RoomAnimationStateInput,
+} from './roomMutationAnimations'
+import {
+  shouldUpdateRoomResizeDragState,
+  type RoomResizeDragState,
+} from './roomResizeDragState'
+import { useRemovalAnimationBatches } from './useRemovalAnimationBatches'
 
 const OVERLAY_Y = 0.3
 const HANDLE_CORNERS: RoomResizeCorner[] = ['nw', 'ne', 'se', 'sw']
@@ -34,36 +47,58 @@ type DragHandle =
   | { kind: 'corner'; corner: RoomResizeCorner }
   | { kind: 'edge'; edge: RoomResizeEdge }
 
-type DragState =
-  | {
-      kind: 'rect'
-      handle: DragHandle
-      bounds: RoomBounds
-      valid: boolean
-    }
-  | {
-      kind: 'run'
-      run: RoomBoundaryRun
-      boundary: number
-      cells: GridCell[]
-      valid: boolean
-    }
+type DragState = RoomResizeDragState
 
-export function RoomResizeOverlay() {
+type RoomResizeOverlayProps = {
+  bakedLightField?: BakedFloorLightField | null
+}
+
+export function RoomResizeOverlay({ bakedLightField = null }: RoomResizeOverlayProps) {
   const tool = useDungeonStore((state) => state.tool)
+  const roomPaintMode = useDungeonStore((state) => state.roomPaintMode)
+  const activeFloorId = useDungeonStore((state) => state.activeFloorId)
+  const activeLayerId = useDungeonStore((state) => state.activeLayerId)
   const paintedCells = useDungeonStore((state) => state.paintedCells)
+  const floorTileAssetIds = useDungeonStore((state) => state.floorTileAssetIds)
+  const wallSurfaceAssetIds = useDungeonStore((state) => state.wallSurfaceAssetIds)
+  const wallSurfaceProps = useDungeonStore((state) => state.wallSurfaceProps)
+  const wallOpenings = useDungeonStore((state) => state.wallOpenings)
+  const innerWalls = useDungeonStore((state) => state.innerWalls)
+  const rooms = useDungeonStore((state) => state.rooms)
+  const globalFloorAssetId = useDungeonStore((state) => state.selectedAssetIds.floor)
+  const globalWallAssetId = useDungeonStore((state) => state.selectedAssetIds.wall)
   const selectedRoomId = useDungeonStore((state) => state.selectedRoomId)
+  const removeRoom = useDungeonStore((state) => state.removeRoom)
   const resizeRoom = useDungeonStore((state) => state.resizeRoom)
   const resizeRoomByBoundaryRun = useDungeonStore((state) => state.resizeRoomByBoundaryRun)
   const setRoomResizeHandleActive = useDungeonStore((state) => state.setRoomResizeHandleActive)
-  const { camera, gl, invalidate } = useThree()
+  const { camera, gl, invalidate, controls } = useThree()
 
   const [dragState, setDragState] = useState<DragState | null>(null)
   const dragStateRef = useRef<DragState | null>(null)
+  const { removalAnimationBatches, queueRemovalAnimationBatch } = useRemovalAnimationBatches()
+  const isDragging = dragState !== null
 
   useEffect(() => {
     dragStateRef.current = dragState
   }, [dragState])
+
+  // Lock/unlock camera controls during resize drag
+  useEffect(() => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const orbitControls = controls as any
+    if (!orbitControls || !('enabled' in orbitControls)) {
+      return
+    }
+
+    if (dragState) {
+      // Disable orbit controls when dragging
+      orbitControls.enabled = false
+    } else {
+      // Re-enable orbit controls when not dragging
+      orbitControls.enabled = true
+    }
+  }, [dragState, controls])
 
   const baseBounds = useMemo(
     () => selectedRoomId ? getRoomBounds(selectedRoomId, paintedCells) : null,
@@ -108,14 +143,90 @@ export function RoomResizeOverlay() {
     invalidate()
   }, [gl, invalidate, setRoomResizeHandleActive])
 
+  const deleteSelectedRoomWithAnimation = useCallback(() => {
+    if (!selectedRoomId || roomCells.length === 0) {
+      return
+    }
+
+    const previousRoomAnimationState = {
+      activeLayerId,
+      activeRoomSetId: useDungeonStore.getState().activeRoomSetId,
+      bakedLightField,
+      floorTileAssetIds,
+      globalFloorAssetId,
+      globalWallAssetId,
+      innerWalls,
+      paintedCells,
+      rooms,
+      wallOpenings,
+      wallSurfaceAssetIds,
+      wallSurfaceProps,
+    } satisfies RoomAnimationStateInput
+
+    removeRoom(selectedRoomId)
+
+    const nextState = useDungeonStore.getState()
+    if (nextState.activeFloorId !== activeFloorId) {
+      return
+    }
+
+    const affectedCells = expandRoomMutationCells(roomCells)
+    const removalEntries = buildRemovedRoomTileEntries({
+      before: previousRoomAnimationState,
+      after: {
+        activeLayerId,
+        activeRoomSetId: nextState.activeRoomSetId,
+        bakedLightField,
+        floorTileAssetIds: nextState.floorTileAssetIds,
+        globalFloorAssetId: nextState.selectedAssetIds.floor,
+        globalWallAssetId: nextState.selectedAssetIds.wall,
+        innerWalls: nextState.innerWalls,
+        paintedCells: nextState.paintedCells,
+        rooms: nextState.rooms,
+        wallOpenings: nextState.wallOpenings,
+        wallSurfaceAssetIds: nextState.wallSurfaceAssetIds,
+        wallSurfaceProps: nextState.wallSurfaceProps,
+      },
+      buildStartedAt: performance.now(),
+      cells: affectedCells,
+      originCell: affectedCells[0] ?? roomCells[0] ?? [0, 0],
+    })
+    queueRemovalAnimationBatch(removalEntries, activeFloorId)
+    invalidate()
+  }, [
+    activeFloorId,
+    activeLayerId,
+    bakedLightField,
+    floorTileAssetIds,
+    globalFloorAssetId,
+    globalWallAssetId,
+    innerWalls,
+    invalidate,
+    paintedCells,
+    queueRemovalAnimationBatch,
+    removeRoom,
+    roomCells,
+    rooms,
+    selectedRoomId,
+    wallOpenings,
+    wallSurfaceAssetIds,
+    wallSurfaceProps,
+  ])
+
   const unitBoxGeometry = useMemo(() => new THREE.BoxGeometry(1, 1, 1), [])
 
   useEffect(() => () => {
     gl.domElement.style.cursor = ''
     setRoomResizeHandleActive(false)
-  }, [gl, setRoomResizeHandleActive])
+    // Ensure controls are re-enabled on unmount
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const orbitControls = controls as any
+    if (orbitControls && 'enabled' in orbitControls) {
+      orbitControls.enabled = true
+    }
+  }, [gl, setRoomResizeHandleActive, controls])
 
-  const showOverlay = tool === 'room' && Boolean(selectedRoomId)
+  const showOverlay = tool === 'room' && roomPaintMode === 'resize' && Boolean(selectedRoomId)
 
   useEffect(() => {
     if (showOverlay) {
@@ -126,12 +237,46 @@ export function RoomResizeOverlay() {
     dragStateRef.current = null
     setDragState(null)
     setRoomResizeHandleActive(false)
-  }, [gl, setRoomResizeHandleActive, showOverlay])
+
+    // Ensure controls are re-enabled when overlay is hidden
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const orbitControls = controls as any
+    if (orbitControls && 'enabled' in orbitControls) {
+      orbitControls.enabled = true
+    }
+  }, [gl, setRoomResizeHandleActive, showOverlay, controls])
 
   useEffect(() => {
-     if (!dragState || !selectedRoomId) {
-       return
-     }
+    if (!showOverlay) {
+      return
+    }
+
+    function handleKeyDown(event: KeyboardEvent) {
+      if ((event.key !== 'Delete' && event.key !== 'Backspace') || dragStateRef.current) {
+        return
+      }
+
+      const activeElement = document.activeElement
+      if (
+        activeElement instanceof HTMLInputElement ||
+        activeElement instanceof HTMLTextAreaElement ||
+        (activeElement instanceof HTMLElement && activeElement.isContentEditable)
+      ) {
+        return
+      }
+
+      event.preventDefault()
+      deleteSelectedRoomWithAnimation()
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [deleteSelectedRoomWithAnimation, showOverlay])
+
+  useEffect(() => {
+      if (!isDragging || !selectedRoomId) {
+        return
+      }
 
      const roomId = selectedRoomId
      const originBounds = baseBounds
@@ -141,11 +286,11 @@ export function RoomResizeOverlay() {
     const ndc = new THREE.Vector2()
     const point = new THREE.Vector3()
 
-    function updateDrag(clientX: number, clientY: number) {
-      const rect = gl.domElement.getBoundingClientRect()
-      if (rect.width === 0 || rect.height === 0) {
-        return
-      }
+      function updateDrag(clientX: number, clientY: number) {
+       const rect = gl.domElement.getBoundingClientRect()
+       if (rect.width === 0 || rect.height === 0) {
+         return
+       }
 
       ndc.set(
         ((clientX - rect.left) / rect.width) * 2 - 1,
@@ -157,10 +302,11 @@ export function RoomResizeOverlay() {
         return
       }
 
-      setDragState((current) => {
-        if (!current) {
-          return current
-        }
+       let didChange = false
+       setDragState((current) => {
+         if (!current) {
+           return current
+         }
 
          if (current.kind === 'rect') {
            if (!originBounds) {
@@ -182,42 +328,102 @@ export function RoomResizeOverlay() {
                    : snapWorldToBoundary(point.x),
                )
 
-           return {
-             ...current,
-             bounds: nextBounds,
-             valid: canResizeRoomToBounds(roomId, nextBounds, paintedCells),
+           const nextState = {
+              ...current,
+              bounds: nextBounds,
+              valid: canResizeRoomToBounds(roomId, nextBounds, paintedCells),
+            }
+           if (!shouldUpdateRoomResizeDragState(current, nextState)) {
+             return current
            }
+           didChange = true
+           return nextState
          }
 
-         const boundary = current.run.direction === 'north' || current.run.direction === 'south'
-           ? snapWorldToBoundary(point.z)
-           : snapWorldToBoundary(point.x)
-         const nextCells = getResizedRoomCellsForRun(roomId, paintedCells, current.run, boundary)
+          const boundary = current.run.direction === 'north' || current.run.direction === 'south'
+            ? snapWorldToBoundary(point.z)
+            : snapWorldToBoundary(point.x)
+          const nextCells = getResizedRoomCellsForRun(roomId, paintedCells, current.run, boundary)
 
-         return {
-           ...current,
-           boundary,
-           cells: nextCells ?? originCells,
-           valid: nextCells !== null,
-         }
-       })
-       invalidate()
-     }
+          const nextState = {
+            ...current,
+            boundary,
+            cells: nextCells ?? originCells,
+            valid: nextCells !== null,
+          }
+          if (!shouldUpdateRoomResizeDragState(current, nextState)) {
+            return current
+          }
+          didChange = true
+          return nextState
+        })
+        if (didChange) {
+          invalidate()
+        }
+      }
 
     function handlePointerMove(event: PointerEvent) {
       updateDrag(event.clientX, event.clientY)
     }
 
      function handlePointerUp() {
-       const current = dragStateRef.current
-       if (current?.kind === 'rect' && current.valid) {
-         resizeRoom(roomId, current.bounds)
-       }
-       if (current?.kind === 'run' && current.valid) {
-         resizeRoomByBoundaryRun(roomId, current.run, current.boundary)
-       }
-       stopDrag()
-     }
+        const current = dragStateRef.current
+        const previousRoomAnimationState = current?.valid
+          ? {
+            activeLayerId,
+            activeRoomSetId: useDungeonStore.getState().activeRoomSetId,
+            bakedLightField,
+            floorTileAssetIds,
+            globalFloorAssetId,
+            globalWallAssetId,
+            innerWalls,
+            paintedCells,
+            rooms,
+            wallOpenings,
+            wallSurfaceAssetIds,
+            wallSurfaceProps,
+          } satisfies RoomAnimationStateInput
+          : null
+        if (current?.kind === 'rect' && current.valid) {
+          resizeRoom(roomId, current.bounds)
+        }
+        if (current?.kind === 'run' && current.valid) {
+          resizeRoomByBoundaryRun(roomId, current.run, current.boundary)
+        }
+        if (current?.valid && previousRoomAnimationState) {
+          const nextState = useDungeonStore.getState()
+          if (nextState.activeFloorId === activeFloorId) {
+            const nextRoomCells = getRoomCells(roomId, nextState.paintedCells)
+            const affectedCells = expandRoomMutationCells([
+              ...originCells,
+              ...nextRoomCells,
+            ])
+            const removalEntries = buildRemovedRoomTileEntries({
+              before: previousRoomAnimationState,
+              after: {
+                activeLayerId,
+                activeRoomSetId: nextState.activeRoomSetId,
+                bakedLightField,
+                floorTileAssetIds: nextState.floorTileAssetIds,
+                globalFloorAssetId: nextState.selectedAssetIds.floor,
+                globalWallAssetId: nextState.selectedAssetIds.wall,
+                innerWalls: nextState.innerWalls,
+                paintedCells: nextState.paintedCells,
+                rooms: nextState.rooms,
+                wallOpenings: nextState.wallOpenings,
+                wallSurfaceAssetIds: nextState.wallSurfaceAssetIds,
+                wallSurfaceProps: nextState.wallSurfaceProps,
+              },
+              buildStartedAt: performance.now(),
+              cells: affectedCells,
+              originCell: affectedCells[0] ?? originCells[0] ?? [0, 0],
+            })
+            queueRemovalAnimationBatch(removalEntries, activeFloorId)
+            invalidate()
+          }
+        }
+        stopDrag()
+      }
 
     window.addEventListener('pointermove', handlePointerMove)
     window.addEventListener('pointerup', handlePointerUp, { once: true })
@@ -226,7 +432,7 @@ export function RoomResizeOverlay() {
       window.removeEventListener('pointermove', handlePointerMove)
       window.removeEventListener('pointerup', handlePointerUp)
     }
-   }, [baseBounds, camera, dragState, gl, invalidate, paintedCells, resizeRoom, resizeRoomByBoundaryRun, roomCells, selectedRoomId, stopDrag])
+    }, [activeFloorId, activeLayerId, bakedLightField, baseBounds, camera, floorTileAssetIds, gl, globalFloorAssetId, globalWallAssetId, innerWalls, invalidate, isDragging, paintedCells, queueRemovalAnimationBatch, resizeRoom, resizeRoomByBoundaryRun, roomCells, rooms, selectedRoomId, stopDrag, wallOpenings, wallSurfaceAssetIds, wallSurfaceProps])
 
   if (tool !== 'room' || !selectedRoomId || !baseBounds) {
     return null
@@ -238,51 +444,65 @@ export function RoomResizeOverlay() {
 
   if (!isRectangular || !displayBounds) {
     return (
-      <group renderOrder={20}>
-        {previewOutlineSegments.map((segment, index) => (
-          <RoomEdge
-            key={`${segment.position.join(':')}:${index}`}
-            geometry={unitBoxGeometry}
-            position={[segment.position[0], OVERLAY_Y, segment.position[2]]}
-            size={segment.size}
-            color={color}
-          />
-        ))}
-        {!dragState && boundaryRuns.map((run, index) => {
-          const segment = getRoomBoundaryRunSegment(run)
-          const cursor = getResizeCursor(run.direction)
-
-          return (
+      <>
+        {removalAnimationBatches
+          .filter((batch) => batch.floorId === activeFloorId)
+          .map((batch) => (
+            <BatchedTileEntries
+              key={batch.id}
+              entries={batch.entries}
+              floorId={batch.floorId}
+              mountId={getTileGpuStreamMountId(batch.floorId, 'active')}
+              sourceId={batch.id}
+              useLineOfSightPostMask={false}
+            />
+          ))}
+        <group renderOrder={20}>
+          {previewOutlineSegments.map((segment, index) => (
             <RoomEdge
-              key={`${run.direction}:${run.line}:${run.start}:${run.end}:${index}`}
+              key={`${segment.position.join(':')}:${index}`}
               geometry={unitBoxGeometry}
               position={[segment.position[0], OVERLAY_Y, segment.position[2]]}
               size={segment.size}
               color={color}
-              hitScale={getRunHitScale(segment.size)}
-              onPointerOver={() => {
-                setRoomResizeHandleActive(true)
-                gl.domElement.style.cursor = cursor
-              }}
-              onPointerOut={() => {
-                if (!dragStateRef.current) {
-                  setRoomResizeHandleActive(false)
-                  gl.domElement.style.cursor = ''
-                }
-              }}
-              onPointerDown={(event) => startBoundaryRunDrag(
-                event,
-                run,
-                roomCells,
-                setDragState,
-                invalidate,
-                gl.domElement,
-                setRoomResizeHandleActive,
-              )}
             />
-          )
-        })}
-      </group>
+          ))}
+          {!dragState && boundaryRuns.map((run, index) => {
+            const segment = getRoomBoundaryRunSegment(run)
+            const cursor = getResizeCursor(run.direction)
+
+            return (
+              <RoomEdge
+                key={`${run.direction}:${run.line}:${run.start}:${run.end}:${index}`}
+                geometry={unitBoxGeometry}
+                position={[segment.position[0], OVERLAY_Y, segment.position[2]]}
+                size={segment.size}
+                color={color}
+                hitScale={getRunHitScale(segment.size)}
+                onPointerOver={() => {
+                  setRoomResizeHandleActive(true)
+                  gl.domElement.style.cursor = cursor
+                }}
+                onPointerOut={() => {
+                  if (!dragStateRef.current) {
+                    setRoomResizeHandleActive(false)
+                    gl.domElement.style.cursor = ''
+                  }
+                }}
+                onPointerDown={(event) => startBoundaryRunDrag(
+                  event,
+                  run,
+                  roomCells,
+                  setDragState,
+                  invalidate,
+                  gl.domElement,
+                  setRoomResizeHandleActive,
+                )}
+              />
+            )
+          })}
+        </group>
+      </>
     )
   }
 
@@ -294,78 +514,92 @@ export function RoomResizeOverlay() {
   const cornerHandleLayout = getCornerHandleLayout()
 
   return (
-    <group renderOrder={20}>
-      {HANDLE_EDGES.map((edge) => {
-        const edgeProps = getEdgeProps(edge, rect, centerX, centerZ, width, depth)
-        const cursor = getResizeCursor(edge)
-
-        return (
-          <RoomEdge
-            key={edge}
-            geometry={unitBoxGeometry}
-            position={edgeProps.position}
-            size={edgeProps.size}
-            color={color}
-            hitScale={edgeProps.hitScale}
-            onPointerOver={() => {
-              setRoomResizeHandleActive(true)
-              gl.domElement.style.cursor = cursor
-            }}
-            onPointerOut={() => {
-              if (!dragStateRef.current) {
-                setRoomResizeHandleActive(false)
-                gl.domElement.style.cursor = ''
-              }
-            }}
-            onPointerDown={(event) => startHandleDrag(
-              event,
-              { kind: 'edge', edge },
-              displayBounds,
-              valid,
-              setDragState,
-              invalidate,
-              gl.domElement,
-              setRoomResizeHandleActive,
-            )}
+    <>
+      {removalAnimationBatches
+        .filter((batch) => batch.floorId === activeFloorId)
+        .map((batch) => (
+          <BatchedTileEntries
+            key={batch.id}
+            entries={batch.entries}
+            floorId={batch.floorId}
+            mountId={getTileGpuStreamMountId(batch.floorId, 'active')}
+            sourceId={batch.id}
+            useLineOfSightPostMask={false}
           />
-        )
-      })}
+        ))}
+      <group renderOrder={20}>
+        {HANDLE_EDGES.map((edge) => {
+          const edgeProps = getEdgeProps(edge, rect, centerX, centerZ, width, depth)
+          const cursor = getResizeCursor(edge)
 
-      {HANDLE_CORNERS.map((corner) => {
-        const [boundaryX, boundaryZ] = getCornerBoundary(displayBounds, corner)
-        const cursor = getResizeCursor(corner)
-        return (
-          <CornerHandle
-            key={corner}
-            geometry={unitBoxGeometry}
-            position={[boundaryX * GRID_SIZE, OVERLAY_Y + 0.04, boundaryZ * GRID_SIZE]}
-            visibleScale={cornerHandleLayout.visibleScale}
-            hitScale={cornerHandleLayout.hitScale}
-            color={color}
-            onPointerOver={() => {
-              setRoomResizeHandleActive(true)
-              gl.domElement.style.cursor = cursor
-            }}
-            onPointerOut={() => {
-              if (!dragStateRef.current) {
-                setRoomResizeHandleActive(false)
-                gl.domElement.style.cursor = ''
-              }
-            }}
-            onPointerDown={(event) => startHandleDrag(
-              event,
-              { kind: 'corner', corner },
-              displayBounds,
-              valid,
-              setDragState,
-              invalidate,
-              gl.domElement,
-              setRoomResizeHandleActive,
-            )}
-          />
-        )
-      })}
-    </group>
+          return (
+            <RoomEdge
+              key={edge}
+              geometry={unitBoxGeometry}
+              position={edgeProps.position}
+              size={edgeProps.size}
+              color={color}
+              hitScale={edgeProps.hitScale}
+              onPointerOver={() => {
+                setRoomResizeHandleActive(true)
+                gl.domElement.style.cursor = cursor
+              }}
+              onPointerOut={() => {
+                if (!dragStateRef.current) {
+                  setRoomResizeHandleActive(false)
+                  gl.domElement.style.cursor = ''
+                }
+              }}
+              onPointerDown={(event) => startHandleDrag(
+                event,
+                { kind: 'edge', edge },
+                displayBounds,
+                valid,
+                setDragState,
+                invalidate,
+                gl.domElement,
+                setRoomResizeHandleActive,
+              )}
+            />
+          )
+        })}
+
+        {HANDLE_CORNERS.map((corner) => {
+          const [boundaryX, boundaryZ] = getCornerBoundary(displayBounds, corner)
+          const cursor = getResizeCursor(corner)
+          return (
+            <CornerHandle
+              key={corner}
+              geometry={unitBoxGeometry}
+              position={[boundaryX * GRID_SIZE, OVERLAY_Y + 0.04, boundaryZ * GRID_SIZE]}
+              visibleScale={cornerHandleLayout.visibleScale}
+              hitScale={cornerHandleLayout.hitScale}
+              color={color}
+              onPointerOver={() => {
+                setRoomResizeHandleActive(true)
+                gl.domElement.style.cursor = cursor
+              }}
+              onPointerOut={() => {
+                if (!dragStateRef.current) {
+                  setRoomResizeHandleActive(false)
+                  gl.domElement.style.cursor = ''
+                }
+              }}
+              onPointerDown={(event) => startHandleDrag(
+                event,
+                { kind: 'corner', corner },
+                displayBounds,
+                valid,
+                setDragState,
+                invalidate,
+                gl.domElement,
+                setRoomResizeHandleActive,
+              )}
+            />
+          )
+        })}
+      </group>
+    </>
   )
 }
 

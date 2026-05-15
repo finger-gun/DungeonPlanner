@@ -19,7 +19,7 @@ const CONTENT_PACK_ASSET_MODULE_PATHS = new Set(Object.keys(import.meta.glob([
 const CORE_ASSET_SOURCE_PATHS: Record<string, string> = {
   'core.floor': './core/tiles/Floor.tsx',
   'core.wall': './core/tiles/Wall.tsx',
-  'core.opening_door_wall_1': './core/openings/DoorWall1.tsx',
+  'core.opening_door_wall_1': './dungeon/openings/door_wall_1.tsx',
   'core.opening_door_wall_3': './core/openings/DoorWall3.tsx',
   'core.opening_door_wall_bars_1': './core/openings/DoorWallBars1.tsx',
   'core.props_barrel': './core/props/Barrel.tsx',

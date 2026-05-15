@@ -55,6 +55,92 @@ describe('floorSurfaceLayout', () => {
     expect(isFloorSurfacePlacementValid('0:0', 'dungeon.floor_floor_tile_large', paintedCells)).toBe(false)
     expect(createFloorSurfacePlacement('0:0', 'dungeon.floor_floor_tile_grate')?.coveredCellKeys).toEqual(['0:0', '1:0'])
   })
+
+  it('resolves cave room floors deterministically with quarter-turn variation', () => {
+    const paintedCells = createPaintedCells([
+      [0, 0], [1, 0], [0, 1], [1, 1],
+    ])
+    Object.values(paintedCells).forEach((record) => {
+      record.roomId = 'room-cave'
+    })
+
+    const rooms = {
+      'room-cave': {
+        id: 'room-cave',
+        name: 'Cave Room',
+        layerId: 'layer-1',
+        roomSetId: 'cave',
+        floorAssetId: null,
+        wallAssetId: null,
+      },
+    }
+
+    const firstPlan = buildFloorRenderPlan(
+      paintedCells,
+      rooms,
+      'dungeon.floor_floor_tile_small',
+      {},
+    )
+    const secondPlan = buildFloorRenderPlan(
+      paintedCells,
+      rooms,
+      'dungeon.floor_floor_tile_small',
+      {},
+    )
+
+    expect(firstPlan.effectiveAssetIdsByCellKey).toEqual(secondPlan.effectiveAssetIdsByCellKey)
+    expect(firstPlan.effectiveRotationsByCellKey).toEqual(secondPlan.effectiveRotationsByCellKey)
+    Object.values(firstPlan.effectiveAssetIdsByCellKey).forEach((assetId) => {
+      expect([
+        'dungeon.floor_floor_dirt_small_A',
+        'dungeon.floor_floor_dirt_small_B',
+        'dungeon.floor_floor_dirt_small_C',
+        'dungeon.floor_floor_dirt_small_D',
+      ]).toContain(assetId)
+    })
+    Object.values(firstPlan.effectiveRotationsByCellKey).forEach((rotation) => {
+      expect([Math.PI / 2, Math.PI, (Math.PI * 3) / 2]).toContain(rotation[1])
+    })
+  })
+
+  it('avoids obvious diagonal repetition in cave floor variation', () => {
+    const paintedCells = createPaintedCells(
+      Array.from({ length: 6 }, (_, z) =>
+        Array.from({ length: 6 }, (_, x) => [x, z] as [number, number]),
+      ).flat(),
+    )
+    Object.values(paintedCells).forEach((record) => {
+      record.roomId = 'room-cave'
+    })
+
+    const rooms = {
+      'room-cave': {
+        id: 'room-cave',
+        name: 'Cave Room',
+        layerId: 'layer-1',
+        roomSetId: 'cave',
+        floorAssetId: null,
+        wallAssetId: null,
+      },
+    }
+
+    const plan = buildFloorRenderPlan(
+      paintedCells,
+      rooms,
+      'dungeon.floor_floor_tile_small',
+      {},
+    )
+
+    const signatures = Object.keys(plan.effectiveAssetIdsByCellKey).map((cellKey) =>
+      `${plan.effectiveAssetIdsByCellKey[cellKey]}@${plan.effectiveRotationsByCellKey[cellKey]?.[1]}`,
+    )
+    const diagonalSignatures = Array.from({ length: 6 }, (_, index) =>
+      `${plan.effectiveAssetIdsByCellKey[`${index}:${index}`]}@${plan.effectiveRotationsByCellKey[`${index}:${index}`]?.[1]}`,
+    )
+
+    expect(new Set(signatures).size).toBeGreaterThan(4)
+    expect(new Set(diagonalSignatures).size).toBeGreaterThan(2)
+  })
 })
 
 function createPaintedCells(cells: Array<[number, number]>): PaintedCells {

@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 from datetime import datetime, UTC
 import io
+import subprocess
 import shutil
 import sys
 from pathlib import Path
@@ -127,6 +128,17 @@ class ConsoleStatusReporter:
         print(message)
 
 
+def _preview_with_kitten(image_path: Path) -> None:
+    kitten_path = shutil.which("kitten")
+    if kitten_path is None:
+        raise RuntimeError("The --preview-kitten flag requires the 'kitten' command to be installed and available on PATH.")
+
+    try:
+        subprocess.run([kitten_path, "icat", str(image_path)], check=True)
+    except subprocess.CalledProcessError as exc:
+        raise RuntimeError(f"Kitten preview failed for {image_path}.") from exc
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Generate Dragonbane character portraits in batches.")
 
@@ -153,6 +165,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--height", type=int, default=DEFAULT_RUNTIME_CONFIG.height, help="Output image height.")
     parser.add_argument("--guidance-scale", type=float, default=DEFAULT_RUNTIME_CONFIG.guidance_scale, help="Guidance scale passed to the image generation pipeline.")
     parser.add_argument("--num-inference-steps", type=int, default=DEFAULT_RUNTIME_CONFIG.num_inference_steps, help="Inference steps passed to the image generation pipeline.")
+    parser.add_argument("--preview-kitten", action="store_true", help="Preview each saved main image in the terminal using `kitten icat`.")
     parser.add_argument("--seed", type=int, help="Optional fixed seed for deterministic runs.")
     parser.add_argument("--device", default=DEFAULT_RUNTIME_CONFIG.device, help="Runtime device: auto, cuda, mps, or cpu.")
     parser.add_argument("--portrait-padding", type=float, default=DEFAULT_RUNTIME_CONFIG.portrait_padding, help="Padding ratio applied around the face crop.")
@@ -217,6 +230,12 @@ def build_runtime_config(args: argparse.Namespace) -> RuntimeConfig:
         args.random,
         DEFAULT_RUNTIME_CONFIG.randomize_order,
     )
+    preview_kitten_value = _resolve_config_value(
+        config_data,
+        "preview_kitten",
+        args.preview_kitten,
+        DEFAULT_RUNTIME_CONFIG.preview_kitten,
+    )
     return RuntimeConfig(
         base_prompt=_resolve_base_prompt(base_prompt_value),
         output_dir=_resolve_path_config_value(config_data, "output_dir", args.output_dir, DEFAULT_RUNTIME_CONFIG.output_dir),
@@ -233,6 +252,7 @@ def build_runtime_config(args: argparse.Namespace) -> RuntimeConfig:
         height=int(height_value),
         guidance_scale=float(guidance_scale_value),
         num_inference_steps=int(num_inference_steps_value),
+        preview_kitten=bool(preview_kitten_value),
         seed=int(seed_value) if isinstance(seed_value, int) else None,
         device=str(device_value),
         portrait_padding=float(portrait_padding_value),
@@ -327,6 +347,7 @@ def main() -> int:
         background_remover=background_remover,
         face_detector=face_detector,
         status_callback=status_reporter.update,
+        preview_callback=(lambda record: (status_reporter.clear(), _preview_with_kitten(record.outputs.main_path))) if runtime_config.preview_kitten else None,
         failure_callback=lambda failure: status_reporter.failure(
             f"failed {failure.combination.kin} / {failure.combination.profession} / {failure.combination.trait}: {failure.error}"
         ),

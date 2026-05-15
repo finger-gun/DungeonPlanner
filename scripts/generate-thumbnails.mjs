@@ -194,7 +194,7 @@ function toViteFsUrl(filePath) {
 }
 
 async function startViteServer() {
-  const command = process.platform === 'win32' ? 'npm.cmd' : 'npm'
+  const command = process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm'
   const child = spawn(
     command,
     ['exec', 'vite', '--host', host, '--port', String(port), '--strictPort'],

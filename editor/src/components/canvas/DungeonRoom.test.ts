@@ -1,10 +1,13 @@
 import { describe, expect, it } from 'vitest'
-import { getOpeningHitboxSize } from './DungeonRoom'
+import {
+  getBuildAnimationKeyFromWallKeys,
+  getOpeningHitboxSize,
+} from './DungeonRoomShared'
 import { deriveWallCornersFromSegments } from './wallCornerLayout'
 import { shouldActivateFloorReceiver } from './floorReceiverMode'
 
 describe('deriveWallCornersFromSegments', () => {
-  it('creates passage-end corners from surviving orthogonal wall segments', () => {
+  it('creates pillar corners from surviving orthogonal wall segments', () => {
     const corners = deriveWallCornersFromSegments([
       { key: '0:0:north' },
       { key: '0:0:west' },
@@ -19,14 +22,33 @@ describe('deriveWallCornersFromSegments', () => {
           key: '0:1:corner',
           wallKeys: expect.arrayContaining(['0:0:north', '0:0:west']),
           position: [0, 0, 2],
+          rotation: [0, 0, 0],
         }),
         expect.objectContaining({
           key: '3:1:corner',
           wallKeys: expect.arrayContaining(['2:0:north', '3:0:west']),
           position: [6, 0, 2],
+          rotation: [0, 0, 0],
         }),
       ]),
     )
+  })
+
+  it('keeps a pillar when orthogonal walls meet at a t-junction', () => {
+    const corners = deriveWallCornersFromSegments([
+      { key: '0:0:north' },
+      { key: '0:0:east' },
+      { key: '1:0:west' },
+    ])
+
+    expect(corners).toEqual([
+      expect.objectContaining({
+        key: '1:1:corner',
+        wallKeys: expect.arrayContaining(['0:0:north', '0:0:east', '1:0:west']),
+        position: [2, 0, 2],
+        rotation: [0, 0, 0],
+      }),
+    ])
   })
 
   it('does not create corners for straight wall runs', () => {
@@ -48,5 +70,31 @@ describe('deriveWallCornersFromSegments', () => {
   it('uses the same hitbox dimensions for asset-backed openings and open passages', () => {
     expect(getOpeningHitboxSize(1)).toEqual([1.9, 2.2, 0.1])
     expect(getOpeningHitboxSize(3)).toEqual([5.699999999999999, 2.2, 0.1])
+  })
+
+  it('resolves build animation cell keys from adjacent wall keys instead of corner vertex keys', () => {
+    expect(getBuildAnimationKeyFromWallKeys(['0:0:north', '0:0:west'])).toBe('0:0')
+    expect(getBuildAnimationKeyFromWallKeys(['2:0:north', '3:0:west'])).toBe('2:0')
+  })
+
+  it('prefers an active adjacent wall cell when choosing build animation timing', () => {
+    expect(
+      getBuildAnimationKeyFromWallKeys(['2:0:north', '3:0:west'], (cellKey) => cellKey === '3:0'),
+    ).toBe('3:0')
+  })
+
+  it('considers opposite-side cells for east and south wall animation lookups', () => {
+    expect(
+      getBuildAnimationKeyFromWallKeys(['2:0:east'], (cellKey) => cellKey === '3:0'),
+    ).toBe('3:0')
+    expect(
+      getBuildAnimationKeyFromWallKeys(['2:0:south'], (cellKey) => cellKey === '2:-1'),
+    ).toBe('2:-1')
+  })
+
+  it('prefers active wall-segment build keys before falling back to adjacent cells', () => {
+    expect(
+      getBuildAnimationKeyFromWallKeys(['2:0:east'], (key) => key === '2:0:east'),
+    ).toBe('2:0:east')
   })
 })

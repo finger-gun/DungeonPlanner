@@ -15,6 +15,7 @@ afterEach(() => {
 function emptyFloorSnapshot() {
   return {
     tool: 'select' as const,
+    activeRoomSetId: 'dungeon',
     selectedAssetIds: { floor: null, wall: null, prop: null, opening: null, player: null },
     selection: null,
     layers: { default: { id: 'default', name: 'Default', visible: true, locked: false } },
@@ -77,17 +78,29 @@ function baseState(): SerializableState {
 describe('serializeDungeon / deserializeDungeon roundtrip', () => {
   it('preserves name and scene settings', () => {
     const state = baseState()
+    state.lightFlickerEnabled = false
     const result = deserializeDungeon(serializeDungeon(state))
     expect(result).not.toBeNull()
     expect(result!.name).toBe('Test Dungeon')
     expect(result!.floors?.['floor-1']?.snapshot.tool).toBe('select')
     expect(result!.sceneLighting.intensity).toBe(1.5)
+    expect(result!.lightFlickerEnabled).toBe(false)
     expect(result!.postProcessing.enabled).toBe(true)
     expect(result!.postProcessing.pixelateEnabled).toBe(false)
     expect(result!.postProcessing.pixelSize).toBe(6)
     expect(result!.postProcessing.focalLength).toBe(9)
     expect(result!.postProcessing.backgroundFocalLength).toBe(9)
     expect(result!.postProcessing.bokehScale).toBe(0.5)
+  })
+
+  it('defaults older dungeon files to light flicker enabled', () => {
+    const file = JSON.parse(serializeDungeon(baseState())) as Record<string, unknown>
+    file.version = 16
+    delete file.lightFlickerEnabled
+
+    const result = deserializeDungeon(JSON.stringify(file))
+
+    expect(result?.lightFlickerEnabled).toBe(true)
   })
 
   it('preserves map mode and outdoor time of day', () => {
@@ -132,6 +145,26 @@ describe('serializeDungeon / deserializeDungeon roundtrip', () => {
     // Active floor data is returned at top level for the store to spread
     const cells = result!.paintedCells ?? result!.floors?.['floor-1']?.snapshot?.paintedCells
     expect(cells?.['2:3']).toMatchObject({ cell: [2, 3] })
+  })
+
+  it('preserves room set selection and room room-set ids', () => {
+    const state = baseState()
+    state.activeRoomSetId = 'cave'
+    state.floors!['floor-1'].snapshot.activeRoomSetId = 'cave'
+    state.floors!['floor-1'].snapshot.rooms['room-1'] = {
+      id: 'room-1',
+      name: 'Cave Room',
+      layerId: 'default',
+      roomSetId: 'cave',
+      floorAssetId: null,
+      wallAssetId: null,
+    }
+
+    const result = deserializeDungeon(serializeDungeon(state))
+
+    expect(result).not.toBeNull()
+    expect(result!.activeRoomSetId).toBe('cave')
+    expect(result!.rooms['room-1']?.roomSetId).toBe('cave')
   })
 
   it('preserves blocked cells', () => {
@@ -214,7 +247,7 @@ describe('serializeDungeon / deserializeDungeon roundtrip', () => {
       assetId: 'dungeon.props_torch',
       position: [1, 0, 1],
       rotation: [0, 0, 0],
-      props: {},
+      props: { atlasColorVariant: 'moss-green' },
       cell: [0, 0],
       cellKey: '0:0:floor',
       layerId: 'default',
@@ -223,7 +256,10 @@ describe('serializeDungeon / deserializeDungeon roundtrip', () => {
     const result = deserializeDungeon(serializeDungeon(state))
     expect(result).not.toBeNull()
     const objects = result!.placedObjects ?? result!.floors?.['floor-1']?.snapshot?.placedObjects
-    expect(objects?.['obj-1']).toMatchObject({ assetId: 'dungeon.props_torch' })
+    expect(objects?.['obj-1']).toMatchObject({
+      assetId: 'dungeon.props_torch',
+      props: { atlasColorVariant: 'moss-green' },
+    })
   })
 
   it('preserves player objects', () => {
@@ -285,6 +321,42 @@ describe('serializeDungeon / deserializeDungeon roundtrip', () => {
     expect(result).not.toBeNull()
     const openings = result!.wallOpenings ?? result!.floors?.['floor-1']?.snapshot?.wallOpenings
     expect(openings?.['op-1']).toMatchObject({ flipped: true, wallKey: '0:0:north' })
+  })
+
+  it('preserves opening object props during roundtrip', () => {
+    const state = baseState()
+    state.floors!['floor-1'].snapshot.wallOpenings['op-door'] = {
+      id: 'op-door',
+      assetId: 'core.opening_door_wall_1',
+      wallKey: '0:0:north',
+      width: 1,
+      flipped: false,
+      objectProps: { open: true },
+      layerId: 'default',
+    }
+
+    const result = deserializeDungeon(serializeDungeon(state))
+    expect(result).not.toBeNull()
+    const openings = result!.wallOpenings ?? result!.floors?.['floor-1']?.snapshot?.wallOpenings
+    expect(openings?.['op-door']).toMatchObject({ objectProps: { open: true } })
+  })
+
+  it('preserves opening provenance during roundtrip', () => {
+    const state = baseState()
+    state.floors!['floor-1'].snapshot.wallOpenings['op-generated'] = {
+      id: 'op-generated',
+      assetId: null,
+      wallKey: '0:0:east',
+      width: 1,
+      flipped: false,
+      layerId: 'default',
+      source: 'generated',
+    }
+
+    const result = deserializeDungeon(serializeDungeon(state))
+    expect(result).not.toBeNull()
+    const openings = result!.wallOpenings ?? result!.floors?.['floor-1']?.snapshot?.wallOpenings
+    expect(openings?.['op-generated']).toMatchObject({ source: 'generated' })
   })
 
   it('roundtrips a multi-floor dungeon', () => {

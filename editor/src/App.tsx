@@ -11,16 +11,18 @@ import { EditorToolbar } from './components/editor/EditorToolbar'
 import { CameraDropdown } from './components/editor/CameraDropdown'
 import { MoveToolPanel } from './components/editor/MoveToolPanel'
 import { RoomToolPanel } from './components/editor/RoomToolPanel'
+import { RoomPaintModePanel } from './components/editor/RoomPaintModePanel'
 import { PropToolPanel } from './components/editor/PropToolPanel'
 import { CharacterToolPanel } from './components/editor/CharacterToolPanel'
 import { SelectToolPanel } from './components/editor/SelectToolPanel'
-import { getSelectedWallAssetId } from './components/editor/SelectedWallInspector'
+import { getSelectedWallAssetId } from './components/editor/SelectedWallInspectorShared'
 import { ScenePanel } from './components/editor/ScenePanel'
 import { getDebugCameraPose, projectDebugWorldPoint } from './components/canvas/debugCameraBridge'
 import { migrateLegacyGeneratedCharacters } from './generated-characters/migration'
 import { loadGeneratedCharacterPackRecords } from './generated-characters/packLoader'
 import type { GeneratedCharacterRecord } from './generated-characters/types'
 import { useDungeonStore } from './store/useDungeonStore'
+import { useBlurPointerRangeInputOnRelease } from './hooks/useBlurPointerRangeInputOnRelease'
 import { shouldRotateSelectionFromShortcut } from './rotationShortcuts'
 import {
   cellToWorldPosition,
@@ -35,6 +37,13 @@ import { ChevronLeft, ChevronRight, RotateCcw } from 'lucide-react'
 import { RendererErrorBoundary } from './components/RendererErrorBoundary'
 import { WebGpuRequiredNotice } from './components/WebGpuRequiredNotice'
 import { getWebGpuSupportMessage, isWebGpuSupported } from './rendering/webgpuSupport'
+import { useContinuousRenderReasons } from './rendering/renderActivity'
+import {
+  clearBuildTraceEntries,
+  type BuildTraceDetail,
+  useBuildTraceEntries,
+  syncBuildTraceObservers,
+} from './performance/runtimeBuildTrace'
 import {
   copyEditorDungeon,
   deleteEditorDungeon,
@@ -238,9 +247,12 @@ function RemoteDungeonLibraryModal({
 }
 
 function App() {
+  useBlurPointerRangeInputOnRelease()
+
   const tool = useDungeonStore((state) => state.tool)
   const mapMode = useDungeonStore((state) => state.mapMode)
   const roomEditMode = useDungeonStore((state) => state.roomEditMode)
+  const roomPaintMode = useDungeonStore((state) => state.roomPaintMode)
   const outdoorBrushMode = useDungeonStore((state) => state.outdoorBrushMode)
   const dungeonName = useDungeonStore((state) => state.dungeonName)
   const exportDungeonJson = useDungeonStore((state) => state.exportDungeonJson)
@@ -269,24 +281,22 @@ function App() {
     selection ? state.wallOpenings[selection] : null,
   )
   const selectedWallAssetId = useDungeonStore((state) => getSelectedWallAssetId(selection, state))
-  const propCount = useDungeonStore(
-    (state) => Object.keys(state.placedObjects).length,
-  )
-  const paintedCellCount = useDungeonStore(
-    (state) => Object.keys(state.paintedCells).length,
-  )
-  const exploredCellCount = useDungeonStore(
-    (state) => Object.keys(state.exploredCells).length,
-  )
-  const clearExploredCells = useDungeonStore((state) => state.clearExploredCells)
   const showLosDebugMask = useDungeonStore((state) => state.showLosDebugMask)
   const showLosDebugRays = useDungeonStore((state) => state.showLosDebugRays)
   const showLensFocusDebugPoint = useDungeonStore((state) => state.showLensFocusDebugPoint)
+  const showChunkDebugOverlay = useDungeonStore((state) => state.showChunkDebugOverlay)
   const showProjectionDebugMesh = useDungeonStore((state) => state.showProjectionDebugMesh)
+  const showPropProbeDebug = useDungeonStore((state) => state.showPropProbeDebug)
+  const slowBuildAnimationDebug = useDungeonStore((state) => state.slowBuildAnimationDebug)
+  const buildPerformanceTracingEnabled = useDungeonStore((state) => state.buildPerformanceTracingEnabled)
   const setShowLosDebugMask = useDungeonStore((state) => state.setShowLosDebugMask)
   const setShowLosDebugRays = useDungeonStore((state) => state.setShowLosDebugRays)
   const setShowLensFocusDebugPoint = useDungeonStore((state) => state.setShowLensFocusDebugPoint)
+  const setShowChunkDebugOverlay = useDungeonStore((state) => state.setShowChunkDebugOverlay)
   const setShowProjectionDebugMesh = useDungeonStore((state) => state.setShowProjectionDebugMesh)
+  const setShowPropProbeDebug = useDungeonStore((state) => state.setShowPropProbeDebug)
+  const setSlowBuildAnimationDebug = useDungeonStore((state) => state.setSlowBuildAnimationDebug)
+  const setBuildPerformanceTracingEnabled = useDungeonStore((state) => state.setBuildPerformanceTracingEnabled)
   const debugAssetId = getDebugPanelAssetId({
     tool,
     selectedAssetIds,
@@ -303,6 +313,10 @@ function App() {
   const showSettingsPanel = sidebarPanel === 'settings'
   const sidebarVisible = sidebarOpen && (!isPlayMode || showSettingsPanel)
   const cameraRightOffset = sidebarVisible ? 400 : 16
+
+  useEffect(() => {
+    syncBuildTraceObservers()
+  }, [buildPerformanceTracingEnabled])
 
   const onWindowKeyDown = useEffectEvent((event: KeyboardEvent) => {
     if (event.ctrlKey && event.shiftKey && event.key === 'F12') {
@@ -329,7 +343,8 @@ function App() {
 
     if (
       (event.key === 'Delete' || event.key === 'Backspace') &&
-      state.selectedRoomId
+      state.selectedRoomId &&
+      !(state.tool === 'room' && state.roomPaintMode === 'resize')
     ) {
       event.preventDefault()
       state.removeSelectedRoom()
@@ -715,12 +730,14 @@ function App() {
                 : outdoorBrushMode === 'terrain-sculpt'
                   ? 'Left-drag to raise stepped terrain · right-drag to lower stepped terrain into pits and trenches'
                   : 'Left-drag to paint nature with the selected style · right-drag to erase nature areas'
-              : 'Click room to select · drag room edges to resize · rectangular rooms also show corner handles · left-drag empty space to build · right-drag to erase'
+              : roomPaintMode === 'paint'
+                ? 'Paint rooms cell-by-cell · release to commit the stroke · right-drag to erase · use Props for floor and wall variants'
+                : roomPaintMode === 'resize'
+                  ? 'Click a room to show resize handles · drag edges or corners to reshape it · press Delete to remove the selected room'
+                  : 'Click and drag to draw a rectangular room selection · release to commit · right-drag to erase · use Props for floor and wall variants'
             : roomEditMode === 'walls'
-              ? 'Top-down wall editing · drag to preview an axis-locked wall run · release to add or remove it'
-            : roomEditMode === 'floor-variants'
-              ? 'Pick a floor variant · click a painted tile to apply it · right-click to clear the tile override'
-              : 'Pick a wall variant · click a wall segment to apply it · right-click to clear the wall override'
+              ? 'Top-down inner wall editing · drag to preview an axis-locked wall run · release to add or remove it'
+              : 'Click and drag to draw a rectangular room selection · release to commit · right-drag to erase · use Props for floor and wall variants'
         : tool === 'character'
           ? 'Select a character to place · click a room cell to place it · use Edit to reopen the character sheet'
         : tool === 'prop'
@@ -819,30 +836,28 @@ function App() {
             <DebugVisibilityPanel
               rightOffset={cameraRightOffset}
               sidebarVisible={sidebarVisible}
-              exploredCellCount={exploredCellCount}
-              clearExploredCells={clearExploredCells}
               showLosDebugMask={showLosDebugMask}
               showLosDebugRays={showLosDebugRays}
               showLensFocusDebugPoint={showLensFocusDebugPoint}
+              showChunkDebugOverlay={showChunkDebugOverlay}
               showProjectionDebugMesh={showProjectionDebugMesh}
+              showPropProbeDebug={showPropProbeDebug}
+              slowBuildAnimationDebug={slowBuildAnimationDebug}
+              buildPerformanceTracingEnabled={buildPerformanceTracingEnabled}
               setShowLosDebugMask={setShowLosDebugMask}
               setShowLosDebugRays={setShowLosDebugRays}
               setShowLensFocusDebugPoint={setShowLensFocusDebugPoint}
+              setShowChunkDebugOverlay={setShowChunkDebugOverlay}
               setShowProjectionDebugMesh={setShowProjectionDebugMesh}
+              setShowPropProbeDebug={setShowPropProbeDebug}
+              setSlowBuildAnimationDebug={setSlowBuildAnimationDebug}
+              setBuildPerformanceTracingEnabled={setBuildPerformanceTracingEnabled}
               debugAssetName={debugAsset?.name ?? null}
               debugAssetSourcePath={debugAssetSourcePath}
               debugAssetSourceLink={debugAssetSourceLink}
             />
           )}
 
-          {/* Stats counter */}
-          <div
-            data-testid="placement-counter"
-            className="pointer-events-none absolute bottom-4 left-4 rounded-full border border-teal-300/20 bg-stone-950/75 px-4 py-2 text-xs uppercase tracking-[0.25em] text-teal-200/85 backdrop-blur"
-          >
-            {formatCount(paintedCellCount, 'room cell')} •{' '}
-            {formatCount(propCount, 'prop')}
-          </div>
 
           {!isPlayMode && (
             <div
@@ -906,6 +921,9 @@ function App() {
             </div>
           )}
         </section>
+
+        {/* Paint tools widget - positioned absolutely on canvas */}
+        <RoomPaintModePanel sidebarVisible={sidebarVisible} />
       </div>
       {editorLibraryOpen ? (
         <RemoteDungeonLibraryModal
@@ -979,43 +997,58 @@ function GeneratedCharacterMigrationBootstrap() {
   return null
 }
 
-function formatCount(count: number, singular: string) {
-  return `${count} ${count === 1 ? singular : `${singular}s`}`
-}
 
 function DebugVisibilityPanel({
   rightOffset,
   sidebarVisible,
-  exploredCellCount,
-  clearExploredCells,
   showLosDebugMask,
   showLosDebugRays,
   showLensFocusDebugPoint,
+  showChunkDebugOverlay,
   showProjectionDebugMesh,
+  showPropProbeDebug,
+  slowBuildAnimationDebug,
+  buildPerformanceTracingEnabled,
   setShowLosDebugMask,
   setShowLosDebugRays,
   setShowLensFocusDebugPoint,
+  setShowChunkDebugOverlay,
   setShowProjectionDebugMesh,
+  setShowPropProbeDebug,
+  setSlowBuildAnimationDebug,
+  setBuildPerformanceTracingEnabled,
   debugAssetName,
   debugAssetSourcePath,
   debugAssetSourceLink,
 }: {
   rightOffset: number
   sidebarVisible: boolean
-  exploredCellCount: number
-  clearExploredCells: () => void
   showLosDebugMask: boolean
   showLosDebugRays: boolean
   showLensFocusDebugPoint: boolean
+  showChunkDebugOverlay: boolean
   showProjectionDebugMesh: boolean
+  showPropProbeDebug: boolean
+  slowBuildAnimationDebug: boolean
+  buildPerformanceTracingEnabled: boolean
   setShowLosDebugMask: (show: boolean) => void
   setShowLosDebugRays: (show: boolean) => void
   setShowLensFocusDebugPoint: (show: boolean) => void
+  setShowChunkDebugOverlay: (show: boolean) => void
   setShowProjectionDebugMesh: (show: boolean) => void
+  setShowPropProbeDebug: (show: boolean) => void
+  setSlowBuildAnimationDebug: (show: boolean) => void
+  setBuildPerformanceTracingEnabled: (show: boolean) => void
   debugAssetName: string | null
   debugAssetSourcePath: string | null
   debugAssetSourceLink: string | null
 }) {
+  const exploredCellCount = useDungeonStore((state) => Object.keys(state.exploredCells).length)
+  const clearExploredCells = useDungeonStore((state) => state.clearExploredCells)
+  const traceEntries = useBuildTraceEntries()
+  const renderReasons = useContinuousRenderReasons()
+  const recentTraceEntries = [...traceEntries].reverse().slice(0, 6)
+
   return (
     <aside
       data-testid="debug-visibility-panel"
@@ -1057,10 +1090,71 @@ function DebugVisibilityPanel({
           onClick={() => setShowLensFocusDebugPoint(!showLensFocusDebugPoint)}
         />
         <DebugToggleButton
+          label="Visualize chunk bounds"
+          pressed={showChunkDebugOverlay}
+          onClick={() => setShowChunkDebugOverlay(!showChunkDebugOverlay)}
+        />
+        <DebugToggleButton
           label="Show projection mesh"
           pressed={showProjectionDebugMesh}
           onClick={() => setShowProjectionDebugMesh(!showProjectionDebugMesh)}
         />
+        <DebugToggleButton
+          label="Visualize prop probes"
+          pressed={showPropProbeDebug}
+          onClick={() => setShowPropProbeDebug(!showPropProbeDebug)}
+        />
+        <DebugToggleButton
+          label="Slow build animation x10"
+          pressed={slowBuildAnimationDebug}
+          onClick={() => setSlowBuildAnimationDebug(!slowBuildAnimationDebug)}
+        />
+        <DebugToggleButton
+          label="Trace build performance"
+          pressed={buildPerformanceTracingEnabled}
+          onClick={() => setBuildPerformanceTracingEnabled(!buildPerformanceTracingEnabled)}
+        />
+      </div>
+
+      <div className="rounded-xl border border-stone-800 bg-stone-900/90 p-3">
+        <div className="flex items-center justify-between gap-3">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-stone-400">
+            Build tracing
+          </p>
+          <button
+            type="button"
+            onClick={clearBuildTraceEntries}
+            disabled={traceEntries.length === 0}
+            className="rounded-lg border border-stone-700 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-stone-300 transition hover:border-stone-500 hover:text-stone-100 disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            Clear
+          </button>
+        </div>
+        <p className="mt-2 text-xs text-stone-400">
+          Capture a Chrome Performance trace and look for <span className="font-mono text-stone-200">dp:*</span> spans.
+        </p>
+        <p className="mt-2 text-xs text-stone-500">
+          Active render: {renderReasons.length > 0 ? renderReasons.join(', ') : 'none'}
+        </p>
+        <div className="mt-3 flex flex-col gap-2">
+          {recentTraceEntries.length > 0 ? recentTraceEntries.map((entry) => (
+            <div key={entry.id} className="rounded-lg border border-stone-800 bg-stone-950/70 px-2.5 py-2">
+              <div className="flex items-center justify-between gap-3">
+                <span className="truncate text-xs font-medium text-stone-200">{entry.name}</span>
+                <span className="shrink-0 font-mono text-[11px] text-amber-200">
+                  {entry.duration.toFixed(1)} ms
+                </span>
+              </div>
+              {entry.detail && (
+                <p className="mt-1 line-clamp-2 text-[11px] text-stone-500">
+                  {formatBuildTraceDetail(entry.detail)}
+                </p>
+              )}
+            </div>
+          )) : (
+            <p className="text-xs text-stone-500">No trace events yet.</p>
+          )}
+        </div>
       </div>
 
       <div className="rounded-xl border border-stone-800 bg-stone-900/90 p-3">
@@ -1111,4 +1205,18 @@ function DebugToggleButton({
       <span className="text-xs uppercase tracking-[0.22em]">{pressed ? 'On' : 'Off'}</span>
     </button>
   )
+}
+
+function formatBuildTraceDetail(detail: BuildTraceDetail) {
+  return Object.entries(detail)
+    .flatMap(([key, value]) => {
+      if (value === undefined || value === null || value === '') {
+        return []
+      }
+
+      const text = Array.isArray(value) ? value.join('|') : String(value)
+      return [`${key}=${text}`]
+    })
+    .slice(0, 4)
+    .join(' · ')
 }

@@ -2,8 +2,8 @@
 /**
  * Per-object selection outline using depth-buffer edge detection (TSL).
  *
- * A cloned camera with only SELECTION_OUTLINE_LAYER visible renders the
- * selected prop to a depth texture. Pixels that have geometry (depth < far)
+ * A cloned camera renders a lightweight selection-proxy scene to a depth texture.
+ * Pixels that have geometry (depth < far)
  * AND have at least one cardinal neighbour that is background (depth ≈ 1.0)
  * are silhouette edges → drawn in the outline colour with alpha = 1.
  * All other pixels are transparent (alpha = 0), so alphaOver compositing
@@ -12,11 +12,9 @@
 import { pass, screenUV, screenSize, float, vec2, vec4, step, max, mix, Fn } from 'three/tsl'
 import type * as THREE from 'three'
 
-export const SELECTION_OUTLINE_LAYER = 31
-
 /**
  * Returns a TSL node: outline colour at silhouette edges, transparent elsewhere.
- * @param outlineCamera - a camera whose layers are restricted to SELECTION_OUTLINE_LAYER
+ * @param outlineCamera - a camera cloned from the active view camera
  */
 export function selectionOutline(
   scene: THREE.Scene,

@@ -4,24 +4,26 @@ import { useEffect, useRef } from 'react'
 import * as THREE from 'three'
 import type { OrbitControls as OrbitControlsImpl } from 'three-stdlib'
 import { useDungeonStore } from '../../store/useDungeonStore'
-
-const PAN_SPEED = 0.006
-const ROTATE_SPEED = 0.025
+import { getKeyboardPanAmount, getKeyboardRotateAmount } from './keyboardCameraMath'
 
 const TRACKED_KEYS = new Set([
   'w', 'a', 's', 'd',
   'arrowup', 'arrowdown', 'arrowleft', 'arrowright',
-  'z', 'x',
   'q', 'e',
 ])
 
 // Fixed world-space cardinal directions for straight-down (top-down) camera
 const WORLD_FORWARD = new THREE.Vector3(0, 0, -1)
 const WORLD_RIGHT   = new THREE.Vector3(1, 0, 0)
+const WORLD_UP      = new THREE.Vector3(0, 1, 0)
 
 function KeyboardCameraControls() {
   const pressedKeys = useRef(new Set<string>())
-  const { camera } = useThree()
+  const forwardScratchRef = useRef(new THREE.Vector3())
+  const rightScratchRef = useRef(new THREE.Vector3())
+  const deltaScratchRef = useRef(new THREE.Vector3())
+  const offsetScratchRef = useRef(new THREE.Vector3())
+  const { camera, invalidate } = useThree()
   const isPaintingStrokeActive = useDungeonStore(
     (state) => state.isPaintingStrokeActive,
   )
@@ -44,6 +46,7 @@ function KeyboardCameraControls() {
       if (TRACKED_KEYS.has(key)) {
         e.preventDefault()
         pressedKeys.current.add(key)
+        invalidate()
       }
     }
     const onKeyUp = (e: KeyboardEvent) => {
@@ -69,7 +72,7 @@ function KeyboardCameraControls() {
       window.removeEventListener('blur', onWindowBlur)
       document.removeEventListener('visibilitychange', onVisibilityChange)
     }
-  }, [])
+  }, [invalidate])
 
   useEffect(() => {
     if (isPaintingStrokeActive || isObjectDragActive) {
@@ -77,7 +80,7 @@ function KeyboardCameraControls() {
     }
   }, [isObjectDragActive, isPaintingStrokeActive])
 
-  useFrame((state) => {
+  useFrame((state, deltaSeconds) => {
     if (isPaintingStrokeActive || isObjectDragActive) return
     const keys = pressedKeys.current
     if (keys.size === 0) return
@@ -88,7 +91,7 @@ function KeyboardCameraControls() {
 
     const target   = orbitControls.target as THREE.Vector3
     const distance = camera.position.distanceTo(target)
-    const speed    = distance * PAN_SPEED
+    const speed    = getKeyboardPanAmount(distance, deltaSeconds)
 
     let forward: THREE.Vector3
     let right: THREE.Vector3
@@ -98,23 +101,21 @@ function KeyboardCameraControls() {
       forward = WORLD_FORWARD
       right   = WORLD_RIGHT
     } else {
-      const forwardRaw = new THREE.Vector3()
+      const forwardRaw = forwardScratchRef.current
         .subVectors(target, camera.position)
         .setY(0)
       if (forwardRaw.lengthSq() < 0.0001) return
       forward = forwardRaw.normalize()
-      right = new THREE.Vector3()
-        .crossVectors(forward, new THREE.Vector3(0, 1, 0))
+      right = rightScratchRef.current
+        .crossVectors(forward, WORLD_UP)
         .normalize()
     }
 
-    const delta = new THREE.Vector3()
+    const delta = deltaScratchRef.current.set(0, 0, 0)
     if (keys.has('w') || keys.has('arrowup'))    delta.addScaledVector(forward,  speed)
     if (keys.has('s') || keys.has('arrowdown'))  delta.addScaledVector(forward, -speed)
     if (keys.has('d') || keys.has('arrowright')) delta.addScaledVector(right,    speed)
     if (keys.has('a') || keys.has('arrowleft'))  delta.addScaledVector(right,   -speed)
-    if (keys.has('z'))                           delta.y += speed
-    if (keys.has('x'))                           delta.y -= speed
 
     if (delta.lengthSq() > 0) {
       camera.position.add(delta)
@@ -123,13 +124,16 @@ function KeyboardCameraControls() {
 
     // Q/E orbital rotation only in perspective mode
     if (activeCameraMode === 'perspective' && (keys.has('q') || keys.has('e'))) {
-      const angle = keys.has('q') ? ROTATE_SPEED : -ROTATE_SPEED
-      const offset = new THREE.Vector3().subVectors(camera.position, target)
-      offset.applyAxisAngle(new THREE.Vector3(0, 1, 0), angle)
+      const angle = keys.has('q')
+        ? getKeyboardRotateAmount(deltaSeconds)
+        : -getKeyboardRotateAmount(deltaSeconds)
+      const offset = offsetScratchRef.current.subVectors(camera.position, target)
+      offset.applyAxisAngle(WORLD_UP, angle)
       camera.position.copy(target).add(offset)
     }
 
     orbitControls.update()
+    invalidate()
   })
 
   return null
