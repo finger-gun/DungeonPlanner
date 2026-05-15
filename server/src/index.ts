@@ -26,6 +26,7 @@ import { DungeonRoom } from './rooms/DungeonRoom.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const PORT = Number(process.env.PORT) || 2567
+const GENERATED_CHARACTER_PACK_PUBLIC_PATH = '/generated-character-packs'
 // ── Express app ───────────────────────────────────────────────────────────────
 const app = express()
 
@@ -88,6 +89,8 @@ app.delete('/api/generated-characters/assets/:storageId', async (req, res) => {
 })
 
 app.use(GENERATED_CHARACTER_ASSET_PUBLIC_PATH, express.static(GENERATED_CHARACTER_STORAGE_DIR))
+const generatedCharacterPackDir = path.resolve(__dirname, '..', '..', 'editor', 'public', 'generated-character-packs')
+app.use(GENERATED_CHARACTER_PACK_PUBLIC_PATH, express.static(generatedCharacterPackDir))
 
 // Serve the built editor frontend from ../../editor/dist in both source and
 // compiled server layouts.

@@ -15,6 +15,7 @@ type WorkspacePage = 'overview' | 'library' | 'dev' | 'sessions' | 'characters' 
 type DevWorkspacePage = 'sessions' | 'characters' | 'admin-users' | 'admin-packs'
 
 const DEV_WORKSPACE_PAGES: readonly DevWorkspacePage[] = ['sessions', 'characters', 'admin-users', 'admin-packs']
+const GENERATED_CHARACTER_PACK_INDEX_PATH = '/generated-character-packs/index.json'
 
 const GITHUB_ICON_PATH =
   'M12 2C6.48 2 2 6.59 2 12.25c0 4.53 2.87 8.37 6.84 9.72.5.1.68-.22.68-.49 0-.24-.01-1.04-.01-1.89-2.78.62-3.37-1.22-3.37-1.22-.46-1.2-1.12-1.52-1.12-1.52-.92-.64.07-.63.07-.63 1.01.08 1.55 1.08 1.55 1.08.91 1.6 2.38 1.14 2.96.87.09-.68.36-1.14.65-1.4-2.22-.26-4.56-1.14-4.56-5.09 0-1.12.39-2.03 1.03-2.74-.1-.26-.45-1.31.1-2.73 0 0 .85-.28 2.78 1.05a9.33 9.33 0 0 1 5.06 0c1.93-1.33 2.78-1.05 2.78-1.05.55 1.42.2 2.47.1 2.73.64.71 1.03 1.62 1.03 2.74 0 3.96-2.34 4.83-4.57 5.08.37.33.7.97.7 1.96 0 1.42-.01 2.57-.01 2.92 0 .27.18.59.69.49A10.25 10.25 0 0 0 22 12.25C22 6.59 17.52 2 12 2Z'
@@ -505,6 +506,7 @@ function SignedInOverview({ identity }: { identity: ReturnType<typeof useViewerI
             backendUrl,
             accessToken: access.accessToken,
             dungeonId: dungeonId ? String(dungeonId) : undefined,
+            generatedPackIndexUrl: new URL(GENERATED_CHARACTER_PACK_INDEX_PATH, backendUrl).toString(),
           }),
           '_blank',
           'noopener,noreferrer',

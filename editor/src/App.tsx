@@ -46,7 +46,7 @@ import {
   stripEditorDungeonHandoff,
 } from './lib/editorDungeonHandoff'
 import { listEditorActors } from './lib/editorActors'
-import type { SavedDungeonSummary } from '@dungeonplanner/shared/editorAccess'
+import type { EditorLaunchSession, SavedDungeonSummary } from '@dungeonplanner/shared/editorAccess'
 import type { EditorActorRecord } from '@dungeonplanner/shared/actors'
 
 const Scene = lazy(() =>
@@ -62,6 +62,7 @@ const FpsOverlay = lazy(() =>
 )
 
 const EDITOR_LIBRARY_SESSION_STORAGE_KEY = 'dungeonplanner.editor-library-access'
+type EditorLibraryAccessSession = Pick<EditorLaunchSession, 'backendUrl' | 'accessToken' | 'generatedPackIndexUrl'>
 
 function RightPanel({
   panelMode,
@@ -247,10 +248,7 @@ function App() {
   const [sidebarPanel, setSidebarPanel] = useState<'tool' | 'settings'>('tool')
   const [sidebarOpen, setSidebarOpen] = useState(true)
   const [debugPanelOpen, setDebugPanelOpen] = useState(false)
-  const [editorLibraryAccess, setEditorLibraryAccess] = useState<{
-    backendUrl: string
-    accessToken: string
-  } | null>(null)
+  const [editorLibraryAccess, setEditorLibraryAccess] = useState<EditorLibraryAccessSession | null>(null)
   const [editorLibraryOpen, setEditorLibraryOpen] = useState(false)
   const [editorLibraryRecords, setEditorLibraryRecords] = useState<SavedDungeonSummary[]>([])
   const [editorLibraryBusyAction, setEditorLibraryBusyAction] = useState<string | null>(null)
@@ -389,10 +387,7 @@ function App() {
           return null
         }
 
-        return JSON.parse(raw) as {
-          backendUrl: string
-          accessToken: string
-        }
+        return JSON.parse(raw) as EditorLibraryAccessSession
       } catch {
         return null
       }
@@ -401,6 +396,7 @@ function App() {
       ? {
           backendUrl: handoff.backendUrl,
           accessToken: handoff.accessToken,
+          generatedPackIndexUrl: handoff.generatedPackIndexUrl,
         }
       : storedAccess
 
@@ -469,8 +465,11 @@ function App() {
 
   useEffect(() => {
     let cancelled = false
+    const indexUrls = editorLibraryAccess?.generatedPackIndexUrl
+      ? ['/generated-character-packs/index.json', editorLibraryAccess.generatedPackIndexUrl]
+      : undefined
 
-    void loadGeneratedCharacterPackRecords()
+    void loadGeneratedCharacterPackRecords({ indexUrls })
       .then((records) => {
         if (cancelled || records.length === 0) {
           return
@@ -485,7 +484,7 @@ function App() {
     return () => {
       cancelled = true
     }
-  }, [ingestGeneratedCharacters])
+  }, [editorLibraryAccess?.generatedPackIndexUrl, ingestGeneratedCharacters])
 
   async function refreshEditorLibrary(access = editorLibraryAccess) {
     if (!access) {

@@ -11,16 +11,31 @@ const GENERATED_CHARACTER_ASSET_PREFIX = 'generated.player.'
 export async function loadGeneratedCharacterPackRecords({
   fetchImpl = fetch,
   indexUrl = GENERATED_CHARACTER_PACK_INDEX_URL,
+  indexUrls,
 }: {
   fetchImpl?: typeof fetch
   indexUrl?: string
+  indexUrls?: string[]
 } = {}) {
-  const manifestUrls = await loadGeneratedCharacterPackManifestUrls({ fetchImpl, indexUrl })
+  const resolvedIndexUrls = getUniqueIndexUrls(indexUrls ?? [indexUrl])
   const records = await Promise.all(
-    manifestUrls.map((manifestUrl) => loadGeneratedCharacterPackManifestRecords({ fetchImpl, manifestUrl })),
+    resolvedIndexUrls.map(async (nextIndexUrl) => {
+      const manifestUrls = await loadGeneratedCharacterPackManifestUrls({ fetchImpl, indexUrl: nextIndexUrl })
+      return Promise.all(
+        manifestUrls.map((manifestUrl) => loadGeneratedCharacterPackManifestRecords({ fetchImpl, manifestUrl })),
+      )
+    }),
   )
 
-  return records.flat()
+  return Array.from(
+    records
+      .flat(2)
+      .reduce<Map<string, GeneratedCharacterRecord>>((recordMap, record) => {
+        recordMap.set(record.assetId, record)
+        return recordMap
+      }, new Map())
+      .values(),
+  )
 }
 
 async function loadGeneratedCharacterPackManifestUrls({
@@ -108,4 +123,10 @@ function toAbsoluteUrl(url: string) {
 
 function createGeneratedCharacterAssetId(id: string) {
   return `${GENERATED_CHARACTER_ASSET_PREFIX}${id}`
+}
+
+function getUniqueIndexUrls(indexUrls: string[]) {
+  return Array.from(
+    new Set(indexUrls.filter((indexUrl) => typeof indexUrl === 'string' && indexUrl.trim())),
+  )
 }

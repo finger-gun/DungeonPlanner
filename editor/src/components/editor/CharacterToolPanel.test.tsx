@@ -80,4 +80,34 @@ describe('CharacterToolPanel', () => {
 
     expect(useDungeonStore.getState().selectedAssetIds.player).not.toBe(assetId)
   })
+
+  it('prefers the pack description and truncates long generated copy', () => {
+    const longDescription = 'Zombie pack entry '.repeat(12)
+
+    useDungeonStore.getState().createGeneratedCharacter({
+      storageId: 'storage-zombie',
+      name: 'Fresh Grave Riser',
+      kind: 'npc',
+      size: 'M',
+      prompt: 'This prompt should not be shown once the pack description exists.',
+      model: 'x/z-image-turbo',
+      processedImageUrl: TEST_IMAGE_DATA_URL,
+      thumbnailUrl: TEST_IMAGE_DATA_URL,
+      width: 300,
+      height: 600,
+      packId: 'zombie-monsters',
+      packName: 'Zombie Monsters',
+      packDescription: longDescription,
+      packScope: 'workspace',
+    })
+
+    render(<CharacterToolPanel />)
+
+    expect(
+      screen.getByText(
+        /^Zombie pack entry Zombie pack entry Zombie pack entry Zombie pack entry Zombie pack entry Zombie pack entry Zombie pack…$/,
+      ),
+    ).toBeInTheDocument()
+    expect(screen.queryByText(/This prompt should not be shown/i)).not.toBeInTheDocument()
+  })
 })

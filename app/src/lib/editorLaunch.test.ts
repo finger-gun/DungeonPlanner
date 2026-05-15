@@ -18,10 +18,14 @@ describe('editor launch helpers', () => {
       backendUrl: 'http://127.0.0.1:3210',
       dungeonId: 'dungeon-1',
       accessToken: 'token-123',
+      generatedPackIndexUrl: 'http://127.0.0.1:3210/generated-character-packs/index.json',
     })
 
     expect(url).toContain('appDungeonId=dungeon-1')
     expect(url).toContain('appEditorToken=token-123')
     expect(url).toContain('appBackendUrl=http%3A%2F%2F127.0.0.1%3A3210')
+    expect(url).toContain(
+      'appGeneratedPackIndexUrl=http%3A%2F%2F127.0.0.1%3A3210%2Fgenerated-character-packs%2Findex.json',
+    )
   })
 })
