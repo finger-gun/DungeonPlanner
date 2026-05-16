@@ -3,6 +3,7 @@ import {
   createDragonbaneCharacterSummary,
   normalizeDragonbaneCharacterSheet,
 } from '@dungeonplanner/shared/dragonbane/characterSheet'
+import { normalizePersistedCharacterSheet } from './dragonbaneSheets'
 import type { Doc } from './_generated/dataModel'
 import { mutation, query } from './_generated/server'
 import { ensureSavedCharacterActorPack } from './actorPackMigration'
@@ -85,8 +86,7 @@ export const saveCharacter = mutation({
     const contentRef = args.contentRef?.trim()
       ? normalizeContentRef(args.contentRef, 'character-library') ?? undefined
       : undefined
-    const dragonbaneSheet = normalizeDragonbaneCharacterSheet(args.sheet)
-    const sheet = dragonbaneSheet ?? args.sheet
+    const sheet = normalizePersistedCharacterSheet(args.sheet)
 
     if (args.characterId) {
       const existingCharacter = await ctx.db.get(args.characterId)

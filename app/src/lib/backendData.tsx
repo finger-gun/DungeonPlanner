@@ -128,7 +128,22 @@ export async function uploadFileThroughBackend(
   file: File,
   fetchImpl: typeof fetch = fetch,
 ) {
-  const response = await fetchImpl(new URL('/api/app/storage/upload', `${getBackendBaseUrl()}/`).toString(), {
+  return uploadFileToBackendRoute('/api/app/storage/upload', file, fetchImpl)
+}
+
+export async function uploadActorAssetThroughBackend(
+  file: File,
+  fetchImpl: typeof fetch = fetch,
+) {
+  return uploadFileToBackendRoute('/api/app/actor-assets/upload', file, fetchImpl)
+}
+
+async function uploadFileToBackendRoute(
+  routePath: string,
+  file: File,
+  fetchImpl: typeof fetch,
+) {
+  const response = await fetchImpl(new URL(routePath, `${getBackendBaseUrl()}/`).toString(), {
     method: 'POST',
     credentials: 'include',
     headers: {
@@ -138,7 +153,7 @@ export async function uploadFileThroughBackend(
   })
 
   if (!response.ok) {
-    let message = 'Pack file upload failed.'
+    let message = 'File upload failed.'
 
     try {
       const errorBody = (await response.json()) as { error?: string }

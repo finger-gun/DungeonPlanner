@@ -371,6 +371,8 @@ function SignedInOverview({ identity }: { identity: ReturnType<typeof useViewerI
   const packDescriptionDraft = packTools.descriptionDraft
   const packEntriesJson = packTools.entriesJsonDraft
   const packDefaultRefsJson = packTools.defaultRefsJsonDraft
+  const packDomainsJson = packTools.domainsJsonDraft
+  const packSourceProvenanceJson = packTools.sourceProvenanceJsonDraft
   const manifestFile = packTools.manifestFile
   const thumbnailFile = packTools.thumbnailFile
   const manifestStorageId = packTools.manifestStorageId
@@ -389,6 +391,8 @@ function SignedInOverview({ identity }: { identity: ReturnType<typeof useViewerI
   const setThumbnailFile = (nextThumbnailFile: File | null) => setPackTools({ thumbnailFile: nextThumbnailFile })
   const setPackDefaultRefsJson = (defaultRefsJsonDraft: string) => setPackTools({ defaultRefsJsonDraft })
   const setPackEntriesJson = (entriesJsonDraft: string) => setPackTools({ entriesJsonDraft })
+  const setPackDomainsJson = (domainsJsonDraft: string) => setPackTools({ domainsJsonDraft })
+  const setPackSourceProvenanceJson = (sourceProvenanceJsonDraft: string) => setPackTools({ sourceProvenanceJsonDraft })
   const editorBaseUrl = resolveEditorBaseUrl(window.location, import.meta.env.VITE_EDITOR_URL)
   const backendUrl = resolveBackendApiBaseUrl(window.location, import.meta.env.VITE_BACKEND_URL)
   const requestedPage = getWorkspacePageFromPath(currentPath)
@@ -751,13 +755,22 @@ function SignedInOverview({ identity }: { identity: ReturnType<typeof useViewerI
 
     let parsedEntries: unknown
     let parsedDefaultRefs: unknown
+    let parsedDomains: unknown
+    let parsedSourceProvenance: unknown
 
     try {
       parsedEntries = JSON.parse(packTools.entriesJsonDraft)
-      parsedDefaultRefs = JSON.parse(packTools.defaultRefsJsonDraft)
+      if (packTools.kindDraft === 'asset') {
+        parsedDefaultRefs = JSON.parse(packTools.defaultRefsJsonDraft)
+      } else {
+        parsedDomains = JSON.parse(packTools.domainsJsonDraft)
+        parsedSourceProvenance = JSON.parse(packTools.sourceProvenanceJsonDraft)
+      }
     } catch {
       setPackTools({
-        error: 'Pack entries JSON and default refs JSON must both be valid JSON.',
+        error: packTools.kindDraft === 'asset'
+          ? 'Pack entries JSON and default refs JSON must both be valid JSON.'
+          : 'Pack entries, rules domains, and source provenance must all be valid JSON.',
         notice: null,
       })
       return
@@ -799,13 +812,26 @@ function SignedInOverview({ identity }: { identity: ReturnType<typeof useViewerI
         isActive: packTools.visibilityDraft === 'global' ? true : packTools.isActiveDraft,
         manifestStorageId: nextManifestStorageId,
         thumbnailStorageId: nextThumbnailStorageId,
-        defaultAssetRefs: parsedDefaultRefs as {
-          floor?: string
-          wall?: string
-          opening?: string
-          prop?: string
-          player?: string
-        },
+        defaultAssetRefs: packTools.kindDraft === 'asset'
+          ? parsedDefaultRefs as {
+              floor?: string
+              wall?: string
+              opening?: string
+              prop?: string
+              player?: string
+            }
+          : undefined,
+        domains: packTools.kindDraft === 'rules' ? parsedDomains : undefined,
+        sourceProvenance: packTools.kindDraft === 'rules'
+          ? parsedSourceProvenance as {
+              sourceRepository: string
+              sourcePath: string
+              sourceVersion?: string
+              packVersion: string
+              importedAt: string
+              importer: 'dragonbane-unbound'
+            }
+          : undefined,
         entries: entriesForMutation,
       })
 
@@ -1212,165 +1238,202 @@ function SignedInOverview({ identity }: { identity: ReturnType<typeof useViewerI
 
         {activePage === 'admin-packs' && identity.access.canManagePacks ? (
           <article className="panel panel--packs">
-            <p className="panel__eyebrow">Admin</p>
-            <h2 className="panel__title">Content packs</h2>
-            <p className="panel__copy">
-              Bundled JSON packs ship with the backend and load from <code>/api/content-packs/</code>. Always-active packs are available to everyone, while optional packs can be installed per workspace.
-            </p>
-
-            <div className="library-grid">
-              <section className="library-card">
-                <div className="library-card__header">
-                  <div>
-                    <p className="status-card__label">Bundled manifests</p>
-                    <h3 className="library-card__title">Static packs</h3>
-                  </div>
-                </div>
-
-                {bundledPackState.error ? <p className="auth-card__error">{bundledPackState.error}</p> : null}
-                {bundledPackState.isLoading ? <p className="panel__copy">Loading bundled packs...</p> : null}
-                {bundledRegistry && bundledRegistry.packs.length > 0 ? (
-                  <div className="library-records">
-                    {bundledRegistry.packs.map((registryEntry) => {
-                      const manifest = bundledPacks.find((pack) => pack.packId === registryEntry.packId)
-                      const installedPack = installedPackById.get(registryEntry.packId)
-
-                      return (
-                        <div className="library-record" key={registryEntry.packId}>
-                          <div>
-                            <p className="library-record__title">{registryEntry.name}</p>
-                            <p className="panel__copy">
-                              {registryEntry.packId} · {registryEntry.version} · {registryEntry.alwaysActive ? 'always active' : 'optional'}
-                            </p>
-                            <p className="library-record__meta">{registryEntry.path}</p>
-                          </div>
-                          <div className="library-card__actions">
-                            {registryEntry.alwaysActive ? (
-                              <button className="hero-panel__button hero-panel__button--secondary" disabled type="button">
-                                Always active
-                              </button>
-                            ) : installedPack ? (
-                              <>
-                                <button
-                                  className="hero-panel__button hero-panel__button--secondary"
-                                  disabled={isWorkingPacks}
-                                  onClick={() => void handleToggleWorkspacePack(installedPack._id as Id<'packs'>, !installedPack.isActive, installedPack.name)}
-                                  type="button"
-                                >
-                                  {installedPack.isActive ? 'Deactivate' : 'Activate'}
-                                </button>
-                                <button
-                                  className="hero-panel__button hero-panel__button--secondary"
-                                  disabled={isWorkingPacks}
-                                  onClick={() => void handleInstallBundledPack(registryEntry.path, registryEntry.packId, registryEntry.name)}
-                                  type="button"
-                                >
-                                  Refresh
-                                </button>
-                              </>
-                            ) : (
-                              <button
-                                className="hero-panel__button hero-panel__button--primary"
-                                disabled={isWorkingPacks || !manifest}
-                                onClick={() => void handleInstallBundledPack(registryEntry.path, registryEntry.packId, registryEntry.name)}
-                                type="button"
-                              >
-                                Install
-                              </button>
-                            )}
-                          </div>
-                        </div>
-                      )
-                    })}
-                  </div>
-                ) : bundledPackState.isLoading ? null : (
-                  <p className="panel__copy">No bundled manifests were found.</p>
-                )}
-              </section>
-
-              <section className="library-card">
-                <div className="library-card__header">
-                  <div>
-                    <p className="status-card__label">Community import</p>
-                    <h3 className="library-card__title">Install from URL</h3>
-                  </div>
-                </div>
-
-                <label className="auth-card__field">
-                  <span>Manifest URL</span>
-                  <input
-                    onChange={(event) => setRemotePackUrl(event.target.value)}
-                    placeholder="https://example.com/my-pack.json"
-                    type="url"
-                    value={remotePackUrl}
-                  />
-                </label>
-
+            <header className="packs-hero">
+              <div>
+                <p className="panel__eyebrow">Admin</p>
+                <h2 className="panel__title">Content packs</h2>
                 <p className="panel__copy">
-                  The URL must return a JSON rules pack manifest. GitHub raw URLs work fine as long as the file is publicly readable.
+                  Review bundled packs, install community rules data, and edit workspace pack records from one focused workspace.
                 </p>
-
-                {remotePackError ? <p className="auth-card__error">{remotePackError}</p> : null}
-                {remotePackNotice ? <p className="library-notice">{remotePackNotice}</p> : null}
-
-                <div className="library-card__actions">
-                  <button
-                    className="hero-panel__button hero-panel__button--primary"
-                    disabled={isImportingRemotePack}
-                    onClick={() => void handleInstallRemotePack()}
-                    type="button"
-                  >
-                    {isImportingRemotePack ? 'Importing...' : 'Import pack'}
-                  </button>
+              </div>
+              <div className="packs-metrics" aria-label="Pack summary">
+                <div className="packs-metric">
+                  <span>Installed</span>
+                  <strong>{packRecords?.length ?? 0}</strong>
                 </div>
-              </section>
-            </div>
+                <div className="packs-metric">
+                  <span>Active</span>
+                  <strong>{packRecords?.filter((pack) => pack.isActive).length ?? 0}</strong>
+                </div>
+                <div className="packs-metric">
+                  <span>Bundled</span>
+                  <strong>{bundledRegistry?.packs.length ?? 0}</strong>
+                </div>
+              </div>
+            </header>
 
-            <div className="library-grid">
-              <section className="library-card">
-                <div className="library-card__header">
+            {packError ? <p className="auth-card__error">{packError}</p> : null}
+            {packNotice ? <p className="library-notice">{packNotice}</p> : null}
+
+            <div className="packs-layout">
+              <aside className="packs-sidebar" aria-label="Pack sources and records">
+                <section className="packs-card packs-card--toolbar">
                   <div>
-                    <p className="status-card__label">Registry records</p>
-                    <h3 className="library-card__title">Available packs</h3>
+                    <p className="status-card__label">Workspace registry</p>
+                    <h3 className="library-card__title">Installed packs</h3>
                   </div>
                   <button className="hero-panel__button hero-panel__button--secondary" onClick={handleNewPackDraft} type="button">
                     New pack
                   </button>
-                </div>
+                </section>
 
-                {packRecords && packRecords.length > 0 ? (
-                  <div className="library-records">
-                    {packRecords.map((pack) => (
-                      <button
-                        className={`library-record ${selectedPackRecordId === pack._id ? 'library-record--selected' : ''}`}
-                        key={pack._id}
-                        onClick={() => hydratePackDraft(pack)}
-                        type="button"
-                      >
-                        <div>
-                          <p className="library-record__title">{pack.name}</p>
-                          <p className="panel__copy">
-                            {pack.packId} · {pack.kind} · {pack.visibility} · {pack.isActive ? 'active' : 'inactive'}
-                          </p>
-                        </div>
-                        <p className="library-record__meta">{pack.entries.length} canonical entr{pack.entries.length === 1 ? 'y' : 'ies'}</p>
-                      </button>
-                    ))}
+                <section className="packs-card">
+                  {packRecords && packRecords.length > 0 ? (
+                    <div className="packs-records">
+                      {packRecords.map((pack) => (
+                        <button
+                          className={`packs-record ${selectedPackRecordId === pack._id ? 'packs-record--selected' : ''}`}
+                          key={pack._id}
+                          onClick={() => hydratePackDraft(pack)}
+                          type="button"
+                        >
+                          <span className="packs-record__kind">{pack.kind}</span>
+                          <strong>{pack.name}</strong>
+                          <span>{pack.packId} · {pack.visibility} · {pack.isActive ? 'active' : 'inactive'}</span>
+                          <small>{pack.entries.length} canonical entr{pack.entries.length === 1 ? 'y' : 'ies'}</small>
+                        </button>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="panel__copy">No packs have been registered yet.</p>
+                  )}
+                </section>
+
+                <details className="packs-card packs-disclosure" open>
+                  <summary>
+                    <span>
+                      <span className="status-card__label">Bundled manifests</span>
+                      <strong>Backend-shipped packs</strong>
+                    </span>
+                  </summary>
+
+                  {bundledPackState.error ? <p className="auth-card__error">{bundledPackState.error}</p> : null}
+                  {bundledPackState.isLoading ? <p className="panel__copy">Loading bundled packs...</p> : null}
+                  {bundledRegistry && bundledRegistry.packs.length > 0 ? (
+                    <div className="packs-records">
+                      {bundledRegistry.packs.map((registryEntry) => {
+                        const manifest = bundledPacks.find((pack) => pack.packId === registryEntry.packId)
+                        const installedPack = installedPackById.get(registryEntry.packId)
+
+                        return (
+                          <div className="packs-record packs-record--static" key={registryEntry.packId}>
+                            <div>
+                              <strong>{registryEntry.name}</strong>
+                              <p className="panel__copy">
+                                {registryEntry.packId} · {registryEntry.version} · {registryEntry.alwaysActive ? 'always active' : 'optional'}
+                              </p>
+                              <p className="library-record__meta">{registryEntry.path}</p>
+                            </div>
+                            <div className="library-card__actions">
+                              {registryEntry.alwaysActive ? (
+                                <button className="hero-panel__button hero-panel__button--tiny hero-panel__button--secondary" disabled type="button">
+                                  Always active
+                                </button>
+                              ) : installedPack ? (
+                                <>
+                                  <button
+                                    className="hero-panel__button hero-panel__button--tiny hero-panel__button--secondary"
+                                    disabled={isWorkingPacks}
+                                    onClick={() => void handleToggleWorkspacePack(installedPack._id as Id<'packs'>, !installedPack.isActive, installedPack.name)}
+                                    type="button"
+                                  >
+                                    {installedPack.isActive ? 'Deactivate' : 'Activate'}
+                                  </button>
+                                  <button
+                                    className="hero-panel__button hero-panel__button--tiny hero-panel__button--secondary"
+                                    disabled={isWorkingPacks}
+                                    onClick={() => void handleInstallBundledPack(registryEntry.path, registryEntry.packId, registryEntry.name)}
+                                    type="button"
+                                  >
+                                    Refresh
+                                  </button>
+                                </>
+                              ) : (
+                                <button
+                                  className="hero-panel__button hero-panel__button--tiny hero-panel__button--primary"
+                                  disabled={isWorkingPacks || !manifest}
+                                  onClick={() => void handleInstallBundledPack(registryEntry.path, registryEntry.packId, registryEntry.name)}
+                                  type="button"
+                                >
+                                  Install
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  ) : bundledPackState.isLoading ? null : (
+                    <p className="panel__copy">No bundled manifests were found.</p>
+                  )}
+                </details>
+
+                <section className="packs-card packs-import">
+                  <div>
+                    <p className="status-card__label">Community import</p>
+                    <h3 className="library-card__title">Install from URL</h3>
                   </div>
-                ) : (
-                  <p className="panel__copy">No packs have been registered yet.</p>
-                )}
-              </section>
 
-              <section className="library-card">
-                <div className="library-card__header">
+                  <label className="auth-card__field">
+                    <span>Manifest URL</span>
+                    <input
+                      onChange={(event) => setRemotePackUrl(event.target.value)}
+                      placeholder="https://example.com/my-pack.json"
+                      type="url"
+                      value={remotePackUrl}
+                    />
+                  </label>
+
+                  <p className="panel__copy">
+                    Public JSON rules-pack manifest URL. GitHub raw URLs work well.
+                  </p>
+
+                  {remotePackError ? <p className="auth-card__error">{remotePackError}</p> : null}
+                  {remotePackNotice ? <p className="library-notice">{remotePackNotice}</p> : null}
+
+                  <div className="library-card__actions">
+                    <button
+                      className="hero-panel__button hero-panel__button--primary"
+                      disabled={isImportingRemotePack}
+                      onClick={() => void handleInstallRemotePack()}
+                      type="button"
+                    >
+                      {isImportingRemotePack ? 'Importing...' : 'Import pack'}
+                    </button>
+                  </div>
+                </section>
+              </aside>
+
+              <section className="packs-editor">
+                <div className="packs-editor__header">
                   <div>
                     <p className="status-card__label">Canonical draft</p>
-                    <h3 className="library-card__title">Pack metadata editor</h3>
+                    <h3 className="library-card__title">{selectedPackRecordId ? 'Edit selected pack' : 'Create pack record'}</h3>
+                    <p className="panel__copy">
+                      Use the basics first. Open advanced JSON only when changing canonical refs or Dragonbane rules data.
+                    </p>
+                  </div>
+                  <div className="packs-editor__actions">
+                    <button
+                      className="hero-panel__button hero-panel__button--primary"
+                      disabled={isWorkingPacks}
+                      onClick={() => void handleSavePack()}
+                      type="button"
+                    >
+                      {selectedPackRecordId ? 'Update pack' : 'Save pack'}
+                    </button>
+                    <button
+                      className="hero-panel__button hero-panel__button--secondary"
+                      disabled={!selectedPackRecordId || isWorkingPacks}
+                      onClick={() => void handleTogglePackActive()}
+                      type="button"
+                    >
+                      {selectedPackRecord?.isActive ? 'Deactivate pack' : 'Activate'}
+                    </button>
                   </div>
                 </div>
 
-                <div className="role-manager">
+                <div className="packs-form-grid">
                   <label className="auth-card__field">
                     <span>Pack ID</span>
                     <input onChange={(event) => setPackIdDraft(event.target.value)} placeholder="dungeon" type="text" value={packIdDraft} />
@@ -1431,72 +1494,104 @@ function SignedInOverview({ identity }: { identity: ReturnType<typeof useViewerI
                   />
                 </label>
 
-                <div className="role-manager">
-                  <label className="auth-card__field">
-                    <span>Manifest file</span>
-                    <input
-                      onChange={(event) => setManifestFile(event.target.files?.[0] ?? null)}
-                      type="file"
-                    />
-                    <span className="panel__copy">{manifestFile?.name ?? (manifestStorageId ? `Stored: ${manifestStorageId}` : 'Optional')}</span>
-                  </label>
+                <details className="packs-disclosure packs-disclosure--editor">
+                  <summary>
+                    <span>
+                      <span className="status-card__label">Files</span>
+                      <strong>Manifest and thumbnail uploads</strong>
+                    </span>
+                  </summary>
+                  <div className="packs-form-grid">
+                    <label className="auth-card__field">
+                      <span>Manifest file</span>
+                      <input
+                        onChange={(event) => setManifestFile(event.target.files?.[0] ?? null)}
+                        type="file"
+                      />
+                      <span className="panel__copy">{manifestFile?.name ?? (manifestStorageId ? `Stored: ${manifestStorageId}` : 'Optional')}</span>
+                    </label>
 
-                  <label className="auth-card__field">
-                    <span>Thumbnail file</span>
-                    <input
-                      accept="image/*"
-                      onChange={(event) => setThumbnailFile(event.target.files?.[0] ?? null)}
-                      type="file"
-                    />
-                    <span className="panel__copy">{thumbnailFile?.name ?? (thumbnailStorageId ? `Stored: ${thumbnailStorageId}` : 'Optional')}</span>
-                  </label>
+                    <label className="auth-card__field">
+                      <span>Thumbnail file</span>
+                      <input
+                        accept="image/*"
+                        onChange={(event) => setThumbnailFile(event.target.files?.[0] ?? null)}
+                        type="file"
+                      />
+                      <span className="panel__copy">{thumbnailFile?.name ?? (thumbnailStorageId ? `Stored: ${thumbnailStorageId}` : 'Optional')}</span>
+                    </label>
+                  </div>
+                </details>
+
+                <details className="packs-disclosure packs-disclosure--editor">
+                  <summary>
+                    <span>
+                      <span className="status-card__label">Advanced JSON</span>
+                      <strong>{packKindDraft === 'asset' ? 'Asset refs and canonical entries' : 'Rules domains and canonical entries'}</strong>
+                    </span>
+                  </summary>
+                  <div className="packs-json-stack">
+                    {packKindDraft === 'asset' ? (
+                      <label className="auth-card__field">
+                        <span>Default asset refs JSON</span>
+                        <textarea
+                          className="library-editor library-editor--compact"
+                          onChange={(event) => setPackDefaultRefsJson(event.target.value)}
+                          rows={6}
+                          value={packDefaultRefsJson}
+                        />
+                      </label>
+                    ) : (
+                      <>
+                        <label className="auth-card__field">
+                          <span>Dragonbane domains JSON</span>
+                          <textarea
+                            className="library-editor library-editor--compact"
+                            onChange={(event) => setPackDomainsJson(event.target.value)}
+                            rows={12}
+                            value={packDomainsJson}
+                          />
+                        </label>
+
+                        <label className="auth-card__field">
+                          <span>Source provenance JSON</span>
+                          <textarea
+                            className="library-editor library-editor--compact"
+                            onChange={(event) => setPackSourceProvenanceJson(event.target.value)}
+                            rows={6}
+                            value={packSourceProvenanceJson}
+                          />
+                        </label>
+                      </>
+                    )}
+
+                    <label className="auth-card__field">
+                      <span>Canonical entries JSON</span>
+                      <textarea
+                        className="library-editor library-editor--compact"
+                        onChange={(event) => setPackEntriesJson(event.target.value)}
+                        rows={12}
+                        value={packEntriesJson}
+                      />
+                    </label>
+                  </div>
+                </details>
+
+                <div className="packs-editor__footer">
+                  <p className="panel__copy">
+                    Pack-managed references use <code>packId:localId</code> so assets stay tidy across your library.
+                  </p>
+                  <div className="packs-editor__actions">
+                    <button
+                      className="hero-panel__button hero-panel__button--primary"
+                      disabled={isWorkingPacks}
+                      onClick={() => void handleSavePack()}
+                      type="button"
+                    >
+                      {selectedPackRecordId ? 'Update pack' : 'Save pack'}
+                    </button>
+                  </div>
                 </div>
-
-                <label className="auth-card__field">
-                  <span>Default asset refs JSON</span>
-                  <textarea
-                    className="library-editor"
-                    onChange={(event) => setPackDefaultRefsJson(event.target.value)}
-                    rows={6}
-                    value={packDefaultRefsJson}
-                  />
-                </label>
-
-                <label className="auth-card__field">
-                  <span>Canonical entries JSON</span>
-                  <textarea
-                    className="library-editor"
-                    onChange={(event) => setPackEntriesJson(event.target.value)}
-                    rows={14}
-                    value={packEntriesJson}
-                  />
-                </label>
-
-                {packError ? <p className="auth-card__error">{packError}</p> : null}
-                {packNotice ? <p className="library-notice">{packNotice}</p> : null}
-
-                <div className="library-card__actions">
-                  <button
-                    className="hero-panel__button hero-panel__button--primary"
-                    disabled={isWorkingPacks}
-                    onClick={() => void handleSavePack()}
-                    type="button"
-                  >
-                    {selectedPackRecordId ? 'Update pack' : 'Save pack'}
-                  </button>
-                  <button
-                    className="hero-panel__button hero-panel__button--secondary"
-                    disabled={!selectedPackRecordId || isWorkingPacks}
-                    onClick={() => void handleTogglePackActive()}
-                    type="button"
-                  >
-                    {selectedPackRecord?.isActive ? 'Deactivate pack' : 'Activate pack'}
-                  </button>
-                </div>
-
-                <p className="panel__copy">
-                  Pack-managed references use <code>packId:localId</code> so assets stay tidy across your library.
-                </p>
               </section>
             </div>
           </article>

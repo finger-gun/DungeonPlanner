@@ -3,6 +3,7 @@ import {
   createDragonbaneCharacterSummary,
   normalizeDragonbaneCharacterSheet,
 } from '@dungeonplanner/shared/dragonbane/characterSheet'
+import { normalizePersistedCharacterSheet } from './dragonbaneSheets'
 import type { Doc, Id } from './_generated/dataModel'
 import { internalQuery, mutation, query, type MutationCtx, type QueryCtx } from './_generated/server'
 import { viewerOwnsActorPack, viewerOwnsCharacter } from './accessPolicies'
@@ -320,6 +321,14 @@ export const deleteActorPack = mutation({
   },
 })
 
+export const generateActorUploadUrl = mutation({
+  args: {},
+  handler: async (ctx) => {
+    await requireRoleInActiveWorkspace(ctx, 'player')
+    return ctx.storage.generateUploadUrl()
+  },
+})
+
 export const listViewerActors = query({
   args: {},
   handler: async (ctx) => {
@@ -389,7 +398,7 @@ export const saveActor = mutation({
 
     const prompt = normalizeActorPrompt(args.prompt)
     const model = normalizeActorModel(args.model)
-    const dragonbaneSheet = args.sheet ? normalizeDragonbaneCharacterSheet(args.sheet) : null
+    const sheet = args.sheet === undefined ? undefined : normalizePersistedCharacterSheet(args.sheet)
     const now = Date.now()
 
     if (args.actorId) {
@@ -412,7 +421,7 @@ export const saveActor = mutation({
         kind: args.kind,
         prompt,
         contentRef: args.contentRef ?? actor.contentRef,
-        sheet: dragonbaneSheet ?? args.sheet ?? actor.sheet,
+        sheet: sheet ?? actor.sheet,
         model,
         size: args.size,
         storageId: args.storageId || actor.storageId || undefined,
@@ -443,7 +452,7 @@ export const saveActor = mutation({
       kind: args.kind,
       prompt,
       contentRef: args.contentRef,
-      sheet: dragonbaneSheet ?? args.sheet ?? {},
+      sheet: sheet ?? {},
       model,
       size: args.size,
       storageId: args.storageId || undefined,

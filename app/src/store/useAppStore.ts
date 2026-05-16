@@ -29,6 +29,46 @@ const DEFAULT_PACK_DEFAULT_REFS_JSON = `{
   "floor": "dungeon:floor_flagstone",
   "wall": "dungeon:wall_plain"
 }`
+const DEFAULT_PACK_DOMAINS_JSON = `{
+  "dragonbane": {
+    "schemaVersion": 1,
+    "kins": [],
+    "professions": [],
+    "skills": [],
+    "rules": {
+      "characterCreation": {
+        "ref": "core:rule.character-creation",
+        "id": "character-creation",
+        "ageSkillSlots": {
+          "Young": { "total": 0, "fromProfession": 0, "freeChoice": 0 },
+          "Middle-Aged": { "total": 0, "fromProfession": 0, "freeChoice": 0 },
+          "Old": { "total": 0, "fromProfession": 0, "freeChoice": 0 }
+        },
+        "damageBonusRanges": {},
+        "movementAgilityModifiers": []
+      },
+      "appearanceOptions": [],
+      "mementoOptions": [],
+      "weaknesses": [],
+      "heroicAbilities": [],
+      "magic": {
+        "rules": { "schools": [] },
+        "schools": []
+      }
+    },
+    "equipment": {
+      "weapons": [],
+      "armor": []
+    }
+  }
+}`
+const DEFAULT_PACK_SOURCE_PROVENANCE_JSON = `{
+  "sourceRepository": "manual",
+  "sourcePath": ".",
+  "packVersion": "0.1.0",
+  "importedAt": "2026-05-16T00:00:00.000Z",
+  "importer": "dragonbane-unbound"
+}`
 
 type RoleScope = 'workspace' | 'global'
 type PackKind = 'asset' | 'rules'
@@ -65,6 +105,8 @@ export type PackDraftSource = {
     prop?: string
     player?: string
   } | null
+  domains?: unknown
+  sourceProvenance?: unknown
   manifestStorageId?: Id<'_storage'> | null
   thumbnailStorageId?: Id<'_storage'> | null
 }
@@ -118,6 +160,8 @@ type PackToolsState = {
   descriptionDraft: string
   entriesJsonDraft: string
   defaultRefsJsonDraft: string
+  domainsJsonDraft: string
+  sourceProvenanceJsonDraft: string
   manifestFile: File | null
   thumbnailFile: File | null
   manifestStorageId: Id<'_storage'> | null
@@ -215,6 +259,8 @@ function createInitialPackToolsState(): PackToolsState {
     descriptionDraft: '',
     entriesJsonDraft: DEFAULT_PACK_ENTRIES_JSON,
     defaultRefsJsonDraft: DEFAULT_PACK_DEFAULT_REFS_JSON,
+    domainsJsonDraft: DEFAULT_PACK_DOMAINS_JSON,
+    sourceProvenanceJsonDraft: DEFAULT_PACK_SOURCE_PROVENANCE_JSON,
     manifestFile: null,
     thumbnailFile: null,
     manifestStorageId: null,
@@ -351,6 +397,8 @@ export const useAppStore = create<AppStore>((set) => ({
         descriptionDraft: record.description ?? '',
         entriesJsonDraft: JSON.stringify(record.entries, null, 2),
         defaultRefsJsonDraft: JSON.stringify(record.defaultAssetRefs ?? {}, null, 2),
+        domainsJsonDraft: JSON.stringify(record.domains ?? {}, null, 2),
+        sourceProvenanceJsonDraft: JSON.stringify(record.sourceProvenance ?? {}, null, 2),
         manifestFile: null,
         thumbnailFile: null,
         manifestStorageId: record.manifestStorageId ?? null,

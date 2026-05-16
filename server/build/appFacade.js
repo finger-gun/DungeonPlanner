@@ -181,35 +181,41 @@ export function registerAppFacadeRoutes(app) {
         registerAuthenticatedConvexRoute(app, route, 'mutation');
     }
     app.post('/api/app/storage/upload', express.raw({ type: '*/*', limit: '50mb' }), async (request, response) => {
-        const client = await withAuthenticatedConvexClient(request, response);
-        if (!client) {
-            return;
-        }
-        const body = request.body;
-        if (!(body instanceof Buffer) || body.length === 0) {
-            sendApiError(response, 'A file payload is required.', 400);
-            return;
-        }
-        try {
-            const uploadUrl = await client.mutation('packs:generatePackUploadUrl', {});
-            const uploadResponse = await fetch(uploadUrl, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': request.header('content-type') ?? 'application/octet-stream',
-                },
-                body,
-            });
-            if (!uploadResponse.ok) {
-                throw new Error('Pack file upload failed.');
-            }
-            const payload = (await uploadResponse.json());
-            response.json(payload);
-        }
-        catch (error) {
-            sendApiError(response, error, 502);
-        }
+        await handleStorageUpload(request, response, 'packs:generatePackUploadUrl');
+    });
+    app.post('/api/app/actor-assets/upload', express.raw({ type: '*/*', limit: '50mb' }), async (request, response) => {
+        await handleStorageUpload(request, response, 'actors:generateActorUploadUrl');
     });
     for (const route of EDITOR_PROXY_ROUTES) {
         registerConvexSiteProxyRoute(app, route);
+    }
+}
+async function handleStorageUpload(request, response, uploadUrlFunction) {
+    const client = await withAuthenticatedConvexClient(request, response);
+    if (!client) {
+        return;
+    }
+    const body = request.body;
+    if (!(body instanceof Buffer) || body.length === 0) {
+        sendApiError(response, 'A file payload is required.', 400);
+        return;
+    }
+    try {
+        const uploadUrl = await client.mutation(uploadUrlFunction, {});
+        const uploadResponse = await fetch(uploadUrl, {
+            method: 'POST',
+            headers: {
+                'Content-Type': request.header('content-type') ?? 'application/octet-stream',
+            },
+            body,
+        });
+        if (!uploadResponse.ok) {
+            throw new Error('File upload failed.');
+        }
+        const payload = (await uploadResponse.json());
+        response.json(payload);
+    }
+    catch (error) {
+        sendApiError(response, error, 502);
     }
 }

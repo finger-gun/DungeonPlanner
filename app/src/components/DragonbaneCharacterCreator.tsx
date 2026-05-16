@@ -7,15 +7,21 @@ import {
 } from '@dungeonplanner/shared/dragonbane/characterCreation'
 import type { DragonbaneCharacterSheet } from '@dungeonplanner/shared/dragonbane/characterSheet'
 import type { DragonbaneContentRef } from '@dungeonplanner/shared/dragonbane/contentRefs'
-import type { DragonbaneAgeCategoryId, DragonbaneAttributeId, DragonbaneRulesPackDomains } from '@dungeonplanner/shared/dragonbane/rulesPack'
+import type { DragonbaneAgeCategoryId, DragonbaneAttributeId } from '@dungeonplanner/shared/dragonbane/rulesPack'
 import { requestGeneratedCharacterImage } from '@dungeonplanner/shared/generated-characters/api'
 import { composeGeneratedCharacterPrompt } from '@dungeonplanner/shared/generated-characters/prompt'
 import { processGeneratedCharacterImage } from '@dungeonplanner/shared/generated-characters/processing'
 import { api } from '../../convex/_generated/api'
 import type { Id } from '../../convex/_generated/dataModel'
 import { resolveBackendApiBaseUrl } from '../lib/backendAuthApi'
-import { uploadFileThroughBackend, useMutation, useQuery } from '../lib/backendData'
+import { uploadActorAssetThroughBackend, useMutation, useQuery } from '../lib/backendData'
 import type { RuntimeRulesPackRecord } from '../lib/dragonbanePacks'
+import {
+  getAvailableKins,
+  getDefaultKinRef,
+  getDefaultProfessionRef,
+  mergeDragonbaneDomains,
+} from '../lib/dragonbaneRules'
 
 type ActorPackSummary = {
   _id: Id<'actorPacks'>
@@ -122,80 +128,6 @@ function shuffle<T>(items: readonly T[]) {
 
 function rollAttribute() {
   return Array.from({ length: 3 }, () => 1 + Math.floor(Math.random() * 6)).reduce((sum, value) => sum + value, 0)
-}
-
-function mergeByRef<TItem extends { ref: string }>(items: Array<TItem | null | undefined>) {
-  return [...new Map(
-    items
-      .filter((item): item is TItem => Boolean(item?.ref))
-      .map((item) => [item.ref, item]),
-  ).values()]
-}
-
-function mergeDragonbaneDomains(selectedPacks: RuntimeRulesPackRecord[]): DragonbaneRulesPackDomains | null {
-  const domains = selectedPacks
-    .map((pack) => pack.domains)
-    .filter((domain): domain is DragonbaneRulesPackDomains => Boolean(domain?.dragonbane))
-
-  if (domains.length === 0) {
-    return null
-  }
-
-  return {
-    dragonbane: {
-      schemaVersion: 1,
-      kins: mergeByRef(domains.flatMap((domain) => domain.dragonbane.kins ?? [])),
-      professions: mergeByRef(domains.flatMap((domain) => domain.dragonbane.professions ?? [])),
-      skills: mergeByRef(domains.flatMap((domain) => domain.dragonbane.skills ?? [])),
-      rules: {
-        characterCreation: domains[0].dragonbane.rules.characterCreation,
-        appearanceOptions: mergeByRef(domains.flatMap((domain) => domain.dragonbane.rules.appearanceOptions ?? [])),
-        mementoOptions: mergeByRef(domains.flatMap((domain) => domain.dragonbane.rules.mementoOptions ?? [])),
-        weaknesses: mergeByRef(domains.flatMap((domain) => domain.dragonbane.rules.weaknesses ?? [])),
-        heroicAbilities: mergeByRef(domains.flatMap((domain) => domain.dragonbane.rules.heroicAbilities ?? [])),
-        magic: {
-          rules: domains[0].dragonbane.rules.magic?.rules ?? { schools: [] },
-          schools: mergeByRef(domains.flatMap((domain) => domain.dragonbane.rules.magic?.schools ?? [])).map((school) => ({
-            ...school,
-            cantrips: mergeByRef(
-              domains
-                .flatMap((domain) => domain.dragonbane.rules.magic?.schools ?? [])
-                .filter((candidate) => candidate.ref === school.ref)
-                .flatMap((candidate) => candidate.cantrips ?? []),
-            ),
-            spells: mergeByRef(
-              domains
-                .flatMap((domain) => domain.dragonbane.rules.magic?.schools ?? [])
-                .filter((candidate) => candidate.ref === school.ref)
-                .flatMap((candidate) => candidate.spells ?? []),
-            ),
-          })),
-        },
-      },
-      equipment: {
-        weapons: mergeByRef(domains.flatMap((domain) => domain.dragonbane.equipment.weapons ?? [])),
-        armor: mergeByRef(domains.flatMap((domain) => domain.dragonbane.equipment.armor ?? [])),
-      },
-    },
-  }
-}
-
-function getAvailableKins(
-  domains: DragonbaneRulesPackDomains | null,
-  actorKind: ActorKind,
-) {
-  return domains?.dragonbane.kins.filter((kin) => actorKind === 'npc' || kin.playableByPlayers !== false) ?? []
-}
-
-function getDefaultKinRef(
-  domains: DragonbaneRulesPackDomains | null,
-  actorKind: ActorKind,
-) {
-  return getAvailableKins(domains, actorKind)[0]?.ref ?? ''
-}
-
-function getDefaultProfessionRef(domains: DragonbaneRulesPackDomains | null) {
-  return domains?.dragonbane.professions[0]?.ref ?? ''
 }
 
 function resolveActorAssetUrl(path: string | null, backendBaseUrl: string) {
@@ -601,10 +533,10 @@ export function DragonbaneCharacterCreator({ packs }: { packs: RuntimeRulesPackR
       ].filter((storageId): storageId is Id<'_storage'> => Boolean(storageId)))
       const staleDraftStorageIds = previousStorageIds.filter((storageId) => !persistedEditingStorageIds.has(storageId))
       const [originalImageStorageId, processedImageStorageId, alphaMaskStorageId, thumbnailStorageId] = await Promise.all([
-        uploadFileThroughBackend(await dataUrlToFile(generated.imageDataUrl, 'original.png')),
-        uploadFileThroughBackend(await dataUrlToFile(processed.processedImageDataUrl, 'processed.png')),
-        uploadFileThroughBackend(await dataUrlToFile(processed.alphaMaskDataUrl, 'alpha-mask.png')),
-        uploadFileThroughBackend(await dataUrlToFile(processed.thumbnailDataUrl, 'thumbnail.png')),
+        uploadActorAssetThroughBackend(await dataUrlToFile(generated.imageDataUrl, 'original.png')),
+        uploadActorAssetThroughBackend(await dataUrlToFile(processed.processedImageDataUrl, 'processed.png')),
+        uploadActorAssetThroughBackend(await dataUrlToFile(processed.alphaMaskDataUrl, 'alpha-mask.png')),
+        uploadActorAssetThroughBackend(await dataUrlToFile(processed.thumbnailDataUrl, 'thumbnail.png')),
       ])
 
       if (staleDraftStorageIds.length > 0) {

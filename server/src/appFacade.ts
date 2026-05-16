@@ -233,42 +233,58 @@ export function registerAppFacadeRoutes(app: Express) {
     '/api/app/storage/upload',
     express.raw({ type: '*/*', limit: '50mb' }),
     async (request, response) => {
-      const client = await withAuthenticatedConvexClient(request, response)
+      await handleStorageUpload(request, response, 'packs:generatePackUploadUrl')
+    },
+  )
 
-      if (!client) {
-        return
-      }
-
-      const body = request.body
-
-      if (!(body instanceof Buffer) || body.length === 0) {
-        sendApiError(response, 'A file payload is required.', 400)
-        return
-      }
-
-      try {
-        const uploadUrl = await client.mutation('packs:generatePackUploadUrl' as never, {} as never)
-        const uploadResponse = await fetch(uploadUrl as string, {
-          method: 'POST',
-          headers: {
-            'Content-Type': request.header('content-type') ?? 'application/octet-stream',
-          },
-          body,
-        })
-
-        if (!uploadResponse.ok) {
-          throw new Error('Pack file upload failed.')
-        }
-
-        const payload = (await uploadResponse.json()) as { storageId: string }
-        response.json(payload)
-      } catch (error) {
-        sendApiError(response, error, 502)
-      }
+  app.post(
+    '/api/app/actor-assets/upload',
+    express.raw({ type: '*/*', limit: '50mb' }),
+    async (request, response) => {
+      await handleStorageUpload(request, response, 'actors:generateActorUploadUrl')
     },
   )
 
   for (const route of EDITOR_PROXY_ROUTES) {
     registerConvexSiteProxyRoute(app, route)
+  }
+}
+
+async function handleStorageUpload(
+  request: Request,
+  response: Response,
+  uploadUrlFunction: string,
+) {
+  const client = await withAuthenticatedConvexClient(request, response)
+
+  if (!client) {
+    return
+  }
+
+  const body = request.body
+
+  if (!(body instanceof Buffer) || body.length === 0) {
+    sendApiError(response, 'A file payload is required.', 400)
+    return
+  }
+
+  try {
+    const uploadUrl = await client.mutation(uploadUrlFunction as never, {} as never)
+    const uploadResponse = await fetch(uploadUrl as string, {
+      method: 'POST',
+      headers: {
+        'Content-Type': request.header('content-type') ?? 'application/octet-stream',
+      },
+      body,
+    })
+
+    if (!uploadResponse.ok) {
+      throw new Error('File upload failed.')
+    }
+
+    const payload = (await uploadResponse.json()) as { storageId: string }
+    response.json(payload)
+  } catch (error) {
+    sendApiError(response, error, 502)
   }
 }

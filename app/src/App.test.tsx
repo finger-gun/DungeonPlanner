@@ -57,6 +57,17 @@ const dragonbaneRulesPack = {
   version: '1.0.0',
   visibility: 'public',
   isActive: true,
+  entries: [],
+  defaultAssetRefs: null,
+  manifestStorageId: null,
+  thumbnailStorageId: null,
+  sourceProvenance: {
+    sourceRepository: 'fixture',
+    sourcePath: '.',
+    packVersion: '1.0.0',
+    importedAt: '2026-05-16T00:00:00.000Z',
+    importer: 'dragonbane-unbound',
+  },
   domains: {
     dragonbane: {
       schemaVersion: 1,
@@ -231,6 +242,7 @@ vi.mock('./lib/backendData', () => ({
   useQuery: (queryKey: string, args: unknown) => (args === 'skip' ? undefined : mock.queries[queryKey]),
   useMutation: (mutationKey: string) => mock.mutations[mutationKey] ?? vi.fn(),
   uploadFileThroughBackend: vi.fn(),
+  uploadActorAssetThroughBackend: vi.fn(),
 }))
 
 vi.mock('./lib/auth', () => ({
@@ -572,5 +584,52 @@ describe('authenticated app shell', () => {
     expect(screen.queryByRole('navigation', { name: 'Dev pages' })).toBeNull()
     expect(screen.getByRole('link', { name: 'Users' })).toBeTruthy()
     expect(screen.getByRole('link', { name: 'Packs' })).toBeTruthy()
+  })
+
+  it('saves rules packs with domains and source provenance from the metadata editor', async () => {
+    const user = userEvent.setup()
+    window.location.hash = '#/app/admin/packs'
+    mock.authState.isAuthenticated = true
+    mock.viewerIdentity = {
+      viewer: { name: 'Admin User', email: 'admin@example.com' },
+      workspace: { name: 'Guild Hall' },
+      roles: ['admin'],
+      access: {
+        isAdmin: true,
+        canManageUsers: true,
+        canManagePacks: true,
+        canManageDungeons: true,
+        canManageSessions: true,
+        canUseCharacterLibrary: true,
+      },
+    }
+    mock.queries = {
+      'dungeons.listViewerDungeons': [],
+      'sessions.listViewerSessions': [],
+      'characters.listViewerCharacters': [],
+      'packs.listWorkspacePacks': [dragonbaneRulesPack],
+      'roles.listActiveWorkspaceUsers': [],
+    }
+    mock.mutations['packs.savePackRecord'].mockResolvedValue('pack-1')
+
+    render(<App />)
+
+    await user.click(screen.getByRole('button', { name: /Core Pack/ }))
+    expect(screen.getByText('Dragonbane domains JSON')).toBeTruthy()
+    expect(screen.getByText('Source provenance JSON')).toBeTruthy()
+
+    await user.click(screen.getAllByRole('button', { name: 'Update pack' })[0])
+
+    await waitFor(() =>
+      expect(mock.mutations['packs.savePackRecord']).toHaveBeenCalledWith(
+        expect.objectContaining({
+          packRecordId: 'pack-1',
+          kind: 'rules',
+          domains: dragonbaneRulesPack.domains,
+          sourceProvenance: dragonbaneRulesPack.sourceProvenance,
+          defaultAssetRefs: undefined,
+        }),
+      ),
+    )
   })
 })

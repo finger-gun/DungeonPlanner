@@ -21,6 +21,15 @@ export type WorkspaceRulesPackRecord = {
   visibility: 'global' | 'public' | 'private'
   description?: string | null
   isActive: boolean
+  manifestStorageId?: Id<'_storage'> | null
+  thumbnailStorageId?: Id<'_storage'> | null
+  defaultAssetRefs?: {
+    floor?: string
+    wall?: string
+    opening?: string
+    prop?: string
+    player?: string
+  } | null
   domains?: DragonbaneRulesPackDomains | null
   sourceProvenance?: DragonbaneSourceProvenance | null
   entries: DragonbaneRulesPackPayload['entries']

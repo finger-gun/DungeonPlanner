@@ -30,6 +30,7 @@ vi.mock('../lib/backendData', () => ({
   useQuery: (queryKey: string, args: unknown) => (args === 'skip' ? undefined : mock.queries[queryKey]),
   useMutation: (mutationKey: string) => mock.mutations[mutationKey] ?? vi.fn(),
   uploadFileThroughBackend: vi.fn(),
+  uploadActorAssetThroughBackend: vi.fn(),
 }))
 
 const rulesPack = {
