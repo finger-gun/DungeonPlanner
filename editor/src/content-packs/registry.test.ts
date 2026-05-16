@@ -6,8 +6,10 @@ import {
   getContentPackAssetsByCategory,
   getContentPackRoomSetById,
   getContentPackWallMaterialSetById,
+  getContentPackWallStyleById,
   getDefaultAssetIdByCategory,
   getDefaultContentPackWallMaterialSetId,
+  getDefaultContentPackWallStyleId,
 } from './registry'
 import { syncGeneratedCharacterAssets } from './runtimeRegistry'
 
@@ -101,6 +103,11 @@ describe('content pack registry', () => {
       textures: {
         albedoUrl: expect.any(String),
       },
+      shading: {
+        tintColor: '#ffffff',
+        roughness: 0.45,
+        metalness: 0,
+      },
     })
     expect(getContentPackWallMaterialSetById('dungeon', 'wedged-cobblestone')).toMatchObject({
       id: 'wedged-cobblestone',
@@ -111,6 +118,108 @@ describe('content pack registry', () => {
         aoUrl: expect.any(String),
         heightUrl: expect.any(String),
       },
+    })
+    expect(getContentPackWallMaterialSetById('dungeon', 'classy-art-deco-wallpaper')).toMatchObject({
+      id: 'classy-art-deco-wallpaper',
+      name: 'Classy Art Deco Wallpaper',
+      textures: {
+        albedoUrl: expect.any(String),
+        normalUrl: expect.any(String),
+        aoUrl: expect.any(String),
+        heightUrl: expect.any(String),
+      },
+    })
+    expect(getContentPackWallMaterialSetById('dungeon', 'modern-brick1')).toMatchObject({
+      id: 'modern-brick1',
+      name: 'Modern Brick1',
+      textures: {
+        albedoUrl: expect.any(String),
+        normalUrl: expect.any(String),
+        aoUrl: expect.any(String),
+        heightUrl: expect.any(String),
+      },
+    })
+    expect(getContentPackWallMaterialSetById('dungeon', 'tavern-wood-planks')).toMatchObject({
+      id: 'tavern-wood-planks',
+      name: 'Tavern Wood Planks',
+      textures: {
+        albedoUrl: expect.any(String),
+        normalUrl: expect.any(String),
+        aoUrl: expect.any(String),
+        heightUrl: expect.any(String),
+      },
+    })
+  })
+
+  it('registers authored dungeon wall styles', () => {
+    expect(getDefaultContentPackWallStyleId('dungeon')).toBe('art-deco-cobblestone')
+    expect(getContentPackWallStyleById('dungeon', 'art-deco-cobblestone')).toMatchObject({
+      id: 'art-deco-cobblestone',
+      name: 'Art Deco Cobblestone',
+      roomFace: {
+        profile: {
+          points: [
+            [-0.181, 0.48],
+            [-0.181, 1],
+          ],
+        },
+        material: {
+          textures: {
+            albedoUrl: expect.stringContaining('modern-brick1_albedo.png'),
+            normalUrl: expect.stringContaining('modern-brick1_normal-ogl.png'),
+            aoUrl: expect.stringContaining('modern-brick1_ao.png'),
+            heightUrl: expect.stringContaining('modern-brick1_height.png'),
+          },
+          shading: {
+            tintColor: '#ffffff',
+          },
+        },
+      },
+      roomFaceDetails: [
+        {
+          profile: {
+            points: [
+              [-0.245, 0],
+              [-0.245, 0.48],
+              [-0.181, 0.48],
+            ],
+          },
+        },
+      ],
+      inserts: [
+        {
+          assetId: 'dungeon.props_pillars_pillar',
+          anchors: ['start', 'end', 'convex-corner', 'curvature-change'],
+        },
+        {
+          assetId: 'dungeon.props_pillars_pillar',
+          anchors: ['interval'],
+          interval: 3,
+        },
+      ],
+      openingRules: {
+        defaultMode: 'structural',
+        supportedModes: ['framed', 'structural'],
+      },
+    })
+    expect(getContentPackWallStyleById('dungeon', 'stone-keep')).toMatchObject({
+      id: 'stone-keep',
+      name: 'Stone Keep',
+      joinMode: 'cover-piece',
+      openingRules: {
+        defaultMode: 'structural',
+        supportedModes: ['framed', 'structural'],
+      },
+    })
+    expect(getContentPackWallStyleById('dungeon', 'manor-plaster')).toMatchObject({
+      id: 'manor-plaster',
+      name: 'Manor Plaster',
+      inserts: [
+        {
+          assetId: 'dungeon.props_pillars_pillar',
+          anchors: ['start', 'end', 'convex-corner'],
+        },
+      ],
     })
   })
 

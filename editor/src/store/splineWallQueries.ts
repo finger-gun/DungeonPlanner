@@ -6,6 +6,7 @@ import {
   type SplineWallGeometryOptions,
   buildSampledSplineWallPathFromGraph,
 } from './splineWalls'
+import { findOwningStraightSegmentCandidate } from './splineWallStraightSegmentOwnership'
 
 type QueryPoint = readonly [number, number]
 
@@ -641,29 +642,7 @@ function findOwningStraightSegment(
   midpoint: QueryPoint,
   candidates: readonly StraightSegmentReference[],
 ): StraightSegmentReference | null {
-  let owner: StraightSegmentReference | null = null
-  let bestDistance = Number.POSITIVE_INFINITY
-  let bestAlignment = Number.NEGATIVE_INFINITY
-
-  candidates.forEach((candidate) => {
-    const distance = distancePointToSegment(midpoint, candidate.start, candidate.end)
-    if (distance > bestDistance + SPLINE_WALL_GEOMETRY_EPSILON) {
-      return
-    }
-
-    const offset = subtractPoint(midpoint, closestPointOnSegment(midpoint, candidate.start, candidate.end))
-    const alignment = Math.abs(dotPoint(normalizePoint(offset), candidate.tangent))
-    if (
-      distance < bestDistance - SPLINE_WALL_GEOMETRY_EPSILON
-      || alignment > bestAlignment + SPLINE_WALL_GEOMETRY_EPSILON
-    ) {
-      owner = candidate
-      bestDistance = distance
-      bestAlignment = alignment
-    }
-  })
-
-  return owner
+  return findOwningStraightSegmentCandidate(midpoint, candidates, SPLINE_WALL_GEOMETRY_EPSILON)
 }
 
 function findBestSampleEdge(
@@ -788,10 +767,6 @@ function projectPointToSegmentRatio(point: QueryPoint, start: QueryPoint, end: Q
 
 function closestPointOnSegment(point: QueryPoint, start: QueryPoint, end: QueryPoint): QueryPoint {
   return lerpPoint(start, end, projectPointToSegmentRatio(point, start, end))
-}
-
-function distancePointToSegment(point: QueryPoint, start: QueryPoint, end: QueryPoint) {
-  return distanceBetweenPoints(point, closestPointOnSegment(point, start, end))
 }
 
 function normalizePoint(point: QueryPoint): QueryPoint {

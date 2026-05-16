@@ -237,6 +237,8 @@ function createFloorData(): DungeonRoomData {
       },
     },
     floorTileAssetIds: {},
+    wallStyleAssignments: {},
+    wallCoreAssignments: {},
     wallSurfaceAssetIds: {},
     wallSurfaceProps: {},
     globalFloorAssetId: null,

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { getContentPackAssetById, getDefaultAssetIdByCategory } from '../content-packs/registry'
 import { createEmptySplineWallGraph } from './splineWallGraph'
 import type { DungeonObjectRecord } from './useDungeonStore'
+import { createSplineWallSegmentSideKey } from './wallStyleAssignments'
 import {
   sanitizePersistedAssetReferences,
   sanitizeSelectedAssetIds,
@@ -39,6 +40,12 @@ function createSnapshot() {
     outdoorTerrainStyleCells: {},
     exploredCells: {},
     floorTileAssetIds: {},
+    wallStyleAssignments: {
+      [createSplineWallSegmentSideKey('segment-a', 'left')]: 'missing.wall-style',
+    } as Record<string, string>,
+    wallCoreAssignments: {
+      'segment-a': 'missing.wall-style',
+    } as Record<string, string>,
     wallSurfaceAssetIds: {},
     wallSurfaceProps: {},
     placedObjects: {} as Record<string, DungeonObjectRecord>,
@@ -114,6 +121,27 @@ describe('asset reference sanitization', () => {
 
     expect(sanitized.floorTileAssetIds).toEqual({})
     expect(sanitized.wallSurfaceAssetIds).toEqual({})
+  })
+
+  it('drops invalid wall style assignments and preserves valid ones', () => {
+    const snapshot = createSnapshot()
+    snapshot.wallStyleAssignments = {
+      [createSplineWallSegmentSideKey('segment-a', 'left')]: 'stone-keep',
+      [createSplineWallSegmentSideKey('segment-a', 'right')]: 'missing.wall-style',
+    }
+    snapshot.wallCoreAssignments = {
+      'segment-a': 'manor-plaster',
+      'segment-b': 'missing.wall-style',
+    } as Record<string, string>
+
+    const sanitized = sanitizeSnapshotAssetReferences(snapshot)
+
+    expect(sanitized.wallStyleAssignments).toEqual({
+      [createSplineWallSegmentSideKey('segment-a', 'left')]: 'stone-keep',
+    })
+    expect(sanitized.wallCoreAssignments).toEqual({
+      'segment-a': 'manor-plaster',
+    })
   })
 
   it('remaps removed lit torch assets to the toggleable torch with lit props', () => {

@@ -1,7 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { SelectToolPanel } from './SelectToolPanel'
+import { upsertSplineWallGraphRoomPath } from '../../store/splineWallGraph'
 import { useDungeonStore } from '../../store/useDungeonStore'
+import { createSplineWallSegmentSideSelectionKey } from '../../store/wallStyleAssignments'
 
 describe('SelectToolPanel', () => {
   beforeEach(() => {
@@ -135,6 +137,28 @@ describe('SelectToolPanel', () => {
 
     expect(useDungeonStore.getState().wallOpenings[openingId]?.assetId).toBe('core.opening_door_wall_1')
     expect(useDungeonStore.getState().wallOpenings[openingId]?.objectProps).toMatchObject({ open: true })
+  })
+
+  it('shows the wall face inspector for selected spline wall faces', () => {
+    useDungeonStore.setState((state) => ({
+      ...state,
+      selection: createSplineWallSegmentSideSelectionKey('room-a:path:0:segment:0', 'left'),
+      splineWallGraph: upsertSplineWallGraphRoomPath(state.splineWallGraph, {
+        roomId: 'room-a',
+        layerId: state.activeLayerId,
+        nodes: [
+          { position: [0, 0], cornerMode: 'square', cornerAmount: 0 },
+          { position: [1, 0], cornerMode: 'square', cornerAmount: 0 },
+          { position: [1, 1], cornerMode: 'square', cornerAmount: 0 },
+          { position: [0, 1], cornerMode: 'square', cornerAmount: 0 },
+        ],
+      }),
+    }))
+
+    render(<SelectToolPanel />)
+
+    expect(screen.getByText('Selected Wall Face')).toBeInTheDocument()
+    expect(screen.getByText('Structural Core')).toBeInTheDocument()
   })
 
 })

@@ -1,4 +1,5 @@
 import { createDungeonAsset } from '../shared/createDungeonAsset'
+import { DungeonDoorCustomVariant } from './door_custom_component'
 
 const DOOR_CUSTOM_SCALE = 0.5
 
@@ -8,6 +9,7 @@ export const dungeonDoorCustomAsset = createDungeonAsset({
   name: 'Dungeon Door (Custom)',
   category: 'opening',
   modelName: 'door_custom',
+  Component: DungeonDoorCustomVariant,
   transform: {
     position: [0, 0, 0],
     rotation: [0, 0, 0],

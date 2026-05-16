@@ -248,7 +248,7 @@ describe('SplineWallComputePrototype', () => {
     })).toBeGreaterThan(0)
   })
 
-  it('generates interior lining geometry for arched door cutouts', () => {
+  it('does not generate interior lining geometry for arched door cutouts', () => {
     const splineWallGraph = createEmptySplineWallGraph()
     splineWallGraph.nodes['node-a'] = {
       id: 'node-a',
@@ -332,7 +332,7 @@ describe('SplineWallComputePrototype', () => {
       maxY: 1.0,
       minZ: -0.05,
       maxZ: 0.05,
-    })).toBeGreaterThan(0)
+    })).toBe(0)
     expect(countLiveTrianglesInsideBox(extractedGeometry, {
       minX: 0.82,
       maxX: 1.18,
@@ -340,7 +340,15 @@ describe('SplineWallComputePrototype', () => {
       maxY: 1.42,
       minZ: -0.05,
       maxZ: 0.05,
-    })).toBeGreaterThan(0)
+    })).toBe(0)
+    expect(countLiveTrianglesInsideBox(extractedGeometry, {
+      minX: 1.45,
+      maxX: 1.55,
+      minY: 0.2,
+      maxY: 1.0,
+      minZ: -0.05,
+      maxZ: 0.05,
+    })).toBe(0)
     expect(countLiveTrianglesInsideBox(extractedGeometry, {
       minX: 0.34,
       maxX: 0.47,

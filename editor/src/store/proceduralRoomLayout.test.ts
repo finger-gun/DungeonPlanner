@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest'
+import { buildRoomDraftSplineNodes, createRoomDraftFromStroke } from './roomDraft'
 import {
   buildSharedBoundaryRuns,
   reconcileProceduralRoomLayout,
 } from './proceduralRoomLayout'
+import { createEmptySplineWallGraph, upsertSplineWallGraphRoomPath } from './splineWallGraph'
 import type { OpeningRecord, PaintedCellRecord } from './useDungeonStore'
 
 describe('proceduralRoomLayout', () => {
@@ -46,7 +48,6 @@ describe('proceduralRoomLayout', () => {
     const openings = Object.values(result.wallOpenings).sort((left, right) =>
       left.wallKey.localeCompare(right.wallKey),
     )
-
     expect(openings).toHaveLength(1)
     expect(openings[0]).toMatchObject({
       assetId: null,
@@ -180,7 +181,7 @@ describe('proceduralRoomLayout', () => {
     })
   })
 
-  it('skips generated connectors and clears old generated connector state for graph-backed rooms', () => {
+  it('generates spline-compatible connectors for graph-backed rooms', () => {
     const paintedCells: Record<string, PaintedCellRecord> = {
       '0:0': { cell: [0, 0], layerId: 'default', roomId: 'left' },
       '1:0': { cell: [1, 0], layerId: 'default', roomId: 'right' },
@@ -191,35 +192,60 @@ describe('proceduralRoomLayout', () => {
       '3:2': { cell: [3, 2], layerId: 'default', roomId: 'top' },
       '4:2': { cell: [4, 2], layerId: 'default', roomId: 'bottom' },
     }
-    const generatedOpening: OpeningRecord = {
-      id: 'generated-open',
-      assetId: null,
-      wallKey: '0:0:east',
-      width: 1,
-      flipped: false,
+    let splineWallGraph = upsertSplineWallGraphRoomPath(createEmptySplineWallGraph(), {
+      roomId: 'left',
       layerId: 'default',
-      source: 'generated',
-    }
+      nodes: buildRoomDraftSplineNodes(createRoomDraftFromStroke([0, 0], [0, 0])),
+    })
+    splineWallGraph = upsertSplineWallGraphRoomPath(splineWallGraph, {
+      roomId: 'right',
+      layerId: 'default',
+      nodes: buildRoomDraftSplineNodes(createRoomDraftFromStroke([1, 0], [1, 0])),
+    })
+    splineWallGraph = upsertSplineWallGraphRoomPath(splineWallGraph, {
+      roomId: 'top',
+      layerId: 'default',
+      nodes: buildRoomDraftSplineNodes(createRoomDraftFromStroke([3, 0], [3, 2])),
+    })
+    splineWallGraph = upsertSplineWallGraphRoomPath(splineWallGraph, {
+      roomId: 'bottom',
+      layerId: 'default',
+      nodes: buildRoomDraftSplineNodes(createRoomDraftFromStroke([4, 0], [4, 2])),
+    })
 
-    expect(reconcileProceduralRoomLayout({
+    let createdOpeningIndex = 0
+    const result = reconcileProceduralRoomLayout({
       paintedCells,
-      wallOpenings: {
-        [generatedOpening.id]: generatedOpening,
-      },
-      wallSurfaceAssetIds: {
-        '3:1:east': 'dungeon.wall_wall_doorway',
-      },
-      wallSurfaceProps: {
-        '3:1:east': { generatedConnector: true },
-      },
-      graphBackedRoomIds: new Set(['left', 'right', 'top', 'bottom']),
-      selection: generatedOpening.id,
-      createOpeningId: () => 'unused',
-    })).toEqual({
       wallOpenings: {},
       wallSurfaceAssetIds: {},
       wallSurfaceProps: {},
+      graphBackedRoomIds: new Set(['left', 'right', 'top', 'bottom']),
+      splineWallGraph,
       selection: null,
+      createOpeningId: () => `generated-open-${createdOpeningIndex += 1}`,
     })
+
+    const openings = Object.values(result.wallOpenings).sort((left, right) =>
+      left.wallKey.localeCompare(right.wallKey),
+    )
+    expect(openings).toHaveLength(2)
+    expect(openings[0]).toMatchObject({
+      assetId: null,
+      width: 1,
+      segmentId: expect.any(String),
+      segmentStartRatio: 0,
+      segmentEndRatio: 1,
+      source: 'generated',
+    })
+    expect(openings[1]).toMatchObject({
+      assetId: 'core.opening_door_custom',
+      width: 1,
+      segmentId: expect.any(String),
+      segmentStartRatio: expect.any(Number),
+      segmentEndRatio: expect.any(Number),
+      source: 'generated',
+    })
+    expect(result.wallSurfaceAssetIds).toEqual({})
+    expect(result.wallSurfaceProps).toEqual({})
   })
 })

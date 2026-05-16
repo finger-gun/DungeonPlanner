@@ -29,6 +29,7 @@ import {
 import { useDungeonStore } from '../../store/useDungeonStore'
 import { getRegisteredObject, useObjectRegistryVersion } from './objectRegistry'
 import { getAutofocusDistance, resolveAutofocusTarget } from './autofocusTarget'
+import { configureAutofocusRaycasterLayers } from './autofocusRaycast'
 import {
   applyWebGpuScenePassStencilSupport,
   getWebGpuPostProcessingPipeline,
@@ -273,7 +274,7 @@ export function WebGPUPostProcessing() {
     }
 
     const raycaster = focusRaycasterRef.current
-    raycaster.layers.mask = (cam as any).layers.mask
+    configureAutofocusRaycasterLayers(raycaster, (cam as any).layers.mask)
     raycaster.setFromCamera(focusNdcRef.current, cam as any)
 
     const hit = raycaster

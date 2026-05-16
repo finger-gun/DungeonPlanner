@@ -1,3 +1,4 @@
+import * as THREE from 'three'
 import type { BakedFloorLightField } from '../../rendering/dungeonLightField'
 import { applyBakedLightToMaterial } from './bakedLightMaterial'
 import type { SplineWallMaterialBundle, SplineWallMaterialPreset } from './splineWallMaterial'
@@ -28,4 +29,30 @@ export function applyBakedLightToSplineWallMaterialLibrary(
   Object.values(materials).forEach((bundle) => {
     applyBakedLightToSplineWallMaterialBundle(bundle, bakedLightField)
   })
+}
+
+export function applyBakedLightToSplineWallStyleMaterial(
+  material: THREE.Material,
+  bakedLightField: BakedFloorLightField | null,
+  options: {
+    useDirectionAttribute?: boolean
+    useDirectionalFaceMask?: boolean
+    useDirectionalSampleOffset?: boolean
+  } = {},
+) {
+  applyBakedLightToMaterial(material, bakedLightField
+    ? {
+        useLightAttribute: true,
+        lightField: bakedLightField,
+        ...(options.useDirectionAttribute !== undefined
+          ? { useDirectionAttribute: options.useDirectionAttribute }
+          : {}),
+        ...(options.useDirectionalFaceMask !== undefined
+          ? { useDirectionalFaceMask: options.useDirectionalFaceMask }
+          : {}),
+        ...(options.useDirectionalSampleOffset !== undefined
+          ? { useDirectionalSampleOffset: options.useDirectionalSampleOffset }
+          : {}),
+      }
+    : null)
 }

@@ -1,7 +1,10 @@
 import * as THREE from 'three'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { BakedFloorLightField } from '../../rendering/dungeonLightField'
-import { applyBakedLightToSplineWallMaterialLibrary } from './splineWallBakedLight'
+import {
+  applyBakedLightToSplineWallMaterialLibrary,
+  applyBakedLightToSplineWallStyleMaterial,
+} from './splineWallBakedLight'
 import { applyBakedLightToMaterial } from './bakedLightMaterial'
 
 vi.mock('./bakedLightMaterial', () => ({
@@ -64,5 +67,52 @@ describe('splineWallBakedLight', () => {
     expect(applyBakedLightToMaterial).toHaveBeenCalledWith(materials.dungeon.side, null)
     expect(applyBakedLightToMaterial).toHaveBeenCalledWith(materials.dungeon.top, null)
     expect(applyBakedLightToMaterial).toHaveBeenCalledTimes(6)
+  })
+
+  it('applies baked light to authored wall-style section materials', () => {
+    const material = new THREE.MeshStandardMaterial()
+    const bakedLightField = {
+      lightFieldTexture: null,
+      flickerLightFieldTextures: [],
+      lightFieldTextureSize: { width: 1, height: 1 },
+      lightFieldGridSize: { widthCells: 1, heightCells: 1 },
+      chunkSize: 1,
+      bounds: null,
+      gpuChunks: null,
+    } as unknown as BakedFloorLightField
+
+    applyBakedLightToSplineWallStyleMaterial(material, bakedLightField)
+
+    expect(applyBakedLightToMaterial).toHaveBeenCalledWith(material, {
+      useLightAttribute: true,
+      lightField: bakedLightField,
+    })
+  })
+
+  it('passes directional baked light options to authored wall-style section materials', () => {
+    const material = new THREE.MeshStandardMaterial()
+    const bakedLightField = {
+      lightFieldTexture: null,
+      flickerLightFieldTextures: [],
+      lightFieldTextureSize: { width: 1, height: 1 },
+      lightFieldGridSize: { widthCells: 1, heightCells: 1 },
+      chunkSize: 1,
+      bounds: null,
+      gpuChunks: null,
+    } as unknown as BakedFloorLightField
+
+    applyBakedLightToSplineWallStyleMaterial(material, bakedLightField, {
+      useDirectionAttribute: true,
+      useDirectionalFaceMask: true,
+      useDirectionalSampleOffset: false,
+    })
+
+    expect(applyBakedLightToMaterial).toHaveBeenCalledWith(material, {
+      useLightAttribute: true,
+      useDirectionAttribute: true,
+      useDirectionalFaceMask: true,
+      useDirectionalSampleOffset: false,
+      lightField: bakedLightField,
+    })
   })
 })

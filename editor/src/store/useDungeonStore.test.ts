@@ -191,7 +191,24 @@ describe('useDungeonStore history', () => {
     expect(state.splineWallGraph.paths[`${roomId}:path:0`]).toBeDefined()
   })
 
-  it('does not generate legacy connector doors when graph-backed draft rooms share a wall', () => {
+  it('keeps paint-created rooms synchronized into spline graph paths', () => {
+    const paintedCount = useDungeonStore.getState().paintCells([
+      [0, 0],
+      [1, 0],
+    ])
+
+    const state = useDungeonStore.getState()
+    const roomId = state.paintedCells['0:0']?.roomId
+
+    expect(paintedCount).toBe(2)
+    expect(roomId).toBeTruthy()
+    expect(state.rooms[roomId!]).toMatchObject({
+      geometrySource: 'paint',
+    })
+    expect(Object.values(state.splineWallGraph.paths).some((path) => path.roomId === roomId)).toBe(true)
+  })
+
+  it('auto-generates spline connectors when graph-backed draft rooms share a wall', () => {
     const firstRoomId = useDungeonStore.getState().commitDraftRoom({
       cells: buildRoomDraftCells(createRoomDraftFromStroke([0, 0], [0, 0])),
       splineNodes: buildRoomDraftSplineNodes(createRoomDraftFromStroke([0, 0], [0, 0])),
@@ -205,9 +222,37 @@ describe('useDungeonStore history', () => {
     expect(firstRoomId).toBeTruthy()
     expect(secondRoomId).toBeTruthy()
     expect(Object.keys(state.splineWallGraph.paths)).toHaveLength(2)
-    expect(state.wallOpenings).toEqual({})
+    expect(Object.values(state.wallOpenings)).toHaveLength(1)
+    expect(Object.values(state.wallOpenings)[0]).toMatchObject({
+      assetId: null,
+      segmentId: expect.any(String),
+      segmentStartRatio: 0,
+      segmentEndRatio: 1,
+      source: 'generated',
+      width: 1,
+    })
     expect(state.wallSurfaceAssetIds).toEqual({})
     expect(state.wallSurfaceProps).toEqual({})
+  })
+
+  it('auto-generates an open passage when a paint room joins a graph-backed room by one wall unit', () => {
+    useDungeonStore.getState().paintCells([[0, 0]])
+    const draftedRoomId = useDungeonStore.getState().commitDraftRoom({
+      cells: buildRoomDraftCells(createRoomDraftFromStroke([1, 0], [1, 0])),
+      splineNodes: buildRoomDraftSplineNodes(createRoomDraftFromStroke([1, 0], [1, 0])),
+    })
+
+    const openings = Object.values(useDungeonStore.getState().wallOpenings)
+    expect(draftedRoomId).toBeTruthy()
+    expect(openings).toHaveLength(1)
+    expect(openings[0]).toMatchObject({
+      assetId: null,
+      wallKey: '0:0:east',
+      segmentId: expect.any(String),
+      segmentStartRatio: 0,
+      segmentEndRatio: 1,
+      source: 'generated',
+    })
   })
 
   it('rejects draft commits when any target cell became occupied before commit', () => {
@@ -2372,13 +2417,15 @@ describe('useDungeonStore wall openings', () => {
     state.paintCells([[0, 0], [0, 1], [0, 2]])
     state.paintCells([[1, 0], [1, 1], [1, 2]])
 
-    expect(useDungeonStore.getState().wallOpenings).toEqual({})
-    expect(useDungeonStore.getState().wallSurfaceAssetIds).toMatchObject({
-      '0:1:east': 'dungeon.wall_wall_doorway',
+    const openings = Object.values(useDungeonStore.getState().wallOpenings)
+    expect(openings).toHaveLength(1)
+    expect(openings[0]).toMatchObject({
+      assetId: 'core.opening_door_custom',
+      width: 1,
+      source: 'generated',
     })
-    expect(useDungeonStore.getState().wallSurfaceProps['0:1:east']).toMatchObject({
-      generatedConnector: true,
-    })
+    expect(useDungeonStore.getState().wallSurfaceAssetIds).toEqual({})
+    expect(useDungeonStore.getState().wallSurfaceProps).toEqual({})
   })
 
   it('preserves manual openings instead of generating overlapping connectors', () => {
@@ -2408,9 +2455,13 @@ describe('useDungeonStore wall openings', () => {
 
     const rightRoomId = useDungeonStore.getState().paintedCells['1:0']?.roomId
     expect(rightRoomId).toBeTruthy()
-    expect(useDungeonStore.getState().wallSurfaceAssetIds).toMatchObject({
-      '0:0:east': 'dungeon.wall_wall_doorway',
-    })
+    expect(Object.values(useDungeonStore.getState().wallOpenings)).toEqual([
+      expect.objectContaining({
+        assetId: 'core.opening_door_custom',
+        source: 'generated',
+      }),
+    ])
+    expect(useDungeonStore.getState().wallSurfaceAssetIds).toEqual({})
 
     useDungeonStore.getState().resizeRoom(rightRoomId!, {
       minX: 1,
@@ -2426,7 +2477,7 @@ describe('useDungeonStore wall openings', () => {
       wallKey: '0:0:east',
       source: 'generated',
     })
-    expect(useDungeonStore.getState().wallSurfaceAssetIds['0:0:east']).toBeUndefined()
+    expect(useDungeonStore.getState().wallSurfaceAssetIds).toEqual({})
   })
 
   it('adds and removes inner wall segments in a single history step', () => {

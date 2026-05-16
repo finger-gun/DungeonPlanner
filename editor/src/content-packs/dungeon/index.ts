@@ -11,6 +11,7 @@ import { dungeonStairAssets } from './openings/stairs'
 import { dungeonPropAssets } from './props'
 import { dungeonRoomSets } from './roomSets'
 import { dungeonWallMaterialSets } from './wallMaterialSets'
+import { dungeonWallStyles } from './wallStyles'
 
 export const dungeonContentPack: ContentPack = {
   id: 'dungeon',
@@ -25,6 +26,7 @@ export const dungeonContentPack: ContentPack = {
   ],
   roomSets: dungeonRoomSets,
   wallMaterialSets: dungeonWallMaterialSets,
+  wallStyles: dungeonWallStyles,
   defaultAssets: {
     floor: defaultAssetForCategory('floor', dungeonFloorTileSmallAsset),
     wall: defaultAssetForCategory('wall', dungeonWallAsset),

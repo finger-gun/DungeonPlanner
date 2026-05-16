@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import {
   AUTOFOCUS_RAYCAST_INTERVAL_MS,
+  AUTOFOCUS_RAYCAST_LAYER,
+  configureAutofocusRaycasterLayers,
   didAutofocusViewStateChange,
   shouldRefreshAutofocusRaycast,
   type AutofocusRaycastViewState,
@@ -67,5 +69,21 @@ describe('autofocusRaycast', () => {
       needsResample: true,
       viewStateChanged: false,
     })).toBe(true)
+  })
+
+  it('adds the focus-only layer to the camera raycast mask', () => {
+    const raycaster = {
+      layers: {
+        mask: 1,
+        enable(layer: number) {
+          this.mask |= 1 << layer
+        },
+      },
+    }
+
+    configureAutofocusRaycasterLayers(raycaster, 1)
+
+    expect(raycaster.layers.mask & 1).toBe(1)
+    expect(raycaster.layers.mask & (1 << AUTOFOCUS_RAYCAST_LAYER)).not.toBe(0)
   })
 })

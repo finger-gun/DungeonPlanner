@@ -1,17 +1,31 @@
 import { getContentPackAssetById } from '../content-packs/registry'
+import type { ContentPackOpeningContext, ContentPackOpeningSpanSample } from '../content-packs/types'
 import { GRID_SIZE, cellToWorldPosition, getCellKey, snapWorldPointToGrid, type GridCell } from '../hooks/useSnapToGrid'
 import { getOpeningSegments } from './openingSegments'
-import { findNearestSplineWallSegment, sampleSplineWallSegment, type SplineWallNearestHit, type SplineWallQueryCache } from './splineWallQueries'
+import {
+  findNearestSplineWallSegment,
+  getSplineWallSegmentQueryData,
+  sampleSplineWallSegment,
+  type SplineWallNearestHit,
+  type SplineWallQueryCache,
+} from './splineWallQueries'
 import type { SplineWallGraph, SplineWallSegment } from './splineWallGraph'
 import { isWallBoundary, wallKeyToWorldPosition } from './wallSegments'
 import type { OpeningRecord, PaintedCellRecord } from './useDungeonStore'
 
 const OPENING_PLACEMENT_EPSILON = 1e-5
+const OPENING_RENDER_SAMPLE_STEP = 0.125
 
 type OpeningSpanPlacement = {
   segmentId: string
   startRatio: number
   endRatio: number
+}
+
+type OpeningSpanWorldSample = {
+  position: readonly [number, number]
+  tangent: readonly [number, number]
+  normal: readonly [number, number]
 }
 
 export type SplineWallOpeningPlacement = {
@@ -198,6 +212,46 @@ export function getOpeningWorldTransform(
   }
 }
 
+export function getOpeningRenderContext(
+  graph: SplineWallGraph,
+  queryCache: SplineWallQueryCache,
+  opening: OpeningRecord,
+): ContentPackOpeningContext | null {
+  const openingTransform = getOpeningWorldTransform(graph, queryCache, opening)
+  if (!openingTransform) {
+    return null
+  }
+
+  const placements = getOpeningSpanPlacements(graph, opening)
+  if (placements.length === 0) {
+    return null
+  }
+
+  const worldSamples = buildOpeningRenderWorldSamples(queryCache, placements)
+  if (worldSamples.length < 2) {
+    return null
+  }
+
+  let distance = 0
+  const spanSamples: ContentPackOpeningSpanSample[] = []
+  worldSamples.forEach((sample, index) => {
+    const localSample = toOpeningLocalSpanSample(sample, openingTransform)
+    if (index > 0) {
+      distance += distanceBetweenOpeningSpanSamples(spanSamples[index - 1]!, localSample)
+    }
+
+    spanSamples.push({
+      ...localSample,
+      distance,
+    })
+  })
+
+  return {
+    clearSpan: getOpeningWorldSpan(opening.assetId, opening.width),
+    spanSamples,
+  }
+}
+
 export function findOpeningAtSplineHit(
   graph: SplineWallGraph,
   wallOpenings: Record<string, OpeningRecord>,
@@ -216,6 +270,107 @@ export function findOpeningAtSplineHit(
       )),
     )
     ?? null
+  )
+}
+
+function buildOpeningRenderWorldSamples(
+  queryCache: SplineWallQueryCache,
+  placements: readonly OpeningSpanPlacement[],
+) {
+  const samples: OpeningSpanWorldSample[] = []
+
+  placements.forEach((placement, placementIndex) => {
+    const segmentQuery = getSplineWallSegmentQueryData(queryCache, placement.segmentId)
+    const placementLength = Math.max(
+      (segmentQuery?.totalLength ?? GRID_SIZE) * Math.max(placement.endRatio - placement.startRatio, OPENING_PLACEMENT_EPSILON),
+      OPENING_RENDER_SAMPLE_STEP,
+    )
+    const stepCount = Math.max(1, Math.ceil(placementLength / OPENING_RENDER_SAMPLE_STEP))
+
+    for (let step = 0; step <= stepCount; step += 1) {
+      if (placementIndex > 0 && step === 0) {
+        continue
+      }
+
+      const ratio = placement.startRatio + ((placement.endRatio - placement.startRatio) * (step / stepCount))
+      const sample = sampleSplineWallSegment(queryCache, placement.segmentId, ratio)
+      if (!sample) {
+        continue
+      }
+
+      appendUniqueOpeningRenderWorldSample(samples, {
+        position: sample.position,
+        tangent: sample.tangent,
+        normal: sample.normal,
+      })
+    }
+  })
+
+  return samples
+}
+
+function appendUniqueOpeningRenderWorldSample(
+  target: OpeningSpanWorldSample[],
+  sample: OpeningSpanWorldSample,
+) {
+  const previous = target.at(-1)
+  if (
+    previous
+    && Math.hypot(
+      previous.position[0] - sample.position[0],
+      previous.position[1] - sample.position[1],
+    ) <= OPENING_PLACEMENT_EPSILON
+  ) {
+    return
+  }
+
+  target.push(sample)
+}
+
+function toOpeningLocalSpanSample(
+  sample: OpeningSpanWorldSample,
+  openingTransform: OpeningWorldTransform,
+): ContentPackOpeningSpanSample {
+  const localPosition = worldPointToOpeningLocal(sample.position, openingTransform)
+  const localTangent = rotateOpeningVector(sample.tangent, -openingTransform.rotation[1])
+  const localNormal = rotateOpeningVector(sample.normal, -openingTransform.rotation[1])
+
+  return {
+    position: [localPosition[0], 0, localPosition[1]],
+    tangent: [localTangent[0], 0, localTangent[1]],
+    normal: [localNormal[0], 0, localNormal[1]],
+    distance: 0,
+  }
+}
+
+function worldPointToOpeningLocal(
+  point: readonly [number, number],
+  openingTransform: OpeningWorldTransform,
+): [number, number] {
+  const offsetX = point[0] - openingTransform.position[0]
+  const offsetZ = point[1] - openingTransform.position[2]
+  return rotateOpeningVector([offsetX, offsetZ], -openingTransform.rotation[1])
+}
+
+function rotateOpeningVector(
+  vector: readonly [number, number],
+  rotationY: number,
+): [number, number] {
+  const cos = Math.cos(rotationY)
+  const sin = Math.sin(rotationY)
+  return [
+    (vector[0] * cos) + (vector[1] * sin),
+    (-vector[0] * sin) + (vector[1] * cos),
+  ]
+}
+
+function distanceBetweenOpeningSpanSamples(
+  left: ContentPackOpeningSpanSample,
+  right: ContentPackOpeningSpanSample,
+) {
+  return Math.hypot(
+    left.position[0] - right.position[0],
+    left.position[2] - right.position[2],
   )
 }
 

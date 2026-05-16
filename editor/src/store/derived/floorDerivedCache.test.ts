@@ -175,6 +175,8 @@ function createFloorData(): DungeonRoomData {
       },
     },
     floorTileAssetIds: {},
+    wallStyleAssignments: {},
+    wallCoreAssignments: {},
     wallSurfaceAssetIds: {},
     wallSurfaceProps: {},
     splineWallGraph: createEmptySplineWallGraph(),

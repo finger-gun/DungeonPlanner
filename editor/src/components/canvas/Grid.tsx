@@ -1293,6 +1293,7 @@ export function Grid({ size = 120, playMode = false, bakedLightField = null }: G
     roomDraftCells,
     roomDraftValid,
     rooms,
+    splineWallGraph,
     wallOpenings,
     wallSurfaceAssetIds,
     wallSurfaceProps,

@@ -60,8 +60,8 @@ export const dungeonWallMaterialSets: ContentPackWallMaterialSet[] = [
     albedoPath: '../../assets/materials/dungeon/wall-materials/kaykit-stone/wall_albedo.png',
     shading: {
       tintColor: '#ffffff',
-      roughness: 0.3,
-      metalness: 0.3,
+      roughness: 0.45,
+      metalness: 0,
       topSurfaceColor: '#2f3442',
       topSurfaceRoughness: 0.7,
     },

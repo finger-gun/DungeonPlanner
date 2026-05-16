@@ -5,6 +5,7 @@ import {
   getDefaultContentPackRoomSetId,
   getContentPackWallMaterialSetById,
   getDefaultContentPackWallMaterialSetId,
+  getContentPackWallStyleById,
 } from '../content-packs/registry'
 import type { ContentPackCategory } from '../content-packs/types'
 import type { DungeonObjectRecord, FloorRecord, OpeningRecord, Room, SelectedAssetIds } from './useDungeonStore'
@@ -17,6 +18,8 @@ type SnapshotAssetState = {
   wallOpenings: Record<string, OpeningRecord>
   placedObjects: Record<string, DungeonObjectRecord>
   floorTileAssetIds?: Record<string, string>
+  wallStyleAssignments?: Record<string, string>
+  wallCoreAssignments?: Record<string, string>
   wallSurfaceAssetIds?: Record<string, string>
 }
 
@@ -75,6 +78,12 @@ export function sanitizeSnapshotAssetReferences<T extends SnapshotAssetState>(sn
     ),
     floorTileAssetIds: Object.fromEntries(
       Object.entries(snapshot.floorTileAssetIds ?? {}).filter(([, assetId]) => isValidAssetId(assetId, 'floor')),
+    ),
+    wallStyleAssignments: Object.fromEntries(
+      Object.entries(snapshot.wallStyleAssignments ?? {}).filter(([, wallStyleId]) => isValidWallStyleId(wallStyleId)),
+    ),
+    wallCoreAssignments: Object.fromEntries(
+      Object.entries(snapshot.wallCoreAssignments ?? {}).filter(([, wallStyleId]) => isValidWallStyleId(wallStyleId)),
     ),
     wallSurfaceAssetIds: Object.fromEntries(
       Object.entries(snapshot.wallSurfaceAssetIds ?? {}).filter(([, assetId]) => isValidAssetId(assetId, 'wall')),
@@ -184,6 +193,10 @@ function isValidRoomSetId(roomSetId: string) {
 
 function isValidWallMaterialSetId(wallMaterialSetId: string) {
   return Boolean(getContentPackWallMaterialSetById('dungeon', wallMaterialSetId))
+}
+
+function isValidWallStyleId(wallStyleId: string) {
+  return Boolean(getContentPackWallStyleById('dungeon', wallStyleId))
 }
 
 function mapLegacyAssetId(assetId: string | null, category: ContentPackCategory) {

@@ -9,6 +9,7 @@ import {
   getDefaultAssetIdByCategory,
   getDefaultContentPackRoomSetId,
   getDefaultContentPackWallMaterialSetId,
+  getContentPackWallStyleById,
 } from '../content-packs/registry'
 import { sanitizePersistedAssetReferences } from './assetReferences'
 import { buildSplineWallOpeningPlacement } from './openingPlacement'
@@ -50,7 +51,7 @@ import {
 import { createSplineWallQueryCache } from './splineWallQueries'
 import { wallKeyToWorldPosition } from './wallSegments'
 
-const CURRENT_VERSION = 22
+const CURRENT_VERSION = 23
 const ROOM_SET_CONTENT_PACK_ID = 'dungeon'
 const FALLBACK_ROOM_SET_ID = 'dungeon'
 const WALL_MATERIAL_SET_CONTENT_PACK_ID = 'dungeon'
@@ -160,6 +161,8 @@ type SerializedFloor = {
   }>
   exploredCells: string[]
   floorTileAssetIds?: Record<string, string>
+  wallStyleAssignments?: Record<string, string>
+  wallCoreAssignments?: Record<string, string>
   wallSurfaceAssetIds?: Record<string, string>
   wallSurfaceProps?: Record<string, Record<string, unknown>>
   objects: SerializedObject[]
@@ -230,6 +233,8 @@ export type SerializableState = {
   outdoorTerrainStyleCells: OutdoorTerrainStyleCells
   exploredCells: Record<string, true>
   floorTileAssetIds: Record<string, string>
+  wallStyleAssignments: Record<string, string>
+  wallCoreAssignments: Record<string, string>
   wallSurfaceAssetIds: Record<string, string>
   wallSurfaceProps: Record<string, Record<string, unknown>>
   placedObjects: Record<string, DungeonObjectRecord>
@@ -307,6 +312,8 @@ function serializeFloorData(
     outdoorTerrainStyleCells: OutdoorTerrainStyleCells
     exploredCells: Record<string, true>
     floorTileAssetIds: Record<string, string>
+    wallStyleAssignments: Record<string, string>
+    wallCoreAssignments: Record<string, string>
     wallSurfaceAssetIds: Record<string, string>
     wallSurfaceProps: Record<string, Record<string, unknown>>
     placedObjects: Record<string, DungeonObjectRecord>
@@ -340,6 +347,8 @@ function serializeFloorData(
     })),
     exploredCells: Object.keys(snapshot.exploredCells),
     floorTileAssetIds: { ...snapshot.floorTileAssetIds },
+    wallStyleAssignments: { ...snapshot.wallStyleAssignments },
+    wallCoreAssignments: { ...snapshot.wallCoreAssignments },
     wallSurfaceAssetIds: { ...snapshot.wallSurfaceAssetIds },
     wallSurfaceProps: Object.fromEntries(
       Object.entries(snapshot.wallSurfaceProps).map(([wallKey, props]) => [wallKey, { ...props }]),
@@ -390,6 +399,8 @@ export function serializeDungeon(state: SerializableState): string {
       outdoorTerrainStyleCells: state.outdoorTerrainStyleCells,
       exploredCells: state.exploredCells,
       floorTileAssetIds: state.floorTileAssetIds,
+      wallStyleAssignments: state.wallStyleAssignments,
+      wallCoreAssignments: state.wallCoreAssignments,
       wallSurfaceAssetIds: state.wallSurfaceAssetIds,
       wallSurfaceProps: state.wallSurfaceProps,
       placedObjects: state.placedObjects,
@@ -536,6 +547,8 @@ export function deserializeDungeon(json: string): SerializableState | null {
           ? {
               ...floor,
               floorTileAssetIds: isObject(floor.floorTileAssetIds) ? floor.floorTileAssetIds : {},
+              wallStyleAssignments: isObject(floor.wallStyleAssignments) ? floor.wallStyleAssignments : {},
+              wallCoreAssignments: isObject(floor.wallCoreAssignments) ? floor.wallCoreAssignments : {},
               wallSurfaceAssetIds: isObject(floor.wallSurfaceAssetIds) ? floor.wallSurfaceAssetIds : {},
             }
           : floor,
@@ -864,6 +877,8 @@ function parseFloorData(raw: Record<string, unknown>): {
   outdoorTerrainStyleCells: OutdoorTerrainStyleCells
   exploredCells: Record<string, true>
   floorTileAssetIds: Record<string, string>
+  wallStyleAssignments: Record<string, string>
+  wallCoreAssignments: Record<string, string>
   wallSurfaceAssetIds: Record<string, string>
   wallSurfaceProps: Record<string, Record<string, unknown>>
   placedObjects: Record<string, DungeonObjectRecord>
@@ -984,6 +999,22 @@ function parseFloorData(raw: Record<string, unknown>): {
       ([cellKey, assetId]) => typeof cellKey === 'string' && typeof assetId === 'string',
     ),
   ) as Record<string, string>
+  const wallStyleAssignments = Object.fromEntries(
+    Object.entries(isObject(raw.wallStyleAssignments) ? raw.wallStyleAssignments : {}).filter(
+      ([key, wallStyleId]) =>
+        typeof key === 'string'
+        && typeof wallStyleId === 'string'
+        && Boolean(getContentPackWallStyleById('dungeon', wallStyleId)),
+    ),
+  ) as Record<string, string>
+  const wallCoreAssignments = Object.fromEntries(
+    Object.entries(isObject(raw.wallCoreAssignments) ? raw.wallCoreAssignments : {}).filter(
+      ([key, wallStyleId]) =>
+        typeof key === 'string'
+        && typeof wallStyleId === 'string'
+        && Boolean(getContentPackWallStyleById('dungeon', wallStyleId)),
+    ),
+  ) as Record<string, string>
   const wallSurfaceAssetIds = Object.fromEntries(
     Object.entries(isObject(raw.wallSurfaceAssetIds) ? raw.wallSurfaceAssetIds : {}).filter(
       ([wallKey, assetId]) => typeof wallKey === 'string' && typeof assetId === 'string',
@@ -1061,6 +1092,8 @@ function parseFloorData(raw: Record<string, unknown>): {
     outdoorTerrainStyleCells,
     exploredCells,
     floorTileAssetIds,
+    wallStyleAssignments,
+    wallCoreAssignments,
     wallSurfaceAssetIds,
     wallSurfaceProps,
     placedObjects,

@@ -9,6 +9,8 @@ type TestNodeMaterial = THREE.Material & {
   isNodeMaterial?: boolean
   colorNode?: unknown
   emissiveNode?: unknown
+  map?: THREE.Texture | null
+  normalMap?: THREE.Texture | null
   needsUpdate?: boolean
   userData: Record<string, unknown>
 }
@@ -81,6 +83,7 @@ describe('bakedLightMaterial', () => {
     expect(material.userData.bakedLightSignature).toContain('layout')
     expect(material.userData.bakedLightSignature).not.toContain(lightField.lightFieldTexture!.uuid)
     expect(material.userData.bakedLightSignature).toContain('directed-constant')
+    expect(material.userData.bakedLightSignature).toContain('face-mask')
     expect(material.colorNode).toBeDefined()
     expect(material.emissiveNode).toBeDefined()
 
@@ -111,6 +114,79 @@ describe('bakedLightMaterial', () => {
     })
 
     expect(material.userData.bakedLightSignature).toContain('double-directed-constant')
+    expect(material.colorNode).toBeDefined()
+    expect(material.emissiveNode).toBeDefined()
+  })
+
+  it('can disable directional face masking for wall-mounted models that need both sides lit', () => {
+    const material = createStandardCompatibleMaterial({
+      color: '#ffffff',
+      roughness: 0.4,
+      metalness: 0.1,
+    }) as TestNodeMaterial
+    const lightField = createTestLightField()
+
+    material.isNodeMaterial = true
+
+    applyBakedLightToMaterial(material, {
+      useLightAttribute: true,
+      useDirectionAttribute: true,
+      useDirectionalFaceMask: false,
+      lightField,
+      direction: [1, 0, 0],
+    })
+
+    expect(material.userData.bakedLightSignature).toContain('no-face-mask')
+    expect(material.colorNode).toBeDefined()
+    expect(material.emissiveNode).toBeDefined()
+  })
+
+  it('can use directional wall masking without shifting the baked light sample point', () => {
+    const material = createStandardCompatibleMaterial({
+      color: '#ffffff',
+      roughness: 0.4,
+      metalness: 0.1,
+    }) as TestNodeMaterial
+    const lightField = createTestLightField()
+
+    material.isNodeMaterial = true
+
+    applyBakedLightToMaterial(material, {
+      useLightAttribute: true,
+      useDirectionAttribute: true,
+      useDirectionalSampleOffset: false,
+      lightField,
+      direction: [0, 0, 1],
+    })
+
+    expect(material.userData.bakedLightSignature).toContain('face-mask')
+    expect(material.userData.bakedLightSignature).toContain('no-sample-offset')
+    expect(material.colorNode).toBeDefined()
+    expect(material.emissiveNode).toBeDefined()
+  })
+
+  it('uses a mapped PBR surface response for textured wall materials', () => {
+    const albedoMap = new THREE.Texture()
+    const normalMap = new THREE.Texture()
+    const material = createStandardCompatibleMaterial({
+      color: '#f5dfc2',
+      map: albedoMap,
+      normalMap,
+      roughness: 0.66,
+      metalness: 0,
+    }) as TestNodeMaterial
+    const lightField = createTestLightField()
+
+    material.isNodeMaterial = true
+
+    applyBakedLightToMaterial(material, {
+      useLightAttribute: true,
+      useDirectionAttribute: true,
+      lightField,
+      direction: [0, 0, 1],
+    })
+
+    expect(material.userData.bakedLightSignature).toContain('mapped-pbr-surface')
     expect(material.colorNode).toBeDefined()
     expect(material.emissiveNode).toBeDefined()
   })

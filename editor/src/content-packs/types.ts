@@ -2,11 +2,25 @@ import type { ComponentType } from 'react'
 import type { JSX } from 'react'
 
 export type ContentPackCategory = 'floor' | 'wall' | 'prop' | 'opening' | 'player'
+export type ContentPackOpeningSpanSample = {
+  position: readonly [number, number, number]
+  tangent: readonly [number, number, number]
+  normal: readonly [number, number, number]
+  distance: number
+}
+export type ContentPackOpeningContext = {
+  clearSpan: number
+  spanSamples: readonly ContentPackOpeningSpanSample[]
+  openingKind?: ContentPackWallStyleOpeningKind
+  openingMode?: ContentPackWallStyleOpeningMode
+  compatibleWithWallStyle?: boolean
+}
 export type ContentPackComponentProps = JSX.IntrinsicElements['group'] & {
   variantKey?: string
   objectProps?: Record<string, unknown>
   poseSelected?: boolean
   playerAnimationState?: 'default' | 'selected' | 'pickup' | 'holding' | 'release'
+  openingContext?: ContentPackOpeningContext
 }
 export type ContentPackModelTransform = {
   position?: readonly [number, number, number]
@@ -151,7 +165,7 @@ export type ContentPackAssetMetadata = {
   /** Width in wall segments (1–3). Only meaningful for category='opening'. Default 1. */
   openingWidth?: 1 | 2 | 3
   /** Opening interaction semantics: passages are always open, doors can toggle state. */
-  openingKind?: 'passage' | 'door'
+  openingKind?: 'passage' | 'door' | 'window'
   /** Optional centered clear width, in world units, to remove from a single wall segment. */
   openingCutoutWidth?: number
   /** Optional clear height, in world units, for a door-like opening below the wall top. */
@@ -224,12 +238,83 @@ export type ContentPackWallMaterialShading = {
   topSurfaceMetalness?: number
 }
 
+export type ContentPackWallStyleMaterialUv = {
+  verticalMode?: 'distance' | 'fit-height'
+}
+
 export type ContentPackWallMaterialSet = {
   id: string
   name: string
   previewImageUrl?: string
   textures: ContentPackWallMaterialTextures
   shading?: ContentPackWallMaterialShading
+}
+
+export type ContentPackWallStyleProfilePoint = readonly [number, number]
+
+export type ContentPackWallStyleProfile = {
+  points: readonly ContentPackWallStyleProfilePoint[]
+}
+
+export type ContentPackWallStyleMaterial = {
+  textures: ContentPackWallMaterialTextures
+  shading?: ContentPackWallMaterialShading
+  uv?: ContentPackWallStyleMaterialUv
+}
+
+export type ContentPackWallStyleLayerRender = {
+  hiddenProfileSegmentIndices?: readonly number[]
+}
+
+export type ContentPackWallStyleLayer = {
+  profile: ContentPackWallStyleProfile
+  material: ContentPackWallStyleMaterial
+  render?: ContentPackWallStyleLayerRender
+}
+
+export type ContentPackWallStyleJoinMode = 'miter' | 'bevel' | 'cap' | 'cover-piece'
+
+export type ContentPackWallStyleInsertAnchor =
+  | 'start'
+  | 'end'
+  | 'convex-corner'
+  | 'concave-corner'
+  | 'curvature-change'
+  | 'interval'
+
+export type ContentPackWallStyleInsertRule = {
+  assetId: string
+  anchors: readonly ContentPackWallStyleInsertAnchor[]
+  interval?: number
+}
+
+export type ContentPackWallStyleOpeningMode = 'framed' | 'sleeve' | 'structural'
+export type ContentPackWallStyleOpeningKind = 'door' | 'window' | 'passage'
+
+export type ContentPackWallStyleOpeningRules = {
+  defaultMode: ContentPackWallStyleOpeningMode
+  supportedModes: readonly ContentPackWallStyleOpeningMode[]
+  supportedKinds?: readonly ContentPackWallStyleOpeningKind[]
+  compatibleAssetIds?: readonly string[]
+}
+
+export type ContentPackWallStyleCurvatureLimits = {
+  minInnerRadius?: number
+  maxTurnDegrees?: number
+}
+
+export type ContentPackWallStyle = {
+  id: string
+  name: string
+  previewImageUrl?: string
+  structuralCore: ContentPackWallStyleLayer
+  roomFace: ContentPackWallStyleLayer
+  roomFaceDetails?: readonly ContentPackWallStyleLayer[]
+  exteriorFace: ContentPackWallStyleLayer
+  joinMode?: ContentPackWallStyleJoinMode
+  inserts?: readonly ContentPackWallStyleInsertRule[]
+  curvatureLimits?: ContentPackWallStyleCurvatureLimits
+  openingRules?: ContentPackWallStyleOpeningRules
 }
 
 export type ContentPackRoomSet = {
@@ -248,6 +333,7 @@ export type ContentPack = {
   assets: ContentPackAsset[]
   roomSets?: ContentPackRoomSet[]
   wallMaterialSets?: ContentPackWallMaterialSet[]
+  wallStyles?: ContentPackWallStyle[]
   /** Optional default assets for each category. Using the asset object keeps defaults type-safe. */
   defaultAssets?: {
     floor?: ContentPackAsset & { category: 'floor' }

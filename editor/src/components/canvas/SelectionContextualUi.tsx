@@ -157,6 +157,7 @@ export function SelectionContextualUi({ bakedLightField = null }: SelectionConte
     selectedObject,
     selectedOpening,
     selectedOpeningTransform,
+    selection,
     selectionMode,
   ])
   const selectedAsset = selectionMode === 'object'

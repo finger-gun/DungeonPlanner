@@ -107,6 +107,7 @@ type ContentPackInstanceProps = ThreeElements['group'] & {
   variantKey?: string
   objectProps?: Record<string, unknown>
   propInstanceKey?: string
+  openingContext?: ContentPackComponentProps['openingContext']
   bakedLightField?: BakedFloorLightField | null
   bakedLightDirection?: SurfaceBakedLightDirection
   bakedLightDirectionSecondary?: SurfaceBakedLightDirection
@@ -132,6 +133,7 @@ export function ContentPackInstance({
   variantKey,
   objectProps,
   propInstanceKey,
+  openingContext,
   bakedLightField = null,
   bakedLightDirection,
   bakedLightDirectionSecondary,
@@ -257,6 +259,7 @@ export function ContentPackInstance({
             objectProps,
             poseSelected,
             playerAnimationState,
+            openingContext,
           )}
           receiveShadow={receiveShadow}
           castShadow={castShadow}
@@ -322,12 +325,14 @@ function getComponentProps(
   objectProps?: Record<string, unknown>,
   poseSelected?: boolean,
   playerAnimationState?: 'default' | 'selected' | 'pickup' | 'holding' | 'release',
+  openingContext?: ContentPackComponentProps['openingContext'],
 ): ContentPackComponentProps {
   return {
     ...(variantKey ? { variantKey } : {}),
     ...(objectProps ? { objectProps } : {}),
     ...(poseSelected ? { poseSelected } : {}),
     ...(playerAnimationState ? { playerAnimationState } : {}),
+    ...(openingContext ? { openingContext } : {}),
   }
 }
 

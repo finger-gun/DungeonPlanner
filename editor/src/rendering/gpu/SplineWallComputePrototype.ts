@@ -12,7 +12,7 @@ import {
   vec4,
 } from 'three/tsl'
 import type { StorageBufferAttribute } from 'three/webgpu'
-import type { SplineWallGraph } from '../../store/splineWallGraph'
+import type { SplineWallCutoutKind, SplineWallGraph } from '../../store/splineWallGraph'
 import {
   createSplineWallQueryCache,
   getSplineWallSegmentQueryData,
@@ -48,6 +48,7 @@ type SplineWallComputePrototypeChain = {
 }
 
 type SplineWallComputePrototypeCutout = {
+  kind: SplineWallCutoutKind
   origin: readonly [number, number]
   tangent: readonly [number, number]
   startDistance: number
@@ -754,6 +755,7 @@ export function collectSplineWallComputePrototypeDebugCutouts(
           : topHeight
 
         return [{
+          kind: cutout.kind,
           origin: startWorld,
           tangent,
           startDistance,
@@ -1578,6 +1580,10 @@ function buildSplineWallComputePrototypeCutoutLiningGeometry(
   const indices: number[] = []
 
   cutouts.forEach((cutout) => {
+    if (cutout.kind === 'door') {
+      return
+    }
+
     const profilePath = buildSplineWallComputePrototypeCutoutProfilePath(cutout)
     if (profilePath.length < 2) {
       return

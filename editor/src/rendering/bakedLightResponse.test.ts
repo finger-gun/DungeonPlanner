@@ -30,31 +30,16 @@ describe('bakedLightResponse', () => {
     expect(highSample[1]).toBeGreaterThan(highSample[2])
   })
 
-  it('keeps prop lighting slightly fuller than surface lighting', () => {
+  it('uses the same baked light response for surfaces, solid props, and billboards', () => {
     const sample: readonly [number, number, number] = [0.18, 0.08, 0.03]
     const surface = shapeBakedLightSample(sample, SURFACE_BAKED_LIGHT_RESPONSE)
     const prop = shapeBakedLightSample(sample, PROP_BAKED_LIGHT_RESPONSE)
-
-    expect(prop[0]).toBeGreaterThan(surface[0])
-    expect(getBakedLightLuminance(prop)).toBeGreaterThan(getBakedLightLuminance(surface))
-  })
-
-  it('keeps solid props closer to surfaces than billboards under dim baked light', () => {
-    const sample: readonly [number, number, number] = [0.18, 0.08, 0.03]
-    const surfaceLuminance = getBakedLightLuminance(shapeBakedLightSample(sample, SURFACE_BAKED_LIGHT_RESPONSE))
-    const propLuminance = getBakedLightLuminance(shapeBakedLightSample(sample, PROP_BAKED_LIGHT_RESPONSE))
-    const billboardLuminance = getBakedLightLuminance(shapeBakedLightSample(sample, BILLBOARD_BAKED_LIGHT_RESPONSE))
-
-    expect(propLuminance - surfaceLuminance).toBeLessThan(billboardLuminance - propLuminance)
-  })
-
-  it('keeps billboard sprites brighter than solid props at the same baked sample', () => {
-    const sample: readonly [number, number, number] = [0.14, 0.08, 0.05]
-    const prop = shapeBakedLightSample(sample, PROP_BAKED_LIGHT_RESPONSE)
     const billboard = shapeBakedLightSample(sample, BILLBOARD_BAKED_LIGHT_RESPONSE)
 
-    expect(getBakedLightLuminance(billboard)).toBeGreaterThan(getBakedLightLuminance(prop))
-    expect(billboard[0]).toBeGreaterThan(prop[0])
+    expect(prop).toEqual(surface)
+    expect(billboard).toEqual(surface)
+    expect(getBakedLightLuminance(prop)).toBeCloseTo(getBakedLightLuminance(surface), 6)
+    expect(getBakedLightLuminance(billboard)).toBeCloseTo(getBakedLightLuminance(surface), 6)
   })
 
   it('strongly attenuates grazing surfaces while keeping some prop wrap', () => {

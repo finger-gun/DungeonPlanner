@@ -314,16 +314,16 @@ test.describe('Dungeon editor smoke flow', () => {
 
     await expect(page.getByTestId('debug-visibility-panel')).toBeVisible()
 
-    await page.getByRole('button', { name: 'Render LoS rays Off' }).click()
-    await page.getByRole('button', { name: 'Render LoS mask Off' }).click()
+    await page.getByRole('button', { name: 'Visualize room floor mask Off' }).click()
+    await page.getByRole('button', { name: 'Visualize wall cutouts Off' }).click()
 
     await page.waitForFunction(() => {
       const snapshot = window.__DUNGEON_DEBUG__?.getSnapshot() as {
-        showLosDebugMask?: boolean
-        showLosDebugRays?: boolean
+        showRoomFloorMaskDebug?: boolean
+        showSplineWallCutoutDebug?: boolean
       } | undefined
 
-      return snapshot?.showLosDebugMask === true && snapshot?.showLosDebugRays === true
+      return snapshot?.showRoomFloorMaskDebug === true && snapshot?.showSplineWallCutoutDebug === true
     })
   })
 
@@ -388,12 +388,8 @@ test.describe('Dungeon editor smoke flow', () => {
     await page.getByRole('button', { name: 'Play' }).click()
     await page.waitForTimeout(200)
 
-    await page.waitForFunction(
-      (id) => window.__DUNGEON_DEBUG__?.getObjectScreenPosition(id) !== null,
-      playerId,
-    )
-
-    const start = await page.evaluate((id) => window.__DUNGEON_DEBUG__?.getObjectScreenPosition(id), playerId)
+    await page.waitForFunction(() => window.__DUNGEON_DEBUG__?.getCellScreenPosition([0, 0]) !== null)
+    const start = await page.evaluate(() => window.__DUNGEON_DEBUG__?.getCellScreenPosition([0, 0]))
     const target = await page.evaluate(() => window.__DUNGEON_DEBUG__?.getCellScreenPosition([1, 0]))
     expect(start).not.toBeNull()
     expect(target).not.toBeNull()

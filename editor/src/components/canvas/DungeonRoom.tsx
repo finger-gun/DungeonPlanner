@@ -15,8 +15,15 @@ import {
   type PaintedCells,
 } from '../../store/useDungeonStore'
 import { getOpeningSegments } from '../../store/openingSegments'
-import { getOpeningWorldTransform } from '../../store/openingPlacement'
+import { getOpeningRenderContext, getOpeningWorldTransform } from '../../store/openingPlacement'
 import { createSplineWallQueryCache, type SplineWallQueryCache } from '../../store/splineWallQueries'
+import { buildSplineWallAssemblySections } from '../../store/splineWallAssembly'
+import {
+  buildSplineWallOpeningDescriptors,
+  getSplineWallOpeningRenderContext,
+  type SplineWallOpeningDescriptor,
+} from '../../store/splineWallOpenings'
+import { analyzeSplineWallGraphBoundaries } from '../../store/splineWallStyleAnalysis'
 import {
   advanceBuildAnimations,
   getBuildAnimationTimeScale,
@@ -219,7 +226,28 @@ export function DungeonRoom({
     () => createSplineWallQueryCache(derived.data.splineWallGraph ?? EMPTY_SPLINE_WALL_GRAPH),
     [derived.data.splineWallGraph],
   )
-  void openingQueryCache
+  const openingAnalyzedBoundaries = useMemo(
+    () => analyzeSplineWallGraphBoundaries(
+      derived.data.splineWallGraph ?? EMPTY_SPLINE_WALL_GRAPH,
+    ),
+    [derived.data.splineWallGraph],
+  )
+  const openingAssemblySections = useMemo(
+    () => buildSplineWallAssemblySections({
+      analyzedBoundaries: openingAnalyzedBoundaries,
+      wallStyleAssignments: derived.data.wallStyleAssignments,
+      wallCoreAssignments: derived.data.wallCoreAssignments,
+    }),
+    [derived.data.wallCoreAssignments, derived.data.wallStyleAssignments, openingAnalyzedBoundaries],
+  )
+  const openingDescriptors = useMemo(
+    () => buildSplineWallOpeningDescriptors({
+      splineWallGraph: derived.data.splineWallGraph ?? EMPTY_SPLINE_WALL_GRAPH,
+      wallOpenings: visibleWallOpenings,
+      assemblySections: openingAssemblySections,
+    }),
+    [derived.data.splineWallGraph, openingAssemblySections, visibleWallOpenings],
+  )
   useLayoutEffect(
     () => () => Object.values(roomFloorMaskRuntimeByRoomId).forEach((runtime) => disposeRoomFloorMaskRuntime(runtime)),
     [roomFloorMaskRuntimeByRoomId],
@@ -242,6 +270,8 @@ export function DungeonRoom({
         layers={derived.data.layers}
         rooms={derived.data.rooms}
         wallOpenings={visibleWallOpenings}
+        wallStyleAssignments={derived.data.wallStyleAssignments}
+        wallCoreAssignments={derived.data.wallCoreAssignments}
         globalWallAssetId={derived.data.globalWallAssetId}
         bakedLightField={bakedFloorLightField}
         visibility={visibility}
@@ -262,6 +292,7 @@ export function DungeonRoom({
             mountId={streamMountId}
             splineWallGraph={derived.data.splineWallGraph ?? EMPTY_SPLINE_WALL_GRAPH}
             openingQueryCache={openingQueryCache}
+            openingDescriptors={openingDescriptors}
             bakedFloorLightField={bakedFloorLightField}
             blockedFloorCellKeys={blockedFloorCellKeys}
             visibility={visibility}
@@ -285,6 +316,7 @@ function FloorRenderChunkRenderer({
   mountId,
   splineWallGraph,
   openingQueryCache,
+  openingDescriptors,
   bakedFloorLightField,
   blockedFloorCellKeys,
   visibility,
@@ -301,6 +333,7 @@ function FloorRenderChunkRenderer({
   mountId: string
   splineWallGraph: typeof EMPTY_SPLINE_WALL_GRAPH
   openingQueryCache: SplineWallQueryCache
+  openingDescriptors: readonly SplineWallOpeningDescriptor[]
   bakedFloorLightField: BakedFloorLightField
   blockedFloorCellKeys: Set<string>
   visibility: PlayVisibility
@@ -354,6 +387,7 @@ function FloorRenderChunkRenderer({
           opening={opening}
           splineWallGraph={splineWallGraph}
           openingQueryCache={openingQueryCache}
+          openingDescriptors={openingDescriptors}
           bakedLightField={bakedFloorLightField}
           paintedCells={bundle.contextPaintedCells}
           visibility={visibility}
@@ -801,6 +835,7 @@ function OpeningRenderer({
   opening,
   splineWallGraph,
   openingQueryCache,
+  openingDescriptors,
   bakedLightField,
   paintedCells,
   visibility,
@@ -809,6 +844,7 @@ function OpeningRenderer({
   opening: OpeningRecord
   splineWallGraph: typeof EMPTY_SPLINE_WALL_GRAPH
   openingQueryCache: SplineWallQueryCache
+  openingDescriptors: readonly SplineWallOpeningDescriptor[]
   bakedLightField: BakedFloorLightField
   paintedCells: PaintedCells
   visibility: PlayVisibility
@@ -822,6 +858,14 @@ function OpeningRenderer({
   const buildAnimationVersion = useBuildAnimationVersion()
   const isBuildAnimationCurrentlyActive = useIsBuildAnimationActive(buildAnimationVersion)
   const openingTransform = getOpeningWorldTransform(splineWallGraph, openingQueryCache, opening)
+  const openingRenderContext = opening.assetId
+    ? getSplineWallOpeningRenderContext({
+        splineWallGraph,
+        openingQueryCache,
+        opening,
+        openingDescriptors,
+      }) ?? getOpeningRenderContext(splineWallGraph, openingQueryCache, opening)
+    : null
   const openingSegmentKeys = openingTransform?.wallKeys ?? getOpeningSegments(opening.wallKey, opening.width)
   const wallVisibility = getWallSpanVisibilityState(visibility, openingSegmentKeys)
   const interiorDirections = getWallSpanInteriorLightDirections(openingSegmentKeys, paintedCells)
@@ -904,6 +948,7 @@ function OpeningRenderer({
             bakedLightDirectionSecondary={interiorDirections.secondary}
             clipBelowGround={clipBelowGround}
             objectProps={getOpeningObjectProps(opening)}
+            openingContext={openingRenderContext ?? undefined}
             onClick={handleClick}
             onPointerDown={handlePointerDown}
           />

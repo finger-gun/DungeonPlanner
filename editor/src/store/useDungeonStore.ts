@@ -6,6 +6,7 @@ import {
   getDefaultContentPackRoomSetId,
   getDefaultContentPackWallMaterialSetId,
   getDefaultAssetIdByCategory,
+  getContentPackWallStyleById,
 } from '../content-packs/registry'
 import { getCellKey, type GridCell } from '../hooks/useSnapToGrid'
 import type { AssetBrowserCategory, AssetBrowserSubcategory, ContentPackCategory, PropConnector } from '../content-packs/types'
@@ -27,12 +28,24 @@ import {
   createEmptySplineWallGraph,
   hasSplineWallGraphPaths,
   pruneSplineWallGraphRooms,
+  removeSplineWallGraphRooms,
   removeSplineWallGraphNode,
   splitSplineWallGraphSegment,
   syncSplineWallGraphCutoutsFromOpenings,
   upsertSplineWallGraphRoomPath,
   type SplineWallGraph,
 } from './splineWallGraph'
+import {
+  copySplineWallSegmentAssignments,
+  copySplineWallStructuralAssignment,
+  sanitizeSplineWallCoreAssignmentsForGraph,
+  sanitizeSplineWallStyleAssignmentsForGraph,
+} from './splineWallAssignmentState'
+import {
+  createSplineWallSegmentSideKey,
+  getStructuralSplineWallSegmentId,
+  type SplineWallSegmentSide,
+} from './wallStyleAssignments'
 import type { RoomDraftSplineNodeInput } from './roomDraft'
 import { getPairedStairAssetId, getStairDirectionForAssetId } from './stairAssets'
 import {
@@ -140,6 +153,7 @@ export type Room = {
   floorAssetId: string | null
   /** null = inherit global wall asset */
   wallAssetId: string | null
+  geometrySource?: 'paint' | 'spline'
 }
 
 export type MapMode = 'indoor' | 'outdoor'
@@ -228,6 +242,8 @@ type DungeonSnapshot = {
   outdoorTerrainStyleCells: OutdoorTerrainStyleCells
   exploredCells: Record<string, true>
   floorTileAssetIds: Record<string, string>
+  wallStyleAssignments: Record<string, string>
+  wallCoreAssignments: Record<string, string>
   wallSurfaceAssetIds: Record<string, string>
   wallSurfaceProps: Record<string, Record<string, unknown>>
   placedObjects: Record<string, DungeonObjectRecord>
@@ -409,6 +425,8 @@ export type DungeonState = DungeonSnapshot & {
   setInnerWallSegments: (wallKeys: string[], present: boolean) => number
   setSplineWallGraph: (graph: SplineWallGraph) => void
   seedSplineWallGraphFromPaintedCells: () => boolean
+  setSplineWallSegmentStyle: (segmentId: string, side: SplineWallSegmentSide, wallStyleId: string | null) => boolean
+  setSplineWallStructuralStyle: (segmentId: string, wallStyleId: string | null) => boolean
   moveSplineWallNode: (nodeId: string, position: [number, number]) => boolean
   splitSplineWallSegment: (segmentId: string, position?: [number, number]) => boolean
   removeSplineWallNode: (nodeId: string) => boolean
@@ -601,6 +619,8 @@ function cloneSnapshot(snapshot: DungeonSnapshot): DungeonSnapshot {
     ),
     exploredCells: { ...snapshot.exploredCells },
     floorTileAssetIds: { ...snapshot.floorTileAssetIds },
+    wallStyleAssignments: { ...snapshot.wallStyleAssignments },
+    wallCoreAssignments: { ...snapshot.wallCoreAssignments },
     wallSurfaceAssetIds: { ...snapshot.wallSurfaceAssetIds },
     wallSurfaceProps: Object.fromEntries(
       Object.entries(snapshot.wallSurfaceProps).map(([wallKey, props]) => [wallKey, { ...props }]),
@@ -708,6 +728,8 @@ function serializeCurrentDungeonState(state: DungeonState) {
     outdoorTerrainStyleCells: state.outdoorTerrainStyleCells,
     exploredCells: state.exploredCells,
     floorTileAssetIds: state.floorTileAssetIds,
+    wallStyleAssignments: state.wallStyleAssignments,
+    wallCoreAssignments: state.wallCoreAssignments,
     wallSurfaceAssetIds: state.wallSurfaceAssetIds,
     wallSurfaceProps: state.wallSurfaceProps,
     placedObjects: state.placedObjects,
@@ -733,6 +755,8 @@ function cloneSnapshotForObjectPlacement(snapshot: DungeonSnapshot): DungeonSnap
     outdoorTerrainStyleCells: snapshot.outdoorTerrainStyleCells,
     exploredCells: snapshot.exploredCells,
     floorTileAssetIds: snapshot.floorTileAssetIds,
+    wallStyleAssignments: snapshot.wallStyleAssignments,
+    wallCoreAssignments: snapshot.wallCoreAssignments,
     wallSurfaceAssetIds: snapshot.wallSurfaceAssetIds,
     wallSurfaceProps: snapshot.wallSurfaceProps,
     placedObjects: Object.fromEntries(
@@ -936,6 +960,8 @@ function createEmptySnapshot(): DungeonSnapshot {
     outdoorTerrainStyleCells: {},
     exploredCells: {},
     floorTileAssetIds: {},
+    wallStyleAssignments: {},
+    wallCoreAssignments: {},
     wallSurfaceAssetIds: {},
     wallSurfaceProps: {},
     placedObjects: {},
@@ -1433,6 +1459,60 @@ function syncOpeningCutoutsIntoSplineWallGraph(
   return syncSplineWallGraphCutoutsFromOpenings(baseGraph, wallOpenings)
 }
 
+function sanitizeWallStyleStateForGraph(
+  splineWallGraph: SplineWallGraph,
+  wallStyleAssignments: Readonly<Record<string, string>>,
+  wallCoreAssignments: Readonly<Record<string, string>>,
+) {
+  return {
+    wallStyleAssignments: sanitizeSplineWallStyleAssignmentsForGraph(splineWallGraph, wallStyleAssignments),
+    wallCoreAssignments: sanitizeSplineWallCoreAssignmentsForGraph(splineWallGraph, wallCoreAssignments),
+  }
+}
+
+function getAddedSplineWallSegmentIds(previousGraph: SplineWallGraph, nextGraph: SplineWallGraph) {
+  return Object.keys(nextGraph.segments).filter((segmentId) => !previousGraph.segments[segmentId])
+}
+
+function getStructuralSegmentIdForGraphSegment(
+  splineWallGraph: SplineWallGraph,
+  segmentId: string,
+) {
+  const segment = splineWallGraph.segments[segmentId]
+  if (!segment) {
+    return ''
+  }
+
+  const start = splineWallGraph.nodes[segment.startNodeId]?.position
+  const end = splineWallGraph.nodes[segment.endNodeId]?.position
+  if (!start || !end) {
+    return segmentId
+  }
+
+  const encoded = [
+    `${start[0].toFixed(6)},${start[1].toFixed(6)}`,
+    `${end[0].toFixed(6)},${end[1].toFixed(6)}`,
+  ].sort()
+  const geometryKey = `${segment.layerId}:${encoded[0]}->${encoded[1]}`
+  const coincidentSegmentIds = Object.values(splineWallGraph.segments)
+    .filter((candidate) => {
+      const candidateStart = splineWallGraph.nodes[candidate.startNodeId]?.position
+      const candidateEnd = splineWallGraph.nodes[candidate.endNodeId]?.position
+      if (!candidateStart || !candidateEnd) {
+        return false
+      }
+
+      const candidateEncoded = [
+        `${candidateStart[0].toFixed(6)},${candidateStart[1].toFixed(6)}`,
+        `${candidateEnd[0].toFixed(6)},${candidateEnd[1].toFixed(6)}`,
+      ].sort()
+      return `${candidate.layerId}:${candidateEncoded[0]}->${candidateEncoded[1]}` === geometryKey
+    })
+    .map((candidate) => candidate.id)
+
+  return getStructuralSplineWallSegmentId(coincidentSegmentIds.length > 0 ? coincidentSegmentIds : [segmentId])
+}
+
 function collectOpenPassageIdsForWallKeys(
   wallOpenings: Record<string, OpeningRecord>,
   wallKeys: string[],
@@ -1842,10 +1922,13 @@ function reconcileRoomLayoutMutation(
     DungeonSnapshot,
     | 'placedObjects'
     | 'occupancy'
+    | 'rooms'
     | 'selection'
     | 'wallOpenings'
     | 'innerWalls'
     | 'floorTileAssetIds'
+    | 'wallStyleAssignments'
+    | 'wallCoreAssignments'
     | 'wallSurfaceAssetIds'
     | 'wallSurfaceProps'
     | 'splineWallGraph'
@@ -1862,6 +1945,11 @@ function reconcileRoomLayoutMutation(
       .filter((roomId): roomId is string => typeof roomId === 'string' && roomId.length > 0),
   )
   const prunedSplineWallGraph = pruneSplineWallGraphRooms(current.splineWallGraph, validGraphRoomIds)
+  const splineWallGraph = syncPaintRoomSplinePaths(
+    prunedSplineWallGraph,
+    paintedCells,
+    current.rooms,
+  )
   const currentWithWallOpenings = {
     ...current,
     wallOpenings: options?.wallOpenings ?? current.wallOpenings,
@@ -1889,21 +1977,29 @@ function reconcileRoomLayoutMutation(
     wallSurfaceAssetIds,
     wallSurfaceProps,
     graphBackedRoomIds: new Set(
-      Object.values(prunedSplineWallGraph.paths)
+      Object.values(splineWallGraph.paths)
         .map((path) => path.roomId)
         .filter((roomId): roomId is string => Boolean(roomId)),
     ),
+    splineWallGraph,
     selection: prunedSelection,
     createOpeningId: createObjectId,
   })
-  const splineWallGraph = syncOpeningCutoutsIntoSplineWallGraph(
-    prunedSplineWallGraph,
+  const nextSplineWallGraph = syncOpeningCutoutsIntoSplineWallGraph(
+    splineWallGraph,
     paintedCells,
     wallOpenings,
+  )
+  const { wallStyleAssignments, wallCoreAssignments } = sanitizeWallStyleStateForGraph(
+    nextSplineWallGraph,
+    current.wallStyleAssignments,
+    current.wallCoreAssignments,
   )
 
   return {
     floorTileAssetIds,
+    wallStyleAssignments,
+    wallCoreAssignments,
     wallSurfaceAssetIds: proceduralWallSurfaceAssetIds,
     wallSurfaceProps: proceduralWallSurfaceProps,
     placedObjects,
@@ -1911,7 +2007,47 @@ function reconcileRoomLayoutMutation(
     selection,
     wallOpenings,
     innerWalls,
-    splineWallGraph,
+    splineWallGraph: nextSplineWallGraph,
+  }
+}
+
+function syncPaintRoomSplinePaths(
+  graph: SplineWallGraph,
+  paintedCells: PaintedCells,
+  rooms: Record<string, Room>,
+) {
+  const paintRoomIds = new Set(
+    Object.values(rooms)
+      .filter((room) => room.geometrySource === 'paint')
+      .map((room) => room.id),
+  )
+  if (paintRoomIds.size === 0) {
+    return graph
+  }
+
+  const derivedPaintedCells = Object.fromEntries(
+    Object.entries(paintedCells).filter(([, record]) => record.roomId && paintRoomIds.has(record.roomId)),
+  )
+  const baseGraph = removeSplineWallGraphRooms(graph, paintRoomIds)
+  const derivedGraph = buildSplineWallGraphFromPaintedCells(derivedPaintedCells)
+
+  if (Object.keys(derivedGraph.paths).length === 0) {
+    return baseGraph
+  }
+
+  return {
+    nodes: {
+      ...baseGraph.nodes,
+      ...derivedGraph.nodes,
+    },
+    segments: {
+      ...baseGraph.segments,
+      ...derivedGraph.segments,
+    },
+    paths: {
+      ...baseGraph.paths,
+      ...derivedGraph.paths,
+    },
   }
 }
 
@@ -2021,6 +2157,14 @@ function deriveChangedFloorDirtyDomains(
     domains.add('renderPlan')
   }
   if (previous.wallSurfaceAssetIds !== next.wallSurfaceAssetIds) {
+    domains.add('walls')
+    domains.add('renderPlan')
+  }
+  if (previous.wallStyleAssignments !== next.wallStyleAssignments) {
+    domains.add('walls')
+    domains.add('renderPlan')
+  }
+  if (previous.wallCoreAssignments !== next.wallCoreAssignments) {
     domains.add('walls')
     domains.add('renderPlan')
   }
@@ -2229,16 +2373,18 @@ export const useDungeonStore = create<DungeonState>()(
       // Auto-create a room for the new cells
       const roomId = createObjectId()
       const roomName = `Room ${current.nextRoomNumber}`
+      const nextRoom: Room = {
+        id: roomId,
+        name: roomName,
+        layerId: current.activeLayerId,
+        roomSetId: current.activeRoomSetId,
+        floorAssetId: null,
+        wallAssetId: null,
+        geometrySource: 'paint',
+      }
       const rooms = {
         ...current.rooms,
-        [roomId]: {
-          id: roomId,
-          name: roomName,
-          layerId: current.activeLayerId,
-          roomSetId: current.activeRoomSetId,
-          floorAssetId: null,
-          wallAssetId: null,
-        },
+        [roomId]: nextRoom,
       }
 
       const paintedCells = { ...current.paintedCells }
@@ -2258,16 +2404,23 @@ export const useDungeonStore = create<DungeonState>()(
         wallOpenings,
         innerWalls,
         floorTileAssetIds,
+        wallStyleAssignments,
+        wallCoreAssignments,
         wallSurfaceAssetIds,
         wallSurfaceProps,
         splineWallGraph,
-      } = reconcileRoomLayoutMutation(current, paintedCells, nextCells)
+      } = reconcileRoomLayoutMutation({
+        ...current,
+        rooms,
+      }, paintedCells, nextCells)
 
       return {
         ...current,
         paintedCells,
         splineWallGraph,
         floorTileAssetIds,
+        wallStyleAssignments,
+        wallCoreAssignments,
         wallSurfaceAssetIds,
         wallSurfaceProps,
         placedObjects,
@@ -2302,16 +2455,18 @@ export const useDungeonStore = create<DungeonState>()(
 
     set((current) => {
       const roomName = `Room ${current.nextRoomNumber}`
+      const nextRoom: Room = {
+        id: roomId,
+        name: roomName,
+        layerId: current.activeLayerId,
+        roomSetId: current.activeRoomSetId,
+        floorAssetId: null,
+        wallAssetId: null,
+        geometrySource: 'spline',
+      }
       const rooms = {
         ...current.rooms,
-        [roomId]: {
-          id: roomId,
-          name: roomName,
-          layerId: current.activeLayerId,
-          roomSetId: current.activeRoomSetId,
-          floorAssetId: null,
-          wallAssetId: null,
-        },
+        [roomId]: nextRoom,
       }
 
       const paintedCells = { ...current.paintedCells }
@@ -2330,32 +2485,59 @@ export const useDungeonStore = create<DungeonState>()(
         wallOpenings,
         innerWalls,
         floorTileAssetIds,
+        wallStyleAssignments,
+        wallCoreAssignments,
         wallSurfaceAssetIds,
         wallSurfaceProps,
         splineWallGraph: reconciledSplineWallGraph,
-      } = reconcileRoomLayoutMutation(current, paintedCells, nextCells)
+      } = reconcileRoomLayoutMutation({
+        ...current,
+        rooms,
+      }, paintedCells, nextCells)
 
-      const splineWallGraph = syncSplineWallGraphCutoutsFromOpenings(
-        upsertSplineWallGraphRoomPath(reconciledSplineWallGraph, {
-          roomId,
-          layerId: current.activeLayerId,
-          nodes: splineNodes,
-          closed: true,
-        }),
+      const splineGraphWithRoom = upsertSplineWallGraphRoomPath(reconciledSplineWallGraph, {
+        roomId,
+        layerId: current.activeLayerId,
+        nodes: splineNodes,
+        closed: true,
+      })
+      const proceduralLayout = reconcileProceduralRoomLayout({
+        paintedCells,
         wallOpenings,
+        wallSurfaceAssetIds,
+        wallSurfaceProps,
+        graphBackedRoomIds: new Set(
+          Object.values(splineGraphWithRoom.paths)
+            .map((path) => path.roomId)
+            .filter((candidateRoomId): candidateRoomId is string => Boolean(candidateRoomId)),
+        ),
+        splineWallGraph: splineGraphWithRoom,
+        selection,
+        createOpeningId: createObjectId,
+      })
+      const splineWallGraph = syncSplineWallGraphCutoutsFromOpenings(
+        splineGraphWithRoom,
+        proceduralLayout.wallOpenings,
+      )
+      const nextAssignmentState = sanitizeWallStyleStateForGraph(
+        splineWallGraph,
+        wallStyleAssignments,
+        wallCoreAssignments,
       )
 
       return {
         ...current,
         paintedCells,
         floorTileAssetIds,
-        wallSurfaceAssetIds,
-        wallSurfaceProps,
+        wallStyleAssignments: nextAssignmentState.wallStyleAssignments,
+        wallCoreAssignments: nextAssignmentState.wallCoreAssignments,
+        wallSurfaceAssetIds: proceduralLayout.wallSurfaceAssetIds,
+        wallSurfaceProps: proceduralLayout.wallSurfaceProps,
         placedObjects,
-        wallOpenings,
+        wallOpenings: proceduralLayout.wallOpenings,
         innerWalls,
         occupancy,
-        selection,
+        selection: proceduralLayout.selection,
         rooms,
         splineWallGraph,
         nextRoomNumber: current.nextRoomNumber + 1,
@@ -2620,6 +2802,8 @@ export const useDungeonStore = create<DungeonState>()(
         wallOpenings,
         innerWalls,
         floorTileAssetIds,
+        wallStyleAssignments,
+        wallCoreAssignments,
         wallSurfaceAssetIds,
         wallSurfaceProps,
         splineWallGraph,
@@ -2630,6 +2814,8 @@ export const useDungeonStore = create<DungeonState>()(
         paintedCells,
         splineWallGraph,
         floorTileAssetIds,
+        wallStyleAssignments,
+        wallCoreAssignments,
         wallSurfaceAssetIds,
         wallSurfaceProps,
         placedObjects,
@@ -3471,6 +3657,11 @@ export const useDungeonStore = create<DungeonState>()(
     const state = get()
     const previousSnapshot = cloneSnapshot(state)
     const nextGraph = syncSplineWallGraphCutoutsFromOpenings(graph, state.wallOpenings)
+    const assignmentState = sanitizeWallStyleStateForGraph(
+      nextGraph,
+      state.wallStyleAssignments,
+      state.wallCoreAssignments,
+    )
 
     queueFloorDirtyHint({
       domains: ['walls', 'lighting', 'renderPlan'],
@@ -3480,6 +3671,8 @@ export const useDungeonStore = create<DungeonState>()(
     set((current) => ({
       ...current,
       splineWallGraph: cloneSplineWallGraph(nextGraph),
+      wallStyleAssignments: assignmentState.wallStyleAssignments,
+      wallCoreAssignments: assignmentState.wallCoreAssignments,
       history: [...current.history, previousSnapshot],
       future: [],
     }))
@@ -3498,6 +3691,11 @@ export const useDungeonStore = create<DungeonState>()(
     }
 
     const previousSnapshot = cloneSnapshot(state)
+    const assignmentState = sanitizeWallStyleStateForGraph(
+      nextGraph,
+      state.wallStyleAssignments,
+      state.wallCoreAssignments,
+    )
     queueFloorDirtyHint({
       domains: ['walls', 'lighting', 'renderPlan'],
       fullRefresh: true,
@@ -3506,9 +3704,101 @@ export const useDungeonStore = create<DungeonState>()(
     set((current) => ({
       ...current,
       splineWallGraph: cloneSplineWallGraph(nextGraph),
+      wallStyleAssignments: assignmentState.wallStyleAssignments,
+      wallCoreAssignments: assignmentState.wallCoreAssignments,
       history: [...current.history, previousSnapshot],
       future: [],
     }))
+
+    return true
+  },
+  setSplineWallSegmentStyle: (segmentId, side, wallStyleId) => {
+    const state = get()
+    if (!state.splineWallGraph.segments[segmentId]) {
+      return false
+    }
+
+    if (wallStyleId && !getContentPackWallStyleById('dungeon', wallStyleId)) {
+      return false
+    }
+
+    const assignmentKey = createSplineWallSegmentSideKey(segmentId, side)
+    const currentWallStyleId = state.wallStyleAssignments[assignmentKey] ?? null
+    if (currentWallStyleId === wallStyleId) {
+      return false
+    }
+
+    const previousSnapshot = cloneSnapshot(state)
+    queueFloorDirtyHint({
+      domains: ['walls', 'renderPlan'],
+      wallKeys: state.splineWallGraph.segments[segmentId]?.wallKey
+        ? [state.splineWallGraph.segments[segmentId]!.wallKey!]
+        : undefined,
+      fullRefresh: !state.splineWallGraph.segments[segmentId]?.wallKey,
+    })
+
+    set((current) => {
+      const wallStyleAssignments = { ...current.wallStyleAssignments }
+      if (wallStyleId) {
+        wallStyleAssignments[assignmentKey] = wallStyleId
+      } else {
+        delete wallStyleAssignments[assignmentKey]
+      }
+
+      return {
+        ...current,
+        wallStyleAssignments,
+        history: [...current.history, previousSnapshot],
+        future: [],
+      }
+    })
+
+    return true
+  },
+  setSplineWallStructuralStyle: (segmentId, wallStyleId) => {
+    const state = get()
+    if (!state.splineWallGraph.segments[segmentId]) {
+      return false
+    }
+
+    if (wallStyleId && !getContentPackWallStyleById('dungeon', wallStyleId)) {
+      return false
+    }
+
+    const structuralSegmentId = getStructuralSegmentIdForGraphSegment(state.splineWallGraph, segmentId)
+    if (!structuralSegmentId) {
+      return false
+    }
+
+    const currentWallStyleId = state.wallCoreAssignments[structuralSegmentId] ?? null
+    if (currentWallStyleId === wallStyleId) {
+      return false
+    }
+
+    const previousSnapshot = cloneSnapshot(state)
+    queueFloorDirtyHint({
+      domains: ['walls', 'renderPlan'],
+      wallKeys: state.splineWallGraph.segments[segmentId]?.wallKey
+        ? [state.splineWallGraph.segments[segmentId]!.wallKey!]
+        : undefined,
+      fullRefresh: !state.splineWallGraph.segments[segmentId]?.wallKey,
+    })
+
+    set((current) => {
+      const wallCoreAssignments = { ...current.wallCoreAssignments }
+      if (wallStyleId) {
+        wallCoreAssignments[structuralSegmentId] = wallStyleId
+      } else {
+        delete wallCoreAssignments[structuralSegmentId]
+      }
+
+      return {
+        ...current,
+        wallCoreAssignments,
+        history: [...current.history, previousSnapshot],
+        future: [],
+      }
+    })
 
     return true
   },
@@ -3570,6 +3860,22 @@ export const useDungeonStore = create<DungeonState>()(
     if (!nextGraph) {
       return false
     }
+    const newSegmentId = getAddedSplineWallSegmentIds(state.splineWallGraph, nextGraph)[0] ?? null
+    const nextWallStyleAssignments = newSegmentId
+      ? copySplineWallSegmentAssignments(state.wallStyleAssignments, segmentId, newSegmentId)
+      : { ...state.wallStyleAssignments }
+    const sourceStructuralSegmentId = getStructuralSegmentIdForGraphSegment(state.splineWallGraph, segmentId)
+    const targetStructuralSegmentId = newSegmentId
+      ? getStructuralSegmentIdForGraphSegment(nextGraph, newSegmentId)
+      : ''
+    const nextWallCoreAssignments = (newSegmentId && sourceStructuralSegmentId && targetStructuralSegmentId)
+      ? copySplineWallStructuralAssignment(state.wallCoreAssignments, sourceStructuralSegmentId, targetStructuralSegmentId)
+      : { ...state.wallCoreAssignments }
+    const assignmentState = sanitizeWallStyleStateForGraph(
+      nextGraph,
+      nextWallStyleAssignments,
+      nextWallCoreAssignments,
+    )
 
     const previousSnapshot = cloneSnapshot(state)
     queueFloorDirtyHint({
@@ -3581,6 +3887,8 @@ export const useDungeonStore = create<DungeonState>()(
     set((current) => ({
       ...current,
       splineWallGraph: nextGraph,
+      wallStyleAssignments: assignmentState.wallStyleAssignments,
+      wallCoreAssignments: assignmentState.wallCoreAssignments,
       history: [...current.history, previousSnapshot],
       future: [],
     }))
@@ -3613,6 +3921,23 @@ export const useDungeonStore = create<DungeonState>()(
     if (!nextGraph) {
       return false
     }
+    const removedSegmentId = nextSegmentId && !nextGraph.segments[nextSegmentId] ? nextSegmentId : null
+    const retainedSegmentId = previousSegmentId && nextGraph.segments[previousSegmentId] ? previousSegmentId : null
+    const nextWallStyleAssignments = removedSegmentId && retainedSegmentId
+      ? copySplineWallSegmentAssignments(state.wallStyleAssignments, removedSegmentId, retainedSegmentId)
+      : { ...state.wallStyleAssignments }
+    const nextWallCoreAssignments = removedSegmentId && retainedSegmentId
+      ? copySplineWallStructuralAssignment(
+          state.wallCoreAssignments,
+          getStructuralSegmentIdForGraphSegment(state.splineWallGraph, removedSegmentId),
+          getStructuralSegmentIdForGraphSegment(nextGraph, retainedSegmentId),
+        )
+      : { ...state.wallCoreAssignments }
+    const assignmentState = sanitizeWallStyleStateForGraph(
+      nextGraph,
+      nextWallStyleAssignments,
+      nextWallCoreAssignments,
+    )
 
     const previousSnapshot = cloneSnapshot(state)
     queueFloorDirtyHint({
@@ -3624,6 +3949,8 @@ export const useDungeonStore = create<DungeonState>()(
     set((current) => ({
       ...current,
       splineWallGraph: nextGraph,
+      wallStyleAssignments: assignmentState.wallStyleAssignments,
+      wallCoreAssignments: assignmentState.wallCoreAssignments,
       history: [...current.history, previousSnapshot],
       future: [],
     }))
@@ -3649,6 +3976,8 @@ export const useDungeonStore = create<DungeonState>()(
     set((current) => ({
       ...current,
       splineWallGraph: createEmptySplineWallGraph(),
+      wallStyleAssignments: {},
+      wallCoreAssignments: {},
       history: [...current.history, previousSnapshot],
       future: [],
     }))
@@ -4072,6 +4401,8 @@ export const useDungeonStore = create<DungeonState>()(
         wallOpenings,
         innerWalls,
         floorTileAssetIds,
+        wallStyleAssignments,
+        wallCoreAssignments,
         wallSurfaceAssetIds,
         wallSurfaceProps,
         splineWallGraph,
@@ -4083,6 +4414,8 @@ export const useDungeonStore = create<DungeonState>()(
         paintedCells,
         splineWallGraph,
         floorTileAssetIds,
+        wallStyleAssignments,
+        wallCoreAssignments,
         wallSurfaceAssetIds,
         wallSurfaceProps,
         placedObjects,
@@ -4123,6 +4456,8 @@ export const useDungeonStore = create<DungeonState>()(
         wallOpenings,
         innerWalls,
         floorTileAssetIds,
+        wallStyleAssignments,
+        wallCoreAssignments,
         wallSurfaceAssetIds,
         wallSurfaceProps,
         splineWallGraph,
@@ -4132,6 +4467,8 @@ export const useDungeonStore = create<DungeonState>()(
         paintedCells,
         splineWallGraph,
         floorTileAssetIds,
+        wallStyleAssignments,
+        wallCoreAssignments,
         wallSurfaceAssetIds,
         wallSurfaceProps,
         placedObjects,
@@ -4231,6 +4568,8 @@ export const useDungeonStore = create<DungeonState>()(
         wallOpenings,
         innerWalls,
         floorTileAssetIds,
+        wallStyleAssignments,
+        wallCoreAssignments,
         wallSurfaceAssetIds,
         wallSurfaceProps,
         splineWallGraph,
@@ -4243,6 +4582,8 @@ export const useDungeonStore = create<DungeonState>()(
         paintedCells,
         splineWallGraph,
         floorTileAssetIds,
+        wallStyleAssignments,
+        wallCoreAssignments,
         wallSurfaceAssetIds,
         wallSurfaceProps,
         placedObjects,
@@ -4324,6 +4665,8 @@ export const useDungeonStore = create<DungeonState>()(
         wallOpenings,
         innerWalls,
         floorTileAssetIds,
+        wallStyleAssignments,
+        wallCoreAssignments,
         wallSurfaceAssetIds,
         wallSurfaceProps,
         splineWallGraph,
@@ -4334,6 +4677,8 @@ export const useDungeonStore = create<DungeonState>()(
         paintedCells,
         splineWallGraph,
         floorTileAssetIds,
+        wallStyleAssignments,
+        wallCoreAssignments,
         wallSurfaceAssetIds,
         wallSurfaceProps,
         placedObjects,
@@ -5007,6 +5352,8 @@ export const useDungeonStore = create<DungeonState>()(
         outdoorTerrainStyleBrush: state.outdoorTerrainStyleBrush,
         activeRoomSetId: state.activeRoomSetId,
         activeWallMaterialSetId: state.activeWallMaterialSetId,
+        wallStyleAssignments: state.wallStyleAssignments,
+        wallCoreAssignments: state.wallCoreAssignments,
         selectedAssetIds: state.selectedAssetIds,
         generatedCharacters: state.generatedCharacters,
         lightEffectsEnabled: state.lightEffectsEnabled,
@@ -5026,6 +5373,8 @@ export const useDungeonStore = create<DungeonState>()(
         Object.assign(state, sanitizePersistedAssetReferences(state))
         state.history = normalizeHistoryEntries(state.history)
         state.future = normalizeHistoryEntries(state.future)
+        state.wallStyleAssignments = state.wallStyleAssignments ?? {}
+        state.wallCoreAssignments = state.wallCoreAssignments ?? {}
         state.innerWalls = state.innerWalls ?? {}
         state.splineWallGraph = syncOpeningCutoutsIntoSplineWallGraph(
           cloneSplineWallGraph(state.splineWallGraph),
@@ -5036,6 +5385,8 @@ export const useDungeonStore = create<DungeonState>()(
         state.defaultOutdoorTerrainStyle = state.defaultOutdoorTerrainStyle ?? DEFAULT_OUTDOOR_TERRAIN_STYLE
         state.outdoorTerrainStyleBrush = state.outdoorTerrainStyleBrush ?? state.defaultOutdoorTerrainStyle
         Object.values(state.floors ?? {}).forEach((floor) => {
+          floor.snapshot.wallStyleAssignments = floor.snapshot.wallStyleAssignments ?? {}
+          floor.snapshot.wallCoreAssignments = floor.snapshot.wallCoreAssignments ?? {}
           floor.snapshot.innerWalls = floor.snapshot.innerWalls ?? {}
           floor.snapshot.splineWallGraph = syncOpeningCutoutsIntoSplineWallGraph(
             cloneSplineWallGraph(floor.snapshot.splineWallGraph),

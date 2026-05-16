@@ -2,6 +2,7 @@ import {
   getOpeningSpanPlacements,
   getOpeningVerticalCutoutSpec,
 } from './openingPlacement'
+import { getOpeningKind } from './openingState'
 import type { RoomDraftCornerMode, RoomDraftSplineNodeInput } from './roomDraft'
 import type { OpeningRecord } from './useDungeonStore'
 
@@ -198,6 +199,21 @@ export function pruneSplineWallGraphRooms(
     .filter((path) => path.roomId !== null && !validRoomIds.has(path.roomId))
     .forEach((path) => deleteSplineWallGraphPath(nextGraph, path.id))
 
+  return nextGraph
+}
+
+export function removeSplineWallGraphRooms(
+  graph: SplineWallGraph,
+  roomIds: ReadonlySet<string>,
+): SplineWallGraph {
+  if (roomIds.size === 0) {
+    return cloneSplineWallGraph(graph)
+  }
+
+  const nextGraph = cloneSplineWallGraph(graph)
+  Object.values(nextGraph.paths)
+    .filter((path) => path.roomId !== null && roomIds.has(path.roomId))
+    .forEach((path) => deleteSplineWallGraphPath(nextGraph, path.id))
   return nextGraph
 }
 
@@ -435,7 +451,7 @@ export function syncSplineWallGraphCutoutsFromOpenings(
   const cutoutsBySegmentId = new Map<string, SplineWallCutout[]>()
 
   Object.values(wallOpenings).forEach((opening) => {
-    const kind: SplineWallCutoutKind = opening.assetId === null ? 'passage' : 'door'
+    const kind = getOpeningKind(opening) satisfies SplineWallCutoutKind
     const { bottomHeight, topHeight } = getOpeningVerticalCutoutSpec(opening)
 
     getOpeningSpanPlacements(nextGraph, opening).forEach((placement) => {

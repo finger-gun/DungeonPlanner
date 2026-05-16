@@ -4,6 +4,7 @@ import {
   type PaintedCellsLike,
   type SplineWallGraph,
 } from './splineWallGraph'
+import { findOwningStraightSegmentCandidate } from './splineWallStraightSegmentOwnership'
 
 export type SplineBoundaryPoint = readonly [number, number]
 export type SplineMaskWorldPoint = readonly [number, number]
@@ -1683,30 +1684,7 @@ function findOwningStraightSplineWallSegment(
   midpoint: WorldPoint,
   candidates: readonly StraightSplineWallSegmentReference[],
 ): StraightSplineWallSegmentReference | null {
-  let owner: StraightSplineWallSegmentReference | null = null
-  let bestDistance = Number.POSITIVE_INFINITY
-  let bestAlignment = Number.NEGATIVE_INFINITY
-
-  candidates.forEach((candidate) => {
-    const closestPoint = closestWorldPointOnSegment(midpoint, candidate.start, candidate.end)
-    const distance = distanceBetweenPoints(midpoint, closestPoint)
-    if (distance > bestDistance + SPLINE_WALL_GEOMETRY_EPSILON) {
-      return
-    }
-
-    const offset = subtractPoints(midpoint, closestPoint)
-    const alignment = Math.abs(dot2D(normalizePoint(offset), candidate.tangent))
-    if (
-      distance < bestDistance - SPLINE_WALL_GEOMETRY_EPSILON
-      || alignment > bestAlignment + SPLINE_WALL_GEOMETRY_EPSILON
-    ) {
-      owner = candidate
-      bestDistance = distance
-      bestAlignment = alignment
-    }
-  })
-
-  return owner
+  return findOwningStraightSegmentCandidate(midpoint, candidates, SPLINE_WALL_GEOMETRY_EPSILON)
 }
 
 function projectWorldPointToSegmentRatio(
@@ -1721,18 +1699,6 @@ function projectWorldPointToSegmentRatio(
   }
 
   return clampSplineWallRatio(dot2D(subtractPoints(point, start), delta) / lengthSquared)
-}
-
-function closestWorldPointOnSegment(
-  point: WorldPoint,
-  start: WorldPoint,
-  end: WorldPoint,
-): WorldPoint {
-  return interpolateSplineBoundaryPoint(
-    start,
-    end,
-    projectWorldPointToSegmentRatio(point, start, end),
-  )
 }
 
 function buildCoincidentWorldSegmentKey(

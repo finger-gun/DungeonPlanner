@@ -6,6 +6,7 @@ import type { FloorRecord } from './useDungeonStore'
 import { DEFAULT_POST_PROCESSING_SETTINGS } from '../postprocessing/tiltShiftMath'
 import { DEFAULT_OUTDOOR_TERRAIN_STYLE } from './outdoorTerrainStyles'
 import { createEmptySplineWallGraph, upsertSplineWallGraphRoomPath } from './splineWallGraph'
+import { createSplineWallSegmentSideKey } from './wallStyleAssignments'
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 
@@ -30,6 +31,8 @@ function emptyFloorSnapshot() {
     outdoorTerrainStyleCells: {},
     exploredCells: {},
     floorTileAssetIds: {},
+    wallStyleAssignments: {},
+    wallCoreAssignments: {},
     wallSurfaceAssetIds: {},
     wallSurfaceProps: {},
     placedObjects: {},
@@ -254,6 +257,37 @@ describe('serializeDungeon / deserializeDungeon roundtrip', () => {
     expect(result).not.toBeNull()
     expect(result!.activeWallMaterialSetId).toBe('wedged-cobblestone')
     expect(result!.floors?.['floor-1']?.snapshot.activeWallMaterialSetId).toBe('wedged-cobblestone')
+  })
+
+  it('preserves per-segment-side wall style assignments', () => {
+    const state = baseState()
+    state.wallStyleAssignments = {
+      [createSplineWallSegmentSideKey('room-a:path:0:segment:0', 'left')]: 'stone-keep',
+      [createSplineWallSegmentSideKey('room-a:path:0:segment:0', 'right')]: 'manor-plaster',
+    }
+    state.wallCoreAssignments = {
+      'room-a:path:0:segment:0': 'manor-plaster',
+    }
+    state.floors!['floor-1']!.snapshot.wallStyleAssignments = { ...state.wallStyleAssignments }
+    state.floors!['floor-1']!.snapshot.wallCoreAssignments = { ...state.wallCoreAssignments }
+
+    const result = deserializeDungeon(serializeDungeon(state))
+
+    expect(result).not.toBeNull()
+    expect(result!.wallStyleAssignments).toEqual({
+      [createSplineWallSegmentSideKey('room-a:path:0:segment:0', 'left')]: 'stone-keep',
+      [createSplineWallSegmentSideKey('room-a:path:0:segment:0', 'right')]: 'manor-plaster',
+    })
+    expect(result!.floors?.['floor-1']?.snapshot.wallStyleAssignments).toEqual({
+      [createSplineWallSegmentSideKey('room-a:path:0:segment:0', 'left')]: 'stone-keep',
+      [createSplineWallSegmentSideKey('room-a:path:0:segment:0', 'right')]: 'manor-plaster',
+    })
+    expect(result!.wallCoreAssignments).toEqual({
+      'room-a:path:0:segment:0': 'manor-plaster',
+    })
+    expect(result!.floors?.['floor-1']?.snapshot.wallCoreAssignments).toEqual({
+      'room-a:path:0:segment:0': 'manor-plaster',
+    })
   })
 
   it('preserves blocked cells', () => {

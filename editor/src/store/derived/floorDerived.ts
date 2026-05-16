@@ -28,6 +28,8 @@ export type DungeonRoomData = {
   innerWalls: Record<string, InnerWallRecord>
   placedObjects: Record<string, DungeonObjectRecord>
   floorTileAssetIds: Record<string, string>
+  wallStyleAssignments: Record<string, string>
+  wallCoreAssignments: Record<string, string>
   wallSurfaceAssetIds: Record<string, string>
   wallSurfaceProps: Record<string, Record<string, unknown>>
   splineWallGraph?: SplineWallGraph
