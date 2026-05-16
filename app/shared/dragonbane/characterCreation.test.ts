@@ -10,7 +10,7 @@ import type { DragonbaneRulesPackDomains } from '@dungeonplanner/shared/dragonba
 const domains: DragonbaneRulesPackDomains = {
   dragonbane: {
     schemaVersion: 1,
-    kins: [{ ref: 'core:kin.human', id: 'human', name: 'Human', movement: 10 }],
+    kins: [{ ref: 'core:kin.human', id: 'human', name: 'Human', movement: 10, playableByPlayers: true }],
     professions: [
       {
         ref: 'core:profession.fighter',
@@ -57,6 +57,14 @@ const domains: DragonbaneRulesPackDomains = {
           { min: 7, max: 12, modifier: 0 },
           { min: 13, modifier: 2 },
         ],
+      },
+      appearanceOptions: [],
+      mementoOptions: [],
+      weaknesses: [],
+      heroicAbilities: [],
+      magic: {
+        rules: { schools: [] },
+        schools: [],
       },
     },
     equipment: {
