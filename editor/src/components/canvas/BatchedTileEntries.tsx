@@ -337,6 +337,7 @@ function FallbackTileEntry({
         propInstanceKey={entry.variant === 'prop' ? entry.key : undefined}
         visibility={entry.visibility}
         bakedLightField={entry.bakedLightField}
+        bakedLight={entry.bakedLight}
         bakedLightDirection={entry.bakedLightDirection}
         bakedLightDirectionSecondary={entry.bakedLightDirectionSecondary}
         useLineOfSightPostMask={useLineOfSightPostMask}

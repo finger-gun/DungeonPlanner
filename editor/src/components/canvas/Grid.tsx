@@ -42,6 +42,7 @@ import {
 } from '../../store/splineWallQueries'
 import { hasSplineWallGraphPaths, type SplineWallGraph } from '../../store/splineWallGraph'
 import { buildSplineWallGraphFromPaintedCells } from '../../store/splineWalls'
+import { buildPaintedAreaRoomPreview, type FreehandPaintPoint } from '../../store/freehandRoomPaint'
 import {
   getInheritedWallAssetIdForWallKey,
   isInterRoomBoundary,
@@ -260,10 +261,12 @@ export function Grid({ size = 120, playMode = false, bakedLightField = null }: G
   const [hoveredOpenWallKey, setHoveredOpenWallKey] = useState<string | null>(null)
   const [openPassageBrushWallKeys, setOpenPassageBrushWallKeys] = useState<string[]>([])
   const [strokePaintedCells, setStrokePaintedCells] = useState<GridCell[]>([])
+  const [freehandPaintPoints, setFreehandPaintPoints] = useState<FreehandPaintPoint[]>([])
   const strokeModeRef = useRef<'paint' | 'erase' | null>(null)
   const strokeStartRef = useRef<GridCell | null>(null)
   const strokeCurrentRef = useRef<GridCell | null>(null)
   const strokePaintedCellsRef = useRef<Set<string>>(new Set())
+  const freehandPaintPointsRef = useRef<FreehandPaintPoint[]>([])
   const openPassageBrushActiveRef = useRef(false)
   const openPassageBrushWallKeysRef = useRef<string[]>([])
   const buildAnimationVersion = useBuildAnimationVersion()
@@ -637,6 +640,8 @@ export function Grid({ size = 120, playMode = false, bakedLightField = null }: G
     updateStrokeState(null, null, null)
     setStrokePaintedCells([])
     strokePaintedCellsRef.current.clear()
+    setFreehandPaintPoints([])
+    freehandPaintPointsRef.current = []
     setLatchedRoomPreview(null)
     const transactionId = roomStreamTransactionIdRef.current
     if (transactionId) {
@@ -730,6 +735,29 @@ export function Grid({ size = 120, playMode = false, bakedLightField = null }: G
       : null,
     [occupiedRoomDraftCellKeys, roomDraftOccupancyPolygons, strokeRoomDraftPreview],
   )
+  const previewStrokeMode = strokeMode ?? latchedRoomPreview?.mode ?? null
+  const paintedAreaRoomPreview = useMemo(() => {
+    if (
+      roomDraft
+      || tool !== 'room'
+      || roomEditMode !== 'rooms'
+      || roomPaintMode !== 'paint'
+      || mapMode === 'outdoor'
+      || previewStrokeMode !== 'paint'
+    ) {
+      return null
+    }
+
+    return buildPaintedAreaRoomPreview(freehandPaintPoints)
+  }, [
+    freehandPaintPoints,
+    mapMode,
+    previewStrokeMode,
+    roomDraft,
+    roomEditMode,
+    roomPaintMode,
+    tool,
+  ])
 
   // R key: rotates floor-connected assets; flips wall-connected openings 180°
   useEffect(() => {
@@ -892,6 +920,15 @@ export function Grid({ size = 120, playMode = false, bakedLightField = null }: G
       return []
     }
 
+    if (
+      roomPaintMode === 'paint'
+      && mapMode !== 'outdoor'
+      && strokeMode === 'paint'
+      && paintedAreaRoomPreview
+    ) {
+      return paintedAreaRoomPreview.cells
+    }
+
     if (mapMode === 'outdoor' && outdoorBrushMode === 'terrain-sculpt') {
       if (strokeStartCell && strokeCurrentCell && strokeMode) {
         return getRectangleCells(strokeStartCell, strokeCurrentCell)
@@ -914,6 +951,7 @@ export function Grid({ size = 120, playMode = false, bakedLightField = null }: G
     })
   }, [
     hoveredCell,
+    paintedAreaRoomPreview,
     mapMode,
     outdoorBrushMode,
     roomEditMode,
@@ -929,7 +967,12 @@ export function Grid({ size = 120, playMode = false, bakedLightField = null }: G
     tool,
     roomPaintMode,
   ])
-  const previewStrokeMode = strokeMode ?? latchedRoomPreview?.mode ?? null
+  const roomPaintPreviewPaths = useMemo(
+    () => paintedAreaRoomPreview?.paths.length
+      ? paintedAreaRoomPreview.paths
+      : [],
+    [paintedAreaRoomPreview],
+  )
 
   useEffect(() => {
     const transactionId = roomStreamTransactionIdRef.current
@@ -1017,10 +1060,22 @@ export function Grid({ size = 120, playMode = false, bakedLightField = null }: G
       return
     }
 
-    // In paint mode, use the tracked painted cells for both paint and erase
+    // In paint mode, use the tracked painted cells for both paint and erase.
+    const paintedAreaCommit = roomPaintMode === 'paint' && mapMode !== 'outdoor' && mode === 'paint'
+      ? (() => {
+          const preview = buildPaintedAreaRoomPreview(freehandPaintPointsRef.current)
+          if (!preview) {
+            return null
+          }
+          const cells = preview.cells.filter((cell) => !paintedCells[getCellKey(cell)])
+          return cells.length > 0
+            ? { ...preview, cells }
+            : null
+        })()
+      : null
     let cells: GridCell[]
     if (roomPaintMode === 'paint' && mapMode !== 'outdoor') {
-      cells = strokePaintedCells
+      cells = paintedAreaCommit?.cells ?? []
     } else {
       cells =
         mapMode === 'outdoor' && outdoorBrushMode === 'terrain-sculpt'
@@ -1097,7 +1152,15 @@ export function Grid({ size = 120, playMode = false, bakedLightField = null }: G
               paintBlockedCells(cells)
             }
           } else {
-            paintCells(cells)
+            if (paintedAreaCommit) {
+              commitDraftRoom({
+                cells: paintedAreaCommit.cells,
+                splineNodes: paintedAreaCommit.splineNodes,
+                splinePaths: paintedAreaCommit.splinePaths,
+              })
+            } else {
+              paintCells(cells)
+            }
           }
         } else {
           setLatchedRoomPreview(null)
@@ -1202,6 +1265,8 @@ export function Grid({ size = 120, playMode = false, bakedLightField = null }: G
     updateStrokeState(null, null, null)
     setStrokePaintedCells([])
     strokePaintedCellsRef.current.clear()
+    setFreehandPaintPoints([])
+    freehandPaintPointsRef.current = []
   })
 
   const commitRoomDraftOverlay = useCallback(() => {
@@ -1444,6 +1509,13 @@ export function Grid({ size = 120, playMode = false, bakedLightField = null }: G
 
       // In paint mode, track cells that will be painted or erased (but don't paint/erase yet)
       if (roomPaintMode === 'paint' && mapMode !== 'outdoor') {
+        const worldPoint: FreehandPaintPoint = [point.x, point.z]
+        const previousPoint = freehandPaintPointsRef.current.at(-1)
+        if (!previousPoint || Math.hypot(previousPoint[0] - worldPoint[0], previousPoint[1] - worldPoint[1]) > GRID_SIZE * 0.05) {
+          freehandPaintPointsRef.current = [...freehandPaintPointsRef.current, worldPoint]
+          setFreehandPaintPoints(freehandPaintPointsRef.current)
+        }
+
         const cellKey = getCellKey(snapped.cell)
         if (!strokePaintedCellsRef.current.has(cellKey)) {
           strokePaintedCellsRef.current.add(cellKey)
@@ -1785,6 +1857,14 @@ export function Grid({ size = 120, playMode = false, bakedLightField = null }: G
     }
 
     if (event.button === 0 && tool === 'room' && roomEditMode === 'rooms' && roomPaintMode === 'paint' && mapMode !== 'outdoor') {
+      const worldPoint: FreehandPaintPoint = [point.x, point.z]
+      freehandPaintPointsRef.current = [worldPoint]
+      setFreehandPaintPoints([worldPoint])
+
+      const cellKey = getCellKey(snapped.cell)
+      strokePaintedCellsRef.current.add(cellKey)
+      setStrokePaintedCells([[...snapped.cell] as GridCell])
+
       const transactionId = `tile-stream:${performance.now()}:${Math.random().toString(36).slice(2, 8)}`
       const transactionStartedAt = performance.now()
       roomStreamTransactionIdRef.current = transactionId
@@ -1996,6 +2076,7 @@ export function Grid({ size = 120, playMode = false, bakedLightField = null }: G
           hoveredCell={hoveredCell}
           hoveredPoint={hoveredPoint}
           previewCells={previewCells}
+          roomPaintPreviewPaths={roomPaintPreviewPaths}
           roomDraftPreviewPoints={strokeRoomDraftPreviewClip?.previewPoints ?? null}
           roomDraftPreviewValid={strokeRoomDraftPreviewClip?.valid ?? false}
           strokeMode={previewStrokeMode}
@@ -2114,6 +2195,7 @@ function HoverPreview({
   hoveredCell,
   hoveredPoint,
   previewCells,
+  roomPaintPreviewPaths,
   roomDraftPreviewPoints,
   roomDraftPreviewValid,
   strokeMode,
@@ -2140,6 +2222,7 @@ function HoverPreview({
   hoveredCell: SnappedGridPosition | null
   hoveredPoint: { x: number; y: number; z: number } | null
   previewCells: GridCell[]
+  roomPaintPreviewPaths: readonly (readonly (readonly [number, number])[])[]
   roomDraftPreviewPoints: readonly (readonly [number, number])[] | null
   roomDraftPreviewValid: boolean
   strokeMode: 'paint' | 'erase' | null
@@ -2320,6 +2403,21 @@ function HoverPreview({
         color={roomDraftPreviewValid ? '#7dd3fc' : '#f87171'}
         opacity={0.24}
       />
+    )
+  }
+
+  if (roomPaintPreviewPaths.length > 0) {
+    return (
+      <group>
+        {roomPaintPreviewPaths.map((points, index) => (
+          <RoomDraftFootprintPreview
+            key={index}
+            points={points}
+            color="#7dd3fc"
+            opacity={0.22}
+          />
+        ))}
+      </group>
     )
   }
 

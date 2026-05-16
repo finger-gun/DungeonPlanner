@@ -3,7 +3,7 @@ import { useThree, type ThreeEvent } from '@react-three/fiber'
 import { useTexture } from '@react-three/drei'
 import * as THREE from 'three'
 import { getContentPackRoomSetById } from '../../content-packs/registry'
-import { GRID_SIZE } from '../../hooks/useSnapToGrid'
+import { getCellKey, GRID_SIZE } from '../../hooks/useSnapToGrid'
 import {
   applyComputedSplineWallRenderEntry,
   applySplineWallMeshDataToGeometry,
@@ -62,7 +62,11 @@ import {
   useSplineWallMaterialLibrary,
 } from './splineWallMaterial'
 import { useRegisteredLightSources } from './objectSourceRegistry'
-import type { BakedFloorLightField } from '../../rendering/dungeonLightField'
+import {
+  getRelevantStaticLightSourcesForBounds,
+  sampleOccludedSurfaceLightAtWorldPosition,
+  type BakedFloorLightField,
+} from '../../rendering/dungeonLightField'
 import {
   applyBakedLightToSplineWallMaterialLibrary,
   applyBakedLightToSplineWallStyleMaterial,
@@ -348,7 +352,9 @@ export function SplineWallLayer({
   }, [dynamicPointLightsActive, wallMaterials])
 
   useEffect(() => {
-    applyBakedLightToSplineWallMaterialLibrary(wallMaterials, bakedLightField)
+    applyBakedLightToSplineWallMaterialLibrary(wallMaterials, null, {
+      useAttributeLight: Boolean(bakedLightField),
+    })
   }, [bakedLightField, wallMaterials])
 
   useEffect(() => {
@@ -475,6 +481,7 @@ export function SplineWallLayer({
                 key={meshData.roomId}
                 meshData={meshData}
                 materialBundle={wallMaterials[getSplineWallMaterialPreset(rooms[meshData.roomId], globalWallAssetId)]}
+                bakedLightField={bakedLightField}
               />
             )
           })
@@ -492,6 +499,7 @@ export function SplineWallLayer({
                 key={entry.roomId}
                 entry={entry}
                 materialBundle={wallMaterials[getSplineWallMaterialPreset(rooms[entry.roomId], globalWallAssetId)]}
+                bakedLightField={bakedLightField}
               />
             )
           })
@@ -597,10 +605,16 @@ export function SplineWallLayer({
 function SplineWallCachedMesh({
   entry,
   materialBundle,
+  bakedLightField,
 }: {
   entry: SplineWallRenderEntry
   materialBundle: SplineWallMaterialBundle
+  bakedLightField: BakedFloorLightField | null
 }) {
+  useEffect(() => {
+    syncSplineWallGeometryBakedLight(entry.geometry, bakedLightField)
+  }, [bakedLightField, entry.geometry])
+
   return (
     <mesh
       geometry={entry.geometry}
@@ -615,9 +629,11 @@ function SplineWallCachedMesh({
 function SplineWallPreviewMesh({
   meshData,
   materialBundle,
+  bakedLightField,
 }: {
   meshData: RoomSplineWallMeshData
   materialBundle: SplineWallMaterialBundle
+  bakedLightField: BakedFloorLightField | null
 }) {
   const geometry = useMemo(() => {
     const nextGeometry = new THREE.BufferGeometry()
@@ -625,6 +641,9 @@ function SplineWallPreviewMesh({
     return nextGeometry
   }, [meshData])
 
+  useEffect(() => {
+    syncSplineWallGeometryBakedLight(geometry, bakedLightField)
+  }, [bakedLightField, geometry])
   useEffect(() => () => {
     geometry.dispose()
   }, [geometry])
@@ -678,12 +697,13 @@ function SplineWallStyleSectionGroupMesh({
   useEffect(() => () => geometryCacheRef.current?.geometry.dispose(), [])
   useEffect(() => () => material.dispose(), [material])
   useEffect(() => {
-    applyBakedLightToSplineWallStyleMaterial(material, bakedLightField, {
+    syncSplineWallGeometryBakedLight(geometry, bakedLightField)
+    applyBakedLightToSplineWallStyleMaterial(material, null, {
       useDirectionAttribute: true,
       useDirectionalFaceMask: true,
-      useDirectionalSampleOffset: true,
+      useDirectionalSampleOffset: false,
     })
-  }, [bakedLightField, material])
+  }, [bakedLightField, geometry, material])
 
   if ((geometry.getAttribute('position')?.count ?? 0) === 0) {
     return null
@@ -734,12 +754,13 @@ function SplineWallOpeningRevealMesh({
   useEffect(() => () => geometryCacheRef.current?.geometry.dispose(), [])
   useEffect(() => () => material.dispose(), [material])
   useEffect(() => {
-    applyBakedLightToSplineWallStyleMaterial(material, bakedLightField, {
+    syncSplineWallGeometryBakedLight(geometry, bakedLightField)
+    applyBakedLightToSplineWallStyleMaterial(material, null, {
       useDirectionAttribute: true,
       useDirectionalFaceMask: true,
-      useDirectionalSampleOffset: true,
+      useDirectionalSampleOffset: false,
     })
-  }, [bakedLightField, material])
+  }, [bakedLightField, geometry, material])
 
   if ((geometry.getAttribute('position')?.count ?? 0) === 0) {
     return null
@@ -1285,6 +1306,154 @@ function setBakedLightDirectionAttribute(
   if (directions.length > 0) {
     geometry.setAttribute('bakedLightDirection', new THREE.Float32BufferAttribute(directions, 3))
   }
+}
+
+function syncSplineWallGeometryBakedLight(
+  geometry: THREE.BufferGeometry,
+  bakedLightField: BakedFloorLightField | null,
+) {
+  const positions = geometry.getAttribute('position')
+  if (!positions || positions.count === 0) {
+    return
+  }
+
+  const normals = geometry.getAttribute('normal')
+  let directions = geometry.getAttribute('bakedLightDirection')
+  const bakedLightValues = new Float32Array(positions.count * 3)
+
+  if (!bakedLightField) {
+    geometry.setAttribute('bakedLight', new THREE.BufferAttribute(bakedLightValues, 3))
+    return
+  }
+
+  if (
+    (!directions || directions.count !== positions.count || directions.itemSize !== 3)
+    && normals
+    && normals.count === positions.count
+  ) {
+    syncBakedLightDirectionsToGeometryNormals(geometry)
+    directions = geometry.getAttribute('bakedLightDirection')
+  }
+
+  geometry.computeBoundingBox()
+  const lightLookupBounds = geometry.boundingBox?.clone().expandByScalar(GRID_SIZE * 0.5) ?? null
+  const relevantLightSources = getRelevantStaticLightSourcesForBounds(
+    bakedLightField,
+    lightLookupBounds,
+  )
+
+  const resolvedDirectionValues = new Float32Array(positions.count * 3)
+  for (let index = 0; index < positions.count; index += 1) {
+    const directionX = directions?.getX(index) ?? normals?.getX(index) ?? 0
+    const directionY = directions?.getY(index) ?? normals?.getY(index) ?? 0
+    const directionZ = directions?.getZ(index) ?? normals?.getZ(index) ?? 0
+    const directionLength = Math.hypot(directionX, directionY, directionZ)
+    const normalizedDirectionX = directionLength > 1e-5 ? directionX / directionLength : 0
+    const normalizedDirectionY = directionLength > 1e-5 ? directionY / directionLength : 0
+    const normalizedDirectionZ = directionLength > 1e-5 ? directionZ / directionLength : 0
+    const resolvedSample = resolveSplineWallBakedLightSample(
+      bakedLightField,
+      [positions.getX(index), positions.getY(index), positions.getZ(index)],
+      [normalizedDirectionX, normalizedDirectionY, normalizedDirectionZ],
+    )
+    const sampledLight = sampleOccludedSurfaceLightAtWorldPosition(
+      bakedLightField,
+      resolvedSample.position,
+      relevantLightSources,
+    )
+    bakedLightValues[index * 3] = sampledLight[0]
+    bakedLightValues[(index * 3) + 1] = sampledLight[1]
+    bakedLightValues[(index * 3) + 2] = sampledLight[2]
+    resolvedDirectionValues[index * 3] = resolvedSample.direction[0]
+    resolvedDirectionValues[(index * 3) + 1] = resolvedSample.direction[1]
+    resolvedDirectionValues[(index * 3) + 2] = resolvedSample.direction[2]
+  }
+
+  const bakedLightDirectionAttribute = geometry.getAttribute('bakedLightDirection')
+  if (
+    bakedLightDirectionAttribute instanceof THREE.BufferAttribute
+    && bakedLightDirectionAttribute.count === positions.count
+    && bakedLightDirectionAttribute.itemSize === 3
+  ) {
+    bakedLightDirectionAttribute.array.set(resolvedDirectionValues)
+    bakedLightDirectionAttribute.needsUpdate = true
+  } else {
+    geometry.setAttribute('bakedLightDirection', new THREE.BufferAttribute(resolvedDirectionValues, 3))
+  }
+
+  const bakedLightAttribute = geometry.getAttribute('bakedLight')
+  if (
+    bakedLightAttribute instanceof THREE.BufferAttribute
+    && bakedLightAttribute.count === positions.count
+    && bakedLightAttribute.itemSize === 3
+  ) {
+    bakedLightAttribute.array.set(bakedLightValues)
+    bakedLightAttribute.needsUpdate = true
+    return
+  }
+
+  geometry.setAttribute('bakedLight', new THREE.BufferAttribute(bakedLightValues, 3))
+}
+
+export function resolveSplineWallBakedLightSamplePosition(
+  bakedLightField: Pick<BakedFloorLightField, 'sampleByCellKey'>,
+  worldPosition: readonly [number, number, number],
+  direction: readonly [number, number, number],
+) {
+  return resolveSplineWallBakedLightSample(bakedLightField, worldPosition, direction).position
+}
+
+export function resolveSplineWallBakedLightSample(
+  bakedLightField: Pick<BakedFloorLightField, 'sampleByCellKey'>,
+  worldPosition: readonly [number, number, number],
+  direction: readonly [number, number, number],
+) {
+  const primary = buildSplineWallBakedLightSamplePosition(worldPosition, direction, 1)
+  const horizontalDirectionLength = Math.hypot(direction[0], direction[2])
+  if (horizontalDirectionLength <= 1e-5 || isBakedLightSampleInsideFloor(bakedLightField, primary)) {
+    return {
+      position: primary,
+      direction,
+    }
+  }
+
+  const opposite = buildSplineWallBakedLightSamplePosition(worldPosition, direction, -1)
+  return isBakedLightSampleInsideFloor(bakedLightField, opposite)
+    ? {
+        position: opposite,
+        direction: flipSplineWallBakedLightDirection(direction),
+      }
+    : {
+        position: primary,
+        direction,
+      }
+}
+
+function flipSplineWallBakedLightDirection(direction: readonly [number, number, number]) {
+  return direction.map((value) => (value === 0 ? 0 : -value)) as [number, number, number]
+}
+
+function buildSplineWallBakedLightSamplePosition(
+  worldPosition: readonly [number, number, number],
+  direction: readonly [number, number, number],
+  directionSign: 1 | -1,
+): [number, number, number] {
+  return [
+    worldPosition[0] + direction[0] * directionSign * GRID_SIZE * 0.24,
+    worldPosition[1] + Math.max(direction[1] * directionSign * 0.08, 0.06),
+    worldPosition[2] + direction[2] * directionSign * GRID_SIZE * 0.24,
+  ]
+}
+
+function isBakedLightSampleInsideFloor(
+  bakedLightField: Pick<BakedFloorLightField, 'sampleByCellKey'>,
+  worldPosition: readonly [number, number, number],
+) {
+  const cellKey = getCellKey([
+    Math.floor(worldPosition[0] / GRID_SIZE),
+    Math.floor(worldPosition[2] / GRID_SIZE),
+  ])
+  return Object.prototype.hasOwnProperty.call(bakedLightField.sampleByCellKey, cellKey)
 }
 
 function syncBakedLightDirectionsToGeometryNormals(geometry: THREE.BufferGeometry) {

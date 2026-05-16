@@ -80,6 +80,21 @@ describe('splineWalls', () => {
     expect(meshes[0]?.indices.length).toBeGreaterThan(0)
   })
 
+  it('keeps unstyled spline wall corners square', () => {
+    const frames = buildSampledSplineWallFrames({
+      roomId: 'room-a',
+      wallKeys: ['wall-a', 'wall-b'],
+      points: [[0, 0], [2, 0], [2, 2]],
+      closed: false,
+    })
+
+    expect(frames.map((frame) => frame.position)).toEqual([
+      [0, 0],
+      [4, 0],
+      [4, 4],
+    ])
+  })
+
   it('uses miter scaling to preserve wall thickness through rounded corner joins', () => {
     const frames = buildSampledSplineWallFrames({
       roomId: 'room-a',

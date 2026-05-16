@@ -1542,6 +1542,16 @@ describe('useDungeonStore history', () => {
     expect(useDungeonStore.getState().showPropProbeDebug).toBe(false)
   })
 
+  it('toggles the surface probe debug visibility flag', () => {
+    expect(useDungeonStore.getState().showSurfaceProbeDebug).toBe(false)
+
+    useDungeonStore.getState().setShowSurfaceProbeDebug(true)
+    expect(useDungeonStore.getState().showSurfaceProbeDebug).toBe(true)
+
+    useDungeonStore.getState().setShowSurfaceProbeDebug(false)
+    expect(useDungeonStore.getState().showSurfaceProbeDebug).toBe(false)
+  })
+
   it('toggles the spline wall cutout debug visibility flag', () => {
     expect(useDungeonStore.getState().showSplineWallCutoutDebug).toBe(false)
 

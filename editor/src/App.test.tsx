@@ -159,6 +159,19 @@ describe('App sidebar drawer', () => {
     expect(useDungeonStore.getState().showPropProbeDebug).toBe(true)
   })
 
+  it('toggles surface probe visualization from the debug panel', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+
+    fireEvent.keyDown(window, { key: 'F12', ctrlKey: true, shiftKey: true })
+
+    expect(useDungeonStore.getState().showSurfaceProbeDebug).toBe(false)
+
+    await user.click(screen.getByRole('button', { name: /visualize surface probes/i }))
+
+    expect(useDungeonStore.getState().showSurfaceProbeDebug).toBe(true)
+  })
+
   it('toggles chunk bounds visualization from the debug panel', async () => {
     const user = userEvent.setup()
     render(<App />)

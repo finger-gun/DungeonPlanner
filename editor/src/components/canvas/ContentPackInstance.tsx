@@ -109,8 +109,11 @@ type ContentPackInstanceProps = ThreeElements['group'] & {
   propInstanceKey?: string
   openingContext?: ContentPackComponentProps['openingContext']
   bakedLightField?: BakedFloorLightField | null
+  bakedLight?: readonly [number, number, number]
   bakedLightDirection?: SurfaceBakedLightDirection
   bakedLightDirectionSecondary?: SurfaceBakedLightDirection
+  bakedLightProbeDirection?: readonly [number, number, number]
+  bakedLightDirectionalStrength?: number
   disableBakedLight?: boolean
   clipBelowGround?: boolean
 }
@@ -135,8 +138,11 @@ export function ContentPackInstance({
   propInstanceKey,
   openingContext,
   bakedLightField = null,
+  bakedLight,
   bakedLightDirection,
   bakedLightDirectionSecondary,
+  bakedLightProbeDirection,
+  bakedLightDirectionalStrength,
   disableBakedLight = false,
   clipBelowGround = false,
   ...groupProps
@@ -207,8 +213,11 @@ export function ContentPackInstance({
           roomFloorMaskRuntime={roomFloorMaskRuntime}
           dynamicPointLightsActive={dynamicPointLightsActive}
           bakedLightField={bakedLightField}
+          bakedLight={bakedLight}
           bakedLightDirection={bakedLightDirection}
           bakedLightDirectionSecondary={bakedLightDirectionSecondary}
+          bakedLightProbeDirection={bakedLightProbeDirection}
+          bakedLightDirectionalStrength={bakedLightDirectionalStrength}
           disableBakedLight={disableBakedLight}
           clipBelowGround={clipBelowGround}
           propInstanceKey={propInstanceKey}
@@ -239,8 +248,11 @@ export function ContentPackInstance({
                roomFloorMaskRuntime={roomFloorMaskRuntime}
                dynamicPointLightsActive={dynamicPointLightsActive}
                bakedLightField={bakedLightField}
+             bakedLight={bakedLight}
              bakedLightDirection={bakedLightDirection}
              bakedLightDirectionSecondary={bakedLightDirectionSecondary}
+             bakedLightProbeDirection={bakedLightProbeDirection}
+             bakedLightDirectionalStrength={bakedLightDirectionalStrength}
               disableBakedLight={disableBakedLight}
               clipBelowGround={clipBelowGround}
               propInstanceKey={propInstanceKey}
@@ -274,8 +286,11 @@ export function ContentPackInstance({
           dynamicPointLightsActive={dynamicPointLightsActive}
           variant={variant}
           bakedLightField={bakedLightField}
+          bakedLight={bakedLight}
            bakedLightDirection={bakedLightDirection}
           bakedLightDirectionSecondary={bakedLightDirectionSecondary}
+          bakedLightProbeDirection={bakedLightProbeDirection}
+          bakedLightDirectionalStrength={bakedLightDirectionalStrength}
           disableBakedLight={disableBakedLight}
           clipBelowGround={clipBelowGround}
           atlasColorVariant={atlasColorVariant}
@@ -303,8 +318,11 @@ export function ContentPackInstance({
           variantKey={variantKey}
           variant={variant}
           bakedLightField={bakedLightField}
+           bakedLight={bakedLight}
            bakedLightDirection={bakedLightDirection}
           bakedLightDirectionSecondary={bakedLightDirectionSecondary}
+           bakedLightProbeDirection={bakedLightProbeDirection}
+           bakedLightDirectionalStrength={bakedLightDirectionalStrength}
             disableBakedLight={disableBakedLight}
             clipBelowGround={clipBelowGround}
             atlasColorVariant={atlasColorVariant}
@@ -339,10 +357,13 @@ function getComponentProps(
 function getSurfaceBakedLightOptions(
   variant: ContentPackInstanceVariant,
   bakedLightField: BakedFloorLightField | null | undefined,
+  bakedLight?: readonly [number, number, number],
   bakedLightDirection?: SurfaceBakedLightDirection,
   bakedLightDirectionSecondary?: SurfaceBakedLightDirection,
+  bakedLightProbeDirection?: readonly [number, number, number],
+  bakedLightDirectionalStrength?: number,
 ) {
-  if (!bakedLightField) {
+  if (!bakedLightField && !bakedLight) {
     return null
   }
   const usesDirectionalSurfaceLighting =
@@ -356,7 +377,11 @@ function getSurfaceBakedLightOptions(
     useDirectionAttribute: usesDirectionalSurfaceLighting,
     useSecondaryDirectionAttribute: usesDirectionalSurfaceLighting && Boolean(bakedLightDirectionSecondary),
     useTopSurfaceMask: variant === 'floor',
-    lightField: bakedLightField,
+    useFieldCellOcclusionCap: variant === 'floor',
+    ...(bakedLightField ? { lightField: bakedLightField } : {}),
+    ...(bakedLight ? { light: bakedLight } : {}),
+    ...(bakedLightProbeDirection ? { lightDirection: bakedLightProbeDirection } : {}),
+    ...(bakedLightDirectionalStrength !== undefined ? { lightDirectionalStrength: bakedLightDirectionalStrength } : {}),
     ...(bakedLightDirection ? { direction: bakedLightDirection } : {}),
     ...(bakedLightDirectionSecondary ? { directionSecondary: bakedLightDirectionSecondary } : {}),
   }
@@ -378,8 +403,11 @@ function GLTFModel({
   variantKey,
   variant,
   bakedLightField = null,
+  bakedLight,
   bakedLightDirection,
   bakedLightDirectionSecondary,
+  bakedLightProbeDirection,
+  bakedLightDirectionalStrength,
   disableBakedLight = false,
   clipBelowGround = false,
   atlasColorVariant,
@@ -405,8 +433,11 @@ function GLTFModel({
   variantKey?: string
   variant: ContentPackInstanceVariant
   bakedLightField?: BakedFloorLightField | null
+  bakedLight?: readonly [number, number, number]
   bakedLightDirection?: SurfaceBakedLightDirection
   bakedLightDirectionSecondary?: SurfaceBakedLightDirection
+  bakedLightProbeDirection?: readonly [number, number, number]
+  bakedLightDirectionalStrength?: number
   disableBakedLight?: boolean
   clipBelowGround?: boolean
   atlasColorVariant?: ResolvedAtlasColorVariant | null
@@ -431,10 +462,21 @@ function GLTFModel({
     () => getSurfaceBakedLightOptions(
       variant,
       bakedLightField,
+      bakedLight,
       bakedLightDirection,
       bakedLightDirectionSecondary,
+      bakedLightProbeDirection,
+      bakedLightDirectionalStrength,
     ),
-    [bakedLightDirection, bakedLightDirectionSecondary, bakedLightField, variant],
+    [
+      bakedLight,
+      bakedLightDirection,
+      bakedLightDirectionSecondary,
+      bakedLightDirectionalStrength,
+      bakedLightField,
+      bakedLightProbeDirection,
+      variant,
+    ],
   )
   const scene = useMemo(() => {
     const clone = cloneSceneWithNodeMaterials(gltf.scene)
@@ -578,8 +620,11 @@ function ComponentAsset({
   dynamicPointLightsActive = false,
   variant,
   bakedLightField = null,
+  bakedLight,
   bakedLightDirection,
   bakedLightDirectionSecondary,
+  bakedLightProbeDirection,
+  bakedLightDirectionalStrength,
   disableBakedLight = false,
   clipBelowGround = false,
   atlasColorVariant,
@@ -605,8 +650,11 @@ function ComponentAsset({
   dynamicPointLightsActive?: boolean
   variant: ContentPackInstanceVariant
   bakedLightField?: BakedFloorLightField | null
+  bakedLight?: readonly [number, number, number]
   bakedLightDirection?: SurfaceBakedLightDirection
   bakedLightDirectionSecondary?: SurfaceBakedLightDirection
+  bakedLightProbeDirection?: readonly [number, number, number]
+  bakedLightDirectionalStrength?: number
   disableBakedLight?: boolean
   clipBelowGround?: boolean
   atlasColorVariant?: ResolvedAtlasColorVariant | null
@@ -633,10 +681,21 @@ function ComponentAsset({
     () => getSurfaceBakedLightOptions(
       variant,
       bakedLightField,
+      bakedLight,
       bakedLightDirection,
       bakedLightDirectionSecondary,
+      bakedLightProbeDirection,
+      bakedLightDirectionalStrength,
     ),
-    [bakedLightDirection, bakedLightDirectionSecondary, bakedLightField, variant],
+    [
+      bakedLight,
+      bakedLightDirection,
+      bakedLightDirectionSecondary,
+      bakedLightDirectionalStrength,
+      bakedLightField,
+      bakedLightProbeDirection,
+      variant,
+    ],
   )
 
   useLayoutEffect(() => {
@@ -842,8 +901,11 @@ function FallbackMesh({
   roomFloorMaskRuntime = null,
   dynamicPointLightsActive = false,
   bakedLightField = null,
+  bakedLight,
   bakedLightDirection,
   bakedLightDirectionSecondary,
+  bakedLightProbeDirection,
+  bakedLightDirectionalStrength,
   disableBakedLight = false,
   clipBelowGround = false,
   propInstanceKey,
@@ -865,8 +927,11 @@ function FallbackMesh({
   roomFloorMaskRuntime?: RoomFloorMaskRuntime | null
   dynamicPointLightsActive?: boolean
   bakedLightField?: BakedFloorLightField | null
+  bakedLight?: readonly [number, number, number]
   bakedLightDirection?: SurfaceBakedLightDirection
   bakedLightDirectionSecondary?: SurfaceBakedLightDirection
+  bakedLightProbeDirection?: readonly [number, number, number]
+  bakedLightDirectionalStrength?: number
   disableBakedLight?: boolean
   clipBelowGround?: boolean
   propInstanceKey?: string
@@ -908,10 +973,21 @@ function FallbackMesh({
     () => getSurfaceBakedLightOptions(
       variant,
       bakedLightField,
+      bakedLight,
       bakedLightDirection,
       bakedLightDirectionSecondary,
+      bakedLightProbeDirection,
+      bakedLightDirectionalStrength,
     ),
-    [bakedLightDirection, bakedLightDirectionSecondary, bakedLightField, variant],
+    [
+      bakedLight,
+      bakedLightDirection,
+      bakedLightDirectionSecondary,
+      bakedLightDirectionalStrength,
+      bakedLightField,
+      bakedLightProbeDirection,
+      variant,
+    ],
   )
   const material = useMemo(
     () => createStandardCompatibleMaterial({

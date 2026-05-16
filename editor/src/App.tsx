@@ -290,6 +290,7 @@ function App() {
   const showChunkDebugOverlay = useDungeonStore((state) => state.showChunkDebugOverlay)
   const showProjectionDebugMesh = useDungeonStore((state) => state.showProjectionDebugMesh)
   const showPropProbeDebug = useDungeonStore((state) => state.showPropProbeDebug)
+  const showSurfaceProbeDebug = useDungeonStore((state) => state.showSurfaceProbeDebug)
   const slowBuildAnimationDebug = useDungeonStore((state) => state.slowBuildAnimationDebug)
   const buildPerformanceTracingEnabled = useDungeonStore((state) => state.buildPerformanceTracingEnabled)
   const setShowRoomFloorMaskDebug = useDungeonStore((state) => state.setShowRoomFloorMaskDebug)
@@ -298,6 +299,7 @@ function App() {
   const setShowChunkDebugOverlay = useDungeonStore((state) => state.setShowChunkDebugOverlay)
   const setShowProjectionDebugMesh = useDungeonStore((state) => state.setShowProjectionDebugMesh)
   const setShowPropProbeDebug = useDungeonStore((state) => state.setShowPropProbeDebug)
+  const setShowSurfaceProbeDebug = useDungeonStore((state) => state.setShowSurfaceProbeDebug)
   const setSlowBuildAnimationDebug = useDungeonStore((state) => state.setSlowBuildAnimationDebug)
   const setBuildPerformanceTracingEnabled = useDungeonStore((state) => state.setBuildPerformanceTracingEnabled)
   const debugAssetId = getDebugPanelAssetId({
@@ -871,6 +873,7 @@ function App() {
               showChunkDebugOverlay={showChunkDebugOverlay}
               showProjectionDebugMesh={showProjectionDebugMesh}
               showPropProbeDebug={showPropProbeDebug}
+              showSurfaceProbeDebug={showSurfaceProbeDebug}
               slowBuildAnimationDebug={slowBuildAnimationDebug}
               buildPerformanceTracingEnabled={buildPerformanceTracingEnabled}
               setShowRoomFloorMaskDebug={setShowRoomFloorMaskDebug}
@@ -879,6 +882,7 @@ function App() {
               setShowChunkDebugOverlay={setShowChunkDebugOverlay}
               setShowProjectionDebugMesh={setShowProjectionDebugMesh}
               setShowPropProbeDebug={setShowPropProbeDebug}
+              setShowSurfaceProbeDebug={setShowSurfaceProbeDebug}
               setSlowBuildAnimationDebug={setSlowBuildAnimationDebug}
               setBuildPerformanceTracingEnabled={setBuildPerformanceTracingEnabled}
               debugAssetName={debugAsset?.name ?? null}
@@ -1032,6 +1036,7 @@ function DebugVisibilityPanel({
   showChunkDebugOverlay,
   showProjectionDebugMesh,
   showPropProbeDebug,
+  showSurfaceProbeDebug,
   slowBuildAnimationDebug,
   buildPerformanceTracingEnabled,
   setShowRoomFloorMaskDebug,
@@ -1040,6 +1045,7 @@ function DebugVisibilityPanel({
   setShowChunkDebugOverlay,
   setShowProjectionDebugMesh,
   setShowPropProbeDebug,
+  setShowSurfaceProbeDebug,
   setSlowBuildAnimationDebug,
   setBuildPerformanceTracingEnabled,
   debugAssetName,
@@ -1054,6 +1060,7 @@ function DebugVisibilityPanel({
   showChunkDebugOverlay: boolean
   showProjectionDebugMesh: boolean
   showPropProbeDebug: boolean
+  showSurfaceProbeDebug: boolean
   slowBuildAnimationDebug: boolean
   buildPerformanceTracingEnabled: boolean
   setShowRoomFloorMaskDebug: (show: boolean) => void
@@ -1062,6 +1069,7 @@ function DebugVisibilityPanel({
   setShowChunkDebugOverlay: (show: boolean) => void
   setShowProjectionDebugMesh: (show: boolean) => void
   setShowPropProbeDebug: (show: boolean) => void
+  setShowSurfaceProbeDebug: (show: boolean) => void
   setSlowBuildAnimationDebug: (show: boolean) => void
   setBuildPerformanceTracingEnabled: (show: boolean) => void
   debugAssetName: string | null
@@ -1128,6 +1136,11 @@ function DebugVisibilityPanel({
           label="Visualize prop probes"
           pressed={showPropProbeDebug}
           onClick={() => setShowPropProbeDebug(!showPropProbeDebug)}
+        />
+        <DebugToggleButton
+          label="Visualize surface probes"
+          pressed={showSurfaceProbeDebug}
+          onClick={() => setShowSurfaceProbeDebug(!showSurfaceProbeDebug)}
         />
         <DebugToggleButton
           label="Slow build animation x10"

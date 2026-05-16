@@ -205,6 +205,7 @@ function buildRenderSignature(
     entry.key,
     entry.visibility,
     usesGpuFog ? 'gpu-fog' : 'no-fog',
+    serializeOptionalVector(entry.bakedLight),
     buildBakedLightFieldPipelineSignature(entry.bakedLightField),
     useLineOfSightPostMask ? 'post-mask' : 'no-post-mask',
     entry.variant === 'wall'

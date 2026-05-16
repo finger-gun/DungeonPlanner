@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useLayoutEffect, useRef } from 'react'
+import { useCallback, useEffect, useMemo, useLayoutEffect, useRef } from 'react'
 import type { ReactNode } from 'react'
 import { useFrame } from '@react-three/fiber'
 import type { ThreeEvent } from '@react-three/fiber'
@@ -47,7 +47,10 @@ import { useGLTF } from '../../rendering/useGLTF'
 import { shouldActivateFloorReceiver } from './floorReceiverMode'
 import type { ContentPackModelTransform } from '../../content-packs/types'
 import { resolveProjectionReceiverAsset } from './tileAssetResolution'
-import { getWallSpanInteriorLightDirections } from './wallLighting'
+import {
+  getWallSpanInteriorLightDirections,
+  getWallSpanSurfaceLightSamplePositions,
+} from './wallLighting'
 import {
   buildChunkedFloorRenderDerivedCache,
   type FloorRenderChunkBundle,
@@ -55,9 +58,14 @@ import {
   type FloorReceiverCellInput,
 } from './floorRenderDerived'
 import {
+  getBakedLightSampleForCell,
   getOrBuildBakedFloorLightField,
   type BakedFloorLightField,
 } from '../../rendering/dungeonLightField'
+import {
+  getCachedRuntimeSurfaceLightProbe,
+  releaseCachedRuntimeSurfaceLightingProbe,
+} from '../../rendering/surfaceLightingCache'
 import { setBuildAnimationTime } from './buildAnimationMaterial'
 import { TileGpuStreamMount } from './TileGpuStreamContext'
 import {
@@ -78,9 +86,35 @@ import {
   disposeRoomFloorMaskRuntime,
   type RoomFloorMaskRuntime,
 } from './roomFloorMaskRuntime'
+import { SurfaceProbeDebugOverlay } from './SurfaceProbeDebugOverlay'
 
 const ZERO_ROTATION = [0, 0, 0] as const
 const IGNORE_RAYCAST: THREE.Object3D['raycast'] = () => {}
+
+function averageBakedLightSamples(
+  lightField: BakedFloorLightField,
+  cellKeys: readonly string[],
+) {
+  if (cellKeys.length === 0) {
+    return [0, 0, 0] as const
+  }
+
+  let sumR = 0
+  let sumG = 0
+  let sumB = 0
+  cellKeys.forEach((cellKey) => {
+    const sample = getBakedLightSampleForCell(lightField, cellKey)
+    sumR += sample[0]
+    sumG += sample[1]
+    sumB += sample[2]
+  })
+
+  return [
+    sumR / cellKeys.length,
+    sumG / cellKeys.length,
+    sumB / cellKeys.length,
+  ] as const
+}
 
 function useIsBuildAnimationActive(buildAnimationVersion: number) {
   return useCallback((cellKey: string) => {
@@ -116,6 +150,7 @@ export function DungeonRoom({
   const buildAnimationVersion = useBuildAnimationVersion()
   const tool = useDungeonStore((state) => state.tool)
   const showProjectionDebugMesh = useDungeonStore((state) => state.showProjectionDebugMesh)
+  const showSurfaceProbeDebug = useDungeonStore((state) => state.showSurfaceProbeDebug)
   const { placedObjects } = derived.data
   const floorId = derived.data.floorId
   const floorReceiverActive = enableFloorReceiver && shouldActivateFloorReceiver(tool, showProjectionDebugMesh)
@@ -276,6 +311,14 @@ export function DungeonRoom({
         bakedLightField={bakedFloorLightField}
         visibility={visibility}
       />
+      {showSurfaceProbeDebug && (
+        <SurfaceProbeDebugOverlay
+          bakedLightField={bakedFloorLightField}
+          paintedCells={derived.visiblePaintedCellRecords}
+          visibleOpenings={derived.visibleOpenings}
+          splineWallGraph={derived.data.splineWallGraph ?? EMPTY_SPLINE_WALL_GRAPH}
+        />
+      )}
       <RoomFloorMaskDebugOverlay maskData={roomFloorMaskData} />
       {floorRenderChunkCache.orderedChunkKeys.map((chunkKey) => {
         const bundle = floorRenderChunkCache.bundlesByChunk.get(chunkKey)
@@ -434,17 +477,18 @@ function CellGroupRenderer({
       const buildAnimation = enableBuildAnimation
         ? getBuildAnimationState(key)
         : null
-        return [{
-          key: `floor:${key}`,
-          assetId: group.floorAssetId,
-          position: cellToWorldPosition(cell),
-          rotation: group.rotation,
-          buildAnimationDelay: buildAnimation?.delay,
-          buildAnimationStart: buildAnimation?.startedAt,
-          variant: 'floor',
-          variantKey: key,
-          visibility: 'visible',
-          bakedLightField: bakedFloorLightField,
+      return [{
+        key: `floor:${key}`,
+        assetId: group.floorAssetId,
+        position: cellToWorldPosition(cell),
+        rotation: group.rotation,
+        buildAnimationDelay: buildAnimation?.delay,
+        buildAnimationStart: buildAnimation?.startedAt,
+        variant: 'floor',
+        variantKey: key,
+        visibility: 'visible',
+        bakedLightField: bakedFloorLightField,
+        bakedLight: getBakedLightSampleForCell(bakedFloorLightField, key),
         fogCell: cell,
       }]
       }),
@@ -529,6 +573,7 @@ function FloorSurfaceRenderer({
           variantKey: placement.anchorCellKey,
           visibility: 'visible',
           bakedLightField: bakedFloorLightField,
+          bakedLight: averageBakedLightSamples(bakedFloorLightField, placement.coveredCellKeys),
           fogCell: placement.anchorCell,
         }
 
@@ -869,6 +914,18 @@ function OpeningRenderer({
   const openingSegmentKeys = openingTransform?.wallKeys ?? getOpeningSegments(opening.wallKey, opening.width)
   const wallVisibility = getWallSpanVisibilityState(visibility, openingSegmentKeys)
   const interiorDirections = getWallSpanInteriorLightDirections(openingSegmentKeys, paintedCells)
+  const openingSurfaceSamplePositions = useMemo(
+    () => getWallSpanSurfaceLightSamplePositions(openingSegmentKeys, paintedCells),
+    [openingSegmentKeys, paintedCells],
+  )
+  const openingSurfaceLightProbe = useMemo(
+    () => getCachedRuntimeSurfaceLightProbe({
+      lightField: bakedLightField,
+      instanceKey: `opening:${opening.id}`,
+      samplePositions: openingSurfaceSamplePositions,
+    }),
+    [bakedLightField, opening.id, openingSurfaceSamplePositions],
+  )
   const openingAnimationCellKey =
     getBuildAnimationKeyFromWallKeys(openingSegmentKeys, isBuildAnimationCurrentlyActive)
     ?? opening.wallKey.split(':').slice(0, 2).join(':')
@@ -881,6 +938,9 @@ function OpeningRenderer({
     if (selectionTarget) registerObject(opening.id, selectionTarget)
     return () => unregisterObject(opening.id)
   }, [opening.assetId, opening.id])
+  useEffect(() => () => {
+    releaseCachedRuntimeSurfaceLightingProbe(bakedLightField.floorId, `opening:${opening.id}`)
+  }, [bakedLightField.floorId, opening.id])
 
   const tool = useDungeonStore((state) => state.tool)
 
@@ -943,9 +1003,12 @@ function OpeningRenderer({
             variant="wall"
             visibility={wallVisibility}
             useLineOfSightPostMask={useLineOfSightPostMask}
-            bakedLightField={bakedLightField}
+            bakedLightField={null}
+            bakedLight={openingSurfaceLightProbe?.light}
             bakedLightDirection={interiorDirections.primary}
             bakedLightDirectionSecondary={interiorDirections.secondary}
+            bakedLightProbeDirection={openingSurfaceLightProbe?.lightDirection}
+            bakedLightDirectionalStrength={openingSurfaceLightProbe?.directionalStrength}
             clipBelowGround={clipBelowGround}
             objectProps={getOpeningObjectProps(opening)}
             openingContext={openingRenderContext ?? undefined}

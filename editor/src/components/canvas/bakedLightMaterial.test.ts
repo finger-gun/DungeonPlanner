@@ -118,6 +118,30 @@ describe('bakedLightMaterial', () => {
     expect(material.emissiveNode).toBeDefined()
   })
 
+  it('can cap smooth floor field lighting with the local cell sample', () => {
+    const material = createStandardCompatibleMaterial({
+      color: '#ffffff',
+      roughness: 0.4,
+      metalness: 0.1,
+    }) as TestNodeMaterial
+    const lightField = createTestLightField()
+
+    material.isNodeMaterial = true
+
+    applyBakedLightToMaterial(material, {
+      useLightAttribute: true,
+      useTopSurfaceMask: true,
+      useFieldCellOcclusionCap: true,
+      lightField,
+    })
+
+    expect(material.userData.bakedLightSignature).toContain('top-only')
+    expect(material.userData.bakedLightSignature).toContain('cell-occlusion-cap')
+    expect(material.userData.bakedLightSignature).toContain('2.25')
+    expect(material.colorNode).toBeDefined()
+    expect(material.emissiveNode).toBeDefined()
+  })
+
   it('can disable directional face masking for wall-mounted models that need both sides lit', () => {
     const material = createStandardCompatibleMaterial({
       color: '#ffffff',
@@ -187,8 +211,56 @@ describe('bakedLightMaterial', () => {
     })
 
     expect(material.userData.bakedLightSignature).toContain('mapped-pbr-surface')
+    expect(material.userData.bakedLightSignature).toContain('0.26')
+    expect(material.userData.bakedLightSignature).toContain('0.28')
     expect(material.colorNode).toBeDefined()
     expect(material.emissiveNode).toBeDefined()
+  })
+
+  it('supports uniform surface probes without rebuilding for probe-only updates', () => {
+    const material = createStandardCompatibleMaterial({
+      color: '#f5dfc2',
+      roughness: 0.66,
+      metalness: 0,
+    }) as TestNodeMaterial
+
+    material.isNodeMaterial = true
+
+    applyBakedLightToMaterial(material, {
+      useLightAttribute: true,
+      useDirectionAttribute: true,
+      light: [0.24, 0.18, 0.1],
+      direction: [0, 0, 1],
+      lightDirection: [1, 0.2, 0],
+      lightDirectionalStrength: 0.65,
+    })
+
+    expect(material.userData.bakedLightSignature).toContain('uniform-light')
+    expect(material.userData.bakedLightSignature).toContain('surface-probe-uniforms-v1')
+    const uniformState = material.userData.surfaceBakedLightUniformState as {
+      light: { value: THREE.Vector3 }
+      lightDirection: { value: THREE.Vector3 }
+      directionalStrength: { value: number }
+      probeEnabled: { value: number }
+    }
+    expect(uniformState.light.value.toArray()).toEqual([0.24, 0.18, 0.1])
+    expect(uniformState.lightDirection.value.toArray()).toEqual([1, 0.2, 0])
+    expect(uniformState.directionalStrength.value).toBeCloseTo(0.65)
+    expect(uniformState.probeEnabled.value).toBe(1)
+
+    applyBakedLightToMaterial(material, {
+      useLightAttribute: true,
+      useDirectionAttribute: true,
+      light: [0.1, 0.08, 0.04],
+      direction: [0, 0, 1],
+      lightDirection: [0, 1, 0],
+      lightDirectionalStrength: 0.2,
+    })
+
+    expect(material.userData.bakedLightSignature).toContain('uniform-light')
+    expect(uniformState.light.value.toArray()).toEqual([0.1, 0.08, 0.04])
+    expect(uniformState.lightDirection.value.toArray()).toEqual([0, 1, 0])
+    expect(uniformState.directionalStrength.value).toBeCloseTo(0.2)
   })
 
   it('applies prop baked lighting directly from the shared baked field texture', () => {

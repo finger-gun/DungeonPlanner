@@ -5,6 +5,8 @@ import {
   buildSplineWallSectionGeometry,
   buildSplineWallSectionGroupGeometry,
   buildSplineWallSectionHeightBands,
+  resolveSplineWallBakedLightSample,
+  resolveSplineWallBakedLightSamplePosition,
 } from './SplineWallLayer'
 import { buildSplineWallAssemblySections } from '../../store/splineWallAssembly'
 import { buildSplineWallOpeningDescriptors, type SplineWallOpeningDescriptor } from '../../store/splineWallOpenings'
@@ -23,7 +25,14 @@ import { analyzeSplineWallGraphBoundaries } from '../../store/splineWallStyleAna
 import { createSplineWallSegmentSideKey } from '../../store/wallStyleAssignments'
 import { getContentPackWallStyleById } from '../../content-packs/registry'
 import { GRID_SIZE } from '../../hooks/useSnapToGrid'
+import type { BakedFloorLightField } from '../../rendering/dungeonLightField'
 import { AUTOFOCUS_RAYCAST_LAYER, configureAutofocusRaycasterLayers } from './autofocusRaycast'
+
+function createSampledFloorLightField(cellKeys: readonly string[]) {
+  return {
+    sampleByCellKey: Object.fromEntries(cellKeys.map((cellKey) => [cellKey, [0.2, 0.2, 0.2]])),
+  } as Pick<BakedFloorLightField, 'sampleByCellKey'>
+}
 
 describe('buildSplineWallSectionHeightBands', () => {
   it('preserves the upper wall band across an opening span', () => {
@@ -798,6 +807,56 @@ describe('buildSplineWallSectionHeightBands', () => {
 
     expect(positions.count).toBeGreaterThan(0)
     expect(intrudingVertices).toHaveLength(0)
+  })
+})
+
+describe('resolveSplineWallBakedLightSamplePosition', () => {
+  it('uses the normal-side sample when it remains inside the baked floor', () => {
+    const field = createSampledFloorLightField(['0:0'])
+
+    expect(resolveSplineWallBakedLightSamplePosition(
+      field,
+      [GRID_SIZE * 0.5, 1, GRID_SIZE * 0.5],
+      [1, 0, 0],
+    )).toEqual([
+      GRID_SIZE * 0.5 + GRID_SIZE * 0.24,
+      1.06,
+      GRID_SIZE * 0.5,
+    ])
+  })
+
+  it('falls back to the opposite side when a perimeter-wall normal points outside the floor', () => {
+    const field = createSampledFloorLightField(['0:0'])
+    const resolved = resolveSplineWallBakedLightSample(
+      field,
+      [0, 1, GRID_SIZE * 0.5],
+      [-1, 0, 0],
+    )
+
+    expect(resolveSplineWallBakedLightSamplePosition(
+      field,
+      [0, 1, GRID_SIZE * 0.5],
+      [-1, 0, 0],
+    )).toEqual([
+      GRID_SIZE * 0.24,
+      1.06,
+      GRID_SIZE * 0.5,
+    ])
+    expect(resolved.direction).toEqual([1, 0, 0])
+  })
+
+  it('does not flip samples across shared walls when both sides are baked floor cells', () => {
+    const field = createSampledFloorLightField(['0:0', '1:0'])
+
+    expect(resolveSplineWallBakedLightSamplePosition(
+      field,
+      [GRID_SIZE, 1, GRID_SIZE * 0.5],
+      [1, 0, 0],
+    )).toEqual([
+      GRID_SIZE + GRID_SIZE * 0.24,
+      1.06,
+      GRID_SIZE * 0.5,
+    ])
   })
 })
 

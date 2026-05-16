@@ -49,6 +49,8 @@ describe('splineWallBakedLight', () => {
 
     expect(applyBakedLightToMaterial).toHaveBeenCalledWith(materials.dungeon.side, {
       useLightAttribute: true,
+      useDirectionAttribute: true,
+      useDirectionalSampleOffset: false,
       lightField: bakedLightField,
     })
     expect(applyBakedLightToMaterial).toHaveBeenCalledWith(materials.dungeon.top, {
@@ -67,6 +69,24 @@ describe('splineWallBakedLight', () => {
     expect(applyBakedLightToMaterial).toHaveBeenCalledWith(materials.dungeon.side, null)
     expect(applyBakedLightToMaterial).toHaveBeenCalledWith(materials.dungeon.top, null)
     expect(applyBakedLightToMaterial).toHaveBeenCalledTimes(6)
+  })
+
+  it('can keep bundle materials on attribute-driven wall probes without a shared field texture', () => {
+    const materials = createMaterialLibrary()
+
+    applyBakedLightToSplineWallMaterialLibrary(materials, null, {
+      useAttributeLight: true,
+    })
+
+    expect(applyBakedLightToMaterial).toHaveBeenCalledWith(materials.dungeon.side, {
+      useLightAttribute: true,
+      useDirectionAttribute: true,
+      useDirectionalSampleOffset: false,
+    })
+    expect(applyBakedLightToMaterial).toHaveBeenCalledWith(materials.dungeon.top, {
+      useLightAttribute: true,
+      useTopSurfaceMask: true,
+    })
   })
 
   it('applies baked light to authored wall-style section materials', () => {
@@ -113,6 +133,23 @@ describe('splineWallBakedLight', () => {
       useDirectionalFaceMask: true,
       useDirectionalSampleOffset: false,
       lightField: bakedLightField,
+    })
+  })
+
+  it('can keep spline wall style lighting enabled with attribute-driven probes', () => {
+    const material = new THREE.MeshStandardMaterial()
+
+    applyBakedLightToSplineWallStyleMaterial(material, null, {
+      useDirectionAttribute: true,
+      useDirectionalFaceMask: true,
+      useDirectionalSampleOffset: false,
+    })
+
+    expect(applyBakedLightToMaterial).toHaveBeenCalledWith(material, {
+      useLightAttribute: true,
+      useDirectionAttribute: true,
+      useDirectionalFaceMask: true,
+      useDirectionalSampleOffset: false,
     })
   })
 })

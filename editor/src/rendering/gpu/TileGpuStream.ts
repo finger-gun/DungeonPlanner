@@ -535,6 +535,7 @@ export class TileGpuStream {
             useDirectionAttribute: descriptor.variant === 'wall',
             useSecondaryDirectionAttribute: descriptor.variant === 'wall' && descriptor.useSecondaryDirectionAttribute,
             useTopSurfaceMask: descriptor.variant === 'floor',
+            useFieldCellOcclusionCap: descriptor.variant === 'floor',
             useFlicker: descriptor.useBakedFlicker,
             lightField: bakedLightField,
           }
@@ -762,6 +763,7 @@ function buildTileStreamEntrySignature(entryState: TileStreamEntryState) {
     entryState.entry.buildAnimationStart ?? '',
     entryState.entry.buildAnimationDelay ?? '',
     entryState.entry.buildAnimationDirection ?? '',
+    entryState.entry.bakedLight?.join(',') ?? '',
     entryState.entry.bakedLightDirection?.join(',') ?? '',
     entryState.entry.bakedLightDirectionSecondary?.join(',') ?? '',
     entryState.entry.fogCell?.join(',') ?? '',

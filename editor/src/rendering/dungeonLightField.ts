@@ -27,7 +27,7 @@ import {
 export const DEFAULT_BAKED_LIGHT_CHUNK_SIZE = DEFAULT_FLOOR_CHUNK_SIZE
 export const DEFAULT_DYNAMIC_LIGHT_POOL_SIZE = 32
 export const DEFAULT_BAKED_LIGHT_CHANNEL_CAP = 0.9
-const BAKED_LIGHT_FIELD_SIGNATURE_VERSION = 'multi-basis-flicker-v2'
+const BAKED_LIGHT_FIELD_SIGNATURE_VERSION = 'multi-basis-flicker-v3-channel-visibility'
 const BAKED_LIGHT_CHUNK_HALO = 1
 const BAKED_LIGHT_DISTANCE_SCALE = 1.18
 const BAKED_LIGHT_NEAR_FIELD_BOOST = 0.42
@@ -73,6 +73,12 @@ export type PropBakedLightProbe = {
   topLight: BakedLightSample
   baseY: number
   topY: number
+  lightDirection: readonly [number, number, number]
+  directionalStrength: number
+}
+
+export type SurfaceBakedLightProbe = {
+  light: BakedLightSample
   lightDirection: readonly [number, number, number]
   directionalStrength: number
 }
@@ -626,7 +632,7 @@ export function sampleBakedLightFieldAtWorldPosition(
   ]
 }
 
-export function getStaticLightSourcesForBounds(
+export function getRelevantStaticLightSourcesForBounds(
   lightField: BakedFloorLightField | null | undefined,
   bounds: THREE.Box3 | null | undefined,
 ) {
@@ -675,7 +681,7 @@ export function buildPropBakedLightProbe(
   const topY = minY + spanY * 0.85
   const lateralProbeOffsetX = Math.max(spanX * 0.45, GRID_SIZE * 0.12)
   const lateralProbeOffsetZ = Math.max(spanZ * 0.45, GRID_SIZE * 0.12)
-  const relevantLightSources = getStaticLightSourcesForBounds(lightField, bounds)
+  const relevantLightSources = getRelevantStaticLightSourcesForBounds(lightField, bounds)
   const centerLight = sampleOccludedPropProbeLightAtWorldPosition(
     lightField,
     relevantLightSources,
@@ -748,11 +754,111 @@ export function buildPropBakedLightProbe(
   }
 }
 
-function buildPropDirectionalLightFromStaticSources(
-  lightField: BakedFloorLightField,
-  bounds: THREE.Box3,
+export function sampleOccludedSurfaceLightAtWorldPosition(
+  lightField: BakedFloorLightField | null | undefined,
   worldPosition: readonly [number, number, number],
-  relevantLightSources: ResolvedDungeonLightSource[] = getStaticLightSourcesForBounds(lightField, bounds),
+  relevantLightSources?: readonly ResolvedDungeonLightSource[],
+) {
+  if (!lightField) {
+    return ZERO_BAKED_LIGHT_SAMPLE
+  }
+
+  const sampleBounds = new THREE.Box3(
+    new THREE.Vector3(worldPosition[0] - GRID_SIZE * 0.5, worldPosition[1] - 0.5, worldPosition[2] - GRID_SIZE * 0.5),
+    new THREE.Vector3(worldPosition[0] + GRID_SIZE * 0.5, worldPosition[1] + 0.5, worldPosition[2] + GRID_SIZE * 0.5),
+  )
+  const resolvedLightSources = relevantLightSources
+    ? [...relevantLightSources]
+    : getRelevantStaticLightSourcesForBounds(lightField, sampleBounds)
+
+  return sampleOccludedPropProbeLightAtWorldPosition(
+    lightField,
+    resolvedLightSources,
+    worldPosition,
+  )
+}
+
+export function buildSurfaceBakedLightProbe(
+  lightField: BakedFloorLightField | null | undefined,
+  samplePositions: readonly (readonly [number, number, number])[],
+  relevantLightSources?: readonly ResolvedDungeonLightSource[],
+): SurfaceBakedLightProbe | null {
+  if (!lightField || samplePositions.length === 0) {
+    return null
+  }
+
+  const bounds = new THREE.Box3()
+  let hasBounds = false
+  samplePositions.forEach((position) => {
+    const point = new THREE.Vector3(position[0], position[1], position[2])
+    if (!hasBounds) {
+      bounds.set(point.clone(), point.clone())
+      hasBounds = true
+      return
+    }
+    bounds.expandByPoint(point)
+  })
+  bounds.expandByScalar(GRID_SIZE * 0.5)
+
+  const resolvedLightSources = relevantLightSources
+    ? [...relevantLightSources]
+    : getRelevantStaticLightSourcesForBounds(lightField, bounds)
+
+  let lightX = 0
+  let lightY = 0
+  let lightZ = 0
+  let totalLuminance = 0
+  directionalLightVectorScratch.set(0, 0, 0)
+
+  samplePositions.forEach((position) => {
+    const sampledLight = sampleOccludedPropProbeLightAtWorldPosition(
+      lightField,
+      resolvedLightSources,
+      position,
+    )
+    const luminance = getBakedLightLuminance(sampledLight)
+    lightX += sampledLight[0]
+    lightY += sampledLight[1]
+    lightZ += sampledLight[2]
+    totalLuminance += luminance
+
+    const directionalLight = buildDirectionalLightFromStaticSources(
+      lightField,
+      position,
+      resolvedLightSources,
+    )
+    if (directionalLight && luminance > 1e-5) {
+      directionalLightContributionScratch
+        .fromArray(directionalLight.lightDirection)
+        .multiplyScalar(Math.max(luminance * directionalLight.directionalStrength, 1e-5))
+      directionalLightVectorScratch.add(directionalLightContributionScratch)
+    }
+  })
+
+  const sampleCount = Math.max(samplePositions.length, 1)
+  const averageLight: BakedLightSample = [
+    lightX / sampleCount,
+    lightY / sampleCount,
+    lightZ / sampleCount,
+  ]
+  const lightDirection = directionalLightVectorScratch.lengthSq() > 1e-8
+    ? directionalLightVectorScratch.clone().normalize().toArray() as [number, number, number]
+    : [0, 1, 0] as const
+  const directionalStrength = directionalLightVectorScratch.lengthSq() > 1e-8
+    ? clamp01(directionalLightVectorScratch.length() / Math.max(totalLuminance, 1e-5))
+    : 0
+
+  return {
+    light: averageLight,
+    lightDirection,
+    directionalStrength,
+  }
+}
+
+function buildDirectionalLightFromStaticSources(
+  lightField: BakedFloorLightField,
+  worldPosition: readonly [number, number, number],
+  relevantLightSources: readonly ResolvedDungeonLightSource[],
 ) {
   if (relevantLightSources.length === 0) {
     return null
@@ -800,6 +906,15 @@ function buildPropDirectionalLightFromStaticSources(
   }
 }
 
+function buildPropDirectionalLightFromStaticSources(
+  lightField: BakedFloorLightField,
+  bounds: THREE.Box3,
+  worldPosition: readonly [number, number, number],
+  relevantLightSources: ResolvedDungeonLightSource[] = getRelevantStaticLightSourcesForBounds(lightField, bounds),
+) {
+  return buildDirectionalLightFromStaticSources(lightField, worldPosition, relevantLightSources)
+}
+
 function samplePropProbeBaseLightAtWorldPosition(
   lightField: BakedFloorLightField,
   worldPosition: readonly [number, number, number],
@@ -840,10 +955,7 @@ function sampleOccludedPropProbeLightAtWorldPosition(
     worldPosition,
     lightField.occlusion,
   )
-  const visibilityFactor = clamp01(
-    getBakedLightLuminance(visibleStaticLight) / rawStaticLuminance,
-  )
-  return scaleBakedLightSample(sampledLight, visibilityFactor)
+  return applyStaticLightVisibilityMaskToSample(sampledLight, rawStaticLight, visibleStaticLight)
 }
 
 function getBakedLightLuminance(sample: BakedLightSample) {
@@ -852,6 +964,36 @@ function getBakedLightLuminance(sample: BakedLightSample) {
 
 function getLinearColorLuminance(color: readonly [number, number, number]) {
   return color[0] * 0.2126 + color[1] * 0.7152 + color[2] * 0.0722
+}
+
+function applyStaticLightVisibilityMaskToSample(
+  sampledLight: BakedLightSample,
+  rawStaticLight: BakedLightSample,
+  visibleStaticLight: BakedLightSample,
+): BakedLightSample {
+  const rawStaticLuminance = getBakedLightLuminance(rawStaticLight)
+  if (rawStaticLuminance <= 1e-4) {
+    return sampledLight
+  }
+
+  const fallbackVisibility = clamp01(
+    getBakedLightLuminance(visibleStaticLight) / rawStaticLuminance,
+  )
+  return [
+    sampledLight[0] * resolveStaticLightChannelVisibility(rawStaticLight[0], visibleStaticLight[0], fallbackVisibility),
+    sampledLight[1] * resolveStaticLightChannelVisibility(rawStaticLight[1], visibleStaticLight[1], fallbackVisibility),
+    sampledLight[2] * resolveStaticLightChannelVisibility(rawStaticLight[2], visibleStaticLight[2], fallbackVisibility),
+  ]
+}
+
+function resolveStaticLightChannelVisibility(
+  rawChannel: number,
+  visibleChannel: number,
+  fallbackVisibility: number,
+) {
+  return rawChannel > 1e-5
+    ? clamp01(visibleChannel / rawChannel)
+    : fallbackVisibility
 }
 
 function getCornerSample(

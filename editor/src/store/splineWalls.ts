@@ -87,7 +87,7 @@ type SampledSplineWallSharedEdge = {
 // 2.0 world units tall and 0.5 world units thick.
 export const DEFAULT_SPLINE_WALL_HEIGHT = 2.0
 export const DEFAULT_SPLINE_WALL_THICKNESS = 0.5
-const DEFAULT_CORNER_RADIUS = GRID_SIZE * 0.35
+const DEFAULT_CORNER_RADIUS = 0
 const DEFAULT_CURVE_SUBDIVISIONS = 6
 export const DEFAULT_SPLINE_WALL_UV_SCALE = GRID_SIZE
 export const SPLINE_WALL_GEOMETRY_EPSILON = 1e-5

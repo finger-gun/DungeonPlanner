@@ -25,6 +25,7 @@ type ViewActionKeys =
   | 'setShowChunkDebugOverlay'
   | 'setShowProjectionDebugMesh'
   | 'setShowPropProbeDebug'
+  | 'setShowSurfaceProbeDebug'
   | 'setSlowBuildAnimationDebug'
   | 'setBuildPerformanceTracingEnabled'
   | 'setLightEffectsEnabled'
@@ -180,6 +181,9 @@ export function createDungeonStoreViewActions({
     },
     setShowPropProbeDebug: (show) => {
       set((state) => ({ ...state, showPropProbeDebug: show }))
+    },
+    setShowSurfaceProbeDebug: (show) => {
+      set((state) => ({ ...state, showSurfaceProbeDebug: show }))
     },
     setSlowBuildAnimationDebug: (show) => {
       set((state) => ({ ...state, slowBuildAnimationDebug: show }))

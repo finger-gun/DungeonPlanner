@@ -33,6 +33,7 @@ import {
   splitSplineWallGraphSegment,
   syncSplineWallGraphCutoutsFromOpenings,
   upsertSplineWallGraphRoomPath,
+  upsertSplineWallGraphRoomPaths,
   type SplineWallGraph,
 } from './splineWallGraph'
 import {
@@ -215,6 +216,7 @@ type PlaceOpeningInput = Pick<
 type CommitDraftRoomInput = {
   cells: GridCell[]
   splineNodes: RoomDraftSplineNodeInput[]
+  splinePaths?: RoomDraftSplineNodeInput[][]
 }
 
 export type DungeonObjectType = 'prop' | 'player'
@@ -368,6 +370,7 @@ export type DungeonState = DungeonSnapshot & {
   showChunkDebugOverlay: boolean
   showProjectionDebugMesh: boolean
   showPropProbeDebug: boolean
+  showSurfaceProbeDebug: boolean
   slowBuildAnimationDebug: boolean
   buildPerformanceTracingEnabled: boolean
   floorViewMode: FloorViewMode
@@ -460,6 +463,7 @@ export type DungeonState = DungeonSnapshot & {
   setShowChunkDebugOverlay: (show: boolean) => void
   setShowProjectionDebugMesh: (show: boolean) => void
   setShowPropProbeDebug: (show: boolean) => void
+  setShowSurfaceProbeDebug: (show: boolean) => void
   setSlowBuildAnimationDebug: (show: boolean) => void
   setBuildPerformanceTracingEnabled: (show: boolean) => void
   lightEffectsEnabled: boolean
@@ -2320,6 +2324,7 @@ export const useDungeonStore = create<DungeonState>()(
   showChunkDebugOverlay: false,
   showProjectionDebugMesh: false,
   showPropProbeDebug: false,
+  showSurfaceProbeDebug: false,
   slowBuildAnimationDebug: false,
   buildPerformanceTracingEnabled: false,
   lightEffectsEnabled: true,
@@ -2437,7 +2442,7 @@ export const useDungeonStore = create<DungeonState>()(
 
     return nextCells.length
   },
-  commitDraftRoom: ({ cells, splineNodes }) => {
+  commitDraftRoom: ({ cells, splineNodes, splinePaths }) => {
     const state = get()
     const nextCells = cells.filter((cell) => !state.paintedCells[getCellKey(cell)])
     if (nextCells.length === 0 || nextCells.length !== cells.length || splineNodes.length < 3) {
@@ -2495,12 +2500,19 @@ export const useDungeonStore = create<DungeonState>()(
         rooms,
       }, paintedCells, nextCells)
 
-      const splineGraphWithRoom = upsertSplineWallGraphRoomPath(reconciledSplineWallGraph, {
-        roomId,
-        layerId: current.activeLayerId,
-        nodes: splineNodes,
-        closed: true,
-      })
+      const splineGraphWithRoom = splinePaths && splinePaths.length > 0
+        ? upsertSplineWallGraphRoomPaths(reconciledSplineWallGraph, {
+            roomId,
+            layerId: current.activeLayerId,
+            paths: splinePaths,
+            closed: true,
+          })
+        : upsertSplineWallGraphRoomPath(reconciledSplineWallGraph, {
+            roomId,
+            layerId: current.activeLayerId,
+            nodes: splineNodes,
+            closed: true,
+          })
       const proceduralLayout = reconcileProceduralRoomLayout({
         paintedCells,
         wallOpenings,
@@ -4316,6 +4328,7 @@ export const useDungeonStore = create<DungeonState>()(
         showChunkDebugOverlay: false,
         showProjectionDebugMesh: false,
         showPropProbeDebug: false,
+        showSurfaceProbeDebug: false,
         slowBuildAnimationDebug: false,
         buildPerformanceTracingEnabled: false,
         lightEffectsEnabled: true,

@@ -72,6 +72,10 @@ export type UpsertSplineWallGraphRoomPathInput = {
   closed?: boolean
 }
 
+export type UpsertSplineWallGraphRoomPathsInput = Omit<UpsertSplineWallGraphRoomPathInput, 'nodes'> & {
+  paths: RoomDraftSplineNodeInput[][]
+}
+
 export function createEmptySplineWallGraph(): SplineWallGraph {
   return {
     nodes: {},
@@ -187,6 +191,82 @@ export function upsertSplineWallGraphRoomPath(
   }
 
   return nextGraph
+}
+
+export function upsertSplineWallGraphRoomPaths(
+  graph: SplineWallGraph,
+  input: UpsertSplineWallGraphRoomPathsInput,
+): SplineWallGraph {
+  const validPaths = input.paths.filter((nodes) => nodes.length >= 2)
+  if (validPaths.length === 0) {
+    return cloneSplineWallGraph(graph)
+  }
+
+  const nextGraph = cloneSplineWallGraph(graph)
+  Object.values(nextGraph.paths)
+    .filter((path) => path.roomId === input.roomId)
+    .forEach((path) => deleteSplineWallGraphPath(nextGraph, path.id))
+
+  validPaths.forEach((nodes, pathIndex) => {
+    insertSplineWallGraphRoomPath(nextGraph, {
+      ...input,
+      nodes,
+      pathIndex,
+    })
+  })
+
+  return nextGraph
+}
+
+function insertSplineWallGraphRoomPath(
+  graph: SplineWallGraph,
+  input: UpsertSplineWallGraphRoomPathInput & { pathIndex: number },
+) {
+  const pathId = `${input.roomId}:path:${input.pathIndex}`
+  const nodeIds = input.nodes.map((_, index) => `${pathId}:node:${index}`)
+  const closed = input.closed ?? true
+  const segmentCount = closed ? input.nodes.length : input.nodes.length - 1
+  const segmentIds = Array.from({ length: segmentCount }, (_, index) => `${pathId}:segment:${index}`)
+
+  input.nodes.forEach((node, index) => {
+    graph.nodes[nodeIds[index]!] = {
+      id: nodeIds[index]!,
+      position: [...node.position] as [number, number],
+      layerId: input.layerId,
+      roomId: input.roomId,
+      cornerMode: node.cornerMode,
+      cornerAmount: node.cornerAmount,
+    }
+  })
+
+  segmentIds.forEach((segmentId, index) => {
+    const startNodeId = nodeIds[index]!
+    const endNodeId = closed
+      ? nodeIds[(index + 1) % input.nodes.length]!
+      : nodeIds[index + 1]!
+
+    graph.segments[segmentId] = {
+      id: segmentId,
+      pathId,
+      startNodeId,
+      endNodeId,
+      layerId: input.layerId,
+      roomId: input.roomId,
+      wallKey: null,
+      wallHeight: null,
+      wallThickness: null,
+      cutouts: [],
+    }
+  })
+
+  graph.paths[pathId] = {
+    id: pathId,
+    layerId: input.layerId,
+    roomId: input.roomId,
+    closed,
+    nodeIds,
+    segmentIds,
+  }
 }
 
 export function pruneSplineWallGraphRooms(
