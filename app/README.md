@@ -39,11 +39,12 @@ This guided setup script:
 After setup, start the authenticated app stack with:
 
 ```bash
-pnpm run app:start
+pnpm app
 ```
 
-That boots the local Convex watcher and the authenticated Vite app together.
-The app prefers `http://localhost:4173` and will automatically move to the next free port if that one is already in use.
+That boots the local Convex watcher, the backend facade on `http://localhost:2567`,
+the authenticated Vite app, and the main editor together.
+The app prefers `http://localhost:4173`; the editor runs on `http://localhost:5173`, which is the local URL used by saved-dungeon launch buttons.
 
 ## Seed development accounts
 
@@ -53,19 +54,21 @@ To create ready-to-use local accounts for development:
 pnpm run app:seed
 ```
 
-This provisions three password accounts in the local Convex backend:
+This provisions three password accounts in the local Convex backend and imports the
+local Dragonbane Unbound rules pack into each dev workspace when
+`/Users/lejahmie/projects/dragonbane-unbound` is available:
 
 ```text
-admin@dungeonplanner.local  / DungeonPlanner123!
-dm@dungeonplanner.local     / DungeonPlanner123!
-player@dungeonplanner.local / DungeonPlanner123!
+admin@dungeonplanner.com  / password
+dm@dungeonplanner.com     / password
+player@dungeonplanner.com / password
 ```
 
 Role defaults:
 
-- `admin@dungeonplanner.local`: global `admin`, workspace `dm`, workspace `player`
-- `dm@dungeonplanner.local`: workspace `dm`, workspace `player`
-- `player@dungeonplanner.local`: workspace `player`
+- `admin@dungeonplanner.com`: global `admin`, workspace `dm`, workspace `player`
+- `dm@dungeonplanner.com`: workspace `dm`, workspace `player`
+- `player@dungeonplanner.com`: workspace `player`
 
 ## Manual setup
 
@@ -93,20 +96,23 @@ pnpm exec convex env set --from-file /tmp/dungeonplanner-convex-self-hosted.env 
 pnpm exec convex dev --once --typecheck disable
 ```
 
-Start the authenticated app:
+Start the backend facade and authenticated app:
 
 ```bash
+pnpm run server
 pnpm --filter dungeonplanner-app dev
 ```
 
-The app prefers `http://localhost:4173` and falls forward to the next free port when needed.
+The app prefers `http://localhost:4173`; the editor launched from saved dungeons expects the editor dev server on `http://localhost:5173`.
 
 ## Useful commands
 
 ```bash
 pnpm run app:setup
+pnpm app
 pnpm run app:start
 pnpm run app:seed
+pnpm run app:vite
 pnpm --filter dungeonplanner-app dev
 pnpm --filter dungeonplanner-app build
 pnpm --filter dungeonplanner-app lint

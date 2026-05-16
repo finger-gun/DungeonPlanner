@@ -71,7 +71,6 @@ export type PackDraftSource = {
 
 type AppShellState = {
   currentPath: string
-  isDevMenuVisible: boolean
 }
 
 type RoleManagerState = {
@@ -139,8 +138,6 @@ type AppStoreFields = {
 
 type AppStore = AppStoreFields & {
   setCurrentPath: (path: string) => void
-  setDevMenuVisible: (isVisible: boolean) => void
-  toggleDevMenuVisible: () => void
   setRoleManager: (patch: Partial<RoleManagerState>) => void
   setDungeonLibrary: (patch: Partial<DungeonLibraryState>) => void
   setSessionTools: (patch: Partial<SessionToolsState>) => void
@@ -232,7 +229,6 @@ function createInitialAppStoreFields(): AppStoreFields {
   return {
     shell: {
       currentPath: readHashPath(),
-      isDevMenuVisible: false,
     },
     roleManager: createInitialRoleManagerState(),
     dungeonLibrary: createInitialDungeonLibraryState(),
@@ -249,22 +245,6 @@ export const useAppStore = create<AppStore>((set) => ({
       shell: {
         ...state.shell,
         currentPath: path,
-      },
-    }))
-  },
-  setDevMenuVisible: (isVisible) => {
-    set((state) => ({
-      shell: {
-        ...state.shell,
-        isDevMenuVisible: isVisible,
-      },
-    }))
-  },
-  toggleDevMenuVisible: () => {
-    set((state) => ({
-      shell: {
-        ...state.shell,
-        isDevMenuVisible: !state.shell.isDevMenuVisible,
       },
     }))
   },
@@ -382,17 +362,13 @@ export const useAppStore = create<AppStore>((set) => ({
     })
   },
   resetWorkspaceState: () => {
-    set((state) => ({
-      shell: {
-        ...state.shell,
-        isDevMenuVisible: false,
-      },
+    set({
       roleManager: createInitialRoleManagerState(),
       dungeonLibrary: createInitialDungeonLibraryState(),
       sessionTools: createInitialSessionToolsState(),
       characterTools: createInitialCharacterToolsState(),
       packTools: createInitialPackToolsState(),
-    }))
+    })
   },
 }))
 
@@ -405,8 +381,6 @@ export function useAuthenticatedAppState() {
     characterTools: state.characterTools,
     packTools: state.packTools,
     setCurrentPath: state.setCurrentPath,
-    setDevMenuVisible: state.setDevMenuVisible,
-    toggleDevMenuVisible: state.toggleDevMenuVisible,
     setRoleManager: state.setRoleManager,
     setDungeonLibrary: state.setDungeonLibrary,
     setSessionTools: state.setSessionTools,

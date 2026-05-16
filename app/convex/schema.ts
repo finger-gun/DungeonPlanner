@@ -7,6 +7,7 @@ import {
   canonicalPackEntryValidator,
   packDefaultAssetRefsValidator,
   packKindValidator,
+  packSourceProvenanceValidator,
   packVisibilityValidator,
   roleValidator,
 } from './model'
@@ -137,6 +138,8 @@ export default defineSchema({
     manifestStorageId: v.optional(v.id('_storage')),
     thumbnailStorageId: v.optional(v.id('_storage')),
     defaultAssetRefs: v.optional(packDefaultAssetRefsValidator),
+    domains: v.optional(v.any()),
+    sourceProvenance: v.optional(packSourceProvenanceValidator),
     entries: v.array(canonicalPackEntryValidator),
     createdAt: v.number(),
     updatedAt: v.number(),

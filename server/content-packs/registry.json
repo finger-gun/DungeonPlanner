@@ -1,0 +1,26 @@
+{
+  "packs": [
+    {
+      "packId": "core",
+      "name": "Core Pack",
+      "system": "dragonbane",
+      "kind": "rules",
+      "version": "0.1.0",
+      "description": "Local dev core content pack",
+      "alwaysActive": true,
+      "bundled": true,
+      "path": "/api/content-packs/core.pack.json"
+    },
+    {
+      "packId": "monsterboken-kins",
+      "name": "Dragonbane Monsterboken Kins",
+      "system": "dragonbane",
+      "kind": "rules",
+      "version": "0.1.0",
+      "description": "Additional Monsterboken kins for player characters, NPCs, and monsters.",
+      "alwaysActive": false,
+      "bundled": true,
+      "path": "/api/content-packs/monsterboken-kins.pack.json"
+    }
+  ]
+}

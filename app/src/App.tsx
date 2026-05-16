@@ -1,5 +1,5 @@
 import './App.css'
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { api } from '../convex/_generated/api'
 import type { Id } from '../convex/_generated/dataModel'
 import { useAuthActions, useBackendAuthState } from './lib/backendAuth'
@@ -9,12 +9,16 @@ import { useViewerIdentity } from './lib/auth'
 import { type PlatformRole } from './lib/roles'
 import { buildEditorLaunchUrl, resolveEditorBaseUrl } from './lib/editorLaunch'
 import { useAuthenticatedAppState } from './store/useAppStore'
-import { ActorLibraryPanel } from './components/ActorLibraryPanel'
+import { DragonbaneCharacterCreator } from './components/DragonbaneCharacterCreator'
+import {
+  loadBundledPackManifest,
+  mergeRuntimeRulesPacks,
+  toWorkspaceRulesPackSaveInput,
+  useBundledDragonbanePacks,
+  type WorkspaceRulesPackRecord,
+} from './lib/dragonbanePacks'
 
-type WorkspacePage = 'overview' | 'library' | 'dev' | 'sessions' | 'characters' | 'admin-users' | 'admin-packs'
-type DevWorkspacePage = 'sessions' | 'characters' | 'admin-users' | 'admin-packs'
-
-const DEV_WORKSPACE_PAGES: readonly DevWorkspacePage[] = ['sessions', 'characters', 'admin-users', 'admin-packs']
+type WorkspacePage = 'overview' | 'library' | 'sessions' | 'characters' | 'admin-users' | 'admin-packs'
 const GENERATED_CHARACTER_PACK_INDEX_PATH = '/generated-character-packs/index.json'
 
 const GITHUB_ICON_PATH =
@@ -74,8 +78,6 @@ function getWorkspacePageFromPath(path: string): WorkspacePage | null {
       return 'overview'
     case '/app/library':
       return 'library'
-    case '/app/dev':
-      return 'dev'
     case '/app/sessions':
     case '/app/dev/sessions':
       return 'sessions'
@@ -91,10 +93,6 @@ function getWorkspacePageFromPath(path: string): WorkspacePage | null {
     default:
       return null
   }
-}
-
-function isDevWorkspacePage(page: WorkspacePage | null): page is DevWorkspacePage {
-  return page !== null && DEV_WORKSPACE_PAGES.includes(page as DevWorkspacePage)
 }
 
 function GitHubMark() {
@@ -277,6 +275,11 @@ function PasswordAuthCard() {
 
 function SignedInOverview({ identity }: { identity: ReturnType<typeof useViewerIdentity> }) {
   const { signOut } = useAuthActions()
+  const bundledPackState = useBundledDragonbanePacks()
+  const [remotePackUrl, setRemotePackUrl] = useState('')
+  const [remotePackError, setRemotePackError] = useState<string | null>(null)
+  const [remotePackNotice, setRemotePackNotice] = useState<string | null>(null)
+  const [isImportingRemotePack, setIsImportingRemotePack] = useState(false)
   const {
     shell,
     roleManager,
@@ -291,7 +294,6 @@ function SignedInOverview({ identity }: { identity: ReturnType<typeof useViewerI
     hydratePackDraft,
   } = useAuthenticatedAppState()
   const currentPath = shell.currentPath
-  const isDevMenuVisible = shell.isDevMenuVisible
   const canAccessDungeonLibrary = identity.access.canManageDungeons
   const workspaceMembers = useQuery(
     api.roles.listActiveWorkspaceUsers,
@@ -302,14 +304,10 @@ function SignedInOverview({ identity }: { identity: ReturnType<typeof useViewerI
     canAccessDungeonLibrary ? {} : 'skip',
   )
   const sessionRecords = useQuery(api.sessions.listViewerSessions, {})
-  const characterRecords = useQuery(
-    api.actors.listViewerActors,
-    identity.access.canUseCharacterLibrary ? {} : 'skip',
-  )
   const packRecords = useQuery(
     api.packs.listWorkspacePacks,
-    identity.access.canManagePacks ? {} : 'skip',
-  )
+    identity.access.canManagePacks || identity.access.canUseCharacterLibrary ? {} : 'skip',
+  ) as WorkspaceRulesPackRecord[] | undefined
   const grantRoleByEmail = useMutation(api.roles.grantRoleByEmail)
   const revokeRoleByEmail = useMutation(api.roles.revokeRoleByEmail)
   const issueEditorAccessToken = useMutation(api.dungeons.issueEditorAccessToken)
@@ -326,6 +324,16 @@ function SignedInOverview({ identity }: { identity: ReturnType<typeof useViewerI
   )
   const selectedSession = sessionRecords?.find((session) => session._id === sessionTools.selectedSessionId) ?? null
   const selectedPackRecord = packRecords?.find((pack) => pack._id === packTools.selectedPackRecordId) ?? null
+  const bundledPacks = bundledPackState.packs
+  const bundledRegistry = bundledPackState.registry
+  const installedPackById = useMemo(
+    () => new Map((packRecords ?? []).map((pack) => [pack.packId, pack])),
+    [packRecords],
+  )
+  const runtimeCharacterPacks = useMemo(
+    () => mergeRuntimeRulesPacks(bundledPackState.alwaysActivePacks, packRecords),
+    [bundledPackState.alwaysActivePacks, packRecords],
+  )
   const dungeonError = dungeonLibrary.error
   const dungeonNotice = dungeonLibrary.notice
   const roleEmail = roleManager.email
@@ -381,33 +389,29 @@ function SignedInOverview({ identity }: { identity: ReturnType<typeof useViewerI
   const setThumbnailFile = (nextThumbnailFile: File | null) => setPackTools({ thumbnailFile: nextThumbnailFile })
   const setPackDefaultRefsJson = (defaultRefsJsonDraft: string) => setPackTools({ defaultRefsJsonDraft })
   const setPackEntriesJson = (entriesJsonDraft: string) => setPackTools({ entriesJsonDraft })
-  const canAccessDevMenu = identity.access.isAdmin && isDevMenuVisible
   const editorBaseUrl = resolveEditorBaseUrl(window.location, import.meta.env.VITE_EDITOR_URL)
   const backendUrl = resolveBackendApiBaseUrl(window.location, import.meta.env.VITE_BACKEND_URL)
   const requestedPage = getWorkspacePageFromPath(currentPath)
   const workspaceNavItems = [
     { id: 'overview', label: 'Overview', href: '#/app' },
     canAccessDungeonLibrary && { id: 'library', label: 'Dungeon Library', href: '#/app/library' },
-    canAccessDevMenu && {
-      id: 'dev',
-      label: 'Dev',
-      href: '#/app/dev',
-    },
-  ].filter((item): item is { id: string; label: string; href: string } => Boolean(item))
-  const devNavItems = [
-    identity.access.canManageSessions && { id: 'sessions', label: 'Sessions', href: '#/app/dev/sessions' },
-    identity.access.canUseCharacterLibrary && { id: 'characters', label: 'Characters', href: '#/app/dev/characters' },
-    identity.access.canManageUsers && { id: 'admin-users', label: 'Users', href: '#/app/dev/users' },
-    identity.access.canManagePacks && { id: 'admin-packs', label: 'Packs', href: '#/app/dev/packs' },
-  ].filter((item): item is { id: DevWorkspacePage; label: string; href: string } => Boolean(item))
+    identity.access.canManageSessions && { id: 'sessions', label: 'Sessions', href: '#/app/sessions' },
+    identity.access.canUseCharacterLibrary && { id: 'characters', label: 'Characters', href: '#/app/characters' },
+    identity.access.canManageUsers && { id: 'admin-users', label: 'Users', href: '#/app/admin/users' },
+    identity.access.canManagePacks && { id: 'admin-packs', label: 'Packs', href: '#/app/admin/packs' },
+  ].filter((item): item is { id: WorkspacePage; label: string; href: string } => Boolean(item))
   const activePage: WorkspacePage =
     requestedPage === 'library' && canAccessDungeonLibrary
       ? 'library'
-      : requestedPage === 'dev' && canAccessDevMenu
-        ? 'dev'
-        : isDevWorkspacePage(requestedPage) && canAccessDevMenu && devNavItems.some((item) => item.id === requestedPage)
-          ? requestedPage
-          : 'overview'
+      : requestedPage === 'sessions' && identity.access.canManageSessions
+        ? 'sessions'
+        : requestedPage === 'characters' && identity.access.canUseCharacterLibrary
+          ? 'characters'
+          : requestedPage === 'admin-users' && identity.access.canManageUsers
+            ? 'admin-users'
+            : requestedPage === 'admin-packs' && identity.access.canManagePacks
+              ? 'admin-packs'
+              : 'overview'
 
   const pageIntro = {
     overview: {
@@ -420,30 +424,25 @@ function SignedInOverview({ identity }: { identity: ReturnType<typeof useViewerI
       title: 'Dungeon library',
       copy: 'Open your private dungeon maps in the editor, duplicate a draft, or remove the ones you no longer need.',
     },
-    dev: {
-      eyebrow: 'Debug',
-      title: 'Developer workspace',
-      copy: 'Open the internal app views for sessions, characters, user roles, and pack management.',
-    },
     sessions: {
-      eyebrow: 'Debug',
+      eyebrow: 'Sessions',
       title: 'Session tools',
-      copy: 'Use the current development session flows for creating tables, joining by code, and issuing server access tickets.',
+      copy: 'Create tables, join by code, and issue server access tickets.',
     },
     characters: {
-      eyebrow: 'Debug',
-      title: 'Character tools',
-      copy: 'Use the current development character flows for saved sheets and session attachments.',
+      eyebrow: 'Characters',
+      title: 'Character library',
+      copy: 'Create Dragonbane characters and manage saved standees for play.',
     },
     'admin-users': {
-      eyebrow: 'Debug',
+      eyebrow: 'Admin',
       title: 'User access tools',
-      copy: 'Grant or remove roles by email and inspect workspace membership from the current admin debug view.',
+      copy: 'Grant or remove roles by email and inspect workspace membership.',
     },
     'admin-packs': {
-      eyebrow: 'Debug',
+      eyebrow: 'Admin',
       title: 'Content pack tools',
-      copy: 'Use the internal pack registry view for uploads, visibility, and activation settings.',
+      copy: 'Manage pack uploads, visibility, and activation settings.',
     },
   } satisfies Record<WorkspacePage, { eyebrow: string; title: string; copy: string }>
 
@@ -678,6 +677,65 @@ function SignedInOverview({ identity }: { identity: ReturnType<typeof useViewerI
     return payload.storageId
   }
 
+  async function installRulesPack(packUrl: string, packRecordId?: Id<'packs'>) {
+    const manifest = await loadBundledPackManifest(packUrl)
+
+    return savePackRecord({
+      packRecordId,
+      ...toWorkspaceRulesPackSaveInput(manifest),
+    })
+  }
+
+  async function handleInstallBundledPack(packUrl: string, packId: string, name: string) {
+    setPackTools({ error: null, notice: null, isWorking: true })
+    setRemotePackError(null)
+    setRemotePackNotice(null)
+
+    try {
+      const existingPackRecord = installedPackById.get(packId)
+      await installRulesPack(packUrl, existingPackRecord?._id as Id<'packs'> | undefined)
+      setPackTools({ notice: existingPackRecord ? `Updated "${name}" from the bundled manifest.` : `Installed "${name}".` })
+    } catch (mutationError) {
+      console.error(mutationError)
+      setPackTools({ error: `Installing "${name}" failed.` })
+    }
+
+    setPackTools({ isWorking: false })
+  }
+
+  async function handleInstallRemotePack() {
+    const normalizedUrl = remotePackUrl.trim()
+
+    if (!normalizedUrl) {
+      setRemotePackError('Enter a pack manifest URL first.')
+      setRemotePackNotice(null)
+      return
+    }
+
+    setIsImportingRemotePack(true)
+    setRemotePackError(null)
+    setRemotePackNotice(null)
+    setPackTools({ error: null, notice: null })
+
+    try {
+      const manifest = await loadBundledPackManifest(normalizedUrl)
+      const existingPackRecord = installedPackById.get(manifest.packId)
+
+      await savePackRecord({
+        packRecordId: existingPackRecord?._id as Id<'packs'> | undefined,
+        ...toWorkspaceRulesPackSaveInput(manifest),
+      })
+
+      setRemotePackNotice(existingPackRecord ? `Updated "${manifest.name}" from ${normalizedUrl}.` : `Installed "${manifest.name}" from ${normalizedUrl}.`)
+      setRemotePackUrl('')
+    } catch (mutationError) {
+      console.error(mutationError)
+      setRemotePackError('Importing the remote pack failed. Make sure the URL returns a valid pack JSON document.')
+    }
+
+    setIsImportingRemotePack(false)
+  }
+
   async function handleSavePack() {
     const normalizedPackId = packTools.packIdDraft.trim()
     const normalizedName = packTools.nameDraft.trim()
@@ -798,6 +856,30 @@ function SignedInOverview({ identity }: { identity: ReturnType<typeof useViewerI
     setPackTools({ isWorking: false })
   }
 
+  async function handleToggleWorkspacePack(packRecordId: Id<'packs'>, nextIsActive: boolean, packName: string) {
+    setPackTools({
+      isWorking: true,
+      error: null,
+      notice: null,
+    })
+
+    try {
+      await setPackActive({
+        packRecordId,
+        isActive: nextIsActive,
+      })
+
+      setPackTools({
+        notice: `${nextIsActive ? 'Activated' : 'Deactivated'} "${packName}".`,
+      })
+    } catch (mutationError) {
+      console.error(mutationError)
+      setPackTools({ error: `Updating "${packName}" failed.` })
+    }
+
+    setPackTools({ isWorking: false })
+  }
+
   return (
     <>
       <section className="signed-in-card signed-in-card--overview" aria-labelledby="signed-in-title">
@@ -846,23 +928,6 @@ function SignedInOverview({ identity }: { identity: ReturnType<typeof useViewerI
         ))}
       </nav>
 
-      {canAccessDevMenu && (activePage === 'dev' || isDevWorkspacePage(activePage)) ? (
-        <nav className="workspace-nav workspace-nav--nested" aria-label="Dev pages">
-          <a className={`workspace-nav__link ${activePage === 'dev' ? 'workspace-nav__link--active' : ''}`} href="#/app/dev">
-            Dev Home
-          </a>
-          {devNavItems.map((item) => (
-            <a
-              className={`workspace-nav__link ${activePage === item.id ? 'workspace-nav__link--active' : ''}`}
-              href={item.href}
-              key={item.id}
-            >
-              {item.label}
-            </a>
-          ))}
-        </nav>
-      ) : null}
-
       {activePage === 'overview' ? (
         <section className="panels" aria-label="Workspace overview">
           {canAccessDungeonLibrary ? (
@@ -907,45 +972,6 @@ function SignedInOverview({ identity }: { identity: ReturnType<typeof useViewerI
       ) : null}
 
       <section className="panels" aria-label="Authenticated product modules">
-        {activePage === 'dev' ? (
-          <article className="panel panel--library">
-            <p className="panel__eyebrow">Development</p>
-            <h2 className="panel__title">Hidden development views</h2>
-            <p className="panel__copy">
-              These screens stay tucked behind the debug shortcut so the main product surface can stay focused on player-facing workflows.
-            </p>
-
-            <div className="panels">
-              {devNavItems.map((item) => (
-                <article className="status-card overview-card" key={item.id}>
-                  <p className="status-card__label">{item.label}</p>
-                  <p className="status-card__value">
-                    {item.id === 'sessions'
-                      ? `${sessionRecords?.length ?? 0} active`
-                      : item.id === 'characters'
-                        ? `${characterRecords?.length ?? 0} ready`
-                        : item.id === 'admin-users'
-                          ? `${workspaceMembers?.length ?? 0} visible`
-                          : `${packRecords?.length ?? 0} registered`}
-                  </p>
-                  <p className="status-card__copy">
-                    {item.id === 'sessions'
-                      ? 'Open the current session creation, join, and access-ticket view.'
-                      : item.id === 'characters'
-                        ? 'Open the current character library and session-attachment view.'
-                        : item.id === 'admin-users'
-                          ? 'Open the current role and workspace membership management view.'
-                          : 'Open the current pack upload and activation management view.'}
-                  </p>
-                  <a className="hero-panel__button hero-panel__button--secondary" href={item.href}>
-                    Open {item.label}
-                  </a>
-                </article>
-              ))}
-            </div>
-          </article>
-        ) : null}
-
         {activePage === 'library' && canAccessDungeonLibrary ? (
           <article className="panel panel--library">
             <p className="panel__eyebrow">Dungeon Library</p>
@@ -1181,7 +1207,7 @@ function SignedInOverview({ identity }: { identity: ReturnType<typeof useViewerI
         ) : null}
 
         {activePage === 'characters' && identity.access.canUseCharacterLibrary ? (
-          <ActorLibraryPanel />
+          <DragonbaneCharacterCreator packs={runtimeCharacterPacks} />
         ) : null}
 
         {activePage === 'admin-packs' && identity.access.canManagePacks ? (
@@ -1189,8 +1215,116 @@ function SignedInOverview({ identity }: { identity: ReturnType<typeof useViewerI
             <p className="panel__eyebrow">Admin</p>
             <h2 className="panel__title">Content packs</h2>
             <p className="panel__copy">
-              Keep your pack catalog organized, set defaults, and control what your group can use.
+              Bundled JSON packs ship with the backend and load from <code>/api/content-packs/</code>. Always-active packs are available to everyone, while optional packs can be installed per workspace.
             </p>
+
+            <div className="library-grid">
+              <section className="library-card">
+                <div className="library-card__header">
+                  <div>
+                    <p className="status-card__label">Bundled manifests</p>
+                    <h3 className="library-card__title">Static packs</h3>
+                  </div>
+                </div>
+
+                {bundledPackState.error ? <p className="auth-card__error">{bundledPackState.error}</p> : null}
+                {bundledPackState.isLoading ? <p className="panel__copy">Loading bundled packs...</p> : null}
+                {bundledRegistry && bundledRegistry.packs.length > 0 ? (
+                  <div className="library-records">
+                    {bundledRegistry.packs.map((registryEntry) => {
+                      const manifest = bundledPacks.find((pack) => pack.packId === registryEntry.packId)
+                      const installedPack = installedPackById.get(registryEntry.packId)
+
+                      return (
+                        <div className="library-record" key={registryEntry.packId}>
+                          <div>
+                            <p className="library-record__title">{registryEntry.name}</p>
+                            <p className="panel__copy">
+                              {registryEntry.packId} · {registryEntry.version} · {registryEntry.alwaysActive ? 'always active' : 'optional'}
+                            </p>
+                            <p className="library-record__meta">{registryEntry.path}</p>
+                          </div>
+                          <div className="library-card__actions">
+                            {registryEntry.alwaysActive ? (
+                              <button className="hero-panel__button hero-panel__button--secondary" disabled type="button">
+                                Always active
+                              </button>
+                            ) : installedPack ? (
+                              <>
+                                <button
+                                  className="hero-panel__button hero-panel__button--secondary"
+                                  disabled={isWorkingPacks}
+                                  onClick={() => void handleToggleWorkspacePack(installedPack._id as Id<'packs'>, !installedPack.isActive, installedPack.name)}
+                                  type="button"
+                                >
+                                  {installedPack.isActive ? 'Deactivate' : 'Activate'}
+                                </button>
+                                <button
+                                  className="hero-panel__button hero-panel__button--secondary"
+                                  disabled={isWorkingPacks}
+                                  onClick={() => void handleInstallBundledPack(registryEntry.path, registryEntry.packId, registryEntry.name)}
+                                  type="button"
+                                >
+                                  Refresh
+                                </button>
+                              </>
+                            ) : (
+                              <button
+                                className="hero-panel__button hero-panel__button--primary"
+                                disabled={isWorkingPacks || !manifest}
+                                onClick={() => void handleInstallBundledPack(registryEntry.path, registryEntry.packId, registryEntry.name)}
+                                type="button"
+                              >
+                                Install
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                ) : bundledPackState.isLoading ? null : (
+                  <p className="panel__copy">No bundled manifests were found.</p>
+                )}
+              </section>
+
+              <section className="library-card">
+                <div className="library-card__header">
+                  <div>
+                    <p className="status-card__label">Community import</p>
+                    <h3 className="library-card__title">Install from URL</h3>
+                  </div>
+                </div>
+
+                <label className="auth-card__field">
+                  <span>Manifest URL</span>
+                  <input
+                    onChange={(event) => setRemotePackUrl(event.target.value)}
+                    placeholder="https://example.com/my-pack.json"
+                    type="url"
+                    value={remotePackUrl}
+                  />
+                </label>
+
+                <p className="panel__copy">
+                  The URL must return a JSON rules pack manifest. GitHub raw URLs work fine as long as the file is publicly readable.
+                </p>
+
+                {remotePackError ? <p className="auth-card__error">{remotePackError}</p> : null}
+                {remotePackNotice ? <p className="library-notice">{remotePackNotice}</p> : null}
+
+                <div className="library-card__actions">
+                  <button
+                    className="hero-panel__button hero-panel__button--primary"
+                    disabled={isImportingRemotePack}
+                    onClick={() => void handleInstallRemotePack()}
+                    type="button"
+                  >
+                    {isImportingRemotePack ? 'Importing...' : 'Import pack'}
+                  </button>
+                </div>
+              </section>
+            </div>
 
             <div className="library-grid">
               <section className="library-card">
@@ -1478,9 +1612,8 @@ function SignedInOverview({ identity }: { identity: ReturnType<typeof useViewerI
 function App() {
   const { isAuthenticated, isLoading } = useBackendAuthState()
   const identity = useViewerIdentity()
-  const { shell, setCurrentPath, toggleDevMenuVisible, setDevMenuVisible, resetWorkspaceState } = useAuthenticatedAppState()
+  const { shell, setCurrentPath, resetWorkspaceState } = useAuthenticatedAppState()
   const currentPath = shell.currentPath
-  const isDevMenuVisible = shell.isDevMenuVisible
   const publicPath = currentPath === '/login' ? '/login' : '/'
 
   useEffect(() => {
@@ -1497,35 +1630,10 @@ function App() {
   }, [setCurrentPath])
 
   useEffect(() => {
-    if (!isAuthenticated || !identity.access.isAdmin) return
-
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.ctrlKey && event.shiftKey && event.key === 'F12') {
-        event.preventDefault()
-        toggleDevMenuVisible()
-      }
-    }
-
-    window.addEventListener('keydown', handleKeyDown)
-
-    return () => {
-      window.removeEventListener('keydown', handleKeyDown)
-    }
-  }, [identity.access.isAdmin, isAuthenticated, toggleDevMenuVisible])
-
-  useEffect(() => {
     if (!isAuthenticated) {
       resetWorkspaceState()
     }
   }, [isAuthenticated, resetWorkspaceState])
-
-  useEffect(() => {
-    if (!identity.access.isAdmin && isDevMenuVisible) {
-      setDevMenuVisible(false)
-    }
-  }, [identity.access.isAdmin, isDevMenuVisible, setDevMenuVisible])
-
-  const showDevHeaderLink = isAuthenticated && identity.access.isAdmin && isDevMenuVisible
 
   return (
     <div className="app-shell">
@@ -1546,19 +1654,11 @@ function App() {
               <GitHubMark />
               GitHub
             </a>
-            {showDevHeaderLink ? (
-              <a
-                className={currentPath.startsWith('/app/dev') ? 'header-nav__link--active' : undefined}
-                href="#/app/dev"
-              >
-                Dev
-              </a>
-            ) : null}
             <a
               className={
                 !isAuthenticated && publicPath === '/login'
                   ? 'header-nav__link--active'
-                  : isAuthenticated && currentPath.startsWith('/app') && !currentPath.startsWith('/app/dev')
+                  : isAuthenticated && currentPath.startsWith('/app')
                     ? 'header-nav__link--active'
                     : undefined
               }

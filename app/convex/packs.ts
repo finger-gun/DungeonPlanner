@@ -1,10 +1,15 @@
 import { ConvexError, v } from 'convex/values'
+import {
+  validateDragonbaneRulesPackDomains,
+  validateDragonbaneSourceProvenance,
+} from '@dungeonplanner/shared/dragonbane/validation'
 import type { Doc } from './_generated/dataModel'
 import { mutation, query, type QueryCtx } from './_generated/server'
 import {
   canonicalPackEntryValidator,
   packDefaultAssetRefsValidator,
   packKindValidator,
+  packSourceProvenanceValidator,
   packVisibilityValidator,
 } from './model'
 import { sessionPackIsVisible } from './accessPolicies'
@@ -84,6 +89,8 @@ async function mapPackRecord(
     manifestUrl,
     thumbnailUrl,
     defaultAssetRefs: pack.defaultAssetRefs ?? null,
+    domains: pack.domains ?? null,
+    sourceProvenance: pack.sourceProvenance ?? null,
     entries: pack.entries,
     createdAt: pack.createdAt,
     updatedAt: pack.updatedAt,
@@ -160,6 +167,8 @@ export const savePackRecord = mutation({
     manifestStorageId: v.optional(v.id('_storage')),
     thumbnailStorageId: v.optional(v.id('_storage')),
     defaultAssetRefs: v.optional(packDefaultAssetRefsValidator),
+    domains: v.optional(v.any()),
+    sourceProvenance: v.optional(packSourceProvenanceValidator),
     entries: v.array(canonicalPackEntryValidator),
   },
   handler: async (ctx, args) => {
@@ -173,7 +182,17 @@ export const savePackRecord = mutation({
     }
 
     const entries = args.entries.map((entry) => normalizePackEntry(packId, entry))
-    const defaultAssetRefs = normalizeDefaultAssetRefs(packId, args.defaultAssetRefs)
+    const defaultAssetRefs = args.kind === 'asset' ? normalizeDefaultAssetRefs(packId, args.defaultAssetRefs) : undefined
+    const domains = args.kind === 'rules' ? validateDragonbaneRulesPackDomains(packId, args.domains) : undefined
+    const sourceProvenance =
+      args.kind === 'rules' && args.sourceProvenance
+        ? validateDragonbaneSourceProvenance(args.sourceProvenance)
+        : undefined
+
+    if (args.kind === 'rules' && (!domains || !sourceProvenance)) {
+      throw new ConvexError(INVALID_REQUEST)
+    }
+
     const isActive = args.visibility === 'global' ? true : args.isActive
     const description = args.description?.trim() || undefined
     const now = Date.now()
@@ -205,6 +224,8 @@ export const savePackRecord = mutation({
         manifestStorageId: args.manifestStorageId ?? packRecord.manifestStorageId,
         thumbnailStorageId: args.thumbnailStorageId ?? packRecord.thumbnailStorageId,
         defaultAssetRefs,
+        domains,
+        sourceProvenance,
         entries,
         updatedAt: now,
       })
@@ -225,6 +246,8 @@ export const savePackRecord = mutation({
       manifestStorageId: args.manifestStorageId,
       thumbnailStorageId: args.thumbnailStorageId,
       defaultAssetRefs,
+      domains,
+      sourceProvenance,
       entries,
       createdAt: now,
       updatedAt: now,

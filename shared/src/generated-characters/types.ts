@@ -16,6 +16,17 @@ export type GeneratedCharacterRecord = {
   thumbnailUrl: string | null
   width: number | null
   height: number | null
+  dragonbaneSummary?: {
+    system: 'dragonbane'
+    name: string
+    movement: number
+    hp: { current: number; max: number }
+    wp: { current: number; max: number }
+    conditions: Array<{ id: string; checked: boolean }>
+    weapons: Array<{ ref: string; name: string; damage?: string }>
+    armor: Array<{ ref: string; name: string; rating: number }>
+    carryingLoad: { carried: number; capacity: number }
+  } | null
   packId: string | null
   packName: string | null
   packDescription: string | null
@@ -139,6 +150,7 @@ export function normalizeGeneratedCharacterRecord(
       : null,
     width: typeof input.width === 'number' && input.width > 0 ? input.width : null,
     height: typeof input.height === 'number' && input.height > 0 ? input.height : null,
+    dragonbaneSummary: input.dragonbaneSummary ?? null,
     packId: typeof input.packId === 'string' && input.packId.trim() ? input.packId : null,
     packName: typeof input.packName === 'string' && input.packName.trim() ? input.packName : null,
     packDescription: typeof input.packDescription === 'string' && input.packDescription.trim()

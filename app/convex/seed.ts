@@ -1,8 +1,13 @@
 import { createAccount, modifyAccountCredentials, retrieveAccount } from '@convex-dev/auth/server'
+import { v } from 'convex/values'
 import { action } from './_generated/server'
 import type { ActionCtx } from './_generated/server'
 import { makeFunctionReference, type FunctionReference } from 'convex/server'
 import { devSeedAccounts, type DevSeedAccount } from './devSeedAccounts'
+import {
+  canonicalPackEntryValidator,
+  packSourceProvenanceValidator,
+} from './model'
 
 type ApplySeedAccountStateArgs = {
   userId: string
@@ -26,6 +31,35 @@ const applySeedAccountState = makeFunctionReference<
   'internal',
   ApplySeedAccountStateArgs,
   ApplySeedAccountStateResult
+>
+
+type SeedDragonbaneRulesPackArgs = {
+  accountEmails: string[]
+  pack: {
+    packId: string
+    name: string
+    system: 'dragonbane'
+    version: string
+    visibility: 'global' | 'public' | 'private'
+    description?: string
+    isActive: boolean
+    alwaysActive: boolean
+    bundled: boolean
+    entries: unknown[]
+    domains: unknown
+    sourceProvenance: unknown
+  }
+}
+
+const upsertSeedDragonbaneRulesPack = makeFunctionReference<
+  'mutation',
+  SeedDragonbaneRulesPackArgs,
+  { seeded: Array<{ email: string; packId: string; workspaceId: string }> }
+>('seedState:upsertSeedDragonbaneRulesPack') as unknown as FunctionReference<
+  'mutation',
+  'internal',
+  SeedDragonbaneRulesPackArgs,
+  { seeded: Array<{ email: string; packId: string; workspaceId: string }> }
 >
 
 async function ensurePasswordUser(
@@ -110,5 +144,30 @@ export const seedDevAccounts = action({
     return {
       seeded: results,
     }
+  },
+})
+
+export const seedDevDragonbaneRulesPack = action({
+  args: {
+    pack: v.object({
+      packId: v.string(),
+      name: v.string(),
+      system: v.literal('dragonbane'),
+      version: v.string(),
+      visibility: v.union(v.literal('global'), v.literal('public'), v.literal('private')),
+      description: v.optional(v.string()),
+      isActive: v.boolean(),
+      alwaysActive: v.boolean(),
+      bundled: v.boolean(),
+      entries: v.array(canonicalPackEntryValidator),
+      domains: v.any(),
+      sourceProvenance: packSourceProvenanceValidator,
+    }),
+  },
+  handler: async (ctx, args) => {
+    return ctx.runMutation(upsertSeedDragonbaneRulesPack, {
+      accountEmails: devSeedAccounts.map((account) => account.email),
+      pack: args.pack,
+    })
   },
 })

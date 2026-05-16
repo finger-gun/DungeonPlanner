@@ -965,6 +965,7 @@ function mapEditorActorToGeneratedCharacter(actor: EditorActorRecord): Generated
     thumbnailUrl: actor.thumbnailUrl,
     width: actor.width,
     height: actor.height,
+    dragonbaneSummary: actor.dragonbaneSummary,
     packId: null,
     packName: null,
     packDescription: null,

@@ -2,6 +2,200 @@
 
 Content packs are the asset system — the way tiles, props, and openings are defined, bundled, and made available to the editor. This page explains how the system works and how to add new assets.
 
+The authenticated app now also uses **JSON-based rules packs** for Dragonbane content such as kins, professions, skills, and rules. Bundled packs live in `server/content-packs/`, ship with the backend, and are served by backend routes. External packs can also be imported from public URLs by workspace admins.
+
+---
+
+## JSON rules packs for the authenticated app
+
+Bundled rules packs are plain JSON files stored in the backend package:
+
+```text
+server/content-packs/
+  registry.json
+  core.pack.json
+  monsterboken-kins.pack.json
+```
+
+`registry.json` lists every bundled pack the app knows about:
+
+```json
+{
+  "packs": [
+    {
+      "packId": "core",
+      "name": "Core Pack",
+      "system": "dragonbane",
+      "kind": "rules",
+      "version": "0.1.0",
+      "alwaysActive": true,
+      "bundled": true,
+      "path": "/api/content-packs/core.pack.json"
+    }
+  ]
+}
+```
+
+### Pack manifest shape
+
+Each rules pack file is a self-contained JSON manifest:
+
+```json
+{
+  "packId": "monsterboken-kins",
+  "name": "Dragonbane Monsterboken Kins",
+  "system": "dragonbane",
+  "kind": "rules",
+  "version": "0.1.0",
+  "visibility": "private",
+  "description": "Additional Monsterboken kins.",
+  "isActive": true,
+  "alwaysActive": false,
+  "bundled": true,
+  "entries": [],
+  "domains": {
+    "dragonbane": {
+      "schemaVersion": 1,
+      "kins": [],
+      "professions": [],
+      "skills": [],
+      "rules": {
+        "characterCreation": {}
+      },
+      "equipment": {
+        "weapons": [],
+        "armor": []
+      }
+    }
+  },
+  "sourceProvenance": {
+    "sourceRepository": "...",
+    "sourcePath": "...",
+    "packVersion": "0.1.0",
+    "importedAt": "2026-05-16T00:00:00.000Z",
+    "importer": "dragonbane-unbound"
+  }
+}
+```
+
+### Important fields
+
+| Field | Meaning |
+|-----|-----|
+| `packId` | Stable unique ID. This becomes part of all content refs (`core:kin.human`). |
+| `system` | Currently `dragonbane`. |
+| `kind` | Currently `rules`. |
+| `alwaysActive` | If `true`, the frontend loads the pack for everyone automatically. |
+| `bundled` | `true` for packs shipped in this repo under `server/content-packs/`. |
+| `entries` | Canonical metadata for pack-managed refs. |
+| `domains.dragonbane` | The actual game data: kins, professions, skills, rules, weapons, armor. |
+
+### Playable vs NPC-only kins
+
+Kins carry:
+
+```json
+{
+  "id": "orc",
+  "name": "Orc",
+  "playableByPlayers": true
+}
+```
+
+The character creator uses this to show:
+
+- all kins for NPC creation
+- only `playableByPlayers: true` kins for player characters
+
+### Bundled pack loading
+
+At runtime the app:
+
+1. fetches `/api/content-packs/registry.json` from the backend
+2. fetches each listed pack manifest
+3. auto-enables packs where `alwaysActive === true`
+4. merges those with workspace-installed packs stored in Convex
+
+This means adding or updating a bundled JSON pack does **not** require a frontend rebuild.
+
+### Installing packs in the app
+
+Workspace admins can:
+
+1. open **Packs**
+2. install an optional bundled pack from the bundled pack list
+3. import a community pack by pasting a URL to a JSON manifest
+4. activate/deactivate installed workspace packs
+
+Always-active bundled packs do not need installation.
+
+### Creating your own community pack
+
+1. Start from an existing bundled JSON pack in `server/content-packs/`.
+2. Copy it to a new file and give it a unique `packId`.
+3. Keep `system: "dragonbane"` and `kind: "rules"`.
+4. Fill in `entries`, `domains`, and `sourceProvenance`.
+5. Host the JSON somewhere public, for example:
+   - GitHub raw URL
+   - a docs/static site
+   - S3 / Cloudflare R2 / similar object storage
+6. In the app, go to **Packs** and paste the URL into **Install from URL**.
+
+### Refreshing bundled packs from Dragonbane Unbound
+
+The repo includes a refresh script:
+
+```bash
+pnpm run app:content-packs:refresh
+```
+
+That script reads the sibling `dragonbane-unbound` project and rewrites:
+
+- `server/content-packs/registry.json`
+- `server/content-packs/core.pack.json`
+- `server/content-packs/monsterboken-kins.pack.json`
+
+### Current bundled Dragonbane packs
+
+| Pack | Purpose | Default |
+|-----|-----|-----|
+| `core` | Core Dragonbane rules, professions, skills, equipment, and the 6 base kins | Always active |
+| `monsterboken-kins` | Additional Monsterboken kins | Optional install |
+
+### Corebook source coverage
+
+The bundled `core` pack is generated from Dragonbane Unbound reference data and now includes:
+
+- `corebook-kins.json`
+- `corebook-professions.json`
+- `corebook-skills.json`
+- `corebook-rules.json`
+- `corebook-equipment.json`
+- `corebook-appearance.json`
+- `corebook-heroic-abilities.json`
+- `corebook-magic.json`
+- `corebook-weaknesses.json`
+
+That means the static core rules pack includes:
+
+- kins
+- professions
+- skills
+- character creation rules
+- weapons and armor
+- appearance options
+- mementos
+- weaknesses
+- heroic abilities
+- magic schools, cantrips, and spells
+
+Some expansion reference files still exist separately and should become their own packs over time, for example:
+
+- `drakborgen-kins.json`
+- `drakborgen-heroic-abilities.json`
+- `brandajorden-professions.json`
+- `brandajorden-magic.json`
+
 ---
 
 ## Core concepts
