@@ -586,7 +586,7 @@ describe('authenticated app shell', () => {
     expect(screen.getByRole('link', { name: 'Packs' })).toBeTruthy()
   })
 
-  it('saves rules packs with domains and source provenance from the metadata editor', async () => {
+  it('lets admins activate or deactivate installed packs without editing pack JSON', async () => {
     const user = userEvent.setup()
     window.location.hash = '#/app/admin/packs'
     mock.authState.isAuthenticated = true
@@ -610,26 +610,24 @@ describe('authenticated app shell', () => {
       'packs.listWorkspacePacks': [dragonbaneRulesPack],
       'roles.listActiveWorkspaceUsers': [],
     }
-    mock.mutations['packs.savePackRecord'].mockResolvedValue('pack-1')
+    mock.mutations['packs.setPackActive'].mockResolvedValue('pack-1')
 
     render(<App />)
 
-    await user.click(screen.getByRole('button', { name: /Core Pack/ }))
-    expect(screen.getByText('Dragonbane domains JSON')).toBeTruthy()
-    expect(screen.getByText('Source provenance JSON')).toBeTruthy()
+    expect(screen.getByText('Core Pack')).toBeTruthy()
+    expect(screen.queryByText('Dragonbane domains JSON')).toBeNull()
+    expect(screen.queryByText('Source provenance JSON')).toBeNull()
 
-    await user.click(screen.getAllByRole('button', { name: 'Update pack' })[0])
+    await user.click(screen.getByRole('button', { name: 'Deactivate' }))
 
     await waitFor(() =>
-      expect(mock.mutations['packs.savePackRecord']).toHaveBeenCalledWith(
+      expect(mock.mutations['packs.setPackActive']).toHaveBeenCalledWith(
         expect.objectContaining({
           packRecordId: 'pack-1',
-          kind: 'rules',
-          domains: dragonbaneRulesPack.domains,
-          sourceProvenance: dragonbaneRulesPack.sourceProvenance,
-          defaultAssetRefs: undefined,
+          isActive: false,
         }),
       ),
     )
+    expect(mock.mutations['packs.savePackRecord']).not.toHaveBeenCalled()
   })
 })

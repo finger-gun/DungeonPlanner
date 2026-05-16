@@ -4,75 +4,8 @@ import type { Id } from '../../convex/_generated/dataModel'
 import type { PlatformRole } from '../lib/roles'
 
 const DEFAULT_CHARACTER_SHEET = '{\n  "notes": ""\n}'
-const DEFAULT_PACK_ENTRIES_JSON = `[
-  {
-    "localId": "wall_window_open",
-    "name": "Window Opening",
-    "entryKind": "scene-asset",
-    "category": "opening",
-    "assetFileRef": "assets/models/dungeon/wall_window_open.glb",
-    "thumbnailFileRef": "assets/models/dungeon/wall_window_open.png",
-    "placement": {
-      "category": "opening",
-      "snapsTo": "GRID",
-      "connectors": [{ "point": [0, 0, 0], "type": "WALL" }],
-      "openingWidth": 1
-    },
-    "browser": {
-      "category": "openings",
-      "subcategory": "doors",
-      "tags": ["wall-mounted"]
-    }
-  }
-]`
-const DEFAULT_PACK_DEFAULT_REFS_JSON = `{
-  "floor": "dungeon:floor_flagstone",
-  "wall": "dungeon:wall_plain"
-}`
-const DEFAULT_PACK_DOMAINS_JSON = `{
-  "dragonbane": {
-    "schemaVersion": 1,
-    "kins": [],
-    "professions": [],
-    "skills": [],
-    "rules": {
-      "characterCreation": {
-        "ref": "core:rule.character-creation",
-        "id": "character-creation",
-        "ageSkillSlots": {
-          "Young": { "total": 0, "fromProfession": 0, "freeChoice": 0 },
-          "Middle-Aged": { "total": 0, "fromProfession": 0, "freeChoice": 0 },
-          "Old": { "total": 0, "fromProfession": 0, "freeChoice": 0 }
-        },
-        "damageBonusRanges": {},
-        "movementAgilityModifiers": []
-      },
-      "appearanceOptions": [],
-      "mementoOptions": [],
-      "weaknesses": [],
-      "heroicAbilities": [],
-      "magic": {
-        "rules": { "schools": [] },
-        "schools": []
-      }
-    },
-    "equipment": {
-      "weapons": [],
-      "armor": []
-    }
-  }
-}`
-const DEFAULT_PACK_SOURCE_PROVENANCE_JSON = `{
-  "sourceRepository": "manual",
-  "sourcePath": ".",
-  "packVersion": "0.1.0",
-  "importedAt": "2026-05-16T00:00:00.000Z",
-  "importer": "dragonbane-unbound"
-}`
 
 type RoleScope = 'workspace' | 'global'
-type PackKind = 'asset' | 'rules'
-type PackVisibility = 'global' | 'public' | 'private'
 
 export type SessionAccessPayload = {
   roomName: string
@@ -86,29 +19,6 @@ export type CharacterDraftSource = {
   name: string
   contentRef?: string | null
   sheet: unknown
-}
-
-export type PackDraftSource = {
-  _id: Id<'packs'>
-  packId: string
-  name: string
-  kind: PackKind
-  version: string
-  visibility: PackVisibility
-  isActive: boolean
-  description?: string | null
-  entries: unknown[]
-  defaultAssetRefs?: {
-    floor?: string
-    wall?: string
-    opening?: string
-    prop?: string
-    player?: string
-  } | null
-  domains?: unknown
-  sourceProvenance?: unknown
-  manifestStorageId?: Id<'_storage'> | null
-  thumbnailStorageId?: Id<'_storage'> | null
 }
 
 type AppShellState = {
@@ -150,22 +60,6 @@ type CharacterToolsState = {
 }
 
 type PackToolsState = {
-  selectedPackRecordId: Id<'packs'> | null
-  packIdDraft: string
-  nameDraft: string
-  kindDraft: PackKind
-  versionDraft: string
-  visibilityDraft: PackVisibility
-  isActiveDraft: boolean
-  descriptionDraft: string
-  entriesJsonDraft: string
-  defaultRefsJsonDraft: string
-  domainsJsonDraft: string
-  sourceProvenanceJsonDraft: string
-  manifestFile: File | null
-  thumbnailFile: File | null
-  manifestStorageId: Id<'_storage'> | null
-  thumbnailStorageId: Id<'_storage'> | null
   notice: string | null
   error: string | null
   isWorking: boolean
@@ -191,8 +85,6 @@ type AppStore = AppStoreFields & {
   selectCharacter: (characterId: Id<'characters'>, name: string) => void
   loadCharacterDraft: (character: CharacterDraftSource) => void
   setPackTools: (patch: Partial<PackToolsState>) => void
-  startNewPackDraft: () => void
-  hydratePackDraft: (record: PackDraftSource) => void
   resetWorkspaceState: () => void
 }
 
@@ -249,22 +141,6 @@ function createInitialCharacterToolsState(): CharacterToolsState {
 
 function createInitialPackToolsState(): PackToolsState {
   return {
-    selectedPackRecordId: null,
-    packIdDraft: '',
-    nameDraft: '',
-    kindDraft: 'asset',
-    versionDraft: '0.1.0',
-    visibilityDraft: 'public',
-    isActiveDraft: true,
-    descriptionDraft: '',
-    entriesJsonDraft: DEFAULT_PACK_ENTRIES_JSON,
-    defaultRefsJsonDraft: DEFAULT_PACK_DEFAULT_REFS_JSON,
-    domainsJsonDraft: DEFAULT_PACK_DOMAINS_JSON,
-    sourceProvenanceJsonDraft: DEFAULT_PACK_SOURCE_PROVENANCE_JSON,
-    manifestFile: null,
-    thumbnailFile: null,
-    manifestStorageId: null,
-    thumbnailStorageId: null,
     notice: null,
     error: null,
     isWorking: false,
@@ -376,39 +252,6 @@ export const useAppStore = create<AppStore>((set) => ({
       },
     }))
   },
-  startNewPackDraft: () => {
-    set({
-      packTools: {
-        ...createInitialPackToolsState(),
-        notice: 'Started a fresh pack draft.',
-      },
-    })
-  },
-  hydratePackDraft: (record) => {
-    set({
-      packTools: {
-        selectedPackRecordId: record._id,
-        packIdDraft: record.packId,
-        nameDraft: record.name,
-        kindDraft: record.kind,
-        versionDraft: record.version,
-        visibilityDraft: record.visibility,
-        isActiveDraft: record.isActive,
-        descriptionDraft: record.description ?? '',
-        entriesJsonDraft: JSON.stringify(record.entries, null, 2),
-        defaultRefsJsonDraft: JSON.stringify(record.defaultAssetRefs ?? {}, null, 2),
-        domainsJsonDraft: JSON.stringify(record.domains ?? {}, null, 2),
-        sourceProvenanceJsonDraft: JSON.stringify(record.sourceProvenance ?? {}, null, 2),
-        manifestFile: null,
-        thumbnailFile: null,
-        manifestStorageId: record.manifestStorageId ?? null,
-        thumbnailStorageId: record.thumbnailStorageId ?? null,
-        notice: `Loaded "${record.name}" into the pack draft.`,
-        error: null,
-        isWorking: false,
-      },
-    })
-  },
   resetWorkspaceState: () => {
     set({
       roleManager: createInitialRoleManagerState(),
@@ -438,8 +281,6 @@ export function useAuthenticatedAppState() {
     selectCharacter: state.selectCharacter,
     loadCharacterDraft: state.loadCharacterDraft,
     setPackTools: state.setPackTools,
-    startNewPackDraft: state.startNewPackDraft,
-    hydratePackDraft: state.hydratePackDraft,
     resetWorkspaceState: state.resetWorkspaceState,
   })))
 }
