@@ -112,6 +112,7 @@ const APP_MUTATION_ROUTES = [
   { method: 'post', path: '/api/app/roles/revoke', convexFunction: 'roles:revokeRoleByEmail' },
   { method: 'post', path: '/api/app/editor-access-token', convexFunction: 'dungeons:issueEditorAccessToken' },
   { method: 'post', path: '/api/app/dungeons/copy', convexFunction: 'dungeons:copyViewerDungeon' },
+  { method: 'post', path: '/api/app/dungeons/share', convexFunction: 'dungeons:copySharedDungeon' },
   { method: 'post', path: '/api/app/dungeons/delete', convexFunction: 'dungeons:deleteViewerDungeon' },
   { method: 'post', path: '/api/app/sessions/create', convexFunction: 'sessions:createSession' },
   { method: 'post', path: '/api/app/sessions/join', convexFunction: 'sessions:joinSessionByCode' },

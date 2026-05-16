@@ -29,6 +29,7 @@ const mock = vi.hoisted(() => ({
       'roles.revokeRoleByEmail': vi.fn(),
       'dungeons.issueEditorAccessToken': vi.fn(),
       'dungeons.copyViewerDungeon': vi.fn(),
+      'dungeons.copySharedDungeon': vi.fn(),
       'dungeons.deleteViewerDungeon': vi.fn(),
       'dungeons.saveDungeon': vi.fn(),
     'sessions.createSession': vi.fn(),
@@ -203,6 +204,7 @@ vi.mock('../convex/_generated/api', () => ({
       getViewerDungeon: 'dungeons.getViewerDungeon',
       issueEditorAccessToken: 'dungeons.issueEditorAccessToken',
       copyViewerDungeon: 'dungeons.copyViewerDungeon',
+      copySharedDungeon: 'dungeons.copySharedDungeon',
       deleteViewerDungeon: 'dungeons.deleteViewerDungeon',
       saveDungeon: 'dungeons.saveDungeon',
     },
@@ -337,7 +339,7 @@ describe('authenticated app shell', () => {
 
     render(<App />)
 
-    expect(screen.getByRole('button', { name: 'New in editor' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'New map' })).toBeTruthy()
     expect(screen.queryByRole('button', { name: 'Open selected in editor' })).toBeNull()
     expect(screen.queryByText('Import dungeon file')).toBeNull()
     expect(screen.queryByLabelText('Portable dungeon JSON')).toBeNull()
@@ -373,7 +375,7 @@ describe('authenticated app shell', () => {
 
     render(<App />)
 
-    await user.click(screen.getByRole('button', { name: 'New in editor' }))
+    await user.click(screen.getByRole('button', { name: 'New map' }))
 
     await waitFor(() =>
       expect(mock.mutations['dungeons.issueEditorAccessToken']).toHaveBeenCalledWith({}),
@@ -412,7 +414,7 @@ describe('authenticated app shell', () => {
     expect(within(mainNav).queryByRole('link', { name: 'Dev' })).toBeNull()
     expect(screen.queryByRole('navigation', { name: 'Dev pages' })).toBeNull()
     expect(screen.getByRole('link', { name: 'Users' })).toBeTruthy()
-    expect(screen.getByRole('heading', { name: 'User access tools' })).toBeTruthy()
+    expect(screen.getByRole('heading', { name: 'User access' })).toBeTruthy()
     expect(screen.getByRole('link', { name: 'Packs' })).toBeTruthy()
   })
 
@@ -493,8 +495,13 @@ describe('authenticated app shell', () => {
     expect(openSpy.mock.calls[0]?.[0]).toContain('appEditorToken=token-123')
   })
 
-  it('copies and deletes dungeons from their library cards', async () => {
+  it('searches, copies share links, copies, and deletes dungeons from their library cards', async () => {
     const user = userEvent.setup()
+    const writeText = vi.fn().mockResolvedValue(undefined)
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText },
+    })
     window.location.hash = '#/app/library'
     mock.authState.isAuthenticated = true
     mock.viewerIdentity = {
@@ -515,7 +522,7 @@ describe('authenticated app shell', () => {
         {
           _id: 'dungeon-1',
           title: 'Archived Keep',
-          description: 'Basement layout',
+          description: 'Basement layout #keep',
           createdAt: 1,
           updatedAt: 2,
         },
@@ -535,6 +542,16 @@ describe('authenticated app shell', () => {
 
     render(<App />)
 
+    expect(screen.getAllByRole('button', { name: '#keep' }).length).toBeGreaterThan(0)
+
+    await user.type(screen.getByLabelText('Search library'), 'missing')
+    expect(screen.getByText('No maps match the current search.')).toBeTruthy()
+    await user.clear(screen.getByLabelText('Search library'))
+
+    await user.click(screen.getByRole('button', { name: 'Share link' }))
+    await waitFor(() => expect(writeText).toHaveBeenCalledTimes(1))
+    expect(writeText.mock.calls[0]?.[0]).toContain('#/app/library/share/dungeon-1')
+
     await user.click(screen.getByRole('button', { name: 'Copy' }))
     await waitFor(() =>
       expect(mock.mutations['dungeons.copyViewerDungeon']).toHaveBeenCalledWith({
@@ -549,6 +566,49 @@ describe('authenticated app shell', () => {
         dungeonId: 'dungeon-1',
       }),
     )
+  })
+
+  it('imports a shared dungeon link as a private copy', async () => {
+    window.location.hash = '#/app/library/share/dungeon-1'
+    mock.authState.isAuthenticated = true
+    mock.viewerIdentity = {
+      viewer: { name: 'Player Builder', email: 'player@example.com' },
+      workspace: { name: 'Player Workspace' },
+      roles: ['player'],
+      access: {
+        isAdmin: false,
+        canManageUsers: false,
+        canManagePacks: false,
+        canManageDungeons: true,
+        canManageSessions: false,
+        canUseCharacterLibrary: true,
+      },
+    }
+    mock.queries = {
+      'dungeons.listViewerDungeons': [],
+      'sessions.listViewerSessions': [],
+      'characters.listViewerCharacters': [],
+    }
+    mock.mutations['dungeons.copySharedDungeon'].mockResolvedValue({
+      copied: true,
+      dungeon: {
+        _id: 'dungeon-2',
+        title: 'Archived Keep (Shared)',
+        description: 'Basement layout',
+        createdAt: 3,
+        updatedAt: 3,
+      },
+    })
+
+    render(<App />)
+
+    await waitFor(() =>
+      expect(mock.mutations['dungeons.copySharedDungeon']).toHaveBeenCalledWith({
+        dungeonId: 'dungeon-1',
+      }),
+    )
+    await waitFor(() => expect(window.location.hash).toBe('#/app/library'))
+    expect(screen.getByText('Added "Archived Keep (Shared)" to your library.')).toBeTruthy()
   })
 
   it('shows dedicated admin user management pages for administrators', async () => {
@@ -578,7 +638,7 @@ describe('authenticated app shell', () => {
     render(<App />)
 
     const mainNav = screen.getByRole('navigation', { name: 'Main navigation' })
-    expect(screen.getByRole('heading', { name: 'User access tools' })).toBeTruthy()
+    expect(screen.getByRole('heading', { name: 'User access' })).toBeTruthy()
     expect(screen.getByLabelText('User email')).toBeTruthy()
     expect(within(mainNav).queryByRole('link', { name: 'Dev' })).toBeNull()
     expect(screen.queryByRole('navigation', { name: 'Dev pages' })).toBeNull()

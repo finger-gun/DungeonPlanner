@@ -40,6 +40,7 @@ const MUTATION_ROUTES: Record<string, BackendDataRoute> = {
   'roles:revokeRoleByEmail': { path: '/api/app/roles/revoke', method: 'POST' },
   'dungeons:issueEditorAccessToken': { path: '/api/app/editor-access-token', method: 'POST' },
   'dungeons:copyViewerDungeon': { path: '/api/app/dungeons/copy', method: 'POST' },
+  'dungeons:copySharedDungeon': { path: '/api/app/dungeons/share', method: 'POST' },
   'dungeons:deleteViewerDungeon': { path: '/api/app/dungeons/delete', method: 'POST' },
   'sessions:createSession': { path: '/api/app/sessions/create', method: 'POST' },
   'sessions:joinSessionByCode': { path: '/api/app/sessions/join', method: 'POST' },

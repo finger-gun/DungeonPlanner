@@ -73,6 +73,10 @@ function readHashPath() {
 }
 
 function getWorkspacePageFromPath(path: string): WorkspacePage | null {
+  if (path.startsWith('/app/library/share/')) {
+    return 'library'
+  }
+
   switch (path) {
     case '/app':
       return 'overview'
@@ -93,6 +97,26 @@ function getWorkspacePageFromPath(path: string): WorkspacePage | null {
     default:
       return null
   }
+}
+
+function getSharedDungeonIdFromPath(path: string) {
+  const prefix = '/app/library/share/'
+  return path.startsWith(prefix) ? decodeURIComponent(path.slice(prefix.length)) : null
+}
+
+function normalizeSearchValue(value: string) {
+  return value.trim().toLowerCase()
+}
+
+function getDungeonTags(record: { title: string; description?: string | null }) {
+  const source = `${record.title} ${record.description ?? ''}`
+  const matches = source.match(/#[a-z0-9][a-z0-9-]*/gi) ?? []
+  return [...new Set(matches.map((tag) => tag.toLowerCase()))]
+}
+
+function buildDungeonShareLink(dungeonId: string) {
+  const { origin, pathname, search } = window.location
+  return `${origin}${pathname}${search}#/app/library/share/${encodeURIComponent(dungeonId)}`
 }
 
 function GitHubMark() {
@@ -280,6 +304,8 @@ function SignedInOverview({ identity }: { identity: ReturnType<typeof useViewerI
   const [remotePackError, setRemotePackError] = useState<string | null>(null)
   const [remotePackNotice, setRemotePackNotice] = useState<string | null>(null)
   const [isImportingRemotePack, setIsImportingRemotePack] = useState(false)
+  const [dungeonSearch, setDungeonSearch] = useState('')
+  const [selectedDungeonTag, setSelectedDungeonTag] = useState<string | null>(null)
   const {
     shell,
     roleManager,
@@ -310,6 +336,7 @@ function SignedInOverview({ identity }: { identity: ReturnType<typeof useViewerI
   const revokeRoleByEmail = useMutation(api.roles.revokeRoleByEmail)
   const issueEditorAccessToken = useMutation(api.dungeons.issueEditorAccessToken)
   const copyViewerDungeon = useMutation(api.dungeons.copyViewerDungeon)
+  const copySharedDungeon = useMutation(api.dungeons.copySharedDungeon)
   const deleteViewerDungeon = useMutation(api.dungeons.deleteViewerDungeon)
   const createSession = useMutation(api.sessions.createSession)
   const joinSessionByCode = useMutation(api.sessions.joinSessionByCode)
@@ -335,6 +362,25 @@ function SignedInOverview({ identity }: { identity: ReturnType<typeof useViewerI
     () => mergeRuntimeRulesPacks(bundledPackState.alwaysActivePacks, packRecords),
     [bundledPackState.alwaysActivePacks, packRecords],
   )
+  const dungeonTags = useMemo(() => {
+    const tags = new Set<string>()
+    for (const record of libraryRecords ?? []) {
+      getDungeonTags(record).forEach((tag) => tags.add(tag))
+    }
+    return [...tags].sort((left, right) => left.localeCompare(right))
+  }, [libraryRecords])
+  const filteredLibraryRecords = useMemo(() => {
+    const search = normalizeSearchValue(dungeonSearch)
+    return (libraryRecords ?? []).filter((record) => {
+      const tags = getDungeonTags(record)
+      const matchesTag = selectedDungeonTag ? tags.includes(selectedDungeonTag) : true
+      const matchesSearch = search
+        ? normalizeSearchValue(`${record.title} ${record.description ?? ''} ${tags.join(' ')}`).includes(search)
+        : true
+
+      return matchesTag && matchesSearch
+    })
+  }, [dungeonSearch, libraryRecords, selectedDungeonTag])
   const dungeonError = dungeonLibrary.error
   const dungeonNotice = dungeonLibrary.notice
   const roleEmail = roleManager.email
@@ -368,6 +414,7 @@ function SignedInOverview({ identity }: { identity: ReturnType<typeof useViewerI
   const editorBaseUrl = resolveEditorBaseUrl(window.location, import.meta.env.VITE_EDITOR_URL)
   const backendUrl = resolveBackendApiBaseUrl(window.location, import.meta.env.VITE_BACKEND_URL)
   const requestedPage = getWorkspacePageFromPath(currentPath)
+  const sharedDungeonId = getSharedDungeonIdFromPath(currentPath)
   const workspaceNavItems = [
     { id: 'overview', label: 'Overview', href: '#/app' },
     canAccessDungeonLibrary && { id: 'library', label: 'Dungeon Library', href: '#/app/library' },
@@ -389,36 +436,84 @@ function SignedInOverview({ identity }: { identity: ReturnType<typeof useViewerI
               ? 'admin-packs'
               : 'overview'
 
+  useEffect(() => {
+    if (!sharedDungeonId || activePage !== 'library') {
+      return
+    }
+
+    let isCancelled = false
+
+    async function copySharedMap() {
+      setDungeonLibrary({
+        error: null,
+        notice: null,
+        activeAction: `import:${sharedDungeonId}`,
+      })
+
+      try {
+        const result = await copySharedDungeon({ dungeonId: sharedDungeonId as Id<'dungeons'> })
+
+        if (isCancelled) {
+          return
+        }
+
+        setDungeonLibrary({
+          notice: result.copied
+            ? `Added "${result.dungeon.title}" to your library.`
+            : `"${result.dungeon.title}" is already in your library.`,
+          activeAction: null,
+        })
+        window.location.hash = '#/app/library'
+      } catch (mutationError) {
+        console.error(mutationError)
+
+        if (!isCancelled) {
+          setDungeonLibrary({
+            error: 'Opening the shared map failed.',
+            activeAction: null,
+          })
+          window.location.hash = '#/app/library'
+        }
+      }
+    }
+
+    void copySharedMap()
+
+    return () => {
+      isCancelled = true
+    }
+  }, [activePage, copySharedDungeon, setDungeonLibrary, sharedDungeonId])
+
   const pageIntro = {
     overview: {
       eyebrow: 'Overview',
-      title: 'Your DungeonPlanner workspace',
-      copy: 'Open your private dungeon library, review your access, and get ready for your next session.',
+      title: 'Workspace',
+      copy: 'Your dungeons, characters, sessions, and table tools live here.',
     },
     library: {
       eyebrow: 'Dungeons',
       title: 'Dungeon library',
-      copy: 'Open your private dungeon maps in the editor, duplicate a draft, or remove the ones you no longer need.',
+      copy: 'Open saved maps, duplicate useful starts, and keep your prep organized.',
     },
     sessions: {
       eyebrow: 'Sessions',
       title: 'Session tools',
-      copy: 'Create tables, join by code, and issue server access tickets.',
+      copy: 'Create play sessions, join by code, and prepare access for your table.',
     },
     characters: {
       eyebrow: 'Characters',
       title: 'Character library',
-      copy: 'Create Dragonbane characters and manage saved standees for play.',
+      copy: 'Create Dragonbane characters, save standees, and keep your cast ready for play.',
     },
     'admin-users': {
       eyebrow: 'Admin',
-      title: 'User access tools',
-      copy: 'Grant or remove roles by email and inspect workspace membership.',
+      title: 'User access',
+      copy: 'Invite the right people and manage what they can do in this workspace.',
     },
     'admin-packs': {
       eyebrow: 'Admin',
-      title: 'Content pack tools',
-      copy: 'Install JSON manifest packs and control which optional packs are active.',
+      title: 'Content packs',
+      copy: 'Choose which rules and content packs are available in this workspace.',
     },
   } satisfies Record<WorkspacePage, { eyebrow: string; title: string; copy: string }>
 
@@ -518,6 +613,30 @@ function SignedInOverview({ identity }: { identity: ReturnType<typeof useViewerI
     } catch (mutationError) {
       console.error(mutationError)
       setDungeonLibrary({ error: 'Copying the dungeon failed.' })
+    }
+
+    setDungeonLibrary({ activeAction: null })
+  }
+
+  async function handleCopyShareLink(dungeonId: Id<'dungeons'>, title: string) {
+    const shareLink = buildDungeonShareLink(String(dungeonId))
+
+    setDungeonLibrary({
+      error: null,
+      notice: null,
+      activeAction: `share:${dungeonId}`,
+    })
+
+    try {
+      if (!navigator.clipboard) {
+        throw new Error('Clipboard API unavailable.')
+      }
+
+      await navigator.clipboard.writeText(shareLink)
+      setDungeonLibrary({ notice: `Copied share link for "${title}".` })
+    } catch (clipboardError) {
+      console.error(clipboardError)
+      setDungeonLibrary({ notice: `Share code for "${title}": ${String(dungeonId)}` })
     }
 
     setDungeonLibrary({ activeAction: null })
@@ -661,7 +780,7 @@ function SignedInOverview({ identity }: { identity: ReturnType<typeof useViewerI
     try {
       const existingPackRecord = installedPackById.get(packId)
       await installRulesPack(packUrl, existingPackRecord?._id as Id<'packs'> | undefined)
-      setPackTools({ notice: existingPackRecord ? `Updated "${name}" from the bundled manifest.` : `Installed "${name}".` })
+      setPackTools({ notice: existingPackRecord ? `Updated "${name}".` : `Installed "${name}".` })
     } catch (mutationError) {
       console.error(mutationError)
       setPackTools({ error: `Installing "${name}" failed.` })
@@ -674,7 +793,7 @@ function SignedInOverview({ identity }: { identity: ReturnType<typeof useViewerI
     const normalizedUrl = remotePackUrl.trim()
 
     if (!normalizedUrl) {
-      setRemotePackError('Enter a pack manifest URL first.')
+      setRemotePackError('Enter a pack URL first.')
       setRemotePackNotice(null)
       return
     }
@@ -731,11 +850,11 @@ function SignedInOverview({ identity }: { identity: ReturnType<typeof useViewerI
     <>
       <section className="signed-in-card signed-in-card--overview" aria-labelledby="signed-in-title">
         <div>
-          <p className="app-shell__eyebrow">Your table</p>
+          <p className="app-shell__eyebrow">Workspace</p>
           <h2 className="panel__title" id="signed-in-title">
             {identity.viewer?.name ?? identity.viewer?.email ?? 'DungeonPlanner user'}
           </h2>
-          <p className="panel__copy">Welcome back. Your private workspace is ready when you are.</p>
+          <p className="panel__copy">Pick up your prep, manage your table, or open a saved map.</p>
         </div>
 
         <div className="signed-in-card__meta">
@@ -753,7 +872,7 @@ function SignedInOverview({ identity }: { identity: ReturnType<typeof useViewerI
                   </span>
                 ))
               ) : (
-                <span className="role-badge role-badge--muted">provisioning</span>
+                <span className="role-badge role-badge--muted">pending</span>
               )}
             </div>
           </div>
@@ -779,19 +898,19 @@ function SignedInOverview({ identity }: { identity: ReturnType<typeof useViewerI
         <section className="panels" aria-label="Workspace overview">
           {canAccessDungeonLibrary ? (
             <article className="status-card overview-card">
-              <p className="status-card__label">Dungeon Library</p>
+              <p className="status-card__label">Dungeons</p>
               <p className="status-card__value">{libraryRecords?.length ?? 0} saved</p>
-              <p className="status-card__copy">Build dungeons for yourself, keep them private, and load any draft back into editing.</p>
+              <p className="status-card__copy">Saved maps are ready to reopen, duplicate, or continue in the editor.</p>
               <a className="hero-panel__button hero-panel__button--secondary" href="#/app/library">
-                Open Dungeon Library
+                Open library
               </a>
             </article>
           ) : null}
           <article className="status-card overview-card">
-            <p className="status-card__label">Roles</p>
-            <p className="status-card__value">{identity.roles.length > 0 ? identity.roles.join(', ') : 'provisioning'}</p>
+            <p className="status-card__label">Access</p>
+            <p className="status-card__value">{identity.roles.length > 0 ? identity.roles.join(', ') : 'pending'}</p>
             <p className="status-card__copy">
-              Everyone can build private dungeons. Dungeon master tools stay limited to users with DM access.
+              Your roles determine which library, session, and admin tools are available.
             </p>
           </article>
         </section>
@@ -811,9 +930,9 @@ function SignedInOverview({ identity }: { identity: ReturnType<typeof useViewerI
       activePage === 'overview' ? (
         <section className="signed-in-card">
           <div>
-            <p className="app-shell__eyebrow">Player access</p>
-            <h2 className="panel__title">Your workspace is open</h2>
-            <p className="panel__copy">Start building private dungeons now. Session-running tools appear when your access expands.</p>
+            <p className="app-shell__eyebrow">Player tools</p>
+            <h2 className="panel__title">Your workspace is ready</h2>
+            <p className="panel__copy">You can create private dungeons now. More table tools appear when your role changes.</p>
           </div>
         </section>
       ) : null}
@@ -822,78 +941,150 @@ function SignedInOverview({ identity }: { identity: ReturnType<typeof useViewerI
         {activePage === 'library' && canAccessDungeonLibrary ? (
           <article className="panel panel--library">
             <p className="panel__eyebrow">Dungeon Library</p>
-            <h2 className="panel__title">Saved dungeons</h2>
+            <h2 className="panel__title">Your saved maps</h2>
             <p className="panel__copy">
-              Browse your private dungeon library and continue building any saved map in the main editor.
+              Find, open, duplicate, or share the maps you have prepared for this workspace.
             </p>
 
-            <div className="library-sync-state library-sync-state--muted">
-              <div>
-                <p className="status-card__label">Library status</p>
-                <p className="library-sync-state__title">{libraryRecords?.length ?? 0} saved dungeons</p>
+            <div className="library-toolbar">
+              <label className="auth-card__field library-toolbar__search">
+                <span>Search library</span>
+                <input
+                  onChange={(event) => setDungeonSearch(event.target.value)}
+                  placeholder="Search by title, description, or #tag"
+                  type="search"
+                  value={dungeonSearch}
+                />
+              </label>
+              <button
+                className="hero-panel__button hero-panel__button--primary"
+                disabled={dungeonLibrary.activeAction === 'new'}
+                onClick={() => void handleLaunchEditor()}
+                type="button"
+              >
+                {dungeonLibrary.activeAction === 'new' ? 'Opening...' : 'New map'}
+              </button>
+            </div>
+
+            {dungeonTags.length > 0 ? (
+              <div className="library-tags" aria-label="Dungeon tags">
+                <button
+                  className={`library-tag ${selectedDungeonTag === null ? 'library-tag--active' : ''}`}
+                  onClick={() => setSelectedDungeonTag(null)}
+                  type="button"
+                >
+                  All
+                </button>
+                {dungeonTags.map((tag) => (
+                  <button
+                    className={`library-tag ${selectedDungeonTag === tag ? 'library-tag--active' : ''}`}
+                    key={tag}
+                    onClick={() => setSelectedDungeonTag(tag)}
+                    type="button"
+                  >
+                    {tag}
+                  </button>
+                ))}
               </div>
-              <p className="panel__copy">
-                Open any saved dungeon straight in the editor, or duplicate and tidy up your library from here.
-              </p>
+            ) : null}
+
+            <div className="library-summary-row">
+              <div className="library-sync-state library-sync-state--muted">
+                <p className="status-card__label">Saved maps</p>
+                <p className="library-sync-state__title">{libraryRecords?.length ?? 0}</p>
+              </div>
+              <div className="library-sync-state library-sync-state--muted">
+                <p className="status-card__label">Showing</p>
+                <p className="library-sync-state__title">{filteredLibraryRecords.length}</p>
+              </div>
+              <div className="library-sync-state library-sync-state--muted">
+                <p className="status-card__label">Tags</p>
+                <p className="library-sync-state__title">{dungeonTags.length}</p>
+              </div>
             </div>
 
             <div className="library-grid">
               <section className="library-card">
                 <div className="library-card__header">
                   <div>
-                    <p className="status-card__label">Saved records</p>
-                    <h3 className="library-card__title">Dungeon library</h3>
+                    <p className="status-card__label">Maps</p>
+                    <h3 className="library-card__title">Saved in this workspace</h3>
                   </div>
-                  <button
-                    className="hero-panel__button hero-panel__button--secondary"
-                    disabled={dungeonLibrary.activeAction === 'new'}
-                    onClick={() => void handleLaunchEditor()}
-                    type="button"
-                  >
-                    {dungeonLibrary.activeAction === 'new' ? 'Opening...' : 'New in editor'}
-                  </button>
                 </div>
 
                 {libraryRecords && libraryRecords.length > 0 ? (
                   <div className="library-records">
-                    {libraryRecords.map((record) => (
-                      <article className="library-record" key={record._id}>
-                        <div>
-                          <p className="library-record__title">{record.title}</p>
-                          <p className="panel__copy">{record.description ?? 'No description yet.'}</p>
-                          <p className="library-record__meta">Updated {new Date(record.updatedAt).toLocaleString()}</p>
-                        </div>
-                        <div className="library-record__actions">
-                          <button
-                            className="hero-panel__button hero-panel__button--secondary"
-                            disabled={!backendUrl || dungeonLibrary.activeAction === `open:${record._id}`}
-                            onClick={() => void handleLaunchEditor(record._id)}
-                            type="button"
-                          >
-                            {dungeonLibrary.activeAction === `open:${record._id}` ? 'Opening...' : 'Open'}
-                          </button>
-                          <button
-                            className="hero-panel__button hero-panel__button--secondary"
-                            disabled={dungeonLibrary.activeAction === `copy:${record._id}`}
-                            onClick={() => void handleCopyDungeon(record._id)}
-                            type="button"
-                          >
-                            {dungeonLibrary.activeAction === `copy:${record._id}` ? 'Copying...' : 'Copy'}
-                          </button>
-                          <button
-                            className="hero-panel__button hero-panel__button--secondary library-record__button--danger"
-                            disabled={dungeonLibrary.activeAction === `delete:${record._id}`}
-                            onClick={() => void handleDeleteDungeon(record._id, record.title)}
-                            type="button"
-                          >
-                            {dungeonLibrary.activeAction === `delete:${record._id}` ? 'Deleting...' : 'Delete'}
-                          </button>
-                        </div>
-                      </article>
-                    ))}
+                    {filteredLibraryRecords.length > 0 ? filteredLibraryRecords.map((record) => {
+                      const tags = getDungeonTags(record)
+
+                      return (
+                        <article className="library-record" key={record._id}>
+                          <div className="library-record__body">
+                            <p className="library-record__title">{record.title}</p>
+                            <p className="panel__copy">{record.description ?? 'No description yet.'}</p>
+                            {tags.length > 0 ? (
+                              <div className="library-record__tags">
+                                {tags.map((tag) => (
+                                  <button
+                                    className="library-tag library-tag--small"
+                                    key={tag}
+                                    onClick={() => setSelectedDungeonTag(tag)}
+                                    type="button"
+                                  >
+                                    {tag}
+                                  </button>
+                                ))}
+                              </div>
+                            ) : null}
+                            <p className="library-record__meta">Updated {new Date(record.updatedAt).toLocaleString()}</p>
+                          </div>
+                          <div className="library-record__controls">
+                            <div className="library-record__actions">
+                              <button
+                                className="hero-panel__button hero-panel__button--secondary"
+                                disabled={!backendUrl || dungeonLibrary.activeAction === `open:${record._id}`}
+                                onClick={() => void handleLaunchEditor(record._id)}
+                                type="button"
+                              >
+                                {dungeonLibrary.activeAction === `open:${record._id}` ? 'Opening...' : 'Open'}
+                              </button>
+                              <button
+                                className="hero-panel__button hero-panel__button--secondary"
+                                disabled={dungeonLibrary.activeAction === `copy:${record._id}`}
+                                onClick={() => void handleCopyDungeon(record._id)}
+                                type="button"
+                              >
+                                {dungeonLibrary.activeAction === `copy:${record._id}` ? 'Copying...' : 'Copy'}
+                              </button>
+                              <button
+                                className="hero-panel__button hero-panel__button--secondary library-record__button--danger"
+                                disabled={dungeonLibrary.activeAction === `delete:${record._id}`}
+                                onClick={() => void handleDeleteDungeon(record._id, record.title)}
+                                type="button"
+                              >
+                                {dungeonLibrary.activeAction === `delete:${record._id}` ? 'Deleting...' : 'Delete'}
+                              </button>
+                              <button
+                                className="hero-panel__button hero-panel__button--secondary"
+                                disabled={dungeonLibrary.activeAction === `share:${record._id}`}
+                                onClick={() => void handleCopyShareLink(record._id, record.title)}
+                                type="button"
+                              >
+                                {dungeonLibrary.activeAction === `share:${record._id}` ? 'Copying...' : 'Share link'}
+                              </button>
+                            </div>
+                            <p className="library-record__share-note">
+                              Opens as a private copy for another workspace user.
+                            </p>
+                          </div>
+                        </article>
+                      )
+                    }) : (
+                      <p className="panel__copy">No maps match the current search.</p>
+                    )}
                   </div>
                 ) : (
-                  <p className="panel__copy">No dungeons have been saved here yet.</p>
+                  <p className="panel__copy">No maps have been saved here yet.</p>
                 )}
 
                 {!backendUrl ? (
@@ -1064,7 +1255,7 @@ function SignedInOverview({ identity }: { identity: ReturnType<typeof useViewerI
                 <p className="panel__eyebrow">Admin</p>
                 <h2 className="panel__title">Content packs</h2>
                 <p className="panel__copy">
-                  Install pack manifests from trusted sources. Installed packs are read-only here; optional packs can be activated or deactivated.
+                  Add rules content for your workspace and choose which packs are active.
                 </p>
               </div>
               <div className="packs-metrics" aria-label="Pack summary">
@@ -1094,7 +1285,7 @@ function SignedInOverview({ identity }: { identity: ReturnType<typeof useViewerI
                     <h3 className="library-card__title" id="installed-packs-title">Installed packs</h3>
                   </div>
                   <p className="panel__copy">
-                    Installed packs are read-only snapshots from their source manifests. Admins can only control whether optional packs are active.
+                    Active packs are available to character tools and play sessions.
                   </p>
                 </div>
 
@@ -1130,7 +1321,7 @@ function SignedInOverview({ identity }: { identity: ReturnType<typeof useViewerI
                     })}
                   </div>
                 ) : (
-                  <p className="panel__copy">No packs have been installed in this workspace yet.</p>
+                  <p className="panel__copy">No packs are installed yet. Add one from the bundled list or import a pack URL.</p>
                 )}
               </section>
 
@@ -1138,8 +1329,8 @@ function SignedInOverview({ identity }: { identity: ReturnType<typeof useViewerI
                 <details className="packs-card packs-disclosure" open>
                   <summary>
                     <span>
-                      <span className="status-card__label">Bundled add-ons</span>
-                      <strong>Available to install</strong>
+                      <span className="status-card__label">Included packs</span>
+                      <strong>Ready to add</strong>
                     </span>
                   </summary>
 
@@ -1174,18 +1365,18 @@ function SignedInOverview({ identity }: { identity: ReturnType<typeof useViewerI
                       })}
                     </div>
                   ) : bundledPackState.isLoading ? null : (
-                    <p className="panel__copy">No optional bundled packs are waiting to be installed.</p>
+                    <p className="panel__copy">All included packs have already been added.</p>
                   )}
                 </details>
 
                 <section className="packs-card packs-import">
                   <div>
-                    <p className="status-card__label">Community import</p>
-                    <h3 className="library-card__title">Install from URL</h3>
+                    <p className="status-card__label">Import</p>
+                    <h3 className="library-card__title">Add pack from URL</h3>
                   </div>
 
                   <label className="auth-card__field">
-                    <span>Manifest URL</span>
+                    <span>Pack URL</span>
                     <input
                       onChange={(event) => setRemotePackUrl(event.target.value)}
                       placeholder="https://example.com/my-pack.json"
@@ -1195,7 +1386,7 @@ function SignedInOverview({ identity }: { identity: ReturnType<typeof useViewerI
                   </label>
 
                   <p className="panel__copy">
-                    Importing a URL installs the manifest as a workspace pack. If the same pack ID already exists, the manifest refreshes that installed pack.
+                    Use a direct link to a compatible pack file. Re-importing the same pack updates it.
                   </p>
 
                   {remotePackError ? <p className="auth-card__error">{remotePackError}</p> : null}
@@ -1222,10 +1413,10 @@ function SignedInOverview({ identity }: { identity: ReturnType<typeof useViewerI
           <div className="auth-card__header">
             <p className="app-shell__eyebrow">Admin</p>
             <h2 className="panel__title" id="role-manager-title">
-              User access
+              Manage users
             </h2>
             <p className="panel__copy">
-              Add new users, grant roles by email, and keep the right tools in the right hands.
+              Grant or remove workspace roles by email.
             </p>
           </div>
 
