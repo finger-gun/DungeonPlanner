@@ -1,0 +1,13 @@
+{
+  "id": "interior-rustic-cottage-packed-dried-mud-and-clay-627924782476288",
+  "name": "Rustic Cottage Packed Dried Mud And Clay 627924782476288",
+  "sourceImage": "/Volumes/roblinas/sd/wall-texture-627924782476288.png",
+  "sourceDepth": "/Volumes/roblinas/sd/wall-depth-627924782476288.png",
+  "size": 1024,
+  "normalStrength": 4,
+  "parallaxScale": 0.12,
+  "parallaxSteps": 16,
+  "bumpScale": 0.16,
+  "parallaxInvert": true,
+  "heightMean": 0.164
+}

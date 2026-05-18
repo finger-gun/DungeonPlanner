@@ -111,6 +111,11 @@ import {
   buildRoomDraftOccupancyPolygons,
   clipRoomDraft,
 } from '../../store/roomDraftClip'
+import { buildPreviewRoomFloorMaskData, filterCellsToRoomFloorMask } from './roomFloorMask'
+import {
+  buildRoomFloorMaskRuntime,
+  disposeRoomFloorMaskRuntime,
+} from './roomFloorMaskRuntime'
 
 type GridProps = {
   size?: number
@@ -1002,9 +1007,42 @@ export function Grid({ size = 120, playMode = false, bakedLightField = null }: G
     previewCells,
     strokeMode,
   })
+  const previewRoomFloorMaskData = useMemo(() => {
+    if (
+      !shouldStreamRoomTransactionPreview
+      || previewStrokeMode !== 'paint'
+      || previewCells.length === 0
+    ) {
+      return null
+    }
+
+    return buildPreviewRoomFloorMaskData(previewCells, roomPaintPreviewPaths)
+  }, [
+    previewCells,
+    previewStrokeMode,
+    roomPaintPreviewPaths,
+    shouldStreamRoomTransactionPreview,
+  ])
+  const renderablePreviewCells = useMemo(
+    () => previewRoomFloorMaskData
+      ? filterCellsToRoomFloorMask(previewCells, previewRoomFloorMaskData)
+      : previewCells,
+    [previewCells, previewRoomFloorMaskData],
+  )
+  const previewRoomFloorMaskRuntime = useMemo(() => {
+    if (!previewRoomFloorMaskData) {
+      return null
+    }
+
+    return buildRoomFloorMaskRuntime(previewRoomFloorMaskData)
+  }, [previewRoomFloorMaskData])
+  useEffect(
+    () => () => disposeRoomFloorMaskRuntime(previewRoomFloorMaskRuntime),
+    [previewRoomFloorMaskRuntime],
+  )
   const previewStreamEntries = useMemo(
     () => {
-      if (!shouldStreamRoomTransactionPreview) {
+      if (!shouldStreamRoomTransactionPreview || renderablePreviewCells.length === 0) {
         return []
       }
 
@@ -1013,12 +1051,12 @@ export function Grid({ size = 120, playMode = false, bakedLightField = null }: G
         activeRoomSetId,
         bakedLightField,
         buildStartedAt: roomStreamTransactionStartedAt!,
-        cells: previewCells,
+        cells: renderablePreviewCells,
         floorTileAssetIds,
         globalFloorAssetId,
         globalWallAssetId,
         innerWalls,
-        originCell: strokeStartCell ?? previewCells[0]!,
+        originCell: strokeStartCell ?? renderablePreviewCells[0]!,
         paintedCells,
         rooms,
         splineWallGraph,
@@ -1036,7 +1074,7 @@ export function Grid({ size = 120, playMode = false, bakedLightField = null }: G
       globalWallAssetId,
       innerWalls,
       paintedCells,
-      previewCells,
+      renderablePreviewCells,
       roomStreamTransactionStartedAt,
       rooms,
       splineWallGraph,
@@ -2035,6 +2073,8 @@ export function Grid({ size = 120, playMode = false, bakedLightField = null }: G
           sourceKind="transaction"
           transactionId={roomStreamTransactionId}
           useLineOfSightPostMask={false}
+          useRoomFloorMask={previewRoomFloorMaskRuntime !== null}
+          roomFloorMaskRuntime={previewRoomFloorMaskRuntime}
         />
       )}
 

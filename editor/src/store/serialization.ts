@@ -6,9 +6,11 @@
  */
 import {
   getContentPackAssetById,
+  getContentPackRoomSetById,
   getDefaultAssetIdByCategory,
   getDefaultContentPackRoomSetId,
   getDefaultContentPackWallMaterialSetId,
+  getDefaultContentPackWallStyleId,
   getContentPackWallStyleById,
 } from '../content-packs/registry'
 import { sanitizePersistedAssetReferences } from './assetReferences'
@@ -51,7 +53,7 @@ import {
 import { createSplineWallQueryCache } from './splineWallQueries'
 import { wallKeyToWorldPosition } from './wallSegments'
 
-const CURRENT_VERSION = 23
+const CURRENT_VERSION = 24
 const ROOM_SET_CONTENT_PACK_ID = 'dungeon'
 const FALLBACK_ROOM_SET_ID = 'dungeon'
 const WALL_MATERIAL_SET_CONTENT_PACK_ID = 'dungeon'
@@ -172,6 +174,8 @@ type SerializedFloor = {
   nextRoomNumber: number
   activeRoomSetId?: string
   activeWallMaterialSetId?: string
+  activeInteriorWallStyleId?: string
+  activeExteriorWallStyleId?: string
 }
 
 export type DungeonFile = {
@@ -245,6 +249,8 @@ export type SerializableState = {
   nextRoomNumber: number
   activeRoomSetId?: string
   activeWallMaterialSetId?: string
+  activeInteriorWallStyleId?: string
+  activeExteriorWallStyleId?: string
   // Multi-floor data
   floors?: Record<string, FloorRecord>
   floorOrder?: string[]
@@ -323,6 +329,8 @@ function serializeFloorData(
     nextRoomNumber: number
     activeRoomSetId?: string
     activeWallMaterialSetId?: string
+    activeInteriorWallStyleId?: string
+    activeExteriorWallStyleId?: string
   },
 ): SerializedFloor {
   return {
@@ -372,6 +380,8 @@ function serializeFloorData(
     nextRoomNumber: snapshot.nextRoomNumber,
     activeRoomSetId: snapshot.activeRoomSetId,
     activeWallMaterialSetId: snapshot.activeWallMaterialSetId,
+    activeInteriorWallStyleId: snapshot.activeInteriorWallStyleId,
+    activeExteriorWallStyleId: snapshot.activeExteriorWallStyleId,
   }
 }
 
@@ -410,6 +420,8 @@ export function serializeDungeon(state: SerializableState): string {
        nextRoomNumber: state.nextRoomNumber,
        activeRoomSetId: state.activeRoomSetId,
        activeWallMaterialSetId: state.activeWallMaterialSetId,
+       activeInteriorWallStyleId: state.activeInteriorWallStyleId,
+       activeExteriorWallStyleId: state.activeExteriorWallStyleId,
      }))
   }
 
@@ -720,6 +732,32 @@ export function deserializeDungeon(json: string): SerializableState | null {
     }
   }
 
+  if (version < 24 && Array.isArray((raw as Record<string, unknown>).floors)) {
+    const r = raw as Record<string, unknown>
+    raw = {
+      ...r,
+      floors: (r.floors as unknown[]).map((floor) => {
+        if (!isObject(floor)) {
+          return floor
+        }
+
+        const activeRoomSetId = typeof floor.activeRoomSetId === 'string'
+          ? floor.activeRoomSetId
+          : getDefaultRoomSetId()
+        const wallStyleId = getDefaultWallStyleIdForRoomSet(activeRoomSetId)
+        return {
+          ...floor,
+          activeInteriorWallStyleId: typeof floor.activeInteriorWallStyleId === 'string'
+            ? floor.activeInteriorWallStyleId
+            : wallStyleId,
+          activeExteriorWallStyleId: typeof floor.activeExteriorWallStyleId === 'string'
+            ? floor.activeExteriorWallStyleId
+            : wallStyleId,
+        }
+      }),
+    }
+  }
+
   return parseFile(raw as Record<string, unknown>)
 }
 
@@ -889,6 +927,8 @@ function parseFloorData(raw: Record<string, unknown>): {
    nextRoomNumber: number
    activeRoomSetId: string
    activeWallMaterialSetId: string
+   activeInteriorWallStyleId: string
+   activeExteriorWallStyleId: string
   } {
   const layers: Record<string, Layer> = {}
   const layersArr = Array.isArray(raw.layers) ? (raw.layers as unknown[]) : []
@@ -924,6 +964,7 @@ function parseFloorData(raw: Record<string, unknown>): {
       name: requireString(r, 'name'),
       layerId: typeof r.layerId === 'string' ? r.layerId : 'default',
       roomSetId: typeof r.roomSetId === 'string' ? r.roomSetId : null,
+      wallMaterialSetId: typeof r.wallMaterialSetId === 'string' ? r.wallMaterialSetId : null,
       floorAssetId: typeof r.floorAssetId === 'string' ? r.floorAssetId : null,
       wallAssetId: typeof r.wallAssetId === 'string' ? r.wallAssetId : null,
     }
@@ -1107,6 +1148,14 @@ function parseFloorData(raw: Record<string, unknown>): {
       typeof raw.activeRoomSetId === 'string' ? raw.activeRoomSetId : getDefaultRoomSetId(),
     activeWallMaterialSetId:
       typeof raw.activeWallMaterialSetId === 'string' ? raw.activeWallMaterialSetId : getDefaultWallMaterialSetId(),
+    activeInteriorWallStyleId:
+      sanitizeWallStyleId(raw.activeInteriorWallStyleId, getDefaultWallStyleIdForRoomSet(
+        typeof raw.activeRoomSetId === 'string' ? raw.activeRoomSetId : getDefaultRoomSetId(),
+      )),
+    activeExteriorWallStyleId:
+      sanitizeWallStyleId(raw.activeExteriorWallStyleId, getDefaultWallStyleIdForRoomSet(
+        typeof raw.activeRoomSetId === 'string' ? raw.activeRoomSetId : getDefaultRoomSetId(),
+      )),
   }
 }
 
@@ -1140,6 +1189,8 @@ function parseFile(raw: Record<string, unknown>): SerializableState | null {
           tool: 'select' as const,
           activeRoomSetId: data.activeRoomSetId,
           activeWallMaterialSetId: data.activeWallMaterialSetId,
+          activeInteriorWallStyleId: data.activeInteriorWallStyleId,
+          activeExteriorWallStyleId: data.activeExteriorWallStyleId,
           selectedAssetIds: {
             floor: getDefaultAssetIdByCategory('floor'),
             wall: getDefaultAssetIdByCategory('wall'),
@@ -1172,6 +1223,8 @@ function parseFile(raw: Record<string, unknown>): SerializableState | null {
           tool: 'select',
           activeRoomSetId: activeFloorData.activeRoomSetId,
           activeWallMaterialSetId: activeFloorData.activeWallMaterialSetId,
+          activeInteriorWallStyleId: activeFloorData.activeInteriorWallStyleId,
+          activeExteriorWallStyleId: activeFloorData.activeExteriorWallStyleId,
           selectedAssetIds: {
             floor: getDefaultAssetIdByCategory('floor'),
             wall: getDefaultAssetIdByCategory('wall'),
@@ -1286,6 +1339,20 @@ function getDefaultRoomSetId() {
 
 function getDefaultWallMaterialSetId() {
   return getDefaultContentPackWallMaterialSetId(WALL_MATERIAL_SET_CONTENT_PACK_ID) ?? FALLBACK_WALL_MATERIAL_SET_ID
+}
+
+function getDefaultWallStyleId() {
+  return getDefaultContentPackWallStyleId(ROOM_SET_CONTENT_PACK_ID) ?? 'dungeon-stone'
+}
+
+function getDefaultWallStyleIdForRoomSet(roomSetId: string) {
+  return getContentPackRoomSetById(ROOM_SET_CONTENT_PACK_ID, roomSetId)?.wallStyleId ?? getDefaultWallStyleId()
+}
+
+function sanitizeWallStyleId(raw: unknown, fallback: string) {
+  return typeof raw === 'string' && getContentPackWallStyleById(ROOM_SET_CONTENT_PACK_ID, raw)
+    ? raw
+    : fallback
 }
 
 // Suppress "unused import" — kept for completeness in registry-aware migrations

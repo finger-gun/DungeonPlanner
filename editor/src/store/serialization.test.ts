@@ -19,6 +19,8 @@ function emptyFloorSnapshot() {
     tool: 'select' as const,
     activeRoomSetId: 'dungeon',
     activeWallMaterialSetId: 'kaykit-stone',
+    activeInteriorWallStyleId: 'dungeon-stone',
+    activeExteriorWallStyleId: 'dungeon-stone',
     selectedAssetIds: { floor: null, wall: null, prop: null, opening: null, player: null },
     selection: null,
     layers: { default: { id: 'default', name: 'Default', visible: true, locked: false } },
@@ -236,6 +238,7 @@ describe('serializeDungeon / deserializeDungeon roundtrip', () => {
       name: 'Cave Room',
       layerId: 'default',
       roomSetId: 'cave',
+      wallMaterialSetId: 'rough-rockface-1-pbr-material',
       floorAssetId: null,
       wallAssetId: null,
     }
@@ -245,6 +248,7 @@ describe('serializeDungeon / deserializeDungeon roundtrip', () => {
     expect(result).not.toBeNull()
     expect(result!.activeRoomSetId).toBe('cave')
     expect(result!.rooms['room-1']?.roomSetId).toBe('cave')
+    expect(result!.rooms['room-1']?.wallMaterialSetId).toBe('rough-rockface-1-pbr-material')
   })
 
   it('preserves the active wall material set selection', () => {
@@ -257,6 +261,22 @@ describe('serializeDungeon / deserializeDungeon roundtrip', () => {
     expect(result).not.toBeNull()
     expect(result!.activeWallMaterialSetId).toBe('wedged-cobblestone')
     expect(result!.floors?.['floor-1']?.snapshot.activeWallMaterialSetId).toBe('wedged-cobblestone')
+  })
+
+  it('preserves active interior and exterior wall style selections', () => {
+    const state = baseState()
+    state.activeInteriorWallStyleId = 'rocky-cave'
+    state.activeExteriorWallStyleId = 'ai-gothic'
+    state.floors!['floor-1'].snapshot.activeInteriorWallStyleId = 'rocky-cave'
+    state.floors!['floor-1'].snapshot.activeExteriorWallStyleId = 'ai-gothic'
+
+    const result = deserializeDungeon(serializeDungeon(state))
+
+    expect(result).not.toBeNull()
+    expect(result!.activeInteriorWallStyleId).toBe('rocky-cave')
+    expect(result!.activeExteriorWallStyleId).toBe('ai-gothic')
+    expect(result!.floors?.['floor-1']?.snapshot.activeInteriorWallStyleId).toBe('rocky-cave')
+    expect(result!.floors?.['floor-1']?.snapshot.activeExteriorWallStyleId).toBe('ai-gothic')
   })
 
   it('preserves per-segment-side wall style assignments', () => {

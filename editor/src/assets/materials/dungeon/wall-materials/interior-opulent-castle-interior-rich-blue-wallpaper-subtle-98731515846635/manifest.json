@@ -1,0 +1,13 @@
+{
+  "id": "interior-opulent-castle-interior-rich-blue-wallpaper-subtle-98731515846635",
+  "name": "Opulent Castle Interior Rich Blue Wallpaper Subtle 98731515846635",
+  "sourceImage": "/Volumes/roblinas/sd/wall-texture-98731515846635.png",
+  "sourceDepth": "/Volumes/roblinas/sd/wall-depth-98731515846635.png",
+  "size": 1024,
+  "normalStrength": 4,
+  "parallaxScale": 0.12,
+  "parallaxSteps": 16,
+  "bumpScale": 0.16,
+  "parallaxInvert": true,
+  "heightMean": 0.2248
+}

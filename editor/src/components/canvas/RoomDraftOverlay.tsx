@@ -196,7 +196,6 @@ export function RoomDraftOverlay({
 
   const startDrag = useCallback((nextDragState: DragState, event: ThreeEvent<PointerEvent>) => {
     event.stopPropagation()
-    event.nativeEvent.preventDefault()
     dragStateRef.current = nextDragState
     setDragState(nextDragState)
     setRoomResizeHandleActive(true)

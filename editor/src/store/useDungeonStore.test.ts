@@ -11,8 +11,10 @@ import { buildRoomDraftOccupancyPolygons, clipRoomDraft } from './roomDraftClip'
 import { createSplineWallQueryCache } from './splineWallQueries'
 import { upsertSplineWallGraphRoomPath } from './splineWallGraph'
 import { buildRoomSplineWallChainsFromGraph, buildSampledSplineWallFrames } from './splineWalls'
+import { analyzeSplineWallGraphBoundaries } from './splineWallStyleAnalysis'
 import { useDungeonStore } from './useDungeonStore'
 import { getOpeningSegments } from './openingSegments'
+import { createSplineWallSegmentSideKey } from './wallStyleAssignments'
 
 const TEST_IMAGE_DATA_URL =
   'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4////fwAJ+wP9KobjigAAAABJRU5ErkJggg=='
@@ -189,6 +191,61 @@ describe('useDungeonStore history', () => {
     state = useDungeonStore.getState()
     expect(Object.keys(state.paintedCells)).toHaveLength(4)
     expect(state.splineWallGraph.paths[`${roomId}:path:0`]).toBeDefined()
+  })
+
+  it('applies active interior and exterior wall styles to newly drawn spline rooms', () => {
+    const state = useDungeonStore.getState()
+    state.setActiveInteriorWallStyleId('rocky-cave')
+    state.setActiveExteriorWallStyleId('ai-gothic')
+
+    const draft = createRoomDraftFromStroke([0, 0], [1, 1])
+    const roomId = state.commitDraftRoom({
+      cells: buildRoomDraftCells(draft),
+      splineNodes: buildRoomDraftSplineNodes(draft),
+    })
+    expect(roomId).toBeTruthy()
+
+    const nextState = useDungeonStore.getState()
+    const sections = analyzeSplineWallGraphBoundaries(nextState.splineWallGraph).flatMap((path) => path.sections)
+    const roomFace = sections.find((section) => section.roomId === roomId && section.faceKind === 'room-face')!
+    const exteriorFace = sections.find((section) => section.roomId === roomId && section.faceKind === 'exterior-face')!
+
+    expect(nextState.wallStyleAssignments[createSplineWallSegmentSideKey(roomFace.segmentId, roomFace.side!)]).toBe('rocky-cave')
+    expect(nextState.wallStyleAssignments[createSplineWallSegmentSideKey(exteriorFace.segmentId, exteriorFace.side!)]).toBe('ai-gothic')
+  })
+
+  it('resizes spline-backed rooms by updating their spline wall path', () => {
+    const draft = setRoomDraftCorner(createRoomDraftFromStroke([0, 0], [1, 1]), 'nw', 'diagonal', 1)
+    const roomId = useDungeonStore.getState().commitDraftRoom({
+      cells: buildRoomDraftCells(draft),
+      splineNodes: buildRoomDraftSplineNodes(draft),
+    })
+
+    expect(roomId).toBeTruthy()
+
+    const resized = useDungeonStore.getState().resizeRoom(roomId!, {
+      minX: 0,
+      maxX: 2,
+      minZ: 0,
+      maxZ: 1,
+    })
+
+    const state = useDungeonStore.getState()
+    const path = state.splineWallGraph.paths[`${roomId}:path:0`]!
+    const positions = path.nodeIds.map((nodeId) => state.splineWallGraph.nodes[nodeId]!.position)
+
+    expect(resized).toBe(true)
+    expect(state.paintedCells['2:1']?.roomId).toBe(roomId)
+    expect(positions).toEqual([
+      [0, 2],
+      [3, 2],
+      [3, 0],
+      [0, 0],
+    ])
+    expect(state.splineWallGraph.nodes[path.nodeIds[0]!]!).toMatchObject({
+      cornerMode: 'diagonal',
+      cornerAmount: 1,
+    })
   })
 
   it('keeps paint-created rooms synchronized into spline graph paths', () => {
@@ -606,9 +663,11 @@ describe('useDungeonStore history', () => {
     const roomId = useDungeonStore.getState().paintedCells['0:0']?.roomId
     expect(roomId).toBeTruthy()
     expect(useDungeonStore.getState().rooms[roomId!]?.roomSetId).toBe('cave')
+    expect(useDungeonStore.getState().rooms[roomId!]?.wallMaterialSetId).toBe('rough-rockface-1-pbr-material')
 
     const manualRoomId = useDungeonStore.getState().createRoom('Manual Room')
     expect(useDungeonStore.getState().rooms[manualRoomId]?.roomSetId).toBe('cave')
+    expect(useDungeonStore.getState().rooms[manualRoomId]?.wallMaterialSetId).toBe('rough-rockface-1-pbr-material')
   })
 
   it('keeps pixelation disabled by default and allows toggling it', () => {

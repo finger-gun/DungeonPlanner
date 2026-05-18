@@ -14,6 +14,8 @@ function createSnapshot() {
     tool: 'select' as const,
     activeRoomSetId: 'dungeon',
     activeWallMaterialSetId: 'kaykit-stone',
+    activeInteriorWallStyleId: 'dungeon-stone',
+    activeExteriorWallStyleId: 'dungeon-stone',
     selectedAssetIds: {
       floor: 'missing.floor',
       wall: 'missing.wall',

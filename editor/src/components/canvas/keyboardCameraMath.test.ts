@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import {
+  KEYBOARD_SLOW_PAN_MULTIPLIER,
   getKeyboardFrameScale,
   getKeyboardPanAmount,
   getKeyboardRotateAmount,
+  getKeyboardSlowPanAmount,
 } from './keyboardCameraMath'
 
 describe('keyboardCameraMath', () => {
@@ -16,6 +18,12 @@ describe('keyboardCameraMath', () => {
     const panAt30Fps = getKeyboardPanAmount(10, 1 / 30) * 30
 
     expect(panAt30Fps).toBeCloseTo(panAt60Fps)
+  })
+
+  it('uses a slower pan amount for shift-modified keyboard movement', () => {
+    expect(getKeyboardSlowPanAmount(10, 1 / 60)).toBeCloseTo(
+      getKeyboardPanAmount(10, 1 / 60) * KEYBOARD_SLOW_PAN_MULTIPLIER,
+    )
   })
 
   it('clamps unusually long frames to avoid large camera jumps', () => {

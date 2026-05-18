@@ -13,6 +13,7 @@ function createTextures(overrides: Partial<{
   normal: THREE.Texture | null
   ao: THREE.Texture | null
   height: THREE.Texture | null
+  displacement: THREE.Texture | null
   roughness: THREE.Texture | null
   metallic: THREE.Texture | null
 }> = {}) {
@@ -21,6 +22,7 @@ function createTextures(overrides: Partial<{
     normal: new THREE.Texture(),
     ao: new THREE.Texture(),
     height: new THREE.Texture(),
+    displacement: new THREE.Texture(),
     roughness: new THREE.Texture(),
     metallic: new THREE.Texture(),
     ...overrides,
@@ -40,6 +42,15 @@ describe('splineWallMaterial', () => {
     expect(colorTexture.colorSpace).toBe(THREE.SRGBColorSpace)
     expect(colorTexture.anisotropy).toBe(8)
     expect(dataTexture.colorSpace).toBe(THREE.NoColorSpace)
+  })
+
+  it('can clamp wall textures vertically while keeping horizontal repeat', () => {
+    const texture = new THREE.Texture()
+
+    configureSplineWallTexture(texture, 'color', 'clamp')
+
+    expect(texture.wrapS).toBe(THREE.RepeatWrapping)
+    expect(texture.wrapT).toBe(THREE.ClampToEdgeWrapping)
   })
 
   it('creates a dungeon wall material with PBR maps', () => {
@@ -86,6 +97,70 @@ describe('splineWallMaterial', () => {
     expect(topMaterial.map).toBeNull()
     expect(topMaterial.color.getHexString()).toBe('2f3442')
     expect(topMaterial.roughness).toBe(0.7)
+  })
+
+  it('enables parallax node sampling for authored height-map wall sets', () => {
+    const textures = createTextures()
+    const wallMaterialSet: ContentPackWallMaterialSet = {
+      id: 'ai-gothic-depth-wall',
+      name: 'AI Gothic Depth Wall',
+      textures: {
+        albedoUrl: '/wall_albedo.png',
+        heightUrl: '/wall_height.png',
+      },
+      shading: {
+        parallaxScale: 0.055,
+        parallaxSteps: 10,
+        parallaxInvert: true,
+      },
+    }
+
+    const material = createSplineWallMaterial('dungeon', textures, wallMaterialSet) as THREE.MeshStandardMaterial & {
+      colorNode?: unknown
+      normalNode?: unknown
+      roughnessNode?: unknown
+    }
+
+    expect(material.userData.splineWallParallax).toEqual({
+      scale: 0.055,
+      steps: 10,
+      inverted: true,
+    })
+    expect(material.colorNode).toBeDefined()
+    expect(material.normalNode).toBeDefined()
+    expect(material.roughnessNode).toBeDefined()
+    expect(material.normalMap).toBeNull()
+    expect(material.bumpMap).toBeNull()
+    expect(material.roughnessMap).toBeNull()
+  })
+
+  it('enables true vertex displacement for authored height-map wall sets', () => {
+    const textures = createTextures()
+    const wallMaterialSet: ContentPackWallMaterialSet = {
+      id: 'ai-gothic-depth-wall',
+      name: 'AI Gothic Depth Wall',
+      textures: {
+        albedoUrl: '/wall_albedo.png',
+        heightUrl: '/wall_height.png',
+        displacementUrl: '/wall_displacement.png',
+      },
+      shading: {
+        displacementScale: 0.12,
+        displacementBias: -0.025,
+      },
+    }
+
+    const material = createSplineWallMaterial('dungeon', textures, wallMaterialSet) as THREE.MeshStandardMaterial & {
+      positionNode?: unknown
+      castShadowPositionNode?: unknown
+    }
+
+    expect(material.userData.splineWallDisplacement).toEqual({
+      scale: 0.12,
+      bias: -0.025,
+    })
+    expect(material.positionNode).toBeDefined()
+    expect(material.castShadowPositionNode).toBeDefined()
   })
 
   it('keeps cave walls on an untextured fallback material', () => {

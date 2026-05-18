@@ -1,4 +1,5 @@
 import {
+  getContentPackRoomSetById,
   getContentPackWallStyleById,
   getDefaultContentPackWallStyleId,
 } from '../content-packs/registry'
@@ -17,6 +18,7 @@ import type {
   AnalyzedSplineWallBoundaryPath,
   AnalyzedSplineWallBoundarySection,
 } from './splineWallStyleAnalysis'
+import type { Room } from './useDungeonStore'
 
 export type SplineWallAssemblyLayerKind = 'structural-core' | 'room-face' | 'room-face-detail' | 'exterior-face'
 
@@ -45,11 +47,13 @@ export function buildSplineWallAssemblySections({
   analyzedBoundaries,
   wallStyleAssignments,
   wallCoreAssignments = {},
+  rooms = {},
   contentPackId = 'dungeon',
 }: {
   analyzedBoundaries: readonly AnalyzedSplineWallBoundaryPath[]
   wallStyleAssignments: Readonly<Record<string, string>>
   wallCoreAssignments?: Readonly<Record<string, string>>
+  rooms?: Readonly<Record<string, Room>>
   contentPackId?: string
 }): SplineWallAssemblySection[] {
   const defaultWallStyleId = getDefaultContentPackWallStyleId(contentPackId)
@@ -66,6 +70,8 @@ export function buildSplineWallAssemblySections({
       const wallStyleId = resolveFaceWallStyleId(
         section,
         wallStyleAssignments,
+        rooms,
+        contentPackId,
         defaultWallStyleId,
       )
       resolvedRoomFaceStyles.set(getResolvedRoomFaceStyleKey(section), wallStyleId)
@@ -150,9 +156,18 @@ function getResolvedRoomFaceStyleKey(section: AnalyzedSplineWallBoundarySection)
 function resolveFaceWallStyleId(
   section: AnalyzedSplineWallBoundarySection,
   wallStyleAssignments: Readonly<Record<string, string>>,
+  rooms: Readonly<Record<string, Room>>,
+  contentPackId: string,
   defaultWallStyleId: string,
 ) {
-  return wallStyleAssignments[createSplineWallSegmentSideKey(section.segmentId, section.side)] ?? defaultWallStyleId
+  const assignedWallStyleId = wallStyleAssignments[createSplineWallSegmentSideKey(section.segmentId, section.side)]
+  if (assignedWallStyleId) {
+    return assignedWallStyleId
+  }
+
+  const roomSetId = section.roomId ? rooms[section.roomId]?.roomSetId : null
+  const roomSetWallStyleId = getContentPackRoomSetById(contentPackId, roomSetId)?.wallStyleId
+  return roomSetWallStyleId ?? defaultWallStyleId
 }
 
 function resolveStructuralWallStyleId({

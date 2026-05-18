@@ -80,18 +80,30 @@ describe('content pack registry', () => {
     expect(asset.metadata?.openingKind).toBe('door')
   })
 
-  it('registers the timber frame room set with scaffold walls and scaffold doors', () => {
-    expect(getContentPackRoomSetById('dungeon', 'timber-frame')).toMatchObject({
-      id: 'timber-frame',
-      name: 'Timber Frame',
-      previewWallAssetId: 'dungeon.wall_wall_scaffold',
-      wallAssetId: 'dungeon.wall_wall_scaffold',
-      pillarAssetId: 'dungeon.props_pillars_pillar',
-      openingAssetId: 'dungeon.wall_wall_doorway_scaffold',
+  it('registers room styles with their wall style and material defaults', () => {
+    expect(getContentPackRoomSetById('dungeon', 'dungeon')).toMatchObject({
+      id: 'dungeon',
+      name: 'Dungeon',
+      wallStyleId: 'dungeon-stone',
+      wallMaterialSetId: 'kaykit-stone',
+    })
+    expect(getContentPackRoomSetById('dungeon', 'cave')).toMatchObject({
+      id: 'cave',
+      name: 'Rocky Cave',
+      previewWallAssetId: 'dungeon.wall_wall_cave',
+      wallAssetId: 'dungeon.wall_wall_cave',
+      pillarAssetId: 'dungeon.props_pillars_cave_pillar',
+      wallStyleId: 'rocky-cave',
+      wallMaterialSetId: 'rough-rockface-1-pbr-material',
       floor: {
-        kind: 'single',
-        assetId: 'dungeon.floor_floor_tile_small',
+        kind: 'randomized',
       },
+    })
+    expect(getContentPackRoomSetById('dungeon', 'ai-gothic')).toMatchObject({
+      id: 'ai-gothic',
+      name: 'AI Gothic',
+      wallStyleId: 'ai-gothic',
+      wallMaterialSetId: 'ai-gothic-depth-wall',
     })
   })
 
@@ -117,6 +129,26 @@ describe('content pack registry', () => {
         normalUrl: expect.any(String),
         aoUrl: expect.any(String),
         heightUrl: expect.any(String),
+      },
+    })
+    expect(getContentPackWallMaterialSetById('dungeon', 'ai-gothic-depth-wall')).toMatchObject({
+      id: 'ai-gothic-depth-wall',
+      name: 'AI Gothic Depth Wall',
+      textures: {
+        albedoUrl: expect.stringContaining('ai-gothic-depth-wall/wall_albedo.png'),
+        normalUrl: expect.stringContaining('ai-gothic-depth-wall/wall_normal.png'),
+        aoUrl: expect.stringContaining('ai-gothic-depth-wall/wall_ao.png'),
+        heightUrl: expect.stringContaining('ai-gothic-depth-wall/wall_height.png'),
+        roughnessUrl: expect.stringContaining('ai-gothic-depth-wall/wall_roughness.png'),
+      },
+      shading: {
+        parallaxScale: 0.055,
+        parallaxSteps: 10,
+        parallaxInvert: true,
+      },
+      uv: {
+        verticalMode: 'fit-height',
+        verticalWrap: 'clamp',
       },
     })
     expect(getContentPackWallMaterialSetById('dungeon', 'classy-art-deco-wallpaper')).toMatchObject({
@@ -152,10 +184,10 @@ describe('content pack registry', () => {
   })
 
   it('registers authored dungeon wall styles', () => {
-    expect(getDefaultContentPackWallStyleId('dungeon')).toBe('art-deco-cobblestone')
-    expect(getContentPackWallStyleById('dungeon', 'art-deco-cobblestone')).toMatchObject({
-      id: 'art-deco-cobblestone',
-      name: 'Art Deco Cobblestone',
+    expect(getDefaultContentPackWallStyleId('dungeon')).toBe('dungeon-stone')
+    expect(getContentPackWallStyleById('dungeon', 'dungeon-stone')).toMatchObject({
+      id: 'dungeon-stone',
+      name: 'Dungeon Stone',
       roomFace: {
         profile: {
           points: [
@@ -165,13 +197,10 @@ describe('content pack registry', () => {
         },
         material: {
           textures: {
-            albedoUrl: expect.stringContaining('modern-brick1_albedo.png'),
-            normalUrl: expect.stringContaining('modern-brick1_normal-ogl.png'),
-            aoUrl: expect.stringContaining('modern-brick1_ao.png'),
-            heightUrl: expect.stringContaining('modern-brick1_height.png'),
+            albedoUrl: expect.stringContaining('kaykit-stone/wall_albedo.png'),
           },
           shading: {
-            tintColor: '#ffffff',
+            tintColor: '#cfd6df',
           },
         },
       },
@@ -186,40 +215,75 @@ describe('content pack registry', () => {
           },
         },
       ],
+      openingRules: {
+        defaultMode: 'structural',
+        supportedModes: ['framed', 'structural'],
+      },
+    })
+    expect(
+      getContentPackWallStyleById('dungeon', 'dungeon-stone')?.inserts
+        ?.some((insert) => insert.assetId === 'dungeon.props_pillars_pillar') ?? false,
+    ).toBe(false)
+    expect(getContentPackWallStyleById('dungeon', 'rocky-cave')).toMatchObject({
+      id: 'rocky-cave',
+      name: 'Rocky Cave',
+      roomFace: {
+        material: {
+          textures: {
+            albedoUrl: expect.stringContaining('Rough-rockface1_Base_Color.png'),
+            normalUrl: expect.stringContaining('Rough-rockface1_Normal.png'),
+            aoUrl: expect.stringContaining('Rough-rockface1_Ambient_Occlusion.png'),
+            heightUrl: expect.stringContaining('Rough-rockface1_Height.png'),
+          },
+        },
+      },
       inserts: [
         {
-          assetId: 'dungeon.props_pillars_pillar',
+          assetId: 'dungeon.props_pillars_cave_pillar',
           anchors: ['start', 'end', 'convex-corner', 'curvature-change'],
         },
-        {
-          assetId: 'dungeon.props_pillars_pillar',
-          anchors: ['interval'],
-          interval: 3,
-        },
       ],
-      openingRules: {
-        defaultMode: 'structural',
-        supportedModes: ['framed', 'structural'],
-      },
     })
-    expect(getContentPackWallStyleById('dungeon', 'stone-keep')).toMatchObject({
-      id: 'stone-keep',
-      name: 'Stone Keep',
-      joinMode: 'cover-piece',
-      openingRules: {
-        defaultMode: 'structural',
-        supportedModes: ['framed', 'structural'],
-      },
-    })
-    expect(getContentPackWallStyleById('dungeon', 'manor-plaster')).toMatchObject({
-      id: 'manor-plaster',
-      name: 'Manor Plaster',
-      inserts: [
-        {
-          assetId: 'dungeon.props_pillars_pillar',
-          anchors: ['start', 'end', 'convex-corner'],
+    expect(getContentPackWallStyleById('dungeon', 'ai-gothic')).toMatchObject({
+      id: 'ai-gothic',
+      name: 'AI Gothic',
+      structuralCore: {
+        render: {
+          hiddenProfileSegmentIndices: [0, 1, 2],
         },
-      ],
+      },
+      roomFace: {
+        profile: {
+          points: [
+            [0.22, 0],
+            [0.22, 1],
+          ],
+        },
+        material: {
+          textures: {
+            albedoUrl: expect.stringContaining('ai-gothic-depth-wall/wall_albedo.png'),
+            normalUrl: expect.stringContaining('ai-gothic-depth-wall/wall_normal.png'),
+            heightUrl: expect.stringContaining('ai-gothic-depth-wall/wall_height.png'),
+          },
+          shading: {
+            parallaxScale: 0.055,
+            parallaxSteps: 10,
+            parallaxInvert: true,
+          },
+          uv: {
+            verticalMode: 'fit-height',
+            verticalWrap: 'clamp',
+          },
+        },
+      },
+      exteriorFace: {
+        profile: {
+          points: [
+            [0.22, 0],
+            [0.22, 1],
+          ],
+        },
+      },
     })
   })
 
@@ -318,6 +382,15 @@ describe('content pack registry', () => {
       })
       expect(asset.metadata?.atlasColorVariants?.variants).toHaveLength(31)
     }
+  })
+
+  it('keeps shield banners offset forward from the wall', () => {
+    const asset = getContentPackAssetById('dungeon.props_banners_banner_shield_blue')
+
+    expect(asset?.metadata?.connectors).toContainEqual({
+      type: 'WALL',
+      point: [0, 0, 0.7],
+    })
   })
 
   it('does not register redundant color sibling assets for swatch-enabled families', () => {

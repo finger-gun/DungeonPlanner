@@ -12,9 +12,11 @@ function createWallMaterialSet({
   normalPath,
   aoPath,
   heightPath,
+  displacementPath,
   roughnessPath,
   metallicPath,
   shading,
+  uv,
 }: {
   id: string
   name: string
@@ -23,9 +25,11 @@ function createWallMaterialSet({
   normalPath?: string
   aoPath?: string
   heightPath?: string
+  displacementPath?: string
   roughnessPath?: string
   metallicPath?: string
   shading?: ContentPackWallMaterialSet['shading']
+  uv?: ContentPackWallMaterialSet['uv']
 }): ContentPackWallMaterialSet {
   const albedoUrl = resolveAssetUrl(albedoPath)
 
@@ -38,10 +42,12 @@ function createWallMaterialSet({
       ...(normalPath ? { normalUrl: resolveAssetUrl(normalPath) } : {}),
       ...(aoPath ? { aoUrl: resolveAssetUrl(aoPath) } : {}),
       ...(heightPath ? { heightUrl: resolveAssetUrl(heightPath) } : {}),
+      ...(displacementPath ? { displacementUrl: resolveAssetUrl(displacementPath) } : {}),
       ...(roughnessPath ? { roughnessUrl: resolveAssetUrl(roughnessPath) } : {}),
       ...(metallicPath ? { metallicUrl: resolveAssetUrl(metallicPath) } : {}),
     },
     ...(shading ? { shading } : {}),
+    ...(uv ? { uv } : {}),
   }
 }
 
@@ -73,6 +79,31 @@ export const dungeonWallMaterialSets: ContentPackWallMaterialSet[] = [
     normalPath: '../../assets/materials/dungeon/wall-materials/wedged-cobblestone/wall_normal.png',
     aoPath: '../../assets/materials/dungeon/wall-materials/wedged-cobblestone/wall_ao.png',
     heightPath: '../../assets/materials/dungeon/wall-materials/wedged-cobblestone/wall_height.png',
+  }),
+  createWallMaterialSet({
+    id: 'ai-gothic-depth-wall',
+    name: 'AI Gothic Depth Wall',
+    albedoPath: '../../assets/materials/dungeon/wall-materials/ai-gothic-depth-wall/wall_albedo.png',
+    normalPath: '../../assets/materials/dungeon/wall-materials/ai-gothic-depth-wall/wall_normal.png',
+    aoPath: '../../assets/materials/dungeon/wall-materials/ai-gothic-depth-wall/wall_ao.png',
+    heightPath: '../../assets/materials/dungeon/wall-materials/ai-gothic-depth-wall/wall_height.png',
+    roughnessPath: '../../assets/materials/dungeon/wall-materials/ai-gothic-depth-wall/wall_roughness.png',
+    shading: {
+      roughness: 0.86,
+      metalness: 0,
+      bumpScale: 0.08,
+      parallaxScale: 0.055,
+      parallaxSteps: 10,
+      parallaxInvert: true,
+      aoMapIntensity: 0.65,
+      topSurfaceColor: '#262a31',
+      topSurfaceRoughness: 0.82,
+      topSurfaceMetalness: 0,
+    },
+    uv: {
+      verticalMode: 'fit-height',
+      verticalWrap: 'clamp',
+    },
   }),
   ...generatedWallMaterialSets,
 ]

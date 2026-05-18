@@ -1,6 +1,8 @@
 import * as THREE from 'three'
 import type { MapMode } from '../../store/useDungeonStore'
 
+const NEUTRAL_LIGHT_COLOR = '#ffffff'
+
 export type EnvironmentLightingState = {
   ambientColor: THREE.Color
   keyColor: THREE.Color
@@ -19,17 +21,17 @@ export function getEnvironmentLightingState(mapMode: MapMode, timeOfDay: number)
     return {
       ambientColor: mapColor(blend, [
         [0, '#ffc89a'],
-        [0.5, '#e8f5ff'],
+        [0.5, NEUTRAL_LIGHT_COLOR],
         [1, '#5c74b3'],
       ]),
       keyColor: mapColor(blend, [
         [0, '#ffd7a6'],
-        [0.5, '#fff2cc'],
+        [0.5, NEUTRAL_LIGHT_COLOR],
         [1, '#9db4ff'],
       ]),
       fillColor: mapColor(blend, [
         [0, '#ff9f6e'],
-        [0.5, '#9bd5ff'],
+        [0.5, NEUTRAL_LIGHT_COLOR],
         [1, '#3f5ca8'],
       ]),
       skyColor: mapColor(blend, [
@@ -51,17 +53,17 @@ export function getEnvironmentLightingState(mapMode: MapMode, timeOfDay: number)
   return {
     ambientColor: mapColor(blend, [
       [0, '#f7c89a'],
-      [0.5, '#ffe4c7'],
+      [0.5, NEUTRAL_LIGHT_COLOR],
       [1, '#7483b8'],
     ]),
     keyColor: mapColor(blend, [
       [0, '#ffcb93'],
-      [0.5, '#ffd29d'],
+      [0.5, NEUTRAL_LIGHT_COLOR],
       [1, '#8ea5df'],
     ]),
     fillColor: mapColor(blend, [
       [0, '#b89f90'],
-      [0.5, '#89dceb'],
+      [0.5, NEUTRAL_LIGHT_COLOR],
       [1, '#41598f'],
     ]),
     skyColor: mapColor(blend, [

@@ -1,0 +1,13 @@
+{
+  "id": "interior-subterranean-city-rough-rough-hewn-stone-clusters-of-714349072336392",
+  "name": "Subterranean City Rough Rough Hewn Stone Clusters Of 714349072336392",
+  "sourceImage": "/Volumes/roblinas/sd/wall-texture-714349072336392.png",
+  "sourceDepth": "/Volumes/roblinas/sd/wall-depth-714349072336392.png",
+  "size": 1024,
+  "normalStrength": 4,
+  "parallaxScale": 0.12,
+  "parallaxSteps": 16,
+  "bumpScale": 0.16,
+  "parallaxInvert": true,
+  "heightMean": 0.1935
+}

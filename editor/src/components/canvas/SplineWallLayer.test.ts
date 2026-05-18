@@ -322,6 +322,72 @@ describe('buildSplineWallSectionHeightBands', () => {
     expect(geometry.getAttribute('uv2')?.count).toBeGreaterThan(0)
   })
 
+  it('fits AI Gothic exterior UVs to wall height at the wall boundary', () => {
+    const graph = upsertSplineWallGraphRoomPath(createEmptySplineWallGraph(), {
+      roomId: 'room-a',
+      layerId: 'default',
+      nodes: [
+        { position: [0, 0], cornerMode: 'square', cornerAmount: 0 },
+        { position: [2, 0], cornerMode: 'square', cornerAmount: 0 },
+        { position: [2, 2], cornerMode: 'square', cornerAmount: 0 },
+        { position: [0, 2], cornerMode: 'square', cornerAmount: 0 },
+      ],
+      closed: true,
+    })
+    const analysis = analyzeSplineWallGraphBoundaries(graph)
+    const exteriorFace = analysis[0]!.sections.find((section) => section.faceKind === 'exterior-face')!
+    const assemblySections = buildSplineWallAssemblySections({
+      analyzedBoundaries: analysis,
+      wallStyleAssignments: {
+        [createSplineWallSegmentSideKey(exteriorFace.segmentId, exteriorFace.side)]: 'ai-gothic',
+      },
+    })
+    const section = assemblySections.find((candidate) =>
+      candidate.segmentId === exteriorFace.segmentId && candidate.layerKind === 'exterior-face',
+    )!
+
+    const geometry = buildSplineWallSectionGeometry(section, createSplineWallQueryCache(graph), [])
+    expect(getMinUvV(geometry)).toBeCloseTo(0, 5)
+    expect(getMaxUvV(geometry)).toBeCloseTo(1, 5)
+    expect(getUvVAtHeight(geometry, 0)).toBeCloseTo(0, 5)
+    expect(getUvVAtHeight(geometry, DEFAULT_SPLINE_WALL_HEIGHT)).toBeCloseTo(1, 5)
+    expect(getMaxUvU(geometry)).toBeCloseTo((2 * GRID_SIZE) / DEFAULT_SPLINE_WALL_HEIGHT, 5)
+    expect(countVerticesAtUvU(geometry, 0)).toBe(2)
+    expect(geometry.getAttribute('position')?.count ?? 0).toBeLessThan(100)
+    expect(getAverageHorizontalOffsetFromSegment(geometry, section)).toBeCloseTo(0.22, 5)
+  })
+
+  it('renders AI Gothic structural core as a neutral top fill sheet only', () => {
+    const graph = upsertSplineWallGraphRoomPath(createEmptySplineWallGraph(), {
+      roomId: 'room-a',
+      layerId: 'default',
+      nodes: [
+        { position: [0, 0], cornerMode: 'square', cornerAmount: 0 },
+        { position: [2, 0], cornerMode: 'square', cornerAmount: 0 },
+        { position: [2, 2], cornerMode: 'square', cornerAmount: 0 },
+        { position: [0, 2], cornerMode: 'square', cornerAmount: 0 },
+      ],
+      closed: true,
+    })
+    const analysis = analyzeSplineWallGraphBoundaries(graph)
+    const roomFace = analysis[0]!.sections.find((section) => section.faceKind === 'room-face')!
+    const assemblySections = buildSplineWallAssemblySections({
+      analyzedBoundaries: analysis,
+      wallStyleAssignments: {
+        [createSplineWallSegmentSideKey(roomFace.segmentId, roomFace.side)]: 'ai-gothic',
+      },
+    })
+    const structuralCore = assemblySections.find((candidate) =>
+      candidate.segmentId === roomFace.segmentId && candidate.layerKind === 'structural-core',
+    )!
+
+    const geometry = buildSplineWallSectionGeometry(structuralCore, createSplineWallQueryCache(graph), [])
+
+    expect(geometry.getAttribute('position')?.count ?? 0).toBeGreaterThan(0)
+    expect(getMinPositionY(geometry)).toBeCloseTo(DEFAULT_SPLINE_WALL_HEIGHT, 5)
+    expect(getMaxPositionY(geometry)).toBeCloseTo(DEFAULT_SPLINE_WALL_HEIGHT, 5)
+  })
+
   it('groups adjacent visual wall sections so clipped curves render as continuous runs', () => {
     const graph = upsertSplineWallGraphRoomPath(createEmptySplineWallGraph(), {
       roomId: 'room-a',
@@ -336,12 +402,17 @@ describe('buildSplineWallSectionHeightBands', () => {
       closed: true,
     })
     const analysis = analyzeSplineWallGraphBoundaries(graph)
-    const firstRoomFace = analysis[0]!.sections.find((section) => section.faceKind === 'room-face')!
+    const roomFaceAnalysisSections = analysis
+      .flatMap((boundaryPath) => boundaryPath.sections)
+      .filter((section) => section.faceKind === 'room-face')
     const assemblySections = buildSplineWallAssemblySections({
       analyzedBoundaries: analysis,
-      wallStyleAssignments: {
-        [createSplineWallSegmentSideKey(firstRoomFace.segmentId, firstRoomFace.side)]: 'art-deco-cobblestone',
-      },
+      wallStyleAssignments: Object.fromEntries(
+        roomFaceAnalysisSections.map((section) => [
+          createSplineWallSegmentSideKey(section.segmentId, section.side),
+          'art-deco-cobblestone',
+        ]),
+      ),
     })
     const roomFaceSections = assemblySections.filter((section) =>
       section.layerKind === 'room-face'
@@ -423,6 +494,78 @@ describe('buildSplineWallSectionHeightBands', () => {
     )
   })
 
+  it('closes grouped exterior corners with mitered offset intersections', () => {
+    const graph = upsertSplineWallGraphRoomPath(createEmptySplineWallGraph(), {
+      roomId: 'room-a',
+      layerId: 'default',
+      nodes: [
+        { position: [0, 0], cornerMode: 'square', cornerAmount: 0 },
+        { position: [2, 0], cornerMode: 'square', cornerAmount: 0 },
+        { position: [2, 2], cornerMode: 'square', cornerAmount: 0 },
+        { position: [0, 2], cornerMode: 'square', cornerAmount: 0 },
+      ],
+      closed: true,
+    })
+    const analysis = analyzeSplineWallGraphBoundaries(graph)
+    const exteriorSections = analysis
+      .flatMap((boundaryPath) => boundaryPath.sections)
+      .filter((section) => section.faceKind === 'exterior-face')
+    const assemblySections = buildSplineWallAssemblySections({
+      analyzedBoundaries: analysis,
+      wallStyleAssignments: Object.fromEntries(
+        exteriorSections.map((section) => [
+          createSplineWallSegmentSideKey(section.segmentId, section.side),
+          'art-deco-cobblestone',
+        ]),
+      ),
+    }).filter((section) => section.layerKind === 'exterior-face')
+
+    const geometry = buildSplineWallSectionGroupGeometry(
+      assemblySections,
+      createSplineWallQueryCache(graph),
+      new Map(),
+    )
+
+    expect(hasVertexNearXZ(geometry, [4.25, 4.25])).toBe(true)
+    expect(hasVertexNearXZ(geometry, [-0.25, -0.25])).toBe(true)
+  })
+
+  it('retracts grouped room-face corners so interior skins meet without overlap', () => {
+    const graph = upsertSplineWallGraphRoomPath(createEmptySplineWallGraph(), {
+      roomId: 'room-a',
+      layerId: 'default',
+      nodes: [
+        { position: [0, 0], cornerMode: 'square', cornerAmount: 0 },
+        { position: [2, 0], cornerMode: 'square', cornerAmount: 0 },
+        { position: [2, 2], cornerMode: 'square', cornerAmount: 0 },
+        { position: [0, 2], cornerMode: 'square', cornerAmount: 0 },
+      ],
+      closed: true,
+    })
+    const analysis = analyzeSplineWallGraphBoundaries(graph)
+    const roomFaceSections = analysis
+      .flatMap((boundaryPath) => boundaryPath.sections)
+      .filter((section) => section.faceKind === 'room-face')
+    const assemblySections = buildSplineWallAssemblySections({
+      analyzedBoundaries: analysis,
+      wallStyleAssignments: Object.fromEntries(
+        roomFaceSections.map((section) => [
+          createSplineWallSegmentSideKey(section.segmentId, section.side),
+          'art-deco-cobblestone',
+        ]),
+      ),
+    }).filter((section) => section.layerKind === 'room-face')
+
+    const geometry = buildSplineWallSectionGroupGeometry(
+      assemblySections,
+      createSplineWallQueryCache(graph),
+      new Map(),
+    )
+
+    expect(hasVertexNearXZ(geometry, [3.819, 3.819])).toBe(true)
+    expect(hasVertexNearXZ(geometry, [0.181, 0.181])).toBe(true)
+  })
+
   it('keeps exterior wall UVs anchored when an opening cuts the mesh into bands', () => {
     const graph = upsertSplineWallGraphRoomPath(createEmptySplineWallGraph(), {
       roomId: 'room-a',
@@ -492,13 +635,13 @@ describe('buildSplineWallSectionHeightBands', () => {
       albedoUrl: expect.any(String),
     })
     expect(style.exteriorFace.material.shading).toMatchObject({
-      tintColor: '#aaaaaa',
-      roughness: 0.45,
-      metalness: 0,
+      tintColor: '#dddddd',
+      roughness: 0.2,
+      metalness: 0.2,
     })
   })
 
-  it('does not render the art deco structural core as a visible wall layer', () => {
+  it('renders the art deco structural core as a neutral top fill sheet only', () => {
     const graph = upsertSplineWallGraphRoomPath(createEmptySplineWallGraph(), {
       roomId: 'room-a',
       layerId: 'default',
@@ -523,7 +666,9 @@ describe('buildSplineWallSectionHeightBands', () => {
     )!
 
     const geometry = buildSplineWallSectionGeometry(structuralCore, createSplineWallQueryCache(graph), [])
-    expect(geometry.getAttribute('position').count).toBe(0)
+    expect(geometry.getAttribute('position').count).toBeGreaterThan(0)
+    expect(getMinPositionY(geometry)).toBeCloseTo(DEFAULT_SPLINE_WALL_HEIGHT, 5)
+    expect(getMaxPositionY(geometry)).toBeCloseTo(DEFAULT_SPLINE_WALL_HEIGHT, 5)
   })
 
   it('aligns structural-core baked light directions with the generated wall normals', () => {
@@ -845,6 +990,23 @@ describe('resolveSplineWallBakedLightSamplePosition', () => {
     expect(resolved.direction).toEqual([1, 0, 0])
   })
 
+  it('keeps exterior-face samples on the exterior side when opposite fallback is disabled', () => {
+    const field = createSampledFloorLightField(['0:0'])
+    const resolved = resolveSplineWallBakedLightSample(
+      field,
+      [0, 1, GRID_SIZE * 0.5],
+      [-1, 0, 0],
+      { allowOppositeFallback: false },
+    )
+
+    expect(resolved.position).toEqual([
+      -GRID_SIZE * 0.24,
+      1.06,
+      GRID_SIZE * 0.5,
+    ])
+    expect(resolved.direction).toEqual([-1, 0, 0])
+  })
+
   it('does not flip samples across shared walls when both sides are baked floor cells', () => {
     const field = createSampledFloorLightField(['0:0', '1:0'])
 
@@ -906,9 +1068,33 @@ function getMaxUvV(geometry: THREE.BufferGeometry) {
   return Math.max(...Array.from({ length: uv.count }, (_, index) => uv.getY(index)))
 }
 
+function getMinUvV(geometry: THREE.BufferGeometry) {
+  const uv = geometry.getAttribute('uv')
+  return Math.min(...Array.from({ length: uv.count }, (_, index) => uv.getY(index)))
+}
+
 function getMaxUvU(geometry: THREE.BufferGeometry) {
   const uv = geometry.getAttribute('uv')
   return Math.max(...Array.from({ length: uv.count }, (_, index) => uv.getX(index)))
+}
+
+function getUvVAtHeight(geometry: THREE.BufferGeometry, height: number) {
+  const uv = geometry.getAttribute('uv')
+  const positions = geometry.getAttribute('position')
+  const values = Array.from({ length: uv.count }, (_, index) =>
+    Math.abs(positions.getY(index) - height) <= 1e-5 ? uv.getY(index) : Number.NEGATIVE_INFINITY)
+  return Math.max(...values)
+}
+
+function countVerticesAtUvU(geometry: THREE.BufferGeometry, u: number) {
+  const uv = geometry.getAttribute('uv')
+  let count = 0
+  for (let index = 0; index < uv.count; index += 1) {
+    if (Math.abs(uv.getX(index) - u) <= 1e-5) {
+      count += 1
+    }
+  }
+  return count
 }
 
 function getMaxUvUAtHeight(geometry: THREE.BufferGeometry, height: number) {
@@ -917,6 +1103,52 @@ function getMaxUvUAtHeight(geometry: THREE.BufferGeometry, height: number) {
   const values = Array.from({ length: uv.count }, (_, index) =>
     Math.abs(positions.getY(index) - height) <= 1e-5 ? uv.getX(index) : Number.NEGATIVE_INFINITY)
   return Math.max(...values)
+}
+
+function hasVertexNearXZ(
+  geometry: THREE.BufferGeometry,
+  target: readonly [number, number],
+  tolerance = 1e-3,
+) {
+  const positions = geometry.getAttribute('position')
+  return Array.from({ length: positions.count }, (_, index) =>
+    Math.hypot(
+      positions.getX(index) - target[0],
+      positions.getZ(index) - target[1],
+    ) <= tolerance).some(Boolean)
+}
+
+function getMinPositionY(geometry: THREE.BufferGeometry) {
+  const positions = geometry.getAttribute('position')
+  return Math.min(...Array.from({ length: positions.count }, (_, index) => positions.getY(index)))
+}
+
+function getMaxPositionY(geometry: THREE.BufferGeometry) {
+  const positions = geometry.getAttribute('position')
+  return Math.max(...Array.from({ length: positions.count }, (_, index) => positions.getY(index)))
+}
+
+function getAverageHorizontalOffsetFromSegment(
+  geometry: THREE.BufferGeometry,
+  section: { start: readonly [number, number]; end: readonly [number, number] },
+) {
+  const positions = geometry.getAttribute('position')
+  expect(positions?.count).toBeGreaterThan(0)
+  const segmentX = section.end[0] - section.start[0]
+  const segmentZ = section.end[1] - section.start[1]
+  const segmentLength = Math.hypot(segmentX, segmentZ)
+  expect(segmentLength).toBeGreaterThan(1e-5)
+
+  let sum = 0
+  for (let index = 0; index < positions.count; index += 1) {
+    const pointX = positions.getX(index)
+    const pointZ = positions.getZ(index)
+    const distance = Math.abs(
+      ((pointX - section.start[0]) * segmentZ) - ((pointZ - section.start[1]) * segmentX),
+    ) / segmentLength
+    sum += distance
+  }
+  return sum / positions.count
 }
 
 function getAverageNormalDotForSectionSide(

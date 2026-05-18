@@ -1,0 +1,13 @@
+{
+  "id": "interior-medieval-wizard-library-389444287740664",
+  "name": "Medieval Wizard Library 389444287740664",
+  "sourceImage": "/Volumes/roblinas/sd/wall-texture-389444287740664.png",
+  "sourceDepth": "/Volumes/roblinas/sd/wall-depth-389444287740664.png",
+  "size": 1024,
+  "normalStrength": 4,
+  "parallaxScale": 0.12,
+  "parallaxSteps": 16,
+  "bumpScale": 0.16,
+  "parallaxInvert": true,
+  "heightMean": 0.3754
+}

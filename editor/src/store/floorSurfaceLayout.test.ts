@@ -104,6 +104,38 @@ describe('floorSurfaceLayout', () => {
     })
   })
 
+  it('keeps painted room floor groups scoped to their owning room for floor masks', () => {
+    const paintedCells = createPaintedCells([
+      [0, 0], [1, 0], [0, 1], [1, 1],
+    ])
+    Object.values(paintedCells).forEach((record) => {
+      record.roomId = 'room-painted'
+    })
+
+    const plan = buildFloorRenderPlan(
+      paintedCells,
+      {
+        'room-painted': {
+          id: 'room-painted',
+          name: 'Painted Room',
+          layerId: 'layer-1',
+          roomSetId: 'dungeon',
+          floorAssetId: null,
+          wallAssetId: null,
+          geometrySource: 'paint',
+        },
+      },
+      'dungeon.floor_floor_tile_small',
+      {},
+    )
+
+    expect(plan.baseGroups).toHaveLength(1)
+    expect(plan.baseGroups[0]).toMatchObject({
+      roomId: 'room-painted',
+      cells: [[0, 0], [1, 0], [0, 1], [1, 1]],
+    })
+  })
+
   it('avoids obvious diagonal repetition in cave floor variation', () => {
     const paintedCells = createPaintedCells(
       Array.from({ length: 6 }, (_, z) =>

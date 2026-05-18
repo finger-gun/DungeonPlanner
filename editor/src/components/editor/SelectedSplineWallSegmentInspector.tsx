@@ -14,6 +14,7 @@ export function SelectedSplineWallSegmentInspector({
   side: SplineWallSegmentSide
 }) {
   const splineWallGraph = useDungeonStore((state) => state.splineWallGraph)
+  const rooms = useDungeonStore((state) => state.rooms)
   const wallStyleAssignments = useDungeonStore((state) => state.wallStyleAssignments)
   const wallCoreAssignments = useDungeonStore((state) => state.wallCoreAssignments)
   const setSplineWallSegmentStyle = useDungeonStore((state) => state.setSplineWallSegmentStyle)
@@ -26,11 +27,12 @@ export function SelectedSplineWallSegmentInspector({
       analyzedBoundaries: analysis,
       wallStyleAssignments,
       wallCoreAssignments,
+      rooms,
     }).find((section) =>
       section.segmentId === segmentId
       && section.side === side
       && section.layerKind !== 'structural-core')
-  }, [segmentId, side, splineWallGraph, wallCoreAssignments, wallStyleAssignments])
+  }, [rooms, segmentId, side, splineWallGraph, wallCoreAssignments, wallStyleAssignments])
 
   const currentStyleId = selectedSection?.wallStyleId ?? null
   const currentCoreStyleId = selectedSection?.structuralSegmentId

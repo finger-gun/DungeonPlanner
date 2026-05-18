@@ -8,13 +8,31 @@ import { buildSplineWallGraphFromPaintedCells } from './splineWalls'
 import { analyzeSplineWallGraphBoundaries } from './splineWallStyleAnalysis'
 import { createSplineWallSegmentSideKey } from './wallStyleAssignments'
 
+const CAVE_PILLAR_ASSET_ID = 'dungeon.props_pillars_cave_pillar'
+const KAYKIT_PILLAR_ASSET_ID = 'dungeon.props_pillars_pillar'
+
+function assignAllAnalyzedFacesToStyle(
+  analysis: ReturnType<typeof analyzeSplineWallGraphBoundaries>,
+  wallStyleId: string,
+) {
+  return Object.fromEntries(
+    analysis.flatMap((path) =>
+      path.sections
+        .filter((section) => section.side)
+        .map((section) => [
+          createSplineWallSegmentSideKey(section.segmentId, section.side!),
+          wallStyleId,
+        ]),
+    ),
+  )
+}
+
 describe('buildSplineWallInsertDescriptors', () => {
-  it('generates pillar inserts for the default art deco wall style', () => {
+  it('does not generate KayKit pillar inserts for the default dungeon wall style', () => {
     const graph = buildSplineWallGraphFromPaintedCells({
       '0:0': { cell: [0, 0], layerId: 'default', roomId: 'room-a' },
     })
     const analysis = analyzeSplineWallGraphBoundaries(graph)
-    const firstRoomFace = analysis[0]!.sections.find((section) => section.faceKind === 'room-face')!
     const assemblySections = buildSplineWallAssemblySections({
       analyzedBoundaries: analysis,
       wallStyleAssignments: {},
@@ -23,14 +41,9 @@ describe('buildSplineWallInsertDescriptors', () => {
     const inserts = buildSplineWallInsertDescriptors({
       analyzedBoundaries: analysis,
       assemblySections,
-    }).filter((insert) =>
-      insert.segmentId === firstRoomFace.segmentId
-      && insert.wallStyleId === 'art-deco-cobblestone'
-      && insert.assetId === 'dungeon.props_pillars_pillar',
-    )
+    })
 
-    expect(inserts.length).toBeGreaterThan(0)
-    expect(new Set(inserts.map((insert) => `${insert.assetId}:${insert.position.join(':')}`)).size).toBe(inserts.length)
+    expect(inserts.some((insert) => insert.assetId === KAYKIT_PILLAR_ASSET_ID)).toBe(false)
   })
 
   it('dedupes room and exterior inserts that would occupy the same wall center point', () => {
@@ -44,15 +57,15 @@ describe('buildSplineWallInsertDescriptors', () => {
     const assemblySections = buildSplineWallAssemblySections({
       analyzedBoundaries: analysis,
       wallStyleAssignments: {
-        [createSplineWallSegmentSideKey(firstRoomFace.segmentId, firstRoomFace.side)]: 'stone-keep',
-        [createSplineWallSegmentSideKey(firstExteriorFace.segmentId, firstExteriorFace.side)]: 'manor-plaster',
+        [createSplineWallSegmentSideKey(firstRoomFace.segmentId, firstRoomFace.side)]: 'rocky-cave',
+        [createSplineWallSegmentSideKey(firstExteriorFace.segmentId, firstExteriorFace.side)]: 'rocky-cave',
       },
     })
 
     const inserts = buildSplineWallInsertDescriptors({
       analyzedBoundaries: analysis,
       assemblySections,
-    }).filter((insert) => insert.assetId === 'dungeon.props_pillars_pillar')
+    }).filter((insert) => insert.assetId === CAVE_PILLAR_ASSET_ID)
 
     expect(inserts.length).toBeGreaterThan(0)
     expect(new Set(inserts.map((insert) => `${insert.position[0]}:${insert.position[1]}`)).size).toBe(inserts.length)
@@ -73,13 +86,13 @@ describe('buildSplineWallInsertDescriptors', () => {
     const analysis = analyzeSplineWallGraphBoundaries(graph)
     const assemblySections = buildSplineWallAssemblySections({
       analyzedBoundaries: analysis,
-      wallStyleAssignments: {},
+      wallStyleAssignments: assignAllAnalyzedFacesToStyle(analysis, 'rocky-cave'),
     })
 
     const inserts = buildSplineWallInsertDescriptors({
       analyzedBoundaries: analysis,
       assemblySections,
-    }).filter((insert) => insert.assetId === 'dungeon.props_pillars_pillar')
+    }).filter((insert) => insert.assetId === CAVE_PILLAR_ASSET_ID)
 
     expect(inserts.some((insert) => insert.anchorKind === 'start' || insert.anchorKind === 'end')).toBe(false)
     expect(inserts.filter((insert) => insert.anchorKind === 'convex-corner')).toHaveLength(4)
@@ -98,92 +111,16 @@ describe('buildSplineWallInsertDescriptors', () => {
     const analysis = analyzeSplineWallGraphBoundaries(graph)
     const assemblySections = buildSplineWallAssemblySections({
       analyzedBoundaries: analysis,
-      wallStyleAssignments: {},
+      wallStyleAssignments: assignAllAnalyzedFacesToStyle(analysis, 'rocky-cave'),
     })
 
     const inserts = buildSplineWallInsertDescriptors({
       analyzedBoundaries: analysis,
       assemblySections,
-    }).filter((insert) => insert.assetId === 'dungeon.props_pillars_pillar')
+    }).filter((insert) => insert.assetId === CAVE_PILLAR_ASSET_ID)
 
     expect(inserts.some((insert) => insert.anchorKind === 'start')).toBe(true)
     expect(inserts.some((insert) => insert.anchorKind === 'end')).toBe(true)
-  })
-
-  it('adds interval inserts along long analyzed wall sections', () => {
-    const graph = upsertSplineWallGraphRoomPath(createEmptySplineWallGraph(), {
-      roomId: 'room-a',
-      layerId: 'default',
-      nodes: [
-        { position: [0, 0], cornerMode: 'square', cornerAmount: 0 },
-        { position: [4, 0], cornerMode: 'square', cornerAmount: 0 },
-        { position: [4, 1], cornerMode: 'square', cornerAmount: 0 },
-        { position: [0, 1], cornerMode: 'square', cornerAmount: 0 },
-      ],
-      closed: true,
-    })
-    const analysis = analyzeSplineWallGraphBoundaries(graph)
-    const longRoomFace = analysis[0]!.sections.find((section) =>
-      section.faceKind === 'room-face' && section.length >= 4,
-    )!
-    const assemblySections = buildSplineWallAssemblySections({
-      analyzedBoundaries: analysis,
-      wallStyleAssignments: {
-        [createSplineWallSegmentSideKey(longRoomFace.segmentId, longRoomFace.side)]: 'stone-keep',
-      },
-    })
-
-    const inserts = buildSplineWallInsertDescriptors({
-      analyzedBoundaries: analysis,
-      assemblySections,
-    }).filter((insert) =>
-      insert.segmentId === longRoomFace.segmentId
-      && insert.anchorKind === 'interval'
-      && insert.side === longRoomFace.side,
-    )
-
-    expect(inserts).toHaveLength(1)
-    expect(inserts[0]?.position[0]).toBeCloseTo(2)
-    expect(inserts[0]?.position[1]).toBeCloseTo(0)
-  })
-
-  it('centers multiple interval inserts across long wall sections', () => {
-    const graph = upsertSplineWallGraphRoomPath(createEmptySplineWallGraph(), {
-      roomId: 'room-a',
-      layerId: 'default',
-      nodes: [
-        { position: [0, 0], cornerMode: 'square', cornerAmount: 0 },
-        { position: [8, 0], cornerMode: 'square', cornerAmount: 0 },
-        { position: [8, 1], cornerMode: 'square', cornerAmount: 0 },
-        { position: [0, 1], cornerMode: 'square', cornerAmount: 0 },
-      ],
-      closed: true,
-    })
-    const analysis = analyzeSplineWallGraphBoundaries(graph)
-    const longRoomFace = analysis[0]!.sections.find((section) =>
-      section.faceKind === 'room-face' && section.length >= 8,
-    )!
-    const assemblySections = buildSplineWallAssemblySections({
-      analyzedBoundaries: analysis,
-      wallStyleAssignments: {
-        [createSplineWallSegmentSideKey(longRoomFace.segmentId, longRoomFace.side)]: 'stone-keep',
-      },
-    })
-
-    const inserts = buildSplineWallInsertDescriptors({
-      analyzedBoundaries: analysis,
-      assemblySections,
-    }).filter((insert) =>
-      insert.segmentId === longRoomFace.segmentId
-      && insert.anchorKind === 'interval'
-      && insert.side === longRoomFace.side,
-    )
-
-    expect(inserts).toHaveLength(2)
-    expect(inserts[0]?.position[0]).toBeCloseTo(8 / 3)
-    expect(inserts[1]?.position[0]).toBeCloseTo(16 / 3)
-    expect(inserts[0]?.position[1]).toBeCloseTo(0)
-    expect(inserts[1]?.position[1]).toBeCloseTo(0)
   })
 
   it('resolves insert placement along sampled curved wall geometry instead of the straight chord', () => {
@@ -204,9 +141,7 @@ describe('buildSplineWallInsertDescriptors', () => {
     )!
     const assemblySections = buildSplineWallAssemblySections({
       analyzedBoundaries: analysis,
-      wallStyleAssignments: {
-        [createSplineWallSegmentSideKey(curvedRoomFace.segmentId, curvedRoomFace.side)]: 'stone-keep',
-      },
+      wallStyleAssignments: assignAllAnalyzedFacesToStyle(analysis, 'rocky-cave'),
     })
 
     const descriptor = buildSplineWallInsertDescriptors({
@@ -214,7 +149,7 @@ describe('buildSplineWallInsertDescriptors', () => {
       assemblySections,
     }).find((insert) =>
       insert.segmentId === curvedRoomFace.segmentId
-      && insert.anchorKind === 'interval'
+      && insert.anchorKind === 'curvature-change'
       && insert.side === curvedRoomFace.side,
     )!
 
@@ -240,18 +175,15 @@ describe('buildSplineWallInsertDescriptors', () => {
       closed: true,
     })
     const analysis = analyzeSplineWallGraphBoundaries(graph)
-    const firstRoomFace = analysis[0]!.sections.find((section) => section.faceKind === 'room-face')!
     const assemblySections = buildSplineWallAssemblySections({
       analyzedBoundaries: analysis,
-      wallStyleAssignments: {
-        [createSplineWallSegmentSideKey(firstRoomFace.segmentId, firstRoomFace.side)]: 'art-deco-cobblestone',
-      },
+      wallStyleAssignments: assignAllAnalyzedFacesToStyle(analysis, 'rocky-cave'),
     })
     const descriptor = buildSplineWallInsertDescriptors({
       analyzedBoundaries: analysis,
       assemblySections,
     }).find((insert) =>
-      insert.assetId === 'dungeon.props_pillars_pillar'
+      insert.assetId === CAVE_PILLAR_ASSET_ID
       && insert.position[0] === 4
       && insert.position[1] === 0,
     )!
@@ -277,18 +209,15 @@ describe('buildSplineWallInsertDescriptors', () => {
       closed: true,
     })
     const analysis = analyzeSplineWallGraphBoundaries(graph)
-    const firstRoomFace = analysis[0]!.sections.find((section) => section.faceKind === 'room-face')!
     const assemblySections = buildSplineWallAssemblySections({
       analyzedBoundaries: analysis,
-      wallStyleAssignments: {
-        [createSplineWallSegmentSideKey(firstRoomFace.segmentId, firstRoomFace.side)]: 'art-deco-cobblestone',
-      },
+      wallStyleAssignments: assignAllAnalyzedFacesToStyle(analysis, 'rocky-cave'),
     })
     const descriptor = buildSplineWallInsertDescriptors({
       analyzedBoundaries: analysis,
       assemblySections,
     }).find((insert) =>
-      insert.assetId === 'dungeon.props_pillars_pillar'
+      insert.assetId === CAVE_PILLAR_ASSET_ID
       && insert.position[0] === 4
       && insert.position[1] === 0,
     )!

@@ -121,4 +121,29 @@ describe('RoomDraftOverlay', () => {
       'Draft must remain one connected piece after clipping',
     )
   })
+
+  it('starts 3d handle drags without calling native preventDefault', () => {
+    const draft = createRoomDraftFromStroke([1, 2], [3, 4])
+
+    const { container } = render(
+      <RoomDraftOverlay
+        draft={draft}
+        valid
+        onChange={vi.fn()}
+        onCommit={vi.fn()}
+        onCancel={vi.fn()}
+      />,
+    )
+
+    const edgeHandle = container.querySelector('mesh[key="north"]') ?? container.querySelectorAll('mesh')[1]
+    expect(edgeHandle).toBeTruthy()
+
+    const pointerDown = new PointerEvent('pointerdown', { bubbles: true, cancelable: true })
+    const preventDefault = vi.spyOn(pointerDown, 'preventDefault')
+
+    edgeHandle!.dispatchEvent(pointerDown)
+
+    expect(preventDefault).not.toHaveBeenCalled()
+    expect(setRoomResizeHandleActiveMock).toHaveBeenCalledWith(true)
+  })
 })

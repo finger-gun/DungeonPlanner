@@ -6,6 +6,7 @@ import {
   getDefaultContentPackRoomSetId,
   getDefaultContentPackWallMaterialSetId,
   getDefaultAssetIdByCategory,
+  getDefaultContentPackWallStyleId,
   getContentPackWallStyleById,
 } from '../content-packs/registry'
 import { getCellKey, type GridCell } from '../hooks/useSnapToGrid'
@@ -22,6 +23,7 @@ import { sanitizePersistedAssetReferences } from './assetReferences'
 import { getOpeningSegments } from './openingSegments'
 import { buildSplineWallOpeningPlacement, doOpeningsOverlap } from './openingPlacement'
 import { buildSplineWallGraphFromPaintedCells } from './splineWalls'
+import { analyzeSplineWallGraphBoundaries } from './splineWallStyleAnalysis'
 import { createSplineWallQueryCache } from './splineWallQueries'
 import {
   cloneSplineWallGraph,
@@ -47,7 +49,12 @@ import {
   getStructuralSplineWallSegmentId,
   type SplineWallSegmentSide,
 } from './wallStyleAssignments'
-import type { RoomDraftSplineNodeInput } from './roomDraft'
+import {
+  buildRoomDraftSplineNodes,
+  createRoomDraft,
+  setRoomDraftCorner,
+  type RoomDraftSplineNodeInput,
+} from './roomDraft'
 import { getPairedStairAssetId, getStairDirectionForAssetId } from './stairAssets'
 import {
   getCanonicalInnerWallKey,
@@ -150,6 +157,7 @@ export type Room = {
   name: string
   layerId: string
   roomSetId?: string | null
+  wallMaterialSetId?: string | null
   /** null = inherit global floor asset */
   floorAssetId: string | null
   /** null = inherit global wall asset */
@@ -256,6 +264,8 @@ type DungeonSnapshot = {
   tool: DungeonTool
   activeRoomSetId: string
   activeWallMaterialSetId: string
+  activeInteriorWallStyleId: string
+  activeExteriorWallStyleId: string
   selectedAssetIds: SelectedAssetIds
   selection: string | null
   layers: Record<string, Layer>
@@ -357,6 +367,8 @@ export type DungeonState = DungeonSnapshot & {
   wallConnectionMode: WallConnectionMode
   wallConnectionWidth: 1 | 2 | 3
   activeWallMaterialSetId: string
+  activeInteriorWallStyleId: string
+  activeExteriorWallStyleId: string
   selectedRoomId: string | null
   surfaceBrushAssetIds: SurfaceBrushAssetIds
   sceneLighting: SceneLighting
@@ -423,6 +435,8 @@ export type DungeonState = DungeonSnapshot & {
   setRoomPaintMode: (mode: RoomPaintMode) => void
   setActiveRoomSetId: (roomSetId: string) => void
   setActiveWallMaterialSetId: (wallMaterialSetId: string) => void
+  setActiveInteriorWallStyleId: (wallStyleId: string) => void
+  setActiveExteriorWallStyleId: (wallStyleId: string) => void
   setWallConnectionMode: (mode: WallConnectionMode) => void
   setWallConnectionWidth: (width: 1 | 2 | 3) => void
   setInnerWallSegments: (wallKeys: string[], present: boolean) => number
@@ -548,6 +562,8 @@ const ROOM_SET_CONTENT_PACK_ID = 'dungeon'
 const FALLBACK_ROOM_SET_ID = 'dungeon'
 const WALL_MATERIAL_SET_CONTENT_PACK_ID = 'dungeon'
 const FALLBACK_WALL_MATERIAL_SET_ID = 'kaykit-stone'
+const WALL_STYLE_CONTENT_PACK_ID = 'dungeon'
+const FALLBACK_WALL_STYLE_ID = 'dungeon-stone'
 const SURROUNDING_FOREST_TAG = 'surrounding-forest'
 const DEFAULT_OUTDOOR_TERRAIN_PROFILES: Record<OutdoorTerrainType, OutdoorTerrainProfile> = {
   mixed: { density: 'medium', overpaintRegenerate: false },
@@ -589,6 +605,10 @@ function getDefaultRoomSetId() {
 
 function getDefaultWallMaterialSetId() {
   return getDefaultContentPackWallMaterialSetId(WALL_MATERIAL_SET_CONTENT_PACK_ID) ?? FALLBACK_WALL_MATERIAL_SET_ID
+}
+
+function getDefaultWallStyleId() {
+  return getDefaultContentPackWallStyleId(WALL_STYLE_CONTENT_PACK_ID) ?? FALLBACK_WALL_STYLE_ID
 }
 
 function cloneSnapshot(snapshot: DungeonSnapshot): DungeonSnapshot {
@@ -666,6 +686,8 @@ function cloneSnapshot(snapshot: DungeonSnapshot): DungeonSnapshot {
     tool: snapshot.tool,
     activeRoomSetId: snapshot.activeRoomSetId,
     activeWallMaterialSetId: snapshot.activeWallMaterialSetId,
+    activeInteriorWallStyleId: snapshot.activeInteriorWallStyleId,
+    activeExteriorWallStyleId: snapshot.activeExteriorWallStyleId,
     selectedAssetIds: { ...snapshot.selectedAssetIds },
     selection: snapshot.selection,
     layers: Object.fromEntries(
@@ -723,6 +745,8 @@ function serializeCurrentDungeonState(state: DungeonState) {
     lightFlickerEnabled: state.lightFlickerEnabled,
     activeRoomSetId: state.activeRoomSetId,
     activeWallMaterialSetId: state.activeWallMaterialSetId,
+    activeInteriorWallStyleId: state.activeInteriorWallStyleId,
+    activeExteriorWallStyleId: state.activeExteriorWallStyleId,
     layers: state.layers,
     layerOrder: state.layerOrder,
     activeLayerId: state.activeLayerId,
@@ -790,6 +814,8 @@ function cloneSnapshotForObjectPlacement(snapshot: DungeonSnapshot): DungeonSnap
     tool: snapshot.tool,
     activeRoomSetId: snapshot.activeRoomSetId,
     activeWallMaterialSetId: snapshot.activeWallMaterialSetId,
+    activeInteriorWallStyleId: snapshot.activeInteriorWallStyleId,
+    activeExteriorWallStyleId: snapshot.activeExteriorWallStyleId,
     selectedAssetIds: { ...snapshot.selectedAssetIds },
     selection: snapshot.selection,
     layers: snapshot.layers,
@@ -976,6 +1002,8 @@ function createEmptySnapshot(): DungeonSnapshot {
     tool: 'select',
     activeRoomSetId: getDefaultRoomSetId(),
     activeWallMaterialSetId: getDefaultWallMaterialSetId(),
+    activeInteriorWallStyleId: getDefaultWallStyleId(),
+    activeExteriorWallStyleId: getDefaultWallStyleId(),
     selectedAssetIds: {
       floor: getDefaultAssetIdByCategory('floor'),
       wall: getDefaultAssetIdByCategory('wall'),
@@ -1472,6 +1500,35 @@ function sanitizeWallStyleStateForGraph(
     wallStyleAssignments: sanitizeSplineWallStyleAssignmentsForGraph(splineWallGraph, wallStyleAssignments),
     wallCoreAssignments: sanitizeSplineWallCoreAssignmentsForGraph(splineWallGraph, wallCoreAssignments),
   }
+}
+
+function applyActiveWallStylesForRoom({
+  splineWallGraph,
+  roomId,
+  wallStyleAssignments,
+  interiorWallStyleId,
+  exteriorWallStyleId,
+}: {
+  splineWallGraph: SplineWallGraph
+  roomId: string
+  wallStyleAssignments: Readonly<Record<string, string>>
+  interiorWallStyleId: string
+  exteriorWallStyleId: string
+}) {
+  const nextAssignments = { ...wallStyleAssignments }
+  analyzeSplineWallGraphBoundaries(splineWallGraph).forEach((boundaryPath) => {
+    boundaryPath.sections.forEach((section) => {
+      if (section.roomId !== roomId || !section.side) {
+        return
+      }
+
+      const wallStyleId = section.faceKind === 'room-face'
+        ? interiorWallStyleId
+        : exteriorWallStyleId
+      nextAssignments[createSplineWallSegmentSideKey(section.segmentId, section.side)] = wallStyleId
+    })
+  })
+  return nextAssignments
 }
 
 function getAddedSplineWallSegmentIds(previousGraph: SplineWallGraph, nextGraph: SplineWallGraph) {
@@ -2055,6 +2112,45 @@ function syncPaintRoomSplinePaths(
   }
 }
 
+const RESIZABLE_SPLINE_ROOM_CORNERS = ['nw', 'ne', 'se', 'sw'] as const
+
+function resizeSplineRoomGraphToBounds(
+  current: Pick<DungeonSnapshot, 'rooms' | 'splineWallGraph'>,
+  roomId: string,
+  bounds: RoomBounds,
+) {
+  const room = current.rooms[roomId]
+  if (room?.geometrySource !== 'spline') {
+    return current.splineWallGraph
+  }
+
+  const existingPath = Object.values(current.splineWallGraph.paths).find((path) =>
+    path.roomId === roomId
+    && path.closed
+    && path.nodeIds.length === RESIZABLE_SPLINE_ROOM_CORNERS.length)
+  if (!existingPath) {
+    return current.splineWallGraph
+  }
+
+  let draft = createRoomDraft(bounds, [bounds.minX, bounds.minZ])
+  existingPath.nodeIds.forEach((nodeId, index) => {
+    const node = current.splineWallGraph.nodes[nodeId]
+    const corner = RESIZABLE_SPLINE_ROOM_CORNERS[index]
+    if (!node || !corner || !node.cornerMode) {
+      return
+    }
+
+    draft = setRoomDraftCorner(draft, corner, node.cornerMode, node.cornerAmount ?? 0)
+  })
+
+  return upsertSplineWallGraphRoomPath(current.splineWallGraph, {
+    roomId,
+    layerId: room.layerId,
+    nodes: buildRoomDraftSplineNodes(draft),
+    closed: true,
+  })
+}
+
 function collectFloorSurfaceAnchorsForCellChange(
   cellKey: string,
   floorTileAssetIds: Record<string, string>,
@@ -2383,6 +2479,7 @@ export const useDungeonStore = create<DungeonState>()(
         name: roomName,
         layerId: current.activeLayerId,
         roomSetId: current.activeRoomSetId,
+        wallMaterialSetId: current.activeWallMaterialSetId,
         floorAssetId: null,
         wallAssetId: null,
         geometrySource: 'paint',
@@ -2418,14 +2515,26 @@ export const useDungeonStore = create<DungeonState>()(
         ...current,
         rooms,
       }, paintedCells, nextCells)
+      const activeWallStyleAssignments = applyActiveWallStylesForRoom({
+        splineWallGraph,
+        roomId,
+        wallStyleAssignments,
+        interiorWallStyleId: current.activeInteriorWallStyleId,
+        exteriorWallStyleId: current.activeExteriorWallStyleId,
+      })
+      const nextAssignmentState = sanitizeWallStyleStateForGraph(
+        splineWallGraph,
+        activeWallStyleAssignments,
+        wallCoreAssignments,
+      )
 
       return {
         ...current,
         paintedCells,
         splineWallGraph,
         floorTileAssetIds,
-        wallStyleAssignments,
-        wallCoreAssignments,
+        wallStyleAssignments: nextAssignmentState.wallStyleAssignments,
+        wallCoreAssignments: nextAssignmentState.wallCoreAssignments,
         wallSurfaceAssetIds,
         wallSurfaceProps,
         placedObjects,
@@ -2465,6 +2574,7 @@ export const useDungeonStore = create<DungeonState>()(
         name: roomName,
         layerId: current.activeLayerId,
         roomSetId: current.activeRoomSetId,
+        wallMaterialSetId: current.activeWallMaterialSetId,
         floorAssetId: null,
         wallAssetId: null,
         geometrySource: 'spline',
@@ -2531,9 +2641,16 @@ export const useDungeonStore = create<DungeonState>()(
         splineGraphWithRoom,
         proceduralLayout.wallOpenings,
       )
+      const activeWallStyleAssignments = applyActiveWallStylesForRoom({
+        splineWallGraph,
+        roomId,
+        wallStyleAssignments,
+        interiorWallStyleId: current.activeInteriorWallStyleId,
+        exteriorWallStyleId: current.activeExteriorWallStyleId,
+      })
       const nextAssignmentState = sanitizeWallStyleStateForGraph(
         splineWallGraph,
-        wallStyleAssignments,
+        activeWallStyleAssignments,
         wallCoreAssignments,
       )
 
@@ -4370,6 +4487,7 @@ export const useDungeonStore = create<DungeonState>()(
             name,
             layerId: current.activeLayerId,
             roomSetId: current.activeRoomSetId,
+            wallMaterialSetId: current.activeWallMaterialSetId,
             floorAssetId: null,
             wallAssetId: null,
           },
@@ -4586,9 +4704,17 @@ export const useDungeonStore = create<DungeonState>()(
         wallSurfaceAssetIds,
         wallSurfaceProps,
         splineWallGraph,
-      } = reconcileRoomLayoutMutation(current, paintedCells, changedCells, {
-        wallOpenings: remappedWallOpenings,
-      })
+      } = reconcileRoomLayoutMutation(
+        {
+          ...current,
+          splineWallGraph: resizeSplineRoomGraphToBounds(current, roomId, bounds),
+        },
+        paintedCells,
+        changedCells,
+        {
+          wallOpenings: remappedWallOpenings,
+        },
+      )
 
       return {
         ...current,
@@ -5365,6 +5491,8 @@ export const useDungeonStore = create<DungeonState>()(
         outdoorTerrainStyleBrush: state.outdoorTerrainStyleBrush,
         activeRoomSetId: state.activeRoomSetId,
         activeWallMaterialSetId: state.activeWallMaterialSetId,
+        activeInteriorWallStyleId: state.activeInteriorWallStyleId,
+        activeExteriorWallStyleId: state.activeExteriorWallStyleId,
         wallStyleAssignments: state.wallStyleAssignments,
         wallCoreAssignments: state.wallCoreAssignments,
         selectedAssetIds: state.selectedAssetIds,
@@ -5388,6 +5516,8 @@ export const useDungeonStore = create<DungeonState>()(
         state.future = normalizeHistoryEntries(state.future)
         state.wallStyleAssignments = state.wallStyleAssignments ?? {}
         state.wallCoreAssignments = state.wallCoreAssignments ?? {}
+        state.activeInteriorWallStyleId = state.activeInteriorWallStyleId ?? getDefaultWallStyleId()
+        state.activeExteriorWallStyleId = state.activeExteriorWallStyleId ?? getDefaultWallStyleId()
         state.innerWalls = state.innerWalls ?? {}
         state.splineWallGraph = syncOpeningCutoutsIntoSplineWallGraph(
           cloneSplineWallGraph(state.splineWallGraph),
@@ -5400,6 +5530,8 @@ export const useDungeonStore = create<DungeonState>()(
         Object.values(state.floors ?? {}).forEach((floor) => {
           floor.snapshot.wallStyleAssignments = floor.snapshot.wallStyleAssignments ?? {}
           floor.snapshot.wallCoreAssignments = floor.snapshot.wallCoreAssignments ?? {}
+          floor.snapshot.activeInteriorWallStyleId = floor.snapshot.activeInteriorWallStyleId ?? getDefaultWallStyleId()
+          floor.snapshot.activeExteriorWallStyleId = floor.snapshot.activeExteriorWallStyleId ?? getDefaultWallStyleId()
           floor.snapshot.innerWalls = floor.snapshot.innerWalls ?? {}
           floor.snapshot.splineWallGraph = syncOpeningCutoutsIntoSplineWallGraph(
             cloneSplineWallGraph(floor.snapshot.splineWallGraph),

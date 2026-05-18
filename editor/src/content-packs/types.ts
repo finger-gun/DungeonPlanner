@@ -223,6 +223,7 @@ export type ContentPackWallMaterialTextures = {
   normalUrl?: string
   aoUrl?: string
   heightUrl?: string
+  displacementUrl?: string
   roughnessUrl?: string
   metallicUrl?: string
 }
@@ -232,6 +233,12 @@ export type ContentPackWallMaterialShading = {
   roughness?: number
   metalness?: number
   bumpScale?: number
+  parallaxScale?: number
+  parallaxSteps?: number
+  parallaxInvert?: boolean
+  displacementScale?: number
+  displacementBias?: number
+  displacementVertexStep?: number
   aoMapIntensity?: number
   topSurfaceColor?: string
   topSurfaceRoughness?: number
@@ -240,6 +247,8 @@ export type ContentPackWallMaterialShading = {
 
 export type ContentPackWallStyleMaterialUv = {
   verticalMode?: 'distance' | 'fit-height'
+  verticalWrap?: 'repeat' | 'clamp'
+  flipVOnExterior?: boolean
 }
 
 export type ContentPackWallMaterialSet = {
@@ -248,6 +257,7 @@ export type ContentPackWallMaterialSet = {
   previewImageUrl?: string
   textures: ContentPackWallMaterialTextures
   shading?: ContentPackWallMaterialShading
+  uv?: ContentPackWallStyleMaterialUv
 }
 
 export type ContentPackWallStyleProfilePoint = readonly [number, number]
@@ -324,6 +334,8 @@ export type ContentPackRoomSet = {
   wallAssetId: string
   pillarAssetId: string
   openingAssetId?: string
+  wallStyleId?: string
+  wallMaterialSetId?: string
   floor: ContentPackRoomSetFloor
 }
 

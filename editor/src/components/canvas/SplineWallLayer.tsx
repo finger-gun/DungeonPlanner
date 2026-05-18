@@ -29,6 +29,7 @@ import { buildOpenWallSegmentSet } from '../../store/openWallSegments'
 import { getSplineWallSegmentMidpoint, type SplineWallGraph } from '../../store/splineWallGraph'
 import {
   createSplineWallQueryCache,
+  findNearestSplineWallSegment,
   getSplineWallSegmentQueryData,
   sampleSplineWallSegment,
   type SplineWallQueryCache,
@@ -55,6 +56,8 @@ import {
 import { shouldRenderLineOfSightGeometry } from './losRendering'
 import { getRoomVisibilityState, type PlayVisibility, type PlayVisibilityState } from './playVisibility'
 import {
+  applySplineWallDisplacementNodes,
+  applySplineWallParallaxNodes,
   configureSplineWallTexture,
   type SplineWallMaterialBundle,
   type SplineWallMaterialPreset,
@@ -102,7 +105,7 @@ const AUTOFOCUS_PROXY_MATERIAL = new THREE.MeshBasicMaterial({
   depthTest: false,
   side: THREE.DoubleSide,
 })
-const SPLINE_WALL_RENDER_STITCH_MIN_NORMAL_DOT = Math.cos(Math.PI / 6)
+const SPLINE_WALL_SECTION_MAX_MITER_SCALE = 2
 
 type SplineNodeDragState = {
   nodeId: string
@@ -300,9 +303,10 @@ export function SplineWallLayer({
           analyzedBoundaries,
           wallStyleAssignments,
           wallCoreAssignments,
+          rooms,
         })
       : [],
-    [analyzedBoundaries, hasGraphWalls, wallCoreAssignments, wallStyleAssignments],
+    [analyzedBoundaries, hasGraphWalls, rooms, wallCoreAssignments, wallStyleAssignments],
   )
   const renderSectionGroups = useMemo(
     () => buildSplineWallRenderSectionGroups(assemblySections),
@@ -520,6 +524,8 @@ export function SplineWallLayer({
             queryCache={wallQueryCache}
             openingsBySectionId={openingDescriptorsBySectionId}
             bakedLightField={bakedLightField}
+            selectable={tool === 'select' || (tool === 'room' && roomEditMode === 'walls')}
+            onSelect={(segmentId, side) => selectObject(createSplineWallSegmentSideSelectionKey(segmentId, side))}
           />
         )
       })}
@@ -670,11 +676,15 @@ function SplineWallStyleSectionGroupMesh({
   queryCache,
   openingsBySectionId,
   bakedLightField,
+  selectable,
+  onSelect,
 }: {
   group: SplineWallRenderSectionGroup
   queryCache: SplineWallQueryCache
   openingsBySectionId: ReadonlyMap<string, readonly SplineWallOpeningDescriptor[]>
   bakedLightField: BakedFloorLightField | null
+  selectable: boolean
+  onSelect: (segmentId: string, side: SplineWallSegmentSide) => void
 }) {
   const section = group.sections[0]!
   const geometryKey = createSplineWallSectionGroupGeometryKey(group, openingsBySectionId, queryCache)
@@ -697,7 +707,9 @@ function SplineWallStyleSectionGroupMesh({
   useEffect(() => () => geometryCacheRef.current?.geometry.dispose(), [])
   useEffect(() => () => material.dispose(), [material])
   useEffect(() => {
-    syncSplineWallGeometryBakedLight(geometry, bakedLightField)
+    syncSplineWallGeometryBakedLight(geometry, bakedLightField, {
+      allowOppositeFallback: section.layerKind !== 'exterior-face',
+    })
     applyBakedLightToSplineWallStyleMaterial(material, null, {
       useDirectionAttribute: true,
       useDirectionalFaceMask: true,
@@ -708,6 +720,7 @@ function SplineWallStyleSectionGroupMesh({
   if ((geometry.getAttribute('position')?.count ?? 0) === 0) {
     return null
   }
+  const selectionSide = section.side
 
   return (
     <>
@@ -716,8 +729,17 @@ function SplineWallStyleSectionGroupMesh({
         material={material}
         castShadow
         receiveShadow
-        raycast={noRaycast}
+        raycast={selectable ? undefined : noRaycast}
         renderOrder={section.layerKind === 'structural-core' ? 0 : 1}
+        onPointerDown={selectable && selectionSide ? (event) => {
+          const hit = findNearestSplineWallSegment(queryCache, [event.point.x, event.point.z])
+          if (!hit) {
+            return
+          }
+
+          event.stopPropagation()
+          onSelect(hit.segmentId, selectionSide)
+        } : undefined}
       />
       <SplineWallAutofocusProxy geometry={geometry} />
     </>
@@ -754,7 +776,9 @@ function SplineWallOpeningRevealMesh({
   useEffect(() => () => geometryCacheRef.current?.geometry.dispose(), [])
   useEffect(() => () => material.dispose(), [material])
   useEffect(() => {
-    syncSplineWallGeometryBakedLight(geometry, bakedLightField)
+    syncSplineWallGeometryBakedLight(geometry, bakedLightField, {
+      allowOppositeFallback: section.layerKind !== 'exterior-face',
+    })
     applyBakedLightToSplineWallStyleMaterial(material, null, {
       useDirectionAttribute: true,
       useDirectionalFaceMask: true,
@@ -967,16 +991,23 @@ export function buildSplineWallSectionGroupGeometry(
       const bandProfile = clipSectionProfilePointsToBand(section, band.startHeight, band.endHeight, {
         hideRenderSegments: true,
       })
-      if (bandProfile.length < 2) {
+      const renderBandProfile = subdivideSectionProfileForDisplacement(section, bandProfile, resolvedWallHeight)
+      if (renderBandProfile.length < 2) {
         return
       }
-      const bandProfileUvDistances = bandProfile.map((point) =>
+      const bandProfileUvDistances = renderBandProfile.map((point) =>
         getSectionProfileUvV(section, point, profileUvDistances, resolvedWallHeight))
 
       band.visibleIntervals.forEach(([startRatio, endRatio]) => {
         const sectionStartRatio = getSectionSegmentRatio(section, startRatio)
         const sectionEndRatio = getSectionSegmentRatio(section, endRatio)
-        const samples = sampleSplineWallSectionInterval(queryCache, section.segmentId, sectionStartRatio, sectionEndRatio)
+        const samples = sampleSplineWallSectionInterval(
+          queryCache,
+          section.segmentId,
+          sectionStartRatio,
+          sectionEndRatio,
+          getSectionGeometrySampleStep(section),
+        )
         if (samples.length < 2) {
           return
         }
@@ -987,15 +1018,23 @@ export function buildSplineWallSectionGroupGeometry(
 
         samples.forEach((sample, sampleIndex) => {
           const bakedLightDirection = getSectionBakedLightDirection(section, sample)
-          bandProfile.forEach((point, pointIndex) => {
-            const [worldX, worldY, worldZ] = getSectionProfileWorldPoint(section, sample, point)
+          renderBandProfile.forEach((point, pointIndex) => {
+            const [worldX, worldY, worldZ] = getSectionProfileStripWorldPoint(
+              section,
+              samples,
+              sampleIndex,
+              point,
+            )
             positions.push(worldX, worldY, worldZ)
-            uvs.push(sampleUvDistances[sampleIndex]!, bandProfileUvDistances[pointIndex]!)
+            uvs.push(
+              getSectionUvU(section, sampleUvDistances[sampleIndex]!, resolvedWallHeight),
+              bandProfileUvDistances[pointIndex]!,
+            )
             bakedLightDirections.push(bakedLightDirection[0], 0, bakedLightDirection[1])
           })
         })
 
-        const rowSize = bandProfile.length
+        const rowSize = renderBandProfile.length
         const reverseWinding = shouldReverseSectionFaceWinding(section)
         for (let rowIndex = 0; rowIndex < samples.length - 1; rowIndex += 1) {
           for (let columnIndex = 0; columnIndex < rowSize - 1; columnIndex += 1) {
@@ -1063,10 +1102,11 @@ function buildContinuousSplineWallSectionGroupGeometry(
     const bandProfile = clipSectionProfilePointsToBand(section, band.startHeight, band.endHeight, {
       hideRenderSegments: true,
     })
-    if (bandProfile.length < 2) {
+    const renderBandProfile = subdivideSectionProfileForDisplacement(section, bandProfile, resolvedWallHeight)
+    if (renderBandProfile.length < 2) {
       return
     }
-    const bandProfileUvDistances = bandProfile.map((point) =>
+    const bandProfileUvDistances = renderBandProfile.map((point) =>
       getSectionProfileUvV(section, point, profileUvDistances, resolvedWallHeight))
 
     sampleRuns.forEach((samples) => {
@@ -1076,15 +1116,23 @@ function buildContinuousSplineWallSectionGroupGeometry(
       const sampleUvDistances = buildSampleUvDistances(samples, 0)
       samples.forEach((sample, sampleIndex) => {
         const bakedLightDirection = getSectionBakedLightDirection(section, sample)
-        bandProfile.forEach((point, pointIndex) => {
-          const [worldX, worldY, worldZ] = getSectionProfileWorldPoint(section, sample, point)
+        renderBandProfile.forEach((point, pointIndex) => {
+          const [worldX, worldY, worldZ] = getSectionProfileStripWorldPoint(
+            section,
+            samples,
+            sampleIndex,
+            point,
+          )
           positions.push(worldX, worldY, worldZ)
-          uvs.push(sampleUvDistances[sampleIndex]!, bandProfileUvDistances[pointIndex]!)
+          uvs.push(
+            getSectionUvU(section, sampleUvDistances[sampleIndex]!, resolvedWallHeight),
+            bandProfileUvDistances[pointIndex]!,
+          )
           bakedLightDirections.push(bakedLightDirection[0], 0, bakedLightDirection[1])
         })
       })
 
-      const rowSize = bandProfile.length
+      const rowSize = renderBandProfile.length
       const reverseWinding = shouldReverseSectionFaceWinding(section)
       for (let rowIndex = 0; rowIndex < samples.length - 1; rowIndex += 1) {
         for (let columnIndex = 0; columnIndex < rowSize - 1; columnIndex += 1) {
@@ -1131,7 +1179,13 @@ function buildContinuousSplineWallSectionSampleRuns(
   let currentRun: SplineWallSectionSample[] = []
 
   sections.forEach((section) => {
-    const samples = sampleSplineWallSectionInterval(queryCache, section.segmentId, section.startRatio, section.endRatio)
+    const samples = sampleSplineWallSectionInterval(
+      queryCache,
+      section.segmentId,
+      section.startRatio,
+      section.endRatio,
+      getSectionGeometrySampleStep(section),
+    )
     if (samples.length < 2) {
       return
     }
@@ -1143,7 +1197,7 @@ function buildContinuousSplineWallSectionSampleRuns(
 
     const previous = currentRun.at(-1)!
     const next = samples[0]!
-    if (canStitchSplineWallSectionSamples(previous, next)) {
+    if (canMergeSplineWallSectionSamples(previous, next)) {
       currentRun[currentRun.length - 1] = mergeSplineWallSectionSamples(previous, next)
       currentRun.push(...samples.slice(1))
       return
@@ -1160,7 +1214,7 @@ function buildContinuousSplineWallSectionSampleRuns(
   return runs
 }
 
-function canStitchSplineWallSectionSamples(
+function canMergeSplineWallSectionSamples(
   previous: SplineWallSectionSample,
   next: SplineWallSectionSample,
 ) {
@@ -1168,7 +1222,6 @@ function canStitchSplineWallSectionSamples(
     previous.position[0] - next.position[0],
     previous.position[1] - next.position[1],
   ) <= 1e-5
-    && dot2(previous.normal, next.normal) >= SPLINE_WALL_RENDER_STITCH_MIN_NORMAL_DOT
 }
 
 function mergeSplineWallSectionSamples(
@@ -1258,6 +1311,7 @@ function sampleSplineWallSectionInterval(
   segmentId: string,
   startRatio: number,
   endRatio: number,
+  maxStep = 0.18,
 ) {
   const segmentData = getSplineWallSegmentQueryData(queryCache, segmentId)
   if (!segmentData) {
@@ -1265,7 +1319,8 @@ function sampleSplineWallSectionInterval(
   }
 
   const samples = []
-  const stepCount = Math.max(1, Math.ceil((segmentData.totalLength * Math.max(endRatio - startRatio, 0)) / 0.18))
+  const clampedMaxStep = Math.max(0.025, maxStep)
+  const stepCount = Math.max(1, Math.ceil((segmentData.totalLength * Math.max(endRatio - startRatio, 0)) / clampedMaxStep))
   for (let index = 0; index <= stepCount; index += 1) {
     const ratio = startRatio + ((endRatio - startRatio) * (index / stepCount))
     const sample = sampleSplineWallSegment(queryCache, segmentId, ratio)
@@ -1275,6 +1330,16 @@ function sampleSplineWallSectionInterval(
   }
 
   return samples
+}
+
+function getSectionGeometrySampleStep(section: SplineWallAssemblySection) {
+  const displacementScale = section.material.shading?.displacementScale ?? 0
+  const vertexStep = section.material.shading?.displacementVertexStep ?? 0
+  if (displacementScale <= 0 || vertexStep <= 0) {
+    return 0.18
+  }
+
+  return Math.min(0.18, vertexStep)
 }
 
 function getSectionSegmentRatio(section: SplineWallAssemblySection, localRatio: number) {
@@ -1311,6 +1376,7 @@ function setBakedLightDirectionAttribute(
 function syncSplineWallGeometryBakedLight(
   geometry: THREE.BufferGeometry,
   bakedLightField: BakedFloorLightField | null,
+  options: { allowOppositeFallback?: boolean } = {},
 ) {
   const positions = geometry.getAttribute('position')
   if (!positions || positions.count === 0) {
@@ -1355,6 +1421,7 @@ function syncSplineWallGeometryBakedLight(
       bakedLightField,
       [positions.getX(index), positions.getY(index), positions.getZ(index)],
       [normalizedDirectionX, normalizedDirectionY, normalizedDirectionZ],
+      options,
     )
     const sampledLight = sampleOccludedSurfaceLightAtWorldPosition(
       bakedLightField,
@@ -1399,18 +1466,24 @@ export function resolveSplineWallBakedLightSamplePosition(
   bakedLightField: Pick<BakedFloorLightField, 'sampleByCellKey'>,
   worldPosition: readonly [number, number, number],
   direction: readonly [number, number, number],
+  options: { allowOppositeFallback?: boolean } = {},
 ) {
-  return resolveSplineWallBakedLightSample(bakedLightField, worldPosition, direction).position
+  return resolveSplineWallBakedLightSample(bakedLightField, worldPosition, direction, options).position
 }
 
 export function resolveSplineWallBakedLightSample(
   bakedLightField: Pick<BakedFloorLightField, 'sampleByCellKey'>,
   worldPosition: readonly [number, number, number],
   direction: readonly [number, number, number],
+  { allowOppositeFallback = true }: { allowOppositeFallback?: boolean } = {},
 ) {
   const primary = buildSplineWallBakedLightSamplePosition(worldPosition, direction, 1)
   const horizontalDirectionLength = Math.hypot(direction[0], direction[2])
-  if (horizontalDirectionLength <= 1e-5 || isBakedLightSampleInsideFloor(bakedLightField, primary)) {
+  if (
+    horizontalDirectionLength <= 1e-5
+    || isBakedLightSampleInsideFloor(bakedLightField, primary)
+    || !allowOppositeFallback
+  ) {
     return {
       position: primary,
       direction,
@@ -1571,16 +1644,29 @@ function clipSectionProfilePointsToBand(
   }
 
   for (let index = 0; index < section.profile.points.length - 1; index += 1) {
-    if (hiddenSegmentIndices?.has(index)) {
-      continue
-    }
     const startPoint = section.profile.points[index]!
     const endPoint = section.profile.points[index + 1]!
+    const forceStructuralFillSegment = shouldRenderStructuralCoreFillSegment(section, startPoint, endPoint)
+    if (hiddenSegmentIndices?.has(index) && !forceStructuralFillSegment) {
+      continue
+    }
+
     const clippedSegment = clipProfileSegmentToBand(startPoint, endPoint, bandStart, bandEnd)
     clippedSegment.forEach(appendPoint)
   }
 
   return clipped
+}
+
+function shouldRenderStructuralCoreFillSegment(
+  section: SplineWallAssemblySection,
+  startPoint: readonly [number, number],
+  endPoint: readonly [number, number],
+) {
+  return section.layerKind === 'structural-core'
+    && Math.abs(startPoint[1] - 1) <= 1e-5
+    && Math.abs(endPoint[1] - 1) <= 1e-5
+    && Math.abs(startPoint[0] - endPoint[0]) > 1e-5
 }
 
 function clipProfileSegmentToBand(
@@ -1640,18 +1726,180 @@ function getSectionProfileWorldPoint(
   point: readonly [number, number],
 ): [number, number, number] {
   const resolvedWallHeight = getSectionResolvedWallHeight(section)
-  const lateralOffset = section.layerKind === 'structural-core'
-    ? point[0]
-    : Math.abs(point[0])
-  const normal = section.layerKind === 'structural-core'
-    ? sample.normal
-    : getSectionSideNormal(section.side!, sample.normal)
+  const lateralOffset = getSectionProfileLateralOffset(section, point)
+  const normal = getSectionOffsetNormal(section, sample.tangent)
 
   return [
     sample.position[0] + (normal[0] * lateralOffset),
     point[1] * resolvedWallHeight,
     sample.position[1] + (normal[1] * lateralOffset),
   ]
+}
+
+function getSectionProfileStripWorldPoint(
+  section: SplineWallAssemblySection,
+  samples: readonly SplineWallSectionSample[],
+  sampleIndex: number,
+  point: readonly [number, number],
+): [number, number, number] {
+  const resolvedWallHeight = getSectionResolvedWallHeight(section)
+  const [worldX, worldZ] = resolveSectionStripOffsetPoint(
+    section,
+    samples,
+    sampleIndex,
+    getSectionProfileLateralOffset(section, point),
+  )
+  return [worldX, point[1] * resolvedWallHeight, worldZ]
+}
+
+function getSectionProfileLateralOffset(
+  section: SplineWallAssemblySection,
+  point: readonly [number, number],
+) {
+  return section.layerKind === 'structural-core'
+    ? point[0]
+    : Math.abs(point[0])
+}
+
+function resolveSectionStripOffsetPoint(
+  section: SplineWallAssemblySection,
+  samples: readonly SplineWallSectionSample[],
+  sampleIndex: number,
+  lateralOffset: number,
+): readonly [number, number] {
+  const sample = samples[sampleIndex]!
+  if (Math.abs(lateralOffset) <= 1e-5) {
+    return sample.position
+  }
+
+  const previous = getSectionStripAdjacentSample(samples, sampleIndex, -1)
+  const next = getSectionStripAdjacentSample(samples, sampleIndex, 1)
+  const incomingTangent = previous
+    ? normalize2([
+        sample.position[0] - previous.position[0],
+        sample.position[1] - previous.position[1],
+      ], sample.tangent)
+    : null
+  const outgoingTangent = next
+    ? normalize2([
+        next.position[0] - sample.position[0],
+        next.position[1] - sample.position[1],
+      ], sample.tangent)
+    : null
+
+  if (incomingTangent && outgoingTangent) {
+    const incomingPoint = offsetSectionSamplePoint(section, sample.position, incomingTangent, lateralOffset)
+    const outgoingPoint = offsetSectionSamplePoint(section, sample.position, outgoingTangent, lateralOffset)
+    const intersection = intersectSectionOffsetLines(
+      incomingPoint,
+      incomingTangent,
+      outgoingPoint,
+      outgoingTangent,
+    )
+    if (intersection) {
+      return clampSectionMiterPoint(sample.position, intersection, lateralOffset)
+    }
+  }
+
+  return offsetSectionSamplePoint(
+    section,
+    sample.position,
+    outgoingTangent ?? incomingTangent ?? sample.tangent,
+    lateralOffset,
+  )
+}
+
+function getSectionStripAdjacentSample(
+  samples: readonly SplineWallSectionSample[],
+  sampleIndex: number,
+  direction: -1 | 1,
+) {
+  const adjacentIndex = sampleIndex + direction
+  if (adjacentIndex >= 0 && adjacentIndex < samples.length) {
+    return samples[adjacentIndex]!
+  }
+
+  if (
+    samples.length > 2
+    && pointsEqual2(samples[0]!.position, samples[samples.length - 1]!.position)
+  ) {
+    if (direction < 0 && sampleIndex === 0) {
+      return samples[samples.length - 2]!
+    }
+    if (direction > 0 && sampleIndex === samples.length - 1) {
+      return samples[1]!
+    }
+  }
+
+  return null
+}
+
+function offsetSectionSamplePoint(
+  section: SplineWallAssemblySection,
+  position: readonly [number, number],
+  tangent: readonly [number, number],
+  lateralOffset: number,
+): readonly [number, number] {
+  const normal = getSectionOffsetNormal(section, tangent)
+  return [
+    position[0] + (normal[0] * lateralOffset),
+    position[1] + (normal[1] * lateralOffset),
+  ]
+}
+
+function getSectionOffsetNormal(
+  section: SplineWallAssemblySection,
+  tangent: readonly [number, number],
+): readonly [number, number] {
+  const leftNormal = [-tangent[1], tangent[0]] as const
+  if (section.layerKind === 'structural-core' || !section.side) {
+    return leftNormal
+  }
+  return getSectionSideNormal(section.side, leftNormal)
+}
+
+function intersectSectionOffsetLines(
+  leftPoint: readonly [number, number],
+  leftDirection: readonly [number, number],
+  rightPoint: readonly [number, number],
+  rightDirection: readonly [number, number],
+) {
+  const denominator = cross2(leftDirection, rightDirection)
+  if (Math.abs(denominator) <= 1e-5) {
+    return null
+  }
+
+  const delta = [
+    rightPoint[0] - leftPoint[0],
+    rightPoint[1] - leftPoint[1],
+  ] as const
+  const leftScale = cross2(delta, rightDirection) / denominator
+  return [
+    leftPoint[0] + (leftDirection[0] * leftScale),
+    leftPoint[1] + (leftDirection[1] * leftScale),
+  ] as const
+}
+
+function clampSectionMiterPoint(
+  origin: readonly [number, number],
+  point: readonly [number, number],
+  lateralOffset: number,
+): readonly [number, number] {
+  const delta = [
+    point[0] - origin[0],
+    point[1] - origin[1],
+  ] as const
+  const distance = Math.hypot(delta[0], delta[1])
+  const maxDistance = Math.abs(lateralOffset) * SPLINE_WALL_SECTION_MAX_MITER_SCALE
+  if (distance <= maxDistance + 1e-5 || distance <= 1e-5) {
+    return point
+  }
+
+  const scale = maxDistance / distance
+  return [
+    origin[0] + (delta[0] * scale),
+    origin[1] + (delta[1] * scale),
+  ] as const
 }
 
 function buildSplineWallOpeningRevealGeometry(
@@ -1772,28 +2020,33 @@ function useSplineWallStyleTextures(material: SplineWallAssemblySection['materia
     normal: loadedTextures.normal ?? null,
     ao: loadedTextures.ao ?? null,
     height: loadedTextures.height ?? null,
+    displacement: loadedTextures.displacement ?? null,
     roughness: loadedTextures.roughness ?? null,
     metallic: loadedTextures.metallic ?? null,
   }), [loadedTextures])
 
   useEffect(() => {
-    configureSplineWallTexture(textures.albedo, 'color')
+    const verticalWrap = material.uv?.verticalWrap ?? 'repeat'
+    configureSplineWallTexture(textures.albedo, 'color', verticalWrap)
     if (textures.normal) {
-      configureSplineWallTexture(textures.normal, 'data')
+      configureSplineWallTexture(textures.normal, 'data', verticalWrap)
     }
     if (textures.ao) {
-      configureSplineWallTexture(textures.ao, 'data')
+      configureSplineWallTexture(textures.ao, 'data', verticalWrap)
     }
     if (textures.height) {
-      configureSplineWallTexture(textures.height, 'data')
+      configureSplineWallTexture(textures.height, 'data', verticalWrap)
+    }
+    if (textures.displacement) {
+      configureSplineWallTexture(textures.displacement, 'data', verticalWrap)
     }
     if (textures.roughness) {
-      configureSplineWallTexture(textures.roughness, 'data')
+      configureSplineWallTexture(textures.roughness, 'data', verticalWrap)
     }
     if (textures.metallic) {
-      configureSplineWallTexture(textures.metallic, 'data')
+      configureSplineWallTexture(textures.metallic, 'data', verticalWrap)
     }
-  }, [textures])
+  }, [material.uv?.verticalWrap, textures])
 
   return textures
 }
@@ -1804,6 +2057,7 @@ function buildSplineWallTextureUrlMap(material: SplineWallAssemblySection['mater
     ...(material.textures.normalUrl ? { normal: material.textures.normalUrl } : {}),
     ...(material.textures.aoUrl ? { ao: material.textures.aoUrl } : {}),
     ...(material.textures.heightUrl ? { height: material.textures.heightUrl } : {}),
+    ...(material.textures.displacementUrl ? { displacement: material.textures.displacementUrl } : {}),
     ...(material.textures.roughnessUrl ? { roughness: material.textures.roughnessUrl } : {}),
     ...(material.textures.metallicUrl ? { metallic: material.textures.metallicUrl } : {}),
   }
@@ -1821,23 +2075,28 @@ function createSplineWallStyleMaterial(
   },
 ) {
   const shading = section.material.shading
+  const materialTextures = section.layerKind === 'structural-core' ? null : textures
   const material = createStandardCompatibleMaterial({
-    color: shading?.tintColor ?? getFallbackSectionColor(section),
-    map: textures.albedo,
-    normalMap: textures.normal,
-    aoMap: textures.ao,
-    aoMapIntensity: textures.ao ? (shading?.aoMapIntensity ?? 1) : 0,
-    bumpMap: textures.height,
-    bumpScale: textures.height ? (shading?.bumpScale ?? 0.18) : 0,
-    roughnessMap: textures.roughness,
-    metalnessMap: textures.metallic,
-    roughness: textures.roughness ? 1 : (shading?.roughness ?? 0.68),
-    metalness: textures.metallic ? 1 : (shading?.metalness ?? 0.04),
+    color: section.layerKind === 'structural-core' ? getFallbackSectionColor(section) : (shading?.tintColor ?? getFallbackSectionColor(section)),
+    map: materialTextures?.albedo,
+    normalMap: materialTextures?.normal,
+    aoMap: materialTextures?.ao,
+    aoMapIntensity: materialTextures?.ao ? (shading?.aoMapIntensity ?? 1) : 0,
+    bumpMap: materialTextures?.height,
+    bumpScale: materialTextures?.height ? (shading?.bumpScale ?? 0.18) : 0,
+    roughnessMap: materialTextures?.roughness,
+    metalnessMap: materialTextures?.metallic,
+    roughness: materialTextures?.roughness ? 1 : (shading?.roughness ?? 0.68),
+    metalness: materialTextures?.metallic ? 1 : (shading?.metalness ?? 0.04),
     side: THREE.DoubleSide,
     polygonOffset: true,
     polygonOffsetFactor,
     polygonOffsetUnits,
   })
+  if (materialTextures) {
+    applySplineWallParallaxNodes(material, materialTextures, section.material)
+    applySplineWallDisplacementNodes(material, materialTextures, section.material)
+  }
   material.needsUpdate = true
   return material
 }
@@ -1934,11 +2193,18 @@ function createGeometryPositionKey(
   ].join(':')
 }
 
-function dot2(
+function cross2(
   left: readonly [number, number],
   right: readonly [number, number],
 ) {
-  return (left[0] * right[0]) + (left[1] * right[1])
+  return (left[0] * right[1]) - (left[1] * right[0])
+}
+
+function pointsEqual2(
+  left: readonly [number, number],
+  right: readonly [number, number],
+) {
+  return Math.hypot(left[0] - right[0], left[1] - right[1]) <= 1e-5
 }
 
 function normalize2(
@@ -1977,17 +2243,65 @@ function buildSectionProfileUvDistances(
   return buildProfileUvDistances(section.profile.points, resolvedWallHeight)
 }
 
+function subdivideSectionProfileForDisplacement(
+  section: SplineWallAssemblySection,
+  points: readonly (readonly [number, number])[],
+  resolvedWallHeight: number,
+) {
+  const displacementScale = section.material.shading?.displacementScale ?? 0
+  const vertexStep = section.material.shading?.displacementVertexStep ?? 0
+  if (displacementScale <= 0 || vertexStep <= 0 || points.length < 2) {
+    return points
+  }
+
+  const output: Array<readonly [number, number]> = [points[0]!]
+  for (let index = 1; index < points.length; index += 1) {
+    const previous = points[index - 1]!
+    const current = points[index]!
+    const deltaX = current[0] - previous[0]
+    const deltaY = (current[1] - previous[1]) * resolvedWallHeight
+    const segmentLength = Math.hypot(deltaX, deltaY)
+    const stepCount = Math.max(1, Math.ceil(segmentLength / vertexStep))
+    for (let stepIndex = 1; stepIndex <= stepCount; stepIndex += 1) {
+      const ratio = stepIndex / stepCount
+      output.push([
+        previous[0] + (deltaX * ratio),
+        previous[1] + ((current[1] - previous[1]) * ratio),
+      ])
+    }
+  }
+
+  return output
+}
+
 function getSectionProfileUvV(
   section: SplineWallAssemblySection,
   point: readonly [number, number],
   sourceDistances: readonly number[],
   resolvedWallHeight: number,
 ) {
+  let v: number
   if (section.material.uv?.verticalMode === 'fit-height') {
-    return Math.min(1, Math.max(0, point[1]))
+    v = Math.min(1, Math.max(0, point[1]))
+  } else {
+    v = getProfileUvDistanceAtPoint(section.profile.points, sourceDistances, point, resolvedWallHeight)
   }
 
-  return getProfileUvDistanceAtPoint(section.profile.points, sourceDistances, point, resolvedWallHeight)
+  return section.layerKind === 'exterior-face' && section.material.uv?.flipVOnExterior
+    ? 1 - v
+    : v
+}
+
+function getSectionUvU(
+  section: SplineWallAssemblySection,
+  distance: number,
+  resolvedWallHeight: number,
+) {
+  if (section.material.uv?.verticalMode === 'fit-height') {
+    return distance / Math.max(resolvedWallHeight, 1e-5)
+  }
+
+  return distance
 }
 
 function getProfileUvDistanceAtPoint(

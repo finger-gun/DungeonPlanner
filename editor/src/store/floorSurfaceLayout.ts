@@ -292,14 +292,15 @@ export function buildFloorRenderPlan(
       record.cell,
       globalFloorAssetId,
     )
-    const groupKey = resolvedFloor.groupKey
+    const roomId = record.roomId ?? null
+    const groupKey = `${roomId ?? 'legacy'}:${resolvedFloor.groupKey}`
     if (!baseGroups.has(groupKey)) {
       baseGroups.set(groupKey, {
         groupKey,
         floorAssetId: resolvedFloor.assetId,
         rotation: resolvedFloor.rotation,
         cells: [],
-        roomId: null,
+        roomId,
       })
     }
     baseGroups.get(groupKey)!.cells.push(record.cell)

@@ -28,7 +28,7 @@ describe('RoomToolPanel', () => {
     render(<RoomToolPanel />)
 
     expect(screen.getByText('Spline walls')).toBeInTheDocument()
-    expect(screen.getByText(/convert rooms to spline graph below/i)).toBeInTheDocument()
+    expect(screen.getByText(/amber node handles/i)).toBeInTheDocument()
   })
 
   it('updates indoor room descriptions to match the active context tool', () => {
@@ -54,55 +54,46 @@ describe('RoomToolPanel', () => {
     expect(screen.getByText(/show resize handles/i)).toBeInTheDocument()
   })
 
-  it('shows room-set choices for area, paint, and inner walls but hides them in resize mode', () => {
+  it('shows wall style choices for area, paint, and walls but hides them in resize mode', () => {
     render(<RoomToolPanel />)
-    expect(screen.getByRole('button', { name: 'Dungeon' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Timber Frame' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Cave' })).toBeInTheDocument()
+    expect(screen.queryByText('Room Style')).not.toBeInTheDocument()
+    expect(screen.getByText('Interior Wall')).toBeInTheDocument()
+    expect(screen.getByText('Exterior Wall')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Interior Wall: Rocky Cave' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Exterior Wall: AI Gothic' })).toBeInTheDocument()
+    expect(screen.getByTestId('Interior Wall-rocky-cave-preview')).toHaveAttribute('src', expect.any(String))
+    expect(screen.getByTestId('Exterior Wall-ai-gothic-preview')).toHaveAttribute('src', expect.any(String))
 
     cleanup()
     useDungeonStore.getState().reset()
     useDungeonStore.getState().setRoomPaintMode('resize')
     render(<RoomToolPanel />)
-    expect(screen.queryByRole('button', { name: 'Dungeon' })).not.toBeInTheDocument()
+    expect(screen.queryByText('Interior Wall')).not.toBeInTheDocument()
 
     cleanup()
     useDungeonStore.getState().reset()
     useDungeonStore.getState().setRoomEditMode('walls')
     render(<RoomToolPanel />)
-    expect(screen.getByRole('button', { name: 'Dungeon' })).toBeInTheDocument()
+    expect(screen.getByText('Interior Wall')).toBeInTheDocument()
   })
 
-  it('updates the active room set from the sidebar picker', () => {
+  it('lets interior and exterior wall styles be picked independently before drawing', () => {
     render(<RoomToolPanel />)
 
-    fireEvent.click(screen.getByRole('button', { name: 'Timber Frame' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Interior Wall: Rocky Cave' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Exterior Wall: AI Gothic' }))
 
-    expect(useDungeonStore.getState().activeRoomSetId).toBe('timber-frame')
-    expect(useDungeonStore.getState().selectedAssetIds.opening).toBe('dungeon.wall_wall_doorway_scaffold')
+    expect(useDungeonStore.getState().activeInteriorWallStyleId).toBe('rocky-cave')
+    expect(useDungeonStore.getState().activeExteriorWallStyleId).toBe('ai-gothic')
   })
 
-  it('updates the active wall material set from the sidebar picker', () => {
-    render(<RoomToolPanel />)
-
-    fireEvent.click(screen.getByRole('button', { name: 'Wedged Cobblestone' }))
-
-    expect(useDungeonStore.getState().activeWallMaterialSetId).toBe('wedged-cobblestone')
-  })
-
-  it('can seed and clear the spline wall graph from the sidebar', () => {
+  it('does not show spline wall graph conversion controls in the sidebar', () => {
     useDungeonStore.getState().paintCells([[0, 0]])
     render(<RoomToolPanel />)
 
-    fireEvent.click(screen.getByRole('button', { name: 'Convert Rooms to Spline Graph' }))
-
-    expect(Object.keys(useDungeonStore.getState().splineWallGraph.paths)).toHaveLength(1)
-    expect(useDungeonStore.getState().roomEditMode).toBe('walls')
-    expect(screen.getByRole('button', { name: 'Clear Spline Graph' })).toBeInTheDocument()
-
-    fireEvent.click(screen.getByRole('button', { name: 'Clear Spline Graph' }))
-
-    expect(Object.keys(useDungeonStore.getState().splineWallGraph.paths)).toHaveLength(0)
+    expect(screen.queryByText('Spline Wall Graph')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /(?:Convert Rooms to|Rebuild) Spline Graph/ })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Clear Spline Graph' })).not.toBeInTheDocument()
   })
 
   it('resets legacy room variant modes back to rooms', () => {

@@ -45,6 +45,36 @@ describe('buildSplineWallAssemblySections', () => {
     expect(structuralCore?.wallStyleId).toBe('stone-keep')
   })
 
+  it('uses the room style wall recipe when no segment override is assigned', () => {
+    const graph = buildSplineWallGraphFromPaintedCells({
+      '0:0': { cell: [0, 0], layerId: 'default', roomId: 'room-a' },
+    })
+    const analysis = analyzeSplineWallGraphBoundaries(graph)
+
+    const sections = buildSplineWallAssemblySections({
+      analyzedBoundaries: analysis,
+      wallStyleAssignments: {},
+      rooms: {
+        'room-a': {
+          id: 'room-a',
+          name: 'Rocky Cave',
+          layerId: 'default',
+          roomSetId: 'cave',
+          wallMaterialSetId: 'rough-rockface-1-pbr-material',
+          floorAssetId: null,
+          wallAssetId: null,
+        },
+      },
+    })
+
+    const roomFace = sections.find((section) => section.layerKind === 'room-face')
+    const structuralCore = sections.find((section) => section.layerKind === 'structural-core')
+
+    expect(roomFace?.wallStyleId).toBe('rocky-cave')
+    expect(structuralCore?.wallStyleId).toBe('rocky-cave')
+    expect(roomFace?.material.textures.albedoUrl).toContain('Rough-rockface1_Base_Color.png')
+  })
+
   it('emits room face detail sections for layered wall styles', () => {
     const graph = buildSplineWallGraphFromPaintedCells({
       '0:0': { cell: [0, 0], layerId: 'default', roomId: 'room-a' },
