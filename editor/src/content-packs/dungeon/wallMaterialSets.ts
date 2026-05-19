@@ -1,7 +1,20 @@
 import type { ContentPackWallMaterialSet } from '../types'
 
+const wallMaterialAssetUrls = import.meta.glob(
+  '../../assets/materials/dungeon/wall-materials/**/*.{png,jpg,jpeg,webp,avif}',
+  {
+    eager: true,
+    import: 'default',
+  },
+) as Record<string, string>
+
 function resolveAssetUrl(relativePath: string) {
-  return new URL(relativePath, import.meta.url).href
+  const assetUrl = wallMaterialAssetUrls[relativePath]
+  if (!assetUrl) {
+    throw new Error(`Unknown dungeon wall material asset "${relativePath}"`)
+  }
+
+  return assetUrl
 }
 
 function createWallMaterialSet({

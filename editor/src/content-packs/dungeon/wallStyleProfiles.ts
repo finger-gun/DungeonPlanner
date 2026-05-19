@@ -9,6 +9,14 @@ import type {
   ContentPackWallStyleProfile,
 } from '../types'
 
+const wallMaterialAssetUrls = import.meta.glob(
+  '../../assets/materials/dungeon/wall-materials/**/*.{png,jpg,jpeg,webp,avif}',
+  {
+    eager: true,
+    import: 'default',
+  },
+) as Record<string, string>
+
 export type WallStyleMaterialDefinition = {
   albedoPath: string
   normalPath?: string
@@ -57,7 +65,12 @@ export type WallStyleRecipe = {
 }
 
 function resolveAssetUrl(relativePath: string) {
-  return new URL(relativePath, import.meta.url).href
+  const assetUrl = wallMaterialAssetUrls[relativePath]
+  if (!assetUrl) {
+    throw new Error(`Unknown dungeon wall style asset "${relativePath}"`)
+  }
+
+  return assetUrl
 }
 
 function createProfile(points: readonly (readonly [number, number])[]): ContentPackWallStyleProfile {
