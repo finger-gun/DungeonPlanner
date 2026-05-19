@@ -1,4 +1,5 @@
 const PAN_SPEED = 0.006
+export const KEYBOARD_SLOW_PAN_MULTIPLIER = 0.35
 const ROTATE_SPEED = 0.025
 const KEYBOARD_REFERENCE_FPS = 60
 const MAX_KEYBOARD_FRAME_SCALE = 2
@@ -9,6 +10,10 @@ export function getKeyboardFrameScale(deltaSeconds: number) {
 
 export function getKeyboardPanAmount(distance: number, deltaSeconds: number) {
   return distance * PAN_SPEED * getKeyboardFrameScale(deltaSeconds)
+}
+
+export function getKeyboardSlowPanAmount(distance: number, deltaSeconds: number) {
+  return getKeyboardPanAmount(distance, deltaSeconds) * KEYBOARD_SLOW_PAN_MULTIPLIER
 }
 
 export function getKeyboardRotateAmount(deltaSeconds: number) {

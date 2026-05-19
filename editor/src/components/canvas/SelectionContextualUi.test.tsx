@@ -35,6 +35,7 @@ const storeState = vi.hoisted(() => ({
     wall: 'wall-asset',
   },
   innerWalls: {},
+  splineWallGraph: { nodes: {}, segments: {}, paths: {} },
   paintedCells: {
     '0:0': { roomId: 'room-a', floorId: 'floor-1', layerId: 'default' },
   } as Record<string, unknown>,
@@ -160,6 +161,7 @@ describe('SelectionContextualUi', () => {
       wall: 'wall-asset',
     }
     storeState.innerWalls = {}
+    storeState.splineWallGraph = { nodes: {}, segments: {}, paths: {} }
     storeState.paintedCells = {
       '0:0': { roomId: 'room-a', floorId: 'floor-1', layerId: 'default' },
     }
@@ -359,62 +361,6 @@ describe('SelectionContextualUi', () => {
     fireEvent.pointerDown(screen.getByLabelText('Toggle selected opening state'), { button: 0 })
 
     expect(storeState.setOpeningProps).toHaveBeenCalledWith('opening-1', { open: true })
-  })
-
-  it('shows wall-door controls and snaps rotation on release', () => {
-    storeState.selection = '0:0:north'
-    storeState.wallSurfaceAssetIds = {
-      '0:0:north': 'wall-door-asset',
-    }
-    storeState.wallSurfaceProps = {
-      '0:0:north': { open: false, generatedConnector: true },
-    }
-    getContentPackAssetByIdMock.mockImplementation((id: string) => {
-      if (id === 'wall-door-asset') {
-        return {
-          id,
-          slug: id,
-          name: 'Wall Door',
-          category: 'wall',
-          Component: () => null,
-          metadata: {
-            atlasColorVariants: {
-              propKey: 'variant',
-              defaultVariantId: 'oak',
-              variants: [{ id: 'oak', label: 'Oak', swatchColor: '#8b5a2b', uvOffset: [0, 0] }],
-            },
-          },
-          getPlayModeNextProps: (props: Record<string, unknown>) => ({ open: !props.open }),
-        }
-      }
-      return null
-    })
-    getRegisteredObjectMock.mockReturnValue(new THREE.Group())
-
-    render(<SelectionContextualUi />)
-
-    expect(screen.getByLabelText('Toggle selected door state')).toBeInTheDocument()
-    expect(screen.getByLabelText('Flip selected door')).toBeInTheDocument()
-    expect(screen.getByLabelText('Delete selected door')).toBeInTheDocument()
-
-    fireEvent.pointerDown(screen.getByLabelText('Flip selected door'), {
-      button: 0,
-      clientX: 100,
-      clientY: 100,
-    })
-    fireEvent.pointerMove(window, {
-      clientX: 420,
-      clientY: 100,
-    })
-    fireEvent.pointerUp(window)
-
-    expect(storeState.rotateSelection).toHaveBeenCalled()
-
-    fireEvent.pointerDown(screen.getByLabelText('Toggle selected door state'), { button: 0 })
-    expect(storeState.setWallSurfaceProps).toHaveBeenCalledWith('0:0:north', {
-      open: true,
-      generatedConnector: true,
-    })
   })
 
   it('shows color swatches for selected props with atlas color variants', () => {

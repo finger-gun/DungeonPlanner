@@ -4,12 +4,13 @@ import { useEffect, useRef } from 'react'
 import * as THREE from 'three'
 import type { OrbitControls as OrbitControlsImpl } from 'three-stdlib'
 import { useDungeonStore } from '../../store/useDungeonStore'
-import { getKeyboardPanAmount, getKeyboardRotateAmount } from './keyboardCameraMath'
+import { getKeyboardPanAmount, getKeyboardRotateAmount, getKeyboardSlowPanAmount } from './keyboardCameraMath'
 
 const TRACKED_KEYS = new Set([
   'w', 'a', 's', 'd',
   'arrowup', 'arrowdown', 'arrowleft', 'arrowright',
   'q', 'e',
+  'shift',
 ])
 
 // Fixed world-space cardinal directions for straight-down (top-down) camera
@@ -91,7 +92,9 @@ function KeyboardCameraControls() {
 
     const target   = orbitControls.target as THREE.Vector3
     const distance = camera.position.distanceTo(target)
-    const speed    = getKeyboardPanAmount(distance, deltaSeconds)
+    const speed = keys.has('shift')
+      ? getKeyboardSlowPanAmount(distance, deltaSeconds)
+      : getKeyboardPanAmount(distance, deltaSeconds)
 
     let forward: THREE.Vector3
     let right: THREE.Vector3

@@ -28,11 +28,22 @@ import {
   isFloorSurfacePlacementValid,
   resolveEffectiveFloorAssetIdForCellKey,
 } from '../../store/floorSurfaceLayout'
-import { getCanonicalInnerWallKey } from '../../store/manualWalls'
 import { getOpeningSegments } from '../../store/openingSegments'
 import { sampleOutdoorTerrainHeight, type OutdoorTerrainHeightfield } from '../../store/outdoorTerrain'
 import {
-  getCanonicalWallKey as getCanonicalWallKeyForGrid,
+  buildSplineWallOpeningPlacement,
+  findOpeningAtSplineHit,
+  type SplineWallOpeningPlacement,
+} from '../../store/openingPlacement'
+import {
+  createSplineWallQueryCache,
+  findNearestSplineWallSegment,
+  type SplineWallQueryCache,
+} from '../../store/splineWallQueries'
+import { hasSplineWallGraphPaths, type SplineWallGraph } from '../../store/splineWallGraph'
+import { buildSplineWallGraphFromPaintedCells } from '../../store/splineWalls'
+import { buildPaintedAreaRoomPreview, type FreehandPaintPoint } from '../../store/freehandRoomPaint'
+import {
   getInheritedWallAssetIdForWallKey,
   isInterRoomBoundary,
   isWallBoundary,
@@ -48,7 +59,6 @@ import {
   hasHeldBuildAnimations,
   releaseHeldBuildAnimations,
   triggerBuild,
-  triggerBuildTargets,
   useBuildAnimationVersion,
 } from '../../store/buildAnimations'
 import { traceBuildPerf } from '../../performance/runtimeBuildTrace'
@@ -66,7 +76,6 @@ import {
   shouldUpdateGridHoverInteractionState,
   shouldUpdateGridStrokeState,
   shouldUpdateOpenPassageBrushState,
-  shouldUpdateRoomWallBrushState,
 } from './gridFastState'
 import { supportsPlacementRotationShortcut } from '../../rotationShortcuts'
 import { getObjectInstanceScale, getObjectTintColor } from '../../store/objectAppearance'
@@ -76,28 +85,37 @@ import {
   useActiveFloorSnapshot,
 } from '../../store/useActiveFloorSnapshot'
 import {
-  getRoomWallBrushAnchor,
-  getRoomWallBrushTargets,
-  type RoomWallBrushAnchor,
-  type RoomWallEditTarget,
-} from './roomWallBrush'
-import {
   useTileGpuStream,
   useTileGpuStreamVersion,
 } from './TileGpuStreamHooks'
 import { getTileGpuStreamMountId } from './TileGpuStreamContextShared'
-import { shouldBlockRoomStrokeStart, shouldRenderRoomStreamPreview } from './GridShared'
+import {
+  shouldBlockRoomStrokeStart,
+  shouldClearRoomDraftForFloorChange,
+  shouldRenderRoomStreamPreview,
+} from './GridShared'
 import {
   buildRemovedRoomTileEntries,
   buildSpeculativeRoomTileEntries,
   expandRoomMutationCells,
-  getBuildAnimationTargetsForWallKeys,
-  getCellsForWallKeys,
-  getOriginCellForCells,
   type RoomAnimationStateInput,
 } from './roomMutationAnimations'
 import { useRemovalAnimationBatches } from './useRemovalAnimationBatches'
 import { WALL_EXTRA_DELAY_MS } from './DungeonRoomShared'
+import { RoomDraftOverlay } from './RoomDraftOverlay'
+import {
+  createRoomDraftFromStroke,
+  type RoomDraftState,
+} from '../../store/roomDraft'
+import {
+  buildRoomDraftOccupancyPolygons,
+  clipRoomDraft,
+} from '../../store/roomDraftClip'
+import { buildPreviewRoomFloorMaskData, filterCellsToRoomFloorMask } from './roomFloorMask'
+import {
+  buildRoomFloorMaskRuntime,
+  disposeRoomFloorMaskRuntime,
+} from './roomFloorMaskRuntime'
 
 type GridProps = {
   size?: number
@@ -119,12 +137,13 @@ export function Grid({ size = 120, playMode = false, bakedLightField = null }: G
     paintedCells,
     blockedCells,
     outdoorTerrainStyleCells,
-    outdoorTerrainHeights,
-    placedObjects,
-    wallOpenings,
-    innerWalls,
-    rooms,
-    floorTileAssetIds,
+        outdoorTerrainHeights,
+        placedObjects,
+        wallOpenings,
+        splineWallGraph,
+        innerWalls,
+        rooms,
+        floorTileAssetIds,
     wallSurfaceAssetIds,
     wallSurfaceProps,
     globalWallAssetId,
@@ -135,10 +154,11 @@ export function Grid({ size = 120, playMode = false, bakedLightField = null }: G
     blockedCells: state.blockedCells,
     outdoorTerrainStyleCells: state.outdoorTerrainStyleCells,
     outdoorTerrainHeights: state.outdoorTerrainHeights,
-    placedObjects: state.placedObjects,
-    wallOpenings: state.wallOpenings,
-    innerWalls: state.innerWalls,
-    rooms: state.rooms,
+      placedObjects: state.placedObjects,
+      wallOpenings: state.wallOpenings,
+      splineWallGraph: state.splineWallGraph,
+      innerWalls: state.innerWalls,
+      rooms: state.rooms,
     floorTileAssetIds: state.floorTileAssetIds,
     wallSurfaceAssetIds: state.wallSurfaceAssetIds,
     wallSurfaceProps: state.wallSurfaceProps,
@@ -149,6 +169,7 @@ export function Grid({ size = 120, playMode = false, bakedLightField = null }: G
   const outdoorTerrainSculptMode = useDungeonStore((state) => state.outdoorTerrainSculptMode)
   const mapMode = useDungeonStore((state) => state.mapMode)
   const paintCells = useDungeonStore((state) => state.paintCells)
+  const commitDraftRoom = useDungeonStore((state) => state.commitDraftRoom)
   const eraseCells = useDungeonStore((state) => state.eraseCells)
   const paintBlockedCells = useDungeonStore((state) => state.paintBlockedCells)
   const eraseBlockedCells = useDungeonStore((state) => state.eraseBlockedCells)
@@ -156,7 +177,6 @@ export function Grid({ size = 120, playMode = false, bakedLightField = null }: G
   const paintOutdoorTerrainStyleCells = useDungeonStore((state) => state.paintOutdoorTerrainStyleCells)
   const eraseOutdoorTerrainStyleCells = useDungeonStore((state) => state.eraseOutdoorTerrainStyleCells)
   const setFloorTileAsset = useDungeonStore((state) => state.setFloorTileAsset)
-  const setWallSurfaceAsset = useDungeonStore((state) => state.setWallSurfaceAsset)
   const placeObject = useDungeonStore((state) => state.placeObject)
   const repositionObject = useDungeonStore((state) => state.repositionObject)
   const removeObjectAtCell = useDungeonStore((state) => state.removeObjectAtCell)
@@ -164,8 +184,6 @@ export function Grid({ size = 120, playMode = false, bakedLightField = null }: G
   const cancelPickedUpObject = useDungeonStore((state) => state.cancelPickedUpObject)
   const placeOpening = useDungeonStore((state) => state.placeOpening)
   const placeOpenPassages = useDungeonStore((state) => state.placeOpenPassages)
-  const restoreOpenPassages = useDungeonStore((state) => state.restoreOpenPassages)
-  const setInnerWallSegments = useDungeonStore((state) => state.setInnerWallSegments)
   const removeOpening = useDungeonStore((state) => state.removeOpening)
   const roomEditMode = useDungeonStore((state) => state.roomEditMode)
   const roomPaintMode = useDungeonStore((state) => state.roomPaintMode)
@@ -191,7 +209,6 @@ export function Grid({ size = 120, playMode = false, bakedLightField = null }: G
   const selectedCharacterAssetId = useDungeonStore((state) => state.selectedAssetIds.player)
   const selectedOpeningAssetId = useDungeonStore((state) => state.selectedAssetIds.opening)
   const selectedFloorBrushAssetId = surfaceBrushAssetIds.floor
-  const selectedWallBrushAssetId = surfaceBrushAssetIds.wall
   const wallConnectionMode = useDungeonStore((state) => state.wallConnectionMode)
   const selectedPropAsset = selectedPropAssetId
     ? getContentPackAssetById(selectedPropAssetId)
@@ -217,7 +234,6 @@ export function Grid({ size = 120, playMode = false, bakedLightField = null }: G
   const isUnifiedOpeningMode = tool === 'prop' && assetBrowser.category === 'openings'
   const isUnifiedSurfaceMode = tool === 'prop' && assetBrowser.category === 'surfaces'
   const isUnifiedFloorVariantMode = isUnifiedSurfaceMode && assetBrowser.subcategory !== 'walls'
-  const isUnifiedWallVariantMode = isUnifiedSurfaceMode && assetBrowser.subcategory === 'walls'
   const isFloorOpeningMode =
     (tool === 'opening' || isUnifiedOpeningMode) &&
     wallConnectionMode === 'door' &&
@@ -226,6 +242,14 @@ export function Grid({ size = 120, playMode = false, bakedLightField = null }: G
     (tool === 'opening' || isUnifiedOpeningMode) &&
     wallConnectionMode === 'door' &&
     openingToolMode === 'wall-connection'
+  const openingPlacementGraph = useMemo(
+    () => (hasSplineWallGraphPaths(splineWallGraph) ? splineWallGraph : buildSplineWallGraphFromPaintedCells(paintedCells)),
+    [paintedCells, splineWallGraph],
+  )
+  const openingQueryCache = useMemo(
+    () => createSplineWallQueryCache(openingPlacementGraph),
+    [openingPlacementGraph],
+  )
   const [hoveredCell, setHoveredCell] = useState<SnappedGridPosition | null>(null)
   const [hoveredPoint, setHoveredPoint] = useState<{ x: number; y: number; z: number } | null>(null)
   const [hoveredRay, setHoveredRay] = useState<{
@@ -241,27 +265,24 @@ export function Grid({ size = 120, playMode = false, bakedLightField = null }: G
     cells: GridCell[]
     mode: 'paint' | 'erase'
   } | null>(null)
+  const [roomDraft, setRoomDraft] = useState<RoomDraftState | null>(null)
   const [hoveredOpenWallKey, setHoveredOpenWallKey] = useState<string | null>(null)
   const [openPassageBrushWallKeys, setOpenPassageBrushWallKeys] = useState<string[]>([])
-  const [hoveredRoomWallEditTarget, setHoveredRoomWallEditTarget] = useState<RoomWallEditTarget | null>(null)
-  const [roomWallBrushTargets, setRoomWallBrushTargets] = useState<RoomWallEditTarget[]>([])
-  const [roomWallBrushMode, setRoomWallBrushMode] = useState<'paint' | 'erase' | null>(null)
   const [strokePaintedCells, setStrokePaintedCells] = useState<GridCell[]>([])
+  const [freehandPaintPoints, setFreehandPaintPoints] = useState<FreehandPaintPoint[]>([])
   const strokeModeRef = useRef<'paint' | 'erase' | null>(null)
   const strokeStartRef = useRef<GridCell | null>(null)
   const strokeCurrentRef = useRef<GridCell | null>(null)
   const strokePaintedCellsRef = useRef<Set<string>>(new Set())
+  const freehandPaintPointsRef = useRef<FreehandPaintPoint[]>([])
   const openPassageBrushActiveRef = useRef(false)
   const openPassageBrushWallKeysRef = useRef<string[]>([])
-  const roomWallBrushActiveRef = useRef(false)
-  const roomWallBrushModeRef = useRef<'paint' | 'erase' | null>(null)
-  const roomWallBrushTargetsRef = useRef<RoomWallEditTarget[]>([])
-  const roomWallBrushAnchorRef = useRef<RoomWallBrushAnchor | null>(null)
   const buildAnimationVersion = useBuildAnimationVersion()
   const tileGpuStream = useTileGpuStream()
   const tileGpuStreamVersion = useTileGpuStreamVersion()
   const roomStreamTransactionIdRef = useRef<string | null>(null)
   const roomStreamTransactionStartedAtRef = useRef<number | null>(null)
+  const previousActiveFloorIdRef = useRef(activeFloorId)
   const { removalAnimationBatches, queueRemovalAnimationBatch } = useRemovalAnimationBatches()
   const hoverPreviewStateRef = useRef<{
     hoveredCell: SnappedGridPosition | null
@@ -281,10 +302,8 @@ export function Grid({ size = 120, playMode = false, bakedLightField = null }: G
   })
   const hoverInteractionStateRef = useRef<{
     hoveredOpenWallKey: string | null
-    hoveredRoomWallEditTarget: RoomWallEditTarget | null
   }>({
     hoveredOpenWallKey: null,
-    hoveredRoomWallEditTarget: null,
   })
   const placementOrientationKey = pickedUpObject
     ? `pickup:${pickedUpObject.objectId}:${pickedUpObject.assetId}:${wallConnectionMode}`
@@ -317,9 +336,8 @@ export function Grid({ size = 120, playMode = false, bakedLightField = null }: G
   useEffect(() => {
     hoverInteractionStateRef.current = {
       hoveredOpenWallKey,
-      hoveredRoomWallEditTarget,
     }
-  }, [hoveredOpenWallKey, hoveredRoomWallEditTarget])
+  }, [hoveredOpenWallKey])
 
   useEffect(() => {
     void buildAnimationVersion
@@ -514,11 +532,12 @@ export function Grid({ size = 120, playMode = false, bakedLightField = null }: G
           outdoorTerrainHeights,
           resolved.ray,
           resolved.terrainCell,
+          openingQueryCache,
         ),
         floorRotationIndex * (Math.PI / 2),
       )
     },
-    [floorRotationIndex, mapMode, outdoorTerrainHeights, paintedCells, pickedUpAsset],
+    [floorRotationIndex, mapMode, openingQueryCache, outdoorTerrainHeights, paintedCells, pickedUpAsset],
   )
 
   const finishHeldMoveDrag = useCallback((commit: boolean, clientX?: number, clientY?: number) => {
@@ -621,41 +640,16 @@ export function Grid({ size = 120, playMode = false, bakedLightField = null }: G
     openPassageBrushActiveRef.current = active
     openPassageBrushWallKeysRef.current = wallKeys
     setOpenPassageBrushWallKeys(wallKeys)
-    setPaintingStrokeActive(active || roomWallBrushActiveRef.current || Boolean(strokeModeRef.current))
+    setPaintingStrokeActive(active || Boolean(strokeModeRef.current))
     return true
   }, [setOpenPassageBrushWallKeys, setPaintingStrokeActive])
-
-  const updateRoomWallBrushState = useCallback((
-    active: boolean,
-    mode: 'paint' | 'erase' | null,
-    targets: RoomWallEditTarget[],
-  ) => {
-    const currentState = {
-      active: roomWallBrushActiveRef.current,
-      mode: roomWallBrushModeRef.current,
-      targets: roomWallBrushTargetsRef.current,
-    }
-    const nextState = {
-      active,
-      mode,
-      targets,
-    }
-    if (!shouldUpdateRoomWallBrushState(currentState, nextState)) {
-      return false
-    }
-    roomWallBrushActiveRef.current = active
-    roomWallBrushModeRef.current = mode
-    roomWallBrushTargetsRef.current = targets
-    setRoomWallBrushTargets(targets)
-    setRoomWallBrushMode(mode)
-    setPaintingStrokeActive(active || openPassageBrushActiveRef.current || Boolean(strokeModeRef.current))
-    return true
-  }, [setPaintingStrokeActive, setRoomWallBrushMode, setRoomWallBrushTargets])
 
   const cancelRoomStrokeStream = useCallback(() => {
     updateStrokeState(null, null, null)
     setStrokePaintedCells([])
     strokePaintedCellsRef.current.clear()
+    setFreehandPaintPoints([])
+    freehandPaintPointsRef.current = []
     setLatchedRoomPreview(null)
     const transactionId = roomStreamTransactionIdRef.current
     if (transactionId) {
@@ -668,6 +662,11 @@ export function Grid({ size = 120, playMode = false, bakedLightField = null }: G
     }
     invalidate()
   }, [invalidate, tileGpuStream, updateStrokeState])
+
+  const cancelRoomDraft = useCallback(() => {
+    setRoomDraft(null)
+    invalidate()
+  }, [invalidate])
 
   const roomBrushCells = useMemo<Record<string, PaintedCellRecord>>(() => {
     if (mapMode !== 'outdoor') {
@@ -687,6 +686,86 @@ export function Grid({ size = 120, playMode = false, bakedLightField = null }: G
     }
     return blockedCells
   }, [blockedCells, mapMode, outdoorBrushMode, outdoorTerrainStyleCells, paintedCells])
+  const roomDraftOccupancyPolygons = useMemo(
+    () => buildRoomDraftOccupancyPolygons(paintedCells, splineWallGraph),
+    [paintedCells, splineWallGraph],
+  )
+  const occupiedRoomDraftCellKeys = useMemo(
+    () => new Set(Object.keys(paintedCells)),
+    [paintedCells],
+  )
+  const clippedRoomDraft = useMemo(
+    () => roomDraft
+      ? clipRoomDraft(roomDraft, roomDraftOccupancyPolygons, occupiedRoomDraftCellKeys)
+      : null,
+    [occupiedRoomDraftCellKeys, roomDraft, roomDraftOccupancyPolygons],
+  )
+  const roomDraftCells = useMemo(
+    () => clippedRoomDraft?.commitCells ?? [],
+    [clippedRoomDraft],
+  )
+  const roomDraftValid = Boolean(
+    clippedRoomDraft
+    && clippedRoomDraft.valid
+    && roomDraftCells.length > 0
+    && clippedRoomDraft.splineNodes.length >= 3,
+  )
+  const strokeRoomDraftPreview = useMemo(() => {
+    if (
+      roomDraft
+      || tool !== 'room'
+      || roomEditMode !== 'rooms'
+      || roomPaintMode !== 'area'
+      || mapMode === 'outdoor'
+      || strokeMode !== 'paint'
+      || !strokeStartCell
+      || !strokeCurrentCell
+      || isRoomResizeHandleActive
+    ) {
+      return null
+    }
+
+    return createRoomDraftFromStroke(strokeStartCell, strokeCurrentCell)
+  }, [
+    isRoomResizeHandleActive,
+    mapMode,
+    roomDraft,
+    roomEditMode,
+    roomPaintMode,
+    strokeCurrentCell,
+    strokeMode,
+    strokeStartCell,
+    tool,
+  ])
+  const strokeRoomDraftPreviewClip = useMemo(
+    () => strokeRoomDraftPreview
+      ? clipRoomDraft(strokeRoomDraftPreview, roomDraftOccupancyPolygons, occupiedRoomDraftCellKeys)
+      : null,
+    [occupiedRoomDraftCellKeys, roomDraftOccupancyPolygons, strokeRoomDraftPreview],
+  )
+  const previewStrokeMode = strokeMode ?? latchedRoomPreview?.mode ?? null
+  const paintedAreaRoomPreview = useMemo(() => {
+    if (
+      roomDraft
+      || tool !== 'room'
+      || roomEditMode !== 'rooms'
+      || roomPaintMode !== 'paint'
+      || mapMode === 'outdoor'
+      || previewStrokeMode !== 'paint'
+    ) {
+      return null
+    }
+
+    return buildPaintedAreaRoomPreview(freehandPaintPoints)
+  }, [
+    freehandPaintPoints,
+    mapMode,
+    previewStrokeMode,
+    roomDraft,
+    roomEditMode,
+    roomPaintMode,
+    tool,
+  ])
 
   // R key: rotates floor-connected assets; flips wall-connected openings 180°
   useEffect(() => {
@@ -707,8 +786,12 @@ export function Grid({ size = 120, playMode = false, bakedLightField = null }: G
         active instanceof HTMLTextAreaElement ||
         (active instanceof HTMLElement && active.isContentEditable)
       ) return
-      if (e.key === 'Escape' && (strokeModeRef.current || latchedRoomPreview || roomStreamTransactionIdRef.current)) {
+      if (e.key === 'Escape' && (strokeModeRef.current || latchedRoomPreview || roomStreamTransactionIdRef.current || roomDraft)) {
         e.preventDefault()
+        if (roomDraft) {
+          cancelRoomDraft()
+          return
+        }
         cancelRoomStrokeStream()
         return
       }
@@ -736,6 +819,7 @@ export function Grid({ size = 120, playMode = false, bakedLightField = null }: G
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
   }, [
+    cancelRoomDraft,
     cancelRoomStrokeStream,
     defaultFloorRotationIndex,
     isFloorOpeningMode,
@@ -745,6 +829,7 @@ export function Grid({ size = 120, playMode = false, bakedLightField = null }: G
     isWallOpeningMode,
     latchedRoomPreview,
     placementOrientationKey,
+    roomDraft,
     tool,
   ])
 
@@ -839,6 +924,19 @@ export function Grid({ size = 120, playMode = false, bakedLightField = null }: G
       return []
     }
 
+    if (roomDraft || strokeRoomDraftPreview) {
+      return []
+    }
+
+    if (
+      roomPaintMode === 'paint'
+      && mapMode !== 'outdoor'
+      && strokeMode === 'paint'
+      && paintedAreaRoomPreview
+    ) {
+      return paintedAreaRoomPreview.cells
+    }
+
     if (mapMode === 'outdoor' && outdoorBrushMode === 'terrain-sculpt') {
       if (strokeStartCell && strokeCurrentCell && strokeMode) {
         return getRectangleCells(strokeStartCell, strokeCurrentCell)
@@ -861,12 +959,15 @@ export function Grid({ size = 120, playMode = false, bakedLightField = null }: G
     })
   }, [
     hoveredCell,
+    paintedAreaRoomPreview,
     mapMode,
     outdoorBrushMode,
     roomEditMode,
     isRoomResizeHandleActive,
+    roomDraft,
     roomBrushCells,
     strokeCurrentCell,
+    strokeRoomDraftPreview,
     strokeMode,
     strokeStartCell,
     strokePaintedCells,
@@ -874,7 +975,12 @@ export function Grid({ size = 120, playMode = false, bakedLightField = null }: G
     tool,
     roomPaintMode,
   ])
-  const previewStrokeMode = strokeMode ?? latchedRoomPreview?.mode ?? null
+  const roomPaintPreviewPaths = useMemo(
+    () => paintedAreaRoomPreview?.paths.length
+      ? paintedAreaRoomPreview.paths
+      : [],
+    [paintedAreaRoomPreview],
+  )
 
   useEffect(() => {
     const transactionId = roomStreamTransactionIdRef.current
@@ -904,9 +1010,42 @@ export function Grid({ size = 120, playMode = false, bakedLightField = null }: G
     previewCells,
     strokeMode,
   })
+  const previewRoomFloorMaskData = useMemo(() => {
+    if (
+      !shouldStreamRoomTransactionPreview
+      || previewStrokeMode !== 'paint'
+      || previewCells.length === 0
+    ) {
+      return null
+    }
+
+    return buildPreviewRoomFloorMaskData(previewCells, roomPaintPreviewPaths)
+  }, [
+    previewCells,
+    previewStrokeMode,
+    roomPaintPreviewPaths,
+    shouldStreamRoomTransactionPreview,
+  ])
+  const renderablePreviewCells = useMemo(
+    () => previewRoomFloorMaskData
+      ? filterCellsToRoomFloorMask(previewCells, previewRoomFloorMaskData)
+      : previewCells,
+    [previewCells, previewRoomFloorMaskData],
+  )
+  const previewRoomFloorMaskRuntime = useMemo(() => {
+    if (!previewRoomFloorMaskData) {
+      return null
+    }
+
+    return buildRoomFloorMaskRuntime(previewRoomFloorMaskData)
+  }, [previewRoomFloorMaskData])
+  useEffect(
+    () => () => disposeRoomFloorMaskRuntime(previewRoomFloorMaskRuntime),
+    [previewRoomFloorMaskRuntime],
+  )
   const previewStreamEntries = useMemo(
     () => {
-      if (!shouldStreamRoomTransactionPreview) {
+      if (!shouldStreamRoomTransactionPreview || renderablePreviewCells.length === 0) {
         return []
       }
 
@@ -915,14 +1054,15 @@ export function Grid({ size = 120, playMode = false, bakedLightField = null }: G
         activeRoomSetId,
         bakedLightField,
         buildStartedAt: roomStreamTransactionStartedAt!,
-        cells: previewCells,
+        cells: renderablePreviewCells,
         floorTileAssetIds,
         globalFloorAssetId,
         globalWallAssetId,
         innerWalls,
-        originCell: strokeStartCell ?? previewCells[0]!,
+        originCell: strokeStartCell ?? renderablePreviewCells[0]!,
         paintedCells,
         rooms,
+        splineWallGraph,
         wallOpenings,
         wallSurfaceAssetIds,
         wallSurfaceProps,
@@ -937,9 +1077,10 @@ export function Grid({ size = 120, playMode = false, bakedLightField = null }: G
       globalWallAssetId,
       innerWalls,
       paintedCells,
-      previewCells,
+      renderablePreviewCells,
       roomStreamTransactionStartedAt,
       rooms,
+      splineWallGraph,
       shouldStreamRoomTransactionPreview,
       strokeStartCell,
       wallOpenings,
@@ -960,10 +1101,22 @@ export function Grid({ size = 120, playMode = false, bakedLightField = null }: G
       return
     }
 
-    // In paint mode, use the tracked painted cells for both paint and erase
+    // In paint mode, use the tracked painted cells for both paint and erase.
+    const paintedAreaCommit = roomPaintMode === 'paint' && mapMode !== 'outdoor' && mode === 'paint'
+      ? (() => {
+          const preview = buildPaintedAreaRoomPreview(freehandPaintPointsRef.current)
+          if (!preview) {
+            return null
+          }
+          const cells = preview.cells.filter((cell) => !paintedCells[getCellKey(cell)])
+          return cells.length > 0
+            ? { ...preview, cells }
+            : null
+        })()
+      : null
     let cells: GridCell[]
     if (roomPaintMode === 'paint' && mapMode !== 'outdoor') {
-      cells = strokePaintedCells
+      cells = paintedAreaCommit?.cells ?? []
     } else {
       cells =
         mapMode === 'outdoor' && outdoorBrushMode === 'terrain-sculpt'
@@ -974,8 +1127,23 @@ export function Grid({ size = 120, playMode = false, bakedLightField = null }: G
               mode,
               mapMode === 'outdoor' &&
                 mode === 'paint' &&
-                (outdoorBrushMode === 'terrain-style' || outdoorOverpaintRegenerate),
+               (outdoorBrushMode === 'terrain-style' || outdoorOverpaintRegenerate),
             )
+    }
+
+    if (mode === 'paint' && roomPaintMode === 'area' && mapMode !== 'outdoor') {
+      setLatchedRoomPreview(null)
+      if (roomStreamTransactionIdRef.current) {
+        tileGpuStream.cancelTileStreamTransaction(roomStreamTransactionIdRef.current)
+        roomStreamTransactionIdRef.current = null
+        roomStreamTransactionStartedAtRef.current = null
+      }
+      setRoomDraft(createRoomDraftFromStroke(startCell, currentCell))
+      updateStrokeState(null, null, null)
+      setStrokePaintedCells([])
+      strokePaintedCellsRef.current.clear()
+      invalidate()
+      return
     }
 
     if (cells.length > 0) {
@@ -991,6 +1159,7 @@ export function Grid({ size = 120, playMode = false, bakedLightField = null }: G
           innerWalls,
           paintedCells,
           rooms,
+          splineWallGraph,
           wallOpenings,
           wallSurfaceAssetIds,
           wallSurfaceProps,
@@ -1024,7 +1193,15 @@ export function Grid({ size = 120, playMode = false, bakedLightField = null }: G
               paintBlockedCells(cells)
             }
           } else {
-            paintCells(cells)
+            if (paintedAreaCommit) {
+              commitDraftRoom({
+                cells: paintedAreaCommit.cells,
+                splineNodes: paintedAreaCommit.splineNodes,
+                splinePaths: paintedAreaCommit.splinePaths,
+              })
+            } else {
+              paintCells(cells)
+            }
           }
         } else {
           setLatchedRoomPreview(null)
@@ -1069,6 +1246,7 @@ export function Grid({ size = 120, playMode = false, bakedLightField = null }: G
                 innerWalls: nextState.innerWalls,
                 paintedCells: nextState.paintedCells,
                 rooms: nextState.rooms,
+                splineWallGraph: nextState.splineWallGraph,
                 wallOpenings: nextState.wallOpenings,
                 wallSurfaceAssetIds: nextState.wallSurfaceAssetIds,
                 wallSurfaceProps: nextState.wallSurfaceProps,
@@ -1128,7 +1306,104 @@ export function Grid({ size = 120, playMode = false, bakedLightField = null }: G
     updateStrokeState(null, null, null)
     setStrokePaintedCells([])
     strokePaintedCellsRef.current.clear()
+    setFreehandPaintPoints([])
+    freehandPaintPointsRef.current = []
   })
+
+  const commitRoomDraftOverlay = useCallback(() => {
+    if (!roomDraft || !clippedRoomDraft || !roomDraftValid || roomDraftCells.length === 0) {
+      return
+    }
+
+    const previousRoomAnimationState = {
+      activeLayerId,
+      activeRoomSetId,
+      bakedLightField,
+      floorTileAssetIds,
+      globalFloorAssetId,
+      globalWallAssetId,
+      innerWalls,
+      paintedCells,
+      rooms,
+      splineWallGraph,
+      wallOpenings,
+      wallSurfaceAssetIds,
+      wallSurfaceProps,
+    } satisfies RoomAnimationStateInput
+
+    if (!commitDraftRoom({
+      cells: roomDraftCells,
+      splineNodes: clippedRoomDraft.splineNodes,
+    })) {
+      return
+    }
+
+    setRoomDraft(null)
+
+    const nextState = useDungeonStore.getState()
+    if (nextState.activeFloorId !== activeFloorId) {
+      invalidate()
+      return
+    }
+
+    const affectedCells = expandRoomMutationCells(roomDraftCells)
+    const removalStartedAt = performance.now()
+    const removalEntries = buildRemovedRoomTileEntries({
+      before: previousRoomAnimationState,
+      after: {
+        activeLayerId,
+        activeRoomSetId: nextState.activeRoomSetId,
+        bakedLightField,
+        floorTileAssetIds: nextState.floorTileAssetIds,
+        globalFloorAssetId: nextState.selectedAssetIds.floor,
+        globalWallAssetId: nextState.selectedAssetIds.wall,
+        innerWalls: nextState.innerWalls,
+        paintedCells: nextState.paintedCells,
+        rooms: nextState.rooms,
+        splineWallGraph: nextState.splineWallGraph,
+        wallOpenings: nextState.wallOpenings,
+        wallSurfaceAssetIds: nextState.wallSurfaceAssetIds,
+        wallSurfaceProps: nextState.wallSurfaceProps,
+      },
+      buildStartedAt: removalStartedAt,
+      cells: affectedCells,
+      originCell: roomDraft.originCell,
+    })
+    queueRemovalAnimationBatch(removalEntries, activeFloorId)
+
+    if (BUILD_ANIMATIONS_ENABLED) {
+      const scheduledBuildStartedAt = removalEntries.length > 0
+        ? removalStartedAt + getBuildAnimationPlaybackDurationMs(WALL_EXTRA_DELAY_MS)
+        : performance.now()
+      triggerBuild(roomDraftCells, roomDraft.originCell, {
+        startedAt: scheduledBuildStartedAt,
+      })
+    }
+
+    invalidate()
+  }, [
+    activeFloorId,
+    activeLayerId,
+    activeRoomSetId,
+    bakedLightField,
+    clippedRoomDraft,
+    commitDraftRoom,
+    floorTileAssetIds,
+    globalFloorAssetId,
+    globalWallAssetId,
+    innerWalls,
+    invalidate,
+    paintedCells,
+    queueRemovalAnimationBatch,
+    roomDraft,
+    roomDraftCells,
+    roomDraftValid,
+    rooms,
+    splineWallGraph,
+    wallOpenings,
+    wallSurfaceAssetIds,
+    wallSurfaceProps,
+  ])
 
   const endOpenPassageBrush = useEffectEvent(() => {
     if (!openPassageBrushActiveRef.current && openPassageBrushWallKeysRef.current.length === 0) {
@@ -1139,106 +1414,6 @@ export function Grid({ size = 120, playMode = false, bakedLightField = null }: G
       placeOpenPassages(openPassageBrushWallKeysRef.current)
     }
     updateOpenPassageBrushState(false, [])
-  })
-
-  const endRoomWallBrush = useEffectEvent(() => {
-    if (!roomWallBrushActiveRef.current || roomWallBrushTargetsRef.current.length === 0) {
-      updateRoomWallBrushState(false, null, [])
-      roomWallBrushAnchorRef.current = null
-      return
-    }
-
-    const mode = roomWallBrushModeRef.current
-    const affectedWallKeys = roomWallBrushTargetsRef.current.map((target) => target.wallKey)
-    const previousRoomAnimationState = BUILD_ANIMATIONS_ENABLED && mapMode !== 'outdoor'
-      ? {
-        activeLayerId,
-        activeRoomSetId,
-        bakedLightField,
-        floorTileAssetIds,
-        globalFloorAssetId,
-        globalWallAssetId,
-        innerWalls,
-        paintedCells,
-        rooms,
-        wallOpenings,
-        wallSurfaceAssetIds,
-        wallSurfaceProps,
-      } satisfies RoomAnimationStateInput
-      : null
-    if (mode === 'paint') {
-      const innerWallKeys = roomWallBrushTargetsRef.current
-        .filter((target) => target.kind === 'inner')
-        .map((target) => target.wallKey)
-      const sharedWallKeys = roomWallBrushTargetsRef.current
-        .filter((target) => target.kind === 'shared')
-        .map((target) => target.wallKey)
-
-      if (innerWallKeys.length > 0) {
-        setInnerWallSegments(innerWallKeys, true)
-      }
-      if (sharedWallKeys.length > 0) {
-        restoreOpenPassages(sharedWallKeys)
-      }
-    } else if (mode === 'erase') {
-      const innerWallKeys = roomWallBrushTargetsRef.current
-        .filter((target) => target.kind === 'inner')
-        .map((target) => target.wallKey)
-      const sharedWallKeys = roomWallBrushTargetsRef.current
-        .filter((target) => target.kind === 'shared')
-        .map((target) => target.wallKey)
-
-      if (innerWallKeys.length > 0) {
-        setInnerWallSegments(innerWallKeys, false)
-      }
-      if (sharedWallKeys.length > 0) {
-        placeOpenPassages(sharedWallKeys)
-      }
-    }
-
-    if (previousRoomAnimationState && affectedWallKeys.length > 0) {
-      const nextState = useDungeonStore.getState()
-      if (nextState.activeFloorId === activeFloorId) {
-        const affectedCells = expandRoomMutationCells(getCellsForWallKeys(affectedWallKeys))
-        const originCell = getOriginCellForCells(affectedCells)
-        const wallBuildTargets = getBuildAnimationTargetsForWallKeys(affectedWallKeys)
-        const mutationStartedAt = performance.now()
-        const removalEntries = buildRemovedRoomTileEntries({
-          before: previousRoomAnimationState,
-          after: {
-            activeLayerId,
-            activeRoomSetId: nextState.activeRoomSetId,
-            bakedLightField,
-            floorTileAssetIds: nextState.floorTileAssetIds,
-            globalFloorAssetId: nextState.selectedAssetIds.floor,
-            globalWallAssetId: nextState.selectedAssetIds.wall,
-            innerWalls: nextState.innerWalls,
-            paintedCells: nextState.paintedCells,
-            rooms: nextState.rooms,
-            wallOpenings: nextState.wallOpenings,
-            wallSurfaceAssetIds: nextState.wallSurfaceAssetIds,
-            wallSurfaceProps: nextState.wallSurfaceProps,
-          },
-          buildStartedAt: mutationStartedAt,
-          cells: affectedCells,
-          originCell,
-        })
-        queueRemovalAnimationBatch(removalEntries, activeFloorId)
-
-        if (mode === 'paint' && wallBuildTargets.length > 0 && BUILD_ANIMATIONS_ENABLED) {
-          const scheduledBuildStartedAt = removalEntries.length > 0
-            ? mutationStartedAt + getBuildAnimationPlaybackDurationMs(WALL_EXTRA_DELAY_MS)
-            : mutationStartedAt
-          triggerBuildTargets(wallBuildTargets, originCell, {
-            startedAt: scheduledBuildStartedAt,
-          })
-        }
-        invalidate()
-      }
-    }
-
-    updateRoomWallBrushState(false, null, [])
-    roomWallBrushAnchorRef.current = null
   })
 
   useEffect(() => {
@@ -1252,6 +1427,18 @@ export function Grid({ size = 120, playMode = false, bakedLightField = null }: G
   }, [cancelRoomStrokeStream, latchedRoomPreview, roomEditMode, tool])
 
   useEffect(() => {
+    if (!roomDraft) {
+      return
+    }
+
+    if (tool === 'room' && roomEditMode === 'rooms' && roomPaintMode === 'area' && mapMode !== 'outdoor') {
+      return
+    }
+
+    cancelRoomDraft()
+  }, [cancelRoomDraft, mapMode, roomDraft, roomEditMode, roomPaintMode, tool])
+
+  useEffect(() => {
     if (!roomStreamTransactionIdRef.current) {
       return
     }
@@ -1260,16 +1447,29 @@ export function Grid({ size = 120, playMode = false, bakedLightField = null }: G
   }, [activeFloorId, cancelRoomStrokeStream])
 
   useEffect(() => {
+    const previousActiveFloorId = previousActiveFloorIdRef.current
+    previousActiveFloorIdRef.current = activeFloorId
+
+    if (!shouldClearRoomDraftForFloorChange({
+      previousActiveFloorId,
+      activeFloorId,
+      roomDraftActive: roomDraft !== null,
+    })) {
+      return
+    }
+
+    cancelRoomDraft()
+  }, [activeFloorId, cancelRoomDraft, roomDraft])
+
+  useEffect(() => {
     function handlePointerUp() {
       commitStroke()
       endOpenPassageBrush()
-      endRoomWallBrush()
     }
 
     function handlePointerCancel() {
       cancelRoomStrokeStream()
       updateOpenPassageBrushState(false, [])
-      updateRoomWallBrushState(false, null, [])
     }
 
     window.addEventListener('pointerup', handlePointerUp)
@@ -1281,22 +1481,14 @@ export function Grid({ size = 120, playMode = false, bakedLightField = null }: G
       window.removeEventListener('blur', handlePointerCancel)
       openPassageBrushActiveRef.current = false
       openPassageBrushWallKeysRef.current = []
-      roomWallBrushActiveRef.current = false
-      roomWallBrushModeRef.current = null
-      roomWallBrushTargetsRef.current = []
-      roomWallBrushAnchorRef.current = null
       setHoveredOpenWallKey(null)
       setOpenPassageBrushWallKeys([])
-      setHoveredRoomWallEditTarget(null)
-      setRoomWallBrushTargets([])
-      setRoomWallBrushMode(null)
       setPaintingStrokeActive(false)
     }
   }, [
     cancelRoomStrokeStream,
     setPaintingStrokeActive,
     updateOpenPassageBrushState,
-    updateRoomWallBrushState,
   ])
 
   function getOutdoorTerrainHit(event: ThreeEvent<PointerEvent>) {
@@ -1312,15 +1504,12 @@ export function Grid({ size = 120, playMode = false, bakedLightField = null }: G
     const point = terrainHit?.point ?? raycaster.pointOnPlane(event)
     const snapped = getSnappedHoverCell(point, terrainHit?.cell ?? null)
     const hoveredOpenWallKey = isOpenWallBrushMode
-      ? getEligibleOpenPassageWallKey(point, paintedCells, eligibleOpenPassageWallKeys)
-      : null
-    const hoveredRoomWallEditTarget = !roomWallBrushActiveRef.current && isRoomWallMode
-      ? getRoomWallEditTarget(
+      ? getEligibleOpenPassageWallKey(
           point,
           paintedCells,
-          innerWalls,
-          suppressedWallKeys,
-          roomWallBrushModeRef.current ?? 'paint',
+          eligibleOpenPassageWallKeys,
+          openingPlacementGraph,
+          openingQueryCache,
         )
       : null
     const hoverPreviewChanged = applyResolvedHoverState({
@@ -1335,7 +1524,6 @@ export function Grid({ size = 120, playMode = false, bakedLightField = null }: G
     })
     const nextHoverInteraction = {
       hoveredOpenWallKey,
-      hoveredRoomWallEditTarget,
     }
     const hoverInteractionChanged = shouldUpdateGridHoverInteractionState(
       hoverInteractionStateRef.current,
@@ -1344,16 +1532,11 @@ export function Grid({ size = 120, playMode = false, bakedLightField = null }: G
     if (hoverInteractionChanged) {
       hoverInteractionStateRef.current = nextHoverInteraction
       setHoveredOpenWallKey(hoveredOpenWallKey)
-      setHoveredRoomWallEditTarget(hoveredRoomWallEditTarget)
     }
 
     let shouldInvalidate = hoverPreviewChanged || hoverInteractionChanged
     if (openPassageBrushActiveRef.current && hoveredOpenWallKey) {
       placeOpenPassageWall(hoveredOpenWallKey)
-      shouldInvalidate = true
-    }
-    if (roomWallBrushActiveRef.current) {
-      extendRoomWallBrush(point)
       shouldInvalidate = true
     }
 
@@ -1367,6 +1550,13 @@ export function Grid({ size = 120, playMode = false, bakedLightField = null }: G
 
       // In paint mode, track cells that will be painted or erased (but don't paint/erase yet)
       if (roomPaintMode === 'paint' && mapMode !== 'outdoor') {
+        const worldPoint: FreehandPaintPoint = [point.x, point.z]
+        const previousPoint = freehandPaintPointsRef.current.at(-1)
+        if (!previousPoint || Math.hypot(previousPoint[0] - worldPoint[0], previousPoint[1] - worldPoint[1]) > GRID_SIZE * 0.05) {
+          freehandPaintPointsRef.current = [...freehandPaintPointsRef.current, worldPoint]
+          setFreehandPaintPoints(freehandPaintPointsRef.current)
+        }
+
         const cellKey = getCellKey(snapped.cell)
         if (!strokePaintedCellsRef.current.has(cellKey)) {
           strokePaintedCellsRef.current.add(cellKey)
@@ -1385,7 +1575,14 @@ export function Grid({ size = 120, playMode = false, bakedLightField = null }: G
     }
   }
 
-  function updateCursorPosOnly() {}
+  function updateCursorPosOnly(event: ThreeEvent<PointerEvent>) {
+    if (applyResolvedHoverState(resolvePointerPlacementState(
+      event.nativeEvent.clientX,
+      event.nativeEvent.clientY,
+    ))) {
+      invalidate()
+    }
+  }
 
   function placeOpenPassageWall(wallKey: string | null) {
     const nextWallKeys = extendOpenPassageBrush(
@@ -1400,53 +1597,18 @@ export function Grid({ size = 120, playMode = false, bakedLightField = null }: G
     updateOpenPassageBrushState(true, nextWallKeys)
   }
 
-  function extendRoomWallBrush(point: { x: number; y: number; z: number }) {
-    const anchor = roomWallBrushAnchorRef.current
-    const mode = roomWallBrushModeRef.current
-    if (!anchor || !mode) {
-      return
-    }
-
-    const nextTargets = getRoomWallBrushTargets(
-      anchor,
-      point,
-      paintedCells,
-      innerWalls,
-      suppressedWallKeys,
-      mode,
-    )
-    if (
-      nextTargets.length === roomWallBrushTargetsRef.current.length &&
-      nextTargets.every((target, index) => {
-        const current = roomWallBrushTargetsRef.current[index]
-        return current?.wallKey === target.wallKey && current?.kind === target.kind
-      })
-    ) {
-      return
-    }
-
-    updateRoomWallBrushState(
-      true,
-      mode,
-      nextTargets,
-    )
-  }
-
   function handlePointerDown(event: ThreeEvent<PointerEvent>) {
     const terrainHit = getOutdoorTerrainHit(event)
     const point = terrainHit?.point ?? raycaster.pointOnPlane(event)
     const snapped = getSnappedHoverCell(point, terrainHit?.cell ?? null)
     const surfaceHit = resolvePlacementSurfaceHit(event.nativeEvent)
     const hoveredOpenWallKey = isOpenWallBrushMode
-      ? getEligibleOpenPassageWallKey(point, paintedCells, eligibleOpenPassageWallKeys)
-      : null
-    const hoveredRoomWallEditTarget = isRoomWallMode
-      ? getRoomWallEditTarget(
+      ? getEligibleOpenPassageWallKey(
           point,
           paintedCells,
-          innerWalls,
-          suppressedWallKeys,
-          event.button === 2 ? 'erase' : 'paint',
+          eligibleOpenPassageWallKeys,
+          openingPlacementGraph,
+          openingQueryCache,
         )
       : null
     setHoveredCell(snapped)
@@ -1458,7 +1620,6 @@ export function Grid({ size = 120, playMode = false, bakedLightField = null }: G
     setHoveredTerrainCell(terrainHit?.cell ?? null)
     setHoveredSurfaceHit(surfaceHit)
     setHoveredOpenWallKey(hoveredOpenWallKey)
-    setHoveredRoomWallEditTarget(hoveredRoomWallEditTarget)
     invalidate()
 
     if (tool === 'opening' || isUnifiedOpeningMode) {
@@ -1480,6 +1641,7 @@ export function Grid({ size = 120, playMode = false, bakedLightField = null }: G
                   direction: [event.ray.direction.x, event.ray.direction.y, event.ray.direction.z],
                 },
                 terrainHit?.cell ?? null,
+                openingQueryCache,
               )
             : null
           const propPlacement = applyFloorRotation(rawPlacement, floorRotationIndex * (Math.PI / 2))
@@ -1513,16 +1675,33 @@ export function Grid({ size = 120, playMode = false, bakedLightField = null }: G
         return
         }
 
-      const openingPlacement = getWallConnectionPlacement(
-        wallConnectionMode,
-        activeOpeningAsset,
-        point,
-        paintedCells,
-      )
+      const splineOpeningHit = wallConnectionMode === 'door'
+        ? findNearestSplineWallSegment(openingQueryCache, [point.x, point.z])
+        : null
+      const openingPlacement = wallConnectionMode === 'door'
+        ? buildSplineWallOpeningPlacement(
+            { x: point.x, z: point.z },
+            openingPlacementGraph,
+            openingQueryCache,
+            paintedCells,
+            activeOpeningAssetId,
+          )
+        : getWallConnectionPlacement(
+            wallConnectionMode,
+            activeOpeningAsset,
+            point,
+            paintedCells,
+            openingPlacementGraph,
+            openingQueryCache,
+          )
       const hoveredConnection = openingPlacement
-        ? wallOpeningDerivedState.wallOpeningsBySegmentKey[
-          `${getCellKey(openingPlacement.cell)}:${openingPlacement.direction}`
-        ] ?? null
+        ? (
+            (wallConnectionMode === 'door'
+              ? findOpeningAtSplineHit(openingPlacementGraph, wallOpenings, splineOpeningHit)
+              : null)
+            ?? wallOpeningDerivedState.wallOpeningsBySegmentKey[openingPlacement.wallKey]
+            ?? null
+          )
         : null
 
       if (event.button === 2) {
@@ -1552,8 +1731,11 @@ export function Grid({ size = 120, playMode = false, bakedLightField = null }: G
 
       placeOpening({
         assetId: activeOpeningAssetId,
-        wallKey: `${getCellKey(openingPlacement.cell)}:${openingPlacement.direction}`,
+        wallKey: openingPlacement.wallKey,
         width: openingPlacement.width,
+        segmentId: 'segmentId' in openingPlacement ? openingPlacement.segmentId : null,
+        segmentStartRatio: 'segmentStartRatio' in openingPlacement ? openingPlacement.segmentStartRatio : null,
+        segmentEndRatio: 'segmentEndRatio' in openingPlacement ? openingPlacement.segmentEndRatio : null,
         flipped: wallFlipped,
       })
       return
@@ -1586,6 +1768,7 @@ export function Grid({ size = 120, playMode = false, bakedLightField = null }: G
               direction: [event.ray.direction.x, event.ray.direction.y, event.ray.direction.z],
             },
             terrainHit?.cell ?? null,
+            openingQueryCache,
           )
         : null
       const propPlacement = applyFloorRotation(rawPlacement, floorRotationIndex * (Math.PI / 2))
@@ -1682,49 +1865,11 @@ export function Grid({ size = 120, playMode = false, bakedLightField = null }: G
         return
       }
 
-      if (isUnifiedWallVariantMode || (tool === 'room' && roomEditMode === 'wall-variants')) {
-        const wallPlacement = hoveredPoint
-          ? getOpeningPlacement(1, hoveredPoint, paintedCells)
-          : getOpeningPlacement(1, point, paintedCells)
-        if (!wallPlacement?.valid) {
-          return
-        }
-
-        const wallKey = `${getCellKey(wallPlacement.cell)}:${wallPlacement.direction}`
-        if (event.button === 0) {
-          setWallSurfaceAsset(wallKey, selectedWallBrushAssetId)
-        } else if (event.button === 2) {
-          setWallSurfaceAsset(wallKey, null)
-        }
-        return
-      }
-
       if (tool !== 'room') {
         return
       }
 
-      if (shouldBlockRoomStrokeStart({ latchedRoomPreview })) {
-        return
-      }
-
-      if (roomEditMode === 'walls') {
-        if (event.button !== 0 && event.button !== 2) {
-          return
-        }
-        if (!hoveredRoomWallEditTarget) {
-          return
-        }
-
-        roomWallBrushAnchorRef.current = getRoomWallBrushAnchor(hoveredRoomWallEditTarget)
-        if (!roomWallBrushAnchorRef.current) {
-          return
-        }
-        updateRoomWallBrushState(
-          true,
-          event.button === 0 ? 'paint' : 'erase',
-          [hoveredRoomWallEditTarget],
-        )
-        setHoveredRoomWallEditTarget(null)
+      if (shouldBlockRoomStrokeStart({ latchedRoomPreview, roomDraftActive: roomDraft !== null })) {
         return
       }
 
@@ -1755,7 +1900,15 @@ export function Grid({ size = 120, playMode = false, bakedLightField = null }: G
       return
     }
 
-    if (event.button === 0 && tool === 'room' && roomEditMode === 'rooms' && roomPaintMode !== 'resize' && mapMode !== 'outdoor') {
+    if (event.button === 0 && tool === 'room' && roomEditMode === 'rooms' && roomPaintMode === 'paint' && mapMode !== 'outdoor') {
+      const worldPoint: FreehandPaintPoint = [point.x, point.z]
+      freehandPaintPointsRef.current = [worldPoint]
+      setFreehandPaintPoints([worldPoint])
+
+      const cellKey = getCellKey(snapped.cell)
+      strokePaintedCellsRef.current.add(cellKey)
+      setStrokePaintedCells([[...snapped.cell] as GridCell])
+
       const transactionId = `tile-stream:${performance.now()}:${Math.random().toString(36).slice(2, 8)}`
       const transactionStartedAt = performance.now()
       roomStreamTransactionIdRef.current = transactionId
@@ -1790,21 +1943,39 @@ export function Grid({ size = 120, playMode = false, bakedLightField = null }: G
 
   const isNavigationTool = isPassiveGridMode(tool, playMode) && !isPickedUpPlacementMode
   const renderGridOverlay = shouldRenderGridOverlay(showGrid, playMode)
+  const hoveredSplineOpeningHit = hoveredPoint && wallConnectionMode === 'door'
+    ? findNearestSplineWallSegment(openingQueryCache, [hoveredPoint.x, hoveredPoint.z])
+    : null
   const wallConnectionPlacement = (tool === 'opening' || isUnifiedOpeningMode) && hoveredPoint
-    ? getWallConnectionPlacement(
-        wallConnectionMode,
-        selectedOpeningAsset,
-        hoveredPoint,
-        paintedCells,
+    ? (
+        wallConnectionMode === 'door'
+          ? buildSplineWallOpeningPlacement(
+              { x: hoveredPoint.x, z: hoveredPoint.z },
+              openingPlacementGraph,
+              openingQueryCache,
+              paintedCells,
+              selectedOpeningAssetId,
+            )
+          : getWallConnectionPlacement(
+              wallConnectionMode,
+              selectedOpeningAsset,
+              hoveredPoint,
+              paintedCells,
+              openingPlacementGraph,
+              openingQueryCache,
+            )
       )
     : null
   const wallOpeningDerivedState = buildWallOpeningDerivedState(wallOpenings)
   const hoveredWallConnection = wallConnectionPlacement
-    ? wallOpeningDerivedState.wallOpeningsBySegmentKey[
-      `${getCellKey(wallConnectionPlacement.cell)}:${wallConnectionPlacement.direction}`
-    ] ?? null
+    ? (
+        (wallConnectionMode === 'door'
+          ? findOpeningAtSplineHit(openingPlacementGraph, wallOpenings, hoveredSplineOpeningHit)
+          : null)
+        ?? wallOpeningDerivedState.wallOpeningsBySegmentKey[wallConnectionPlacement.wallKey]
+        ?? null
+      )
     : null
-  const suppressedWallKeys = wallOpeningDerivedState.suppressedWallKeys
   const eligibleOpenPassageWalls = buildEligibleOpenPassageWalls(
     paintedCells,
     wallOpenings,
@@ -1812,25 +1983,13 @@ export function Grid({ size = 120, playMode = false, bakedLightField = null }: G
   )
   const eligibleOpenPassageWallKeys = new Set(eligibleOpenPassageWalls.map((wall) => wall.wallKey))
   const isFloorVariantMode = (tool === 'room' && roomEditMode === 'floor-variants') || isUnifiedFloorVariantMode
-  const isWallVariantMode = (tool === 'room' && roomEditMode === 'wall-variants') || isUnifiedWallVariantMode
-  const isRoomWallMode = tool === 'room' && roomEditMode === 'walls'
   const isOpenWallBrushMode =
     (tool === 'opening' || isUnifiedOpeningMode) &&
     wallConnectionMode === 'open' &&
     !isFloorOpeningMode
-  const wallVariantPlacement = useMemo(
-    () => (isWallVariantMode && hoveredPoint ? getOpeningPlacement(1, hoveredPoint, paintedCells) : null),
-    [hoveredPoint, isWallVariantMode, paintedCells],
-  )
   const activeHoveredOpenWallKey =
     hoveredOpenWallKey && eligibleOpenPassageWallKeys.has(hoveredOpenWallKey)
       ? hoveredOpenWallKey
-      : null
-  const activeHoveredRoomWallEditTarget =
-    roomWallBrushTargets.length === 0 &&
-    hoveredRoomWallEditTarget &&
-    !roomWallBrushTargets.some((target) => target.wallKey === hoveredRoomWallEditTarget.wallKey)
-      ? hoveredRoomWallEditTarget
       : null
   const activeChunkKeys = useMemo(() => {
     if (tool !== 'room') {
@@ -1848,13 +2007,22 @@ export function Grid({ size = 120, playMode = false, bakedLightField = null }: G
   return (
     <group>
       {/* Hit plane — always tracks cursor world pos; editing events only for build/place tools */}
-      <mesh
-        rotation={[-Math.PI / 2, 0, 0]}
-        onPointerMove={isNavigationTool ? updateCursorPosOnly : updateHoveredCell}
-        onPointerOut={() => {
-          if (!isNavigationTool && !strokeModeRef.current && !openPassageBrushActiveRef.current && !roomWallBrushActiveRef.current) {
+        <mesh
+          rotation={[-Math.PI / 2, 0, 0]}
+          onPointerMove={isNavigationTool ? updateCursorPosOnly : updateHoveredCell}
+          onPointerOut={() => {
+          if (!strokeModeRef.current && !openPassageBrushActiveRef.current) {
+            hoverPreviewStateRef.current = {
+              hoveredCell: null,
+              hoveredPoint: null,
+              hoveredRay: null,
+              hoveredTerrainCell: null,
+              hoveredSurfaceHit: null,
+            }
+            hoverInteractionStateRef.current = {
+              hoveredOpenWallKey: null,
+            }
             setHoveredOpenWallKey(null)
-            setHoveredRoomWallEditTarget(null)
             setHoveredCell(null)
             setHoveredPoint(null)
             setHoveredRay(null)
@@ -1911,6 +2079,8 @@ export function Grid({ size = 120, playMode = false, bakedLightField = null }: G
           sourceKind="transaction"
           transactionId={roomStreamTransactionId}
           useLineOfSightPostMask={false}
+          useRoomFloorMask={previewRoomFloorMaskRuntime !== null}
+          roomFloorMaskRuntime={previewRoomFloorMaskRuntime}
         />
       )}
 
@@ -1927,11 +2097,34 @@ export function Grid({ size = 120, playMode = false, bakedLightField = null }: G
           />
         ))}
 
+      {roomDraft && (
+        <RoomDraftOverlay
+          draft={roomDraft}
+          valid={roomDraftValid}
+          previewPoints={clippedRoomDraft?.previewPoints}
+          centerPosition={clippedRoomDraft?.controlPosition}
+          handleVisibility={clippedRoomDraft?.handleVisibility}
+          invalidTitle={
+            clippedRoomDraft?.invalidReason === 'disconnected'
+              ? 'Draft must remain one connected piece after clipping'
+              : clippedRoomDraft?.invalidReason === 'empty'
+                ? 'Draft has no visible area after clipping'
+                : 'Commit draft room'
+          }
+          onChange={setRoomDraft}
+          onCommit={commitRoomDraftOverlay}
+          onCancel={cancelRoomDraft}
+        />
+      )}
+
       {!isNavigationTool && (
         <HoverPreview
           hoveredCell={hoveredCell}
           hoveredPoint={hoveredPoint}
           previewCells={previewCells}
+          roomPaintPreviewPaths={roomPaintPreviewPaths}
+          roomDraftPreviewPoints={strokeRoomDraftPreviewClip?.previewPoints ?? null}
+          roomDraftPreviewValid={strokeRoomDraftPreviewClip?.valid ?? false}
           strokeMode={previewStrokeMode}
           propPlacement={(() => {
             if (pickedUpAsset && hoveredPoint)
@@ -1945,6 +2138,7 @@ export function Grid({ size = 120, playMode = false, bakedLightField = null }: G
                   outdoorTerrainHeights,
                   hoveredRay,
                   hoveredTerrainCell,
+                  openingQueryCache,
                 ),
                 floorRotationIndex * (Math.PI / 2),
               )
@@ -1959,6 +2153,7 @@ export function Grid({ size = 120, playMode = false, bakedLightField = null }: G
                   outdoorTerrainHeights,
                   hoveredRay,
                   hoveredTerrainCell,
+                  openingQueryCache,
                 ),
                 floorRotationIndex * (Math.PI / 2),
               )
@@ -1973,6 +2168,7 @@ export function Grid({ size = 120, playMode = false, bakedLightField = null }: G
                   outdoorTerrainHeights,
                   hoveredRay,
                   hoveredTerrainCell,
+                  openingQueryCache,
                 ),
                 floorRotationIndex * (Math.PI / 2),
               )
@@ -1992,6 +2188,7 @@ export function Grid({ size = 120, playMode = false, bakedLightField = null }: G
                   outdoorTerrainHeights,
                   hoveredRay,
                   hoveredTerrainCell,
+                  openingQueryCache,
                 ),
                 floorRotationIndex * (Math.PI / 2),
               )
@@ -2014,8 +2211,6 @@ export function Grid({ size = 120, playMode = false, bakedLightField = null }: G
             (tool === 'opening' || isUnifiedOpeningMode) ? wallConnectionPlacement : null
           }
           floorVariantAssetId={isFloorVariantMode ? selectedFloorBrushAssetId : null}
-          wallVariantAssetId={isWallVariantMode ? selectedWallBrushAssetId : null}
-          wallVariantPlacement={isWallVariantMode ? wallVariantPlacement : null}
           openingAssetId={
             (tool === 'opening' || isUnifiedOpeningMode) &&
             wallConnectionMode === 'door' &&
@@ -2026,23 +2221,18 @@ export function Grid({ size = 120, playMode = false, bakedLightField = null }: G
           wallConnectionMode={wallConnectionMode}
           wallConnectionRemovable={Boolean(hoveredWallConnection)}
           wallFlipped={wallFlipped}
-          roomWallEditMode={isRoomWallMode}
-          roomWallBrushMode={roomWallBrushMode}
-          hoveredRoomWallEditTarget={activeHoveredRoomWallEditTarget}
-          roomWallBrushTargets={roomWallBrushTargets}
           hoveredOpenWallKey={activeHoveredOpenWallKey}
           openPassageBrushWallKeys={openPassageBrushWallKeys}
           eligibleOpenWallKeys={eligibleOpenPassageWallKeys}
-           paintedCells={paintedCells}
-           rooms={rooms}
-           floorTileAssetIds={floorTileAssetIds}
+          paintedCells={paintedCells}
+          rooms={rooms}
+          floorTileAssetIds={floorTileAssetIds}
           globalWallAssetId={globalWallAssetId}
           globalFloorAssetId={globalFloorAssetId}
-          wallSurfaceAssetIds={wallSurfaceAssetIds}
           mapMode={mapMode}
           outdoorTerrainHeights={outdoorTerrainHeights}
-         />
-       )}
+        />
+      )}
     </group>
   )
 }
@@ -2051,22 +2241,19 @@ function HoverPreview({
   hoveredCell,
   hoveredPoint,
   previewCells,
+  roomPaintPreviewPaths,
+  roomDraftPreviewPoints,
+  roomDraftPreviewValid,
   strokeMode,
   propPlacement,
   propAssetId,
   propObjectProps,
   openingPlacement,
   floorVariantAssetId,
-  wallVariantAssetId,
-  wallVariantPlacement,
   openingAssetId,
   wallConnectionMode,
   wallConnectionRemovable,
   wallFlipped,
-  roomWallEditMode,
-  roomWallBrushMode,
-  hoveredRoomWallEditTarget,
-  roomWallBrushTargets,
   hoveredOpenWallKey,
   openPassageBrushWallKeys,
   eligibleOpenWallKeys,
@@ -2075,29 +2262,25 @@ function HoverPreview({
   floorTileAssetIds,
   globalWallAssetId,
   globalFloorAssetId,
-  wallSurfaceAssetIds,
   mapMode,
   outdoorTerrainHeights,
 }: {
   hoveredCell: SnappedGridPosition | null
   hoveredPoint: { x: number; y: number; z: number } | null
   previewCells: GridCell[]
+  roomPaintPreviewPaths: readonly (readonly (readonly [number, number])[])[]
+  roomDraftPreviewPoints: readonly (readonly [number, number])[] | null
+  roomDraftPreviewValid: boolean
   strokeMode: 'paint' | 'erase' | null
   propPlacement: PropPlacement | null
   propAssetId: string | null
   propObjectProps: Record<string, unknown> | null
-  openingPlacement: OpeningPlacement | null
+  openingPlacement: OpeningPlacement | SplineWallOpeningPlacement | null
   floorVariantAssetId: string | null
-  wallVariantAssetId: string | null
-  wallVariantPlacement: OpeningPlacement | null
   openingAssetId: string | null
   wallConnectionMode: WallConnectionMode
   wallConnectionRemovable: boolean
   wallFlipped: boolean
-  roomWallEditMode: boolean
-  roomWallBrushMode: 'paint' | 'erase' | null
-  hoveredRoomWallEditTarget: RoomWallEditTarget | null
-  roomWallBrushTargets: RoomWallEditTarget[]
   hoveredOpenWallKey: string | null
   openPassageBrushWallKeys: string[]
   eligibleOpenWallKeys: Set<string>
@@ -2106,7 +2289,6 @@ function HoverPreview({
   floorTileAssetIds: Record<string, string>
   globalWallAssetId: string | null
   globalFloorAssetId: string | null
-  wallSurfaceAssetIds: Record<string, string>
   mapMode: MapMode
   outdoorTerrainHeights: OutdoorTerrainHeightfield
 }) {
@@ -2179,56 +2361,6 @@ function HoverPreview({
     )
   }
 
-  if (wallVariantAssetId) {
-    if (!wallVariantPlacement?.valid) {
-      return null
-    }
-
-    const wallKey = `${getCellKey(wallVariantPlacement.cell)}:${wallVariantPlacement.direction}`
-    const effectiveWallAssetId = getWallAssetIdForWallKey(
-      wallKey,
-      paintedCells,
-      rooms,
-      globalWallAssetId,
-      wallSurfaceAssetIds,
-    )
-
-    return (
-      <group position={wallVariantPlacement.position} rotation={wallVariantPlacement.rotation}>
-        <ContentPackInstance
-          assetId={wallVariantAssetId}
-          variant="wall"
-          tint={effectiveWallAssetId === wallVariantAssetId ? '#22c55e' : '#7dd3fc'}
-          tintOpacity={0.26}
-        />
-      </group>
-    )
-  }
-
-  if (roomWallEditMode && (hoveredRoomWallEditTarget || roomWallBrushTargets.length > 0)) {
-    const activeBrushColor = roomWallBrushMode === 'erase' ? '#ef4444' : '#22c55e'
-    return (
-      <group>
-        {roomWallBrushTargets.map((target) => (
-          <WallEditLinePreview
-            key={`${target.kind}:${target.wallKey}`}
-            wallKey={target.wallKey}
-            color={activeBrushColor}
-            opacity={0.55}
-          />
-        ))}
-        {hoveredRoomWallEditTarget && (
-          <WallEditLinePreview
-            key={`hover:${hoveredRoomWallEditTarget.kind}:${hoveredRoomWallEditTarget.wallKey}`}
-            wallKey={hoveredRoomWallEditTarget.wallKey}
-            color={hoveredRoomWallEditTarget.kind === 'shared' ? '#f97316' : '#38bdf8'}
-            opacity={0.42}
-          />
-        )}
-      </group>
-    )
-  }
-
   if (openingPlacement || openingAssetId || hoveredOpenWallKey || openPassageBrushWallKeys.length > 0) {
     if (wallConnectionMode === 'open') {
       return (
@@ -2242,7 +2374,6 @@ function HoverPreview({
                 paintedCells,
                 rooms,
                 globalWallAssetId,
-                wallSurfaceAssetIds,
               )}
               color={OPEN_WALL_BRUSH_COLOR}
               opacity={0.34}
@@ -2259,7 +2390,6 @@ function HoverPreview({
                 paintedCells,
                 rooms,
                 globalWallAssetId,
-                wallSurfaceAssetIds,
               )}
               color={OPEN_WALL_HOVER_COLOR}
               opacity={0.24}
@@ -2277,9 +2407,10 @@ function HoverPreview({
       : openingPlacement.rotation
 
     if (wallConnectionMode === 'wall') {
+      const previewWidth = openingPlacement.spanWorldWidth
       return (
         <mesh position={position} rotation={rotation}>
-          <boxGeometry args={[openingPlacement.width * GRID_SIZE * 0.95, 2.2, 0.1]} />
+          <boxGeometry args={[previewWidth * 0.95, 2.2, 0.1]} />
           <meshBasicMaterial
             color={valid && wallConnectionRemovable ? '#f59e0b' : '#ef4444'}
             transparent
@@ -2311,6 +2442,31 @@ function HoverPreview({
     )
   }
 
+  if (roomDraftPreviewPoints) {
+    return (
+      <RoomDraftFootprintPreview
+        points={roomDraftPreviewPoints}
+        color={roomDraftPreviewValid ? '#7dd3fc' : '#f87171'}
+        opacity={0.24}
+      />
+    )
+  }
+
+  if (roomPaintPreviewPaths.length > 0) {
+    return (
+      <group>
+        {roomPaintPreviewPaths.map((points, index) => (
+          <RoomDraftFootprintPreview
+            key={index}
+            points={points}
+            color="#7dd3fc"
+            opacity={0.22}
+          />
+        ))}
+      </group>
+    )
+  }
+
   const color =
     strokeMode === 'erase' ? '#f87171' : strokeMode === 'paint' ? '#7dd3fc' : '#34d399'
   const opacity = strokeMode ? 0.35 : 0.2
@@ -2331,6 +2487,76 @@ function HoverPreview({
           </mesh>
         )
       })}
+    </group>
+  )
+}
+
+function RoomDraftFootprintPreview({
+  points,
+  color,
+  opacity,
+}: {
+  points: readonly (readonly [number, number])[]
+  color: string
+  opacity: number
+}) {
+  const fillGeometry = useMemo(() => {
+    if (points.length < 3) {
+      return null
+    }
+
+    const shape = new THREE.Shape()
+    const [firstPoint, ...rest] = points
+    shape.moveTo(firstPoint![0], firstPoint![1])
+    rest.forEach((point) => {
+      shape.lineTo(point[0], point[1])
+    })
+    shape.closePath()
+
+    const geometry = new THREE.ShapeGeometry(shape)
+    geometry.rotateX(Math.PI / 2)
+    geometry.translate(0, 0.02, 0)
+    return geometry
+  }, [points])
+  const outlinePositions = useMemo(() => {
+    if (points.length === 0) {
+      return new Float32Array()
+    }
+
+    const closedPoints = [...points, points[0]!]
+    return new Float32Array(closedPoints.flatMap((point) => [point[0], 0.03, point[1]]))
+  }, [points])
+
+  useEffect(() => () => {
+    fillGeometry?.dispose()
+  }, [fillGeometry])
+
+  if (!fillGeometry) {
+    return null
+  }
+
+  return (
+    <group>
+      <mesh geometry={fillGeometry}>
+        <meshBasicMaterial
+          color={color}
+          transparent
+          opacity={opacity}
+          depthWrite={false}
+          side={THREE.DoubleSide}
+        />
+      </mesh>
+      {outlinePositions.length > 0 ? (
+        <line>
+          <bufferGeometry>
+            <bufferAttribute
+              attach="attributes-position"
+              args={[outlinePositions, 3]}
+            />
+          </bufferGeometry>
+          <lineBasicMaterial color="#bae6fd" transparent opacity={0.9} />
+        </line>
+      ) : null}
     </group>
   )
 }
@@ -2447,9 +2673,6 @@ const OPEN_WALL_BRUSH_COLOR = '#ef4444'
 const OPEN_WALL_HITBOX_WIDTH = GRID_SIZE * 1.08
 const OPEN_WALL_HITBOX_HEIGHT = 3.8
 const OPEN_WALL_HITBOX_DEPTH = GRID_SIZE * 0.7
-const ROOM_WALL_PREVIEW_THICKNESS = GRID_SIZE * 0.08
-const ROOM_WALL_PREVIEW_HEIGHT = 1.35
-const ROOM_WALL_PREVIEW_RENDER_ORDER = 20
 
 function applyFloorRotation(
   placement: PropPlacement | null,
@@ -2686,6 +2909,7 @@ function getPropPlacement(
     direction: [number, number, number]
   } | null,
   terrainCellOverride?: GridCell | null,
+  wallQueryCache?: ReturnType<typeof createSplineWallQueryCache> | null,
 ): PropPlacement | null {
   // Use new placement system if asset has new metadata features
   // OR if it uses new ConnectsTo values (WALL, SURFACE, or arrays)
@@ -2712,6 +2936,7 @@ function getPropPlacement(
       mapMode === 'outdoor',
       mapMode === 'outdoor' ? outdoorTerrainHeights : undefined,
       terrainCellOverride ?? undefined,
+      wallQueryCache,
     )
     
     if (!snapResult) {
@@ -2868,12 +3093,17 @@ function getPropPlacement(
 }
 
 type OpeningPlacement = {
+  wallKey: string
   direction: 'north' | 'south' | 'east' | 'west'
   cell: GridCell
   width: 1 | 2 | 3
+  spanWorldWidth: number
   position: [number, number, number]
   rotation: [number, number, number]
   valid: boolean
+  segmentId?: string | null
+  segmentStartRatio?: number | null
+  segmentEndRatio?: number | null
 }
 
 function getOpeningPlacement(
@@ -2881,7 +3111,48 @@ function getOpeningPlacement(
   point: { x: number; y: number; z: number },
   paintedCells: Record<string, PaintedCellRecord>,
   requireInterRoom = false,
+  splineWallGraph?: SplineWallGraph | null,
+  openingQueryCache?: SplineWallQueryCache | null,
+  openingAssetId?: string | null,
 ): OpeningPlacement | null {
+  if (splineWallGraph && openingQueryCache) {
+    const splinePlacement = buildSplineWallOpeningPlacement(
+      { x: point.x, z: point.z },
+      splineWallGraph,
+      openingQueryCache,
+      paintedCells,
+      openingAssetId ?? null,
+    )
+    if (splinePlacement) {
+      const [cellX, cellZ, direction] = splinePlacement.wallKey.split(':')
+      const parsedCell: GridCell = [Number.parseInt(cellX ?? '', 10), Number.parseInt(cellZ ?? '', 10)]
+      const directionEntry = WALL_CONNECTOR_DIRECTIONS.find((entry) => entry.name === direction)
+      const neighbor: GridCell = directionEntry
+        ? [parsedCell[0] + directionEntry.delta[0], parsedCell[1] + directionEntry.delta[1]]
+        : parsedCell
+      const validInterRoom = !requireInterRoom ||
+        (directionEntry != null &&
+          paintedCells[getCellKey(parsedCell)] != null &&
+          isInterRoomBoundary(parsedCell, neighbor, paintedCells))
+
+      if (directionEntry) {
+        return {
+          wallKey: splinePlacement.wallKey,
+          direction: directionEntry.name,
+          cell: parsedCell,
+          width,
+          spanWorldWidth: splinePlacement.spanWorldWidth,
+          position: splinePlacement.position,
+          rotation: splinePlacement.rotation,
+          valid: splinePlacement.valid && validInterRoom,
+          segmentId: splinePlacement.segmentId,
+          segmentStartRatio: splinePlacement.segmentStartRatio,
+          segmentEndRatio: splinePlacement.segmentEndRatio,
+        }
+      }
+    }
+  }
+
   const snapped = snapWorldPointToGrid(point)
   if (!paintedCells[snapped.key]) return null
 
@@ -2922,9 +3193,11 @@ function getOpeningPlacement(
     })
 
   return {
+    wallKey,
     direction: dir.name,
     cell: snapped.cell,
     width,
+    spanWorldWidth: width * GRID_SIZE,
     position: [
       cellCenter[0] + dir.delta[0] * (GRID_SIZE * 0.5),
       0,
@@ -2940,6 +3213,8 @@ function getWallConnectionPlacement(
   asset: ContentPackAsset | null,
   point: { x: number; y: number; z: number },
   paintedCells: Record<string, PaintedCellRecord>,
+  splineWallGraph?: SplineWallGraph | null,
+  openingQueryCache?: SplineWallQueryCache | null,
 ) {
   if (mode === 'door') {
     if (!asset) {
@@ -2948,68 +3223,10 @@ function getWallConnectionPlacement(
 
     const width: 1 | 2 | 3 =
       asset.metadata?.openingWidth === 2 ? 2 : asset.metadata?.openingWidth === 3 ? 3 : 1
-    return getOpeningPlacement(width, point, paintedCells)
+    return getOpeningPlacement(width, point, paintedCells, false, splineWallGraph, openingQueryCache, asset.id)
   }
 
-  return getOpeningPlacement(1, point, paintedCells, true)
-}
-
-function getRoomWallEditTarget(
-  point: { x: number; y: number; z: number },
-  paintedCells: Record<string, PaintedCellRecord>,
-  innerWalls: ReturnType<typeof useDungeonStore.getState>['innerWalls'],
-  suppressedWallKeys: Set<string>,
-  mode: 'paint' | 'erase',
-): RoomWallEditTarget | null {
-  const snapped = snapWorldPointToGrid(point)
-  if (!paintedCells[snapped.key]) {
-    return null
-  }
-
-  const cellCenter = cellToWorldPosition(snapped.cell)
-  const localX = point.x - cellCenter[0]
-  const localZ = point.z - cellCenter[2]
-  const rankedDirections = [...WALL_CONNECTOR_DIRECTIONS].sort((left, right) => {
-    const leftDistance = Math.abs(localX - left.delta[0] * (GRID_SIZE * 0.5))
-      + Math.abs(localZ - left.delta[1] * (GRID_SIZE * 0.5))
-    const rightDistance = Math.abs(localX - right.delta[0] * (GRID_SIZE * 0.5))
-      + Math.abs(localZ - right.delta[1] * (GRID_SIZE * 0.5))
-
-    return leftDistance - rightDistance
-  })
-
-  for (const direction of rankedDirections) {
-    const rawWallKey = `${snapped.key}:${direction.name}`
-    const neighbor: GridCell = [
-      snapped.cell[0] + direction.delta[0],
-      snapped.cell[1] + direction.delta[1],
-    ]
-    const neighborKey = getCellKey(neighbor)
-    if (!paintedCells[neighborKey]) {
-      continue
-    }
-
-    const innerWallKey = getCanonicalInnerWallKey(rawWallKey, paintedCells)
-    if (mode === 'paint' && innerWallKey) {
-      return { wallKey: innerWallKey, kind: 'inner' }
-    }
-
-    if (mode === 'erase' && innerWallKey && innerWalls[innerWallKey]) {
-      return { wallKey: innerWallKey, kind: 'inner' }
-    }
-
-    const boundaryWallKey = getCanonicalWallKeyForGrid(rawWallKey, paintedCells)
-    if (
-      boundaryWallKey &&
-      isInterRoomBoundary(snapped.cell, neighbor, paintedCells) &&
-      ((mode === 'paint' && suppressedWallKeys.has(boundaryWallKey)) ||
-        (mode === 'erase' && !suppressedWallKeys.has(boundaryWallKey)))
-    ) {
-      return { wallKey: boundaryWallKey, kind: 'shared' }
-    }
-  }
-
-  return null
+  return getOpeningPlacement(1, point, paintedCells, true, splineWallGraph, openingQueryCache, null)
 }
 
 function getWallAssetIdForWallKey(
@@ -3017,15 +3234,13 @@ function getWallAssetIdForWallKey(
   paintedCells: Record<string, PaintedCellRecord>,
   rooms: Record<string, Room>,
   globalWallAssetId: string | null,
-  wallSurfaceAssetIds: Record<string, string>,
 ) {
-  const inheritedAssetId = getInheritedWallAssetIdForWallKey(
+  return getInheritedWallAssetIdForWallKey(
     wallKey,
     paintedCells,
     rooms,
     globalWallAssetId,
   )
-  return wallSurfaceAssetIds[getCanonicalWallKeyForGrid(wallKey, paintedCells) ?? ''] ?? inheritedAssetId
 }
 
 function WallSegmentHighlight({
@@ -3054,38 +3269,6 @@ function WallSegmentHighlight({
         overlayOnly
       />
     </group>
-  )
-}
-
-function WallEditLinePreview({
-  wallKey,
-  color,
-  opacity,
-}: {
-  wallKey: string
-  color: string
-  opacity: number
-}) {
-  const position = wallKeyToWorldPosition(wallKey)
-  if (!position) {
-    return null
-  }
-
-  return (
-    <mesh
-      position={[position.position[0], ROOM_WALL_PREVIEW_HEIGHT, position.position[2]]}
-      rotation={position.rotation}
-      renderOrder={ROOM_WALL_PREVIEW_RENDER_ORDER}
-    >
-      <boxGeometry args={[GRID_SIZE * 0.94, ROOM_WALL_PREVIEW_THICKNESS, ROOM_WALL_PREVIEW_THICKNESS]} />
-      <meshBasicMaterial
-        color={color}
-        transparent
-        opacity={opacity}
-        depthTest={false}
-        depthWrite={false}
-      />
-    </mesh>
   )
 }
 

@@ -4,6 +4,25 @@ import type { RegisteredEffectSource } from '../objectSourceRegistry'
 import { buildActiveFireEmitters } from './fireParticleSystemShared'
 
 describe('fireParticleSystem', () => {
+  it('projects local emitter offsets through the object transform', () => {
+    const emitters = buildActiveFireEmitters({
+      effectSources: [
+        createEffectSource('rotated', [2, 0.5, 4], [0, Math.PI / 2, 0], [{ offset: [0, 1, 0.5] }]),
+      ],
+      visibility: {
+        getObjectVisibility: () => 'visible',
+      },
+      useLineOfSightPostMask: false,
+    })
+
+    expect(emitters).toMatchObject([{
+      id: 'rotated:0',
+      worldX: 2.5,
+      worldY: 1.5,
+      worldZ: 4,
+    }])
+  })
+
   it('culls fire emitters outside the camera frustum', () => {
     const emitters = buildActiveFireEmitters({
       effectSources: [
@@ -24,6 +43,8 @@ describe('fireParticleSystem', () => {
 function createEffectSource(
   id: string,
   position: [number, number, number],
+  rotation: [number, number, number] = [0, 0, 0],
+  emitters: Array<{ offset?: [number, number, number] }> = [{ offset: [0, 0, 0] }],
 ): RegisteredEffectSource {
   return {
     key: id,
@@ -32,7 +53,7 @@ function createEffectSource(
       type: 'prop',
       assetId: 'dungeon.props_candle',
       position,
-      rotation: [0, 0, 0],
+      rotation,
       props: {},
       cell: [0, 0],
       cellKey: '0:0:floor',
@@ -40,7 +61,7 @@ function createEffectSource(
     },
     effect: {
       preset: 'fire',
-      emitters: [{ offset: [0, 0, 0] }],
+      emitters,
     },
   }
 }

@@ -1,11 +1,18 @@
 import { getAssetBrowserCategory, getAssetBrowserSubcategory } from '../../content-packs/browserMetadata'
-import { getContentPackAssetById, getContentPackRoomSetById } from '../../content-packs/registry'
+import {
+  getContentPackAssetById,
+  getContentPackRoomSetById,
+  getContentPackWallMaterialSetById,
+  getContentPackWallStyleById,
+} from '../../content-packs/registry'
 import type { DungeonState } from '../useDungeonStore'
 
 type DungeonStoreSet = (updater: (state: DungeonState) => DungeonState) => void
 type DungeonStoreGet = () => DungeonState
 
 const ROOM_SET_CONTENT_PACK_ID = 'dungeon'
+const WALL_MATERIAL_SET_CONTENT_PACK_ID = 'dungeon'
+const WALL_STYLE_CONTENT_PACK_ID = 'dungeon'
 
 type EditorUiActionKeys =
   | 'clearSelection'
@@ -17,6 +24,9 @@ type EditorUiActionKeys =
   | 'setRoomEditMode'
   | 'setRoomPaintMode'
   | 'setActiveRoomSetId'
+  | 'setActiveWallMaterialSetId'
+  | 'setActiveInteriorWallStyleId'
+  | 'setActiveExteriorWallStyleId'
   | 'setWallConnectionMode'
   | 'setWallConnectionWidth'
   | 'setSelectedAsset'
@@ -141,6 +151,9 @@ export function createDungeonStoreEditorUiActions({
         return {
           ...current,
           activeRoomSetId: roomSetId,
+          activeWallMaterialSetId: roomSet?.wallMaterialSetId ?? current.activeWallMaterialSetId,
+          activeInteriorWallStyleId: roomSet?.wallStyleId ?? current.activeInteriorWallStyleId,
+          activeExteriorWallStyleId: roomSet?.wallStyleId ?? current.activeExteriorWallStyleId,
           selectedAssetIds: openingAssetId
             ? {
                 ...current.selectedAssetIds,
@@ -153,6 +166,58 @@ export function createDungeonStoreEditorUiActions({
                 subcategory: getAssetBrowserSubcategory(openingAsset),
               }
             : current.assetBrowser,
+        }
+      })
+    },
+    setActiveWallMaterialSetId: (wallMaterialSetId) => {
+      set((current) => {
+        if (current.activeWallMaterialSetId === wallMaterialSetId) {
+          return current
+        }
+
+        const wallMaterialSet = getContentPackWallMaterialSetById(
+          WALL_MATERIAL_SET_CONTENT_PACK_ID,
+          wallMaterialSetId,
+        )
+        if (!wallMaterialSet) {
+          return current
+        }
+
+        return {
+          ...current,
+          activeWallMaterialSetId: wallMaterialSetId,
+        }
+      })
+    },
+    setActiveInteriorWallStyleId: (wallStyleId) => {
+      set((current) => {
+        if (current.activeInteriorWallStyleId === wallStyleId) {
+          return current
+        }
+
+        if (!getContentPackWallStyleById(WALL_STYLE_CONTENT_PACK_ID, wallStyleId)) {
+          return current
+        }
+
+        return {
+          ...current,
+          activeInteriorWallStyleId: wallStyleId,
+        }
+      })
+    },
+    setActiveExteriorWallStyleId: (wallStyleId) => {
+      set((current) => {
+        if (current.activeExteriorWallStyleId === wallStyleId) {
+          return current
+        }
+
+        if (!getContentPackWallStyleById(WALL_STYLE_CONTENT_PACK_ID, wallStyleId)) {
+          return current
+        }
+
+        return {
+          ...current,
+          activeExteriorWallStyleId: wallStyleId,
         }
       })
     },

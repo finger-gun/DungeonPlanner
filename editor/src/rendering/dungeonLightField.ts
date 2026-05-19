@@ -15,6 +15,8 @@ import { getObjectLightOverrides, mergePropLightWithOverrides } from '../store/l
 import { DEFAULT_FLOOR_CHUNK_SIZE } from '../store/floorChunkKeys'
 import { buildOpenWallSegmentSet } from '../store/openWallSegments'
 import { getMirroredWallKey } from '../store/manualWalls'
+import { createActiveSplineWallQueryCache, doesLineCrossBlockingSplineWall, type SplineWallQueryCache } from '../store/splineWallQueries'
+import type { SplineWallGraph } from '../store/splineWallGraph'
 import { collectBoundaryWallSegments } from '../store/wallSegments'
 import { doesLineIntersectClosedWall, isCornerBlockedBySolidWall } from './dungeonLightFieldOcclusion'
 import {
@@ -25,7 +27,7 @@ import {
 export const DEFAULT_BAKED_LIGHT_CHUNK_SIZE = DEFAULT_FLOOR_CHUNK_SIZE
 export const DEFAULT_DYNAMIC_LIGHT_POOL_SIZE = 32
 export const DEFAULT_BAKED_LIGHT_CHANNEL_CAP = 0.9
-const BAKED_LIGHT_FIELD_SIGNATURE_VERSION = 'multi-basis-flicker-v2'
+const BAKED_LIGHT_FIELD_SIGNATURE_VERSION = 'multi-basis-flicker-v3-channel-visibility'
 const BAKED_LIGHT_CHUNK_HALO = 1
 const BAKED_LIGHT_DISTANCE_SCALE = 1.18
 const BAKED_LIGHT_NEAR_FIELD_BOOST = 0.42
@@ -51,6 +53,7 @@ export type BakedLightSample = readonly [number, number, number]
 export type BakedLightCornerSample = readonly [number, number, number]
 export type BakedLightOcclusionInput = {
   paintedCells: PaintedCells
+  splineWallGraph?: SplineWallGraph
   wallOpenings: Record<string, OpeningRecord>
   innerWalls: Record<string, InnerWallRecord>
   wallSurfaceAssetIds?: Record<string, string>
@@ -62,6 +65,7 @@ export type BakedLightOcclusion = {
   openWalls: Set<string>
   solidWalls: Set<string>
   cornerBlockingWalls: Set<string>
+  splineWallQueryCache: SplineWallQueryCache | null
 }
 
 export type PropBakedLightProbe = {
@@ -69,6 +73,12 @@ export type PropBakedLightProbe = {
   topLight: BakedLightSample
   baseY: number
   topY: number
+  lightDirection: readonly [number, number, number]
+  directionalStrength: number
+}
+
+export type SurfaceBakedLightProbe = {
+  light: BakedLightSample
   lightDirection: readonly [number, number, number]
   directionalStrength: number
 }
@@ -291,7 +301,7 @@ export function pruneBakedFloorLightFieldCache(retainedFloorIds: Iterable<string
   }
 }
 
-export function getPropLightWorldPosition(
+export function getObjectLocalOffsetWorldPosition(
   object: Pick<DungeonObjectRecord, 'position' | 'rotation'>,
   offset?: [number, number, number],
 ): [number, number, number] {
@@ -305,6 +315,13 @@ export function getPropLightWorldPosition(
   offsetScratch.applyEuler(rotationScratch)
   positionScratch.add(offsetScratch)
   return positionScratch.toArray() as [number, number, number]
+}
+
+export function getPropLightWorldPosition(
+  object: Pick<DungeonObjectRecord, 'position' | 'rotation'>,
+  offset?: [number, number, number],
+): [number, number, number] {
+  return getObjectLocalOffsetWorldPosition(object, offset)
 }
 
 function disposeBakedFloorLightField(field: BakedFloorLightField) {
@@ -615,7 +632,7 @@ export function sampleBakedLightFieldAtWorldPosition(
   ]
 }
 
-export function getStaticLightSourcesForBounds(
+export function getRelevantStaticLightSourcesForBounds(
   lightField: BakedFloorLightField | null | undefined,
   bounds: THREE.Box3 | null | undefined,
 ) {
@@ -664,7 +681,7 @@ export function buildPropBakedLightProbe(
   const topY = minY + spanY * 0.85
   const lateralProbeOffsetX = Math.max(spanX * 0.45, GRID_SIZE * 0.12)
   const lateralProbeOffsetZ = Math.max(spanZ * 0.45, GRID_SIZE * 0.12)
-  const relevantLightSources = getStaticLightSourcesForBounds(lightField, bounds)
+  const relevantLightSources = getRelevantStaticLightSourcesForBounds(lightField, bounds)
   const centerLight = sampleOccludedPropProbeLightAtWorldPosition(
     lightField,
     relevantLightSources,
@@ -737,11 +754,111 @@ export function buildPropBakedLightProbe(
   }
 }
 
-function buildPropDirectionalLightFromStaticSources(
-  lightField: BakedFloorLightField,
-  bounds: THREE.Box3,
+export function sampleOccludedSurfaceLightAtWorldPosition(
+  lightField: BakedFloorLightField | null | undefined,
   worldPosition: readonly [number, number, number],
-  relevantLightSources: ResolvedDungeonLightSource[] = getStaticLightSourcesForBounds(lightField, bounds),
+  relevantLightSources?: readonly ResolvedDungeonLightSource[],
+) {
+  if (!lightField) {
+    return ZERO_BAKED_LIGHT_SAMPLE
+  }
+
+  const sampleBounds = new THREE.Box3(
+    new THREE.Vector3(worldPosition[0] - GRID_SIZE * 0.5, worldPosition[1] - 0.5, worldPosition[2] - GRID_SIZE * 0.5),
+    new THREE.Vector3(worldPosition[0] + GRID_SIZE * 0.5, worldPosition[1] + 0.5, worldPosition[2] + GRID_SIZE * 0.5),
+  )
+  const resolvedLightSources = relevantLightSources
+    ? [...relevantLightSources]
+    : getRelevantStaticLightSourcesForBounds(lightField, sampleBounds)
+
+  return sampleOccludedPropProbeLightAtWorldPosition(
+    lightField,
+    resolvedLightSources,
+    worldPosition,
+  )
+}
+
+export function buildSurfaceBakedLightProbe(
+  lightField: BakedFloorLightField | null | undefined,
+  samplePositions: readonly (readonly [number, number, number])[],
+  relevantLightSources?: readonly ResolvedDungeonLightSource[],
+): SurfaceBakedLightProbe | null {
+  if (!lightField || samplePositions.length === 0) {
+    return null
+  }
+
+  const bounds = new THREE.Box3()
+  let hasBounds = false
+  samplePositions.forEach((position) => {
+    const point = new THREE.Vector3(position[0], position[1], position[2])
+    if (!hasBounds) {
+      bounds.set(point.clone(), point.clone())
+      hasBounds = true
+      return
+    }
+    bounds.expandByPoint(point)
+  })
+  bounds.expandByScalar(GRID_SIZE * 0.5)
+
+  const resolvedLightSources = relevantLightSources
+    ? [...relevantLightSources]
+    : getRelevantStaticLightSourcesForBounds(lightField, bounds)
+
+  let lightX = 0
+  let lightY = 0
+  let lightZ = 0
+  let totalLuminance = 0
+  directionalLightVectorScratch.set(0, 0, 0)
+
+  samplePositions.forEach((position) => {
+    const sampledLight = sampleOccludedPropProbeLightAtWorldPosition(
+      lightField,
+      resolvedLightSources,
+      position,
+    )
+    const luminance = getBakedLightLuminance(sampledLight)
+    lightX += sampledLight[0]
+    lightY += sampledLight[1]
+    lightZ += sampledLight[2]
+    totalLuminance += luminance
+
+    const directionalLight = buildDirectionalLightFromStaticSources(
+      lightField,
+      position,
+      resolvedLightSources,
+    )
+    if (directionalLight && luminance > 1e-5) {
+      directionalLightContributionScratch
+        .fromArray(directionalLight.lightDirection)
+        .multiplyScalar(Math.max(luminance * directionalLight.directionalStrength, 1e-5))
+      directionalLightVectorScratch.add(directionalLightContributionScratch)
+    }
+  })
+
+  const sampleCount = Math.max(samplePositions.length, 1)
+  const averageLight: BakedLightSample = [
+    lightX / sampleCount,
+    lightY / sampleCount,
+    lightZ / sampleCount,
+  ]
+  const lightDirection = directionalLightVectorScratch.lengthSq() > 1e-8
+    ? directionalLightVectorScratch.clone().normalize().toArray() as [number, number, number]
+    : [0, 1, 0] as const
+  const directionalStrength = directionalLightVectorScratch.lengthSq() > 1e-8
+    ? clamp01(directionalLightVectorScratch.length() / Math.max(totalLuminance, 1e-5))
+    : 0
+
+  return {
+    light: averageLight,
+    lightDirection,
+    directionalStrength,
+  }
+}
+
+function buildDirectionalLightFromStaticSources(
+  lightField: BakedFloorLightField,
+  worldPosition: readonly [number, number, number],
+  relevantLightSources: readonly ResolvedDungeonLightSource[],
 ) {
   if (relevantLightSources.length === 0) {
     return null
@@ -789,6 +906,15 @@ function buildPropDirectionalLightFromStaticSources(
   }
 }
 
+function buildPropDirectionalLightFromStaticSources(
+  lightField: BakedFloorLightField,
+  bounds: THREE.Box3,
+  worldPosition: readonly [number, number, number],
+  relevantLightSources: ResolvedDungeonLightSource[] = getRelevantStaticLightSourcesForBounds(lightField, bounds),
+) {
+  return buildDirectionalLightFromStaticSources(lightField, worldPosition, relevantLightSources)
+}
+
 function samplePropProbeBaseLightAtWorldPosition(
   lightField: BakedFloorLightField,
   worldPosition: readonly [number, number, number],
@@ -829,10 +955,7 @@ function sampleOccludedPropProbeLightAtWorldPosition(
     worldPosition,
     lightField.occlusion,
   )
-  const visibilityFactor = clamp01(
-    getBakedLightLuminance(visibleStaticLight) / rawStaticLuminance,
-  )
-  return scaleBakedLightSample(sampledLight, visibilityFactor)
+  return applyStaticLightVisibilityMaskToSample(sampledLight, rawStaticLight, visibleStaticLight)
 }
 
 function getBakedLightLuminance(sample: BakedLightSample) {
@@ -841,6 +964,36 @@ function getBakedLightLuminance(sample: BakedLightSample) {
 
 function getLinearColorLuminance(color: readonly [number, number, number]) {
   return color[0] * 0.2126 + color[1] * 0.7152 + color[2] * 0.0722
+}
+
+function applyStaticLightVisibilityMaskToSample(
+  sampledLight: BakedLightSample,
+  rawStaticLight: BakedLightSample,
+  visibleStaticLight: BakedLightSample,
+): BakedLightSample {
+  const rawStaticLuminance = getBakedLightLuminance(rawStaticLight)
+  if (rawStaticLuminance <= 1e-4) {
+    return sampledLight
+  }
+
+  const fallbackVisibility = clamp01(
+    getBakedLightLuminance(visibleStaticLight) / rawStaticLuminance,
+  )
+  return [
+    sampledLight[0] * resolveStaticLightChannelVisibility(rawStaticLight[0], visibleStaticLight[0], fallbackVisibility),
+    sampledLight[1] * resolveStaticLightChannelVisibility(rawStaticLight[1], visibleStaticLight[1], fallbackVisibility),
+    sampledLight[2] * resolveStaticLightChannelVisibility(rawStaticLight[2], visibleStaticLight[2], fallbackVisibility),
+  ]
+}
+
+function resolveStaticLightChannelVisibility(
+  rawChannel: number,
+  visibleChannel: number,
+  fallbackVisibility: number,
+) {
+  return rawChannel > 1e-5
+    ? clamp01(visibleChannel / rawChannel)
+    : fallbackVisibility
 }
 
 function getCornerSample(
@@ -1146,6 +1299,9 @@ export function prepareBakedFloorLightFieldWorkerBuild(
   prepared: PreparedBakedFloorLightFieldBuild,
 ) {
   if (prepared.staticLightSources.length === 0) {
+    return null
+  }
+  if (prepared.occlusion?.splineWallQueryCache) {
     return null
   }
 
@@ -1678,6 +1834,9 @@ function getDirtyChunkKeysForOcclusionChanges(
   }
   if (!previousOcclusion || !nextOcclusion) {
     return previousOcclusion !== nextOcclusion ? null : new Set<string>()
+  }
+  if (previousOcclusion.splineWallQueryCache || nextOcclusion.splineWallQueryCache) {
+    return null
   }
 
   const changedWallKeys = new Set<string>()
@@ -2486,7 +2645,13 @@ function buildBakedLightOcclusion(
     return null
   }
 
-  const cacheKey = `${getDerivedObjectIdentity(input.paintedCells)}:${getDerivedObjectIdentity(input.wallOpenings)}:${getDerivedObjectIdentity(input.innerWalls)}:${input.wallSurfaceProps ? getDerivedObjectIdentity(input.wallSurfaceProps) : 'none'}`
+  const cacheKey = [
+    getDerivedObjectIdentity(input.paintedCells),
+    input.splineWallGraph ? getDerivedObjectIdentity(input.splineWallGraph) : 'none',
+    getDerivedObjectIdentity(input.wallOpenings),
+    getDerivedObjectIdentity(input.innerWalls),
+    input.wallSurfaceProps ? getDerivedObjectIdentity(input.wallSurfaceProps) : 'none',
+  ].join(':')
   const cachedOcclusion = bakedLightOcclusionCache.get(cacheKey)
   if (cachedOcclusion) {
     return cachedOcclusion
@@ -2497,11 +2662,19 @@ function buildBakedLightOcclusion(
     input.wallSurfaceAssetIds ?? {},
     input.wallSurfaceProps,
   )
+  const splineWallQueryCache = createActiveSplineWallQueryCache(input.splineWallGraph)
+  const solidWalls = splineWallQueryCache
+    ? buildManualInnerWallSet(input.innerWalls, openWalls)
+    : buildSolidWallSet(input.paintedCells, input.innerWalls, openWalls)
+  const cornerBlockingWalls = splineWallQueryCache
+    ? buildManualInnerWallSet(input.innerWalls, openWalls)
+    : buildCornerBlockingWallSet(input.paintedCells, input.innerWalls, openWalls)
   const nextOcclusion = {
     paintedCells: input.paintedCells,
     openWalls,
-    solidWalls: buildSolidWallSet(input.paintedCells, input.innerWalls, openWalls),
-    cornerBlockingWalls: buildCornerBlockingWallSet(input.paintedCells, input.innerWalls, openWalls),
+    solidWalls,
+    cornerBlockingWalls,
+    splineWallQueryCache,
   }
   bakedLightOcclusionCache.set(cacheKey, nextOcclusion)
   return nextOcclusion
@@ -2537,6 +2710,27 @@ function buildSolidWallSet(
       solidWalls.add(mirroredWallKey)
     }
   })
+
+  Object.keys(innerWalls).forEach((wallKey) => {
+    if (openWalls.has(wallKey)) {
+      return
+    }
+
+    solidWalls.add(wallKey)
+    const mirroredWallKey = getMirroredWallKey(wallKey)
+    if (mirroredWallKey && !openWalls.has(mirroredWallKey)) {
+      solidWalls.add(mirroredWallKey)
+    }
+  })
+
+  return solidWalls
+}
+
+function buildManualInnerWallSet(
+  innerWalls: Record<string, InnerWallRecord>,
+  openWalls: ReadonlySet<string>,
+) {
+  const solidWalls = new Set<string>()
 
   Object.keys(innerWalls).forEach((wallKey) => {
     if (openWalls.has(wallKey)) {
@@ -2592,6 +2786,17 @@ function hasBakedLightLineOfSight(
   targetWorld: readonly [number, number, number],
   occlusion: BakedLightOcclusion,
 ) {
+  if (
+    occlusion.splineWallQueryCache
+    && doesLineCrossBlockingSplineWall(
+      occlusion.splineWallQueryCache,
+      [originWorld[0], originWorld[2]],
+      [targetWorld[0], targetWorld[2]],
+    )
+  ) {
+    return false
+  }
+
   return !doesLineIntersectClosedWall(originWorld, targetWorld, occlusion.solidWalls)
 }
 

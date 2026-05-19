@@ -1,0 +1,13 @@
+{
+  "id": "interior-massive-dwarf-hall-heavy-angular-granite-blocks-832173876125782",
+  "name": "Massive Dwarf Hall Heavy Angular Granite Blocks 832173876125782",
+  "sourceImage": "/Volumes/roblinas/sd/wall-texture-832173876125782.png",
+  "sourceDepth": "/Volumes/roblinas/sd/wall-depth-832173876125782.png",
+  "size": 1024,
+  "normalStrength": 4,
+  "parallaxScale": 0.12,
+  "parallaxSteps": 16,
+  "bumpScale": 0.16,
+  "parallaxInvert": true,
+  "heightMean": 0.3424
+}

@@ -6,6 +6,7 @@ import { useGLTF } from '../../rendering/useGLTF'
 import { useFogOfWarRuntime } from './fogOfWarHooks'
 import { useDungeonStore } from '../../store/useDungeonStore'
 import { buildChunkEntrySignature } from './BatchedTileEntriesShared'
+import { useRegisteredLightSources } from './objectSourceRegistry'
 import { getBuildYOffsetForAnimation, type BuildAnimationState } from '../../store/buildAnimations'
 import {
   buildBatchDescriptors,
@@ -14,6 +15,7 @@ import {
 import { recordBuildPerfEvent } from '../../performance/runtimeBuildTrace'
 import { useTileGpuStream } from './TileGpuStreamHooks'
 import type { StaticTileEntry } from './tileEntries'
+import type { RoomFloorMaskRuntime } from './roomFloorMaskRuntime'
 
 export type { StaticTileEntry } from './tileEntries'
 
@@ -25,6 +27,9 @@ type BatchedTileEntriesProps = {
   sourceKind?: 'static' | 'transaction'
   transactionId?: string
   useLineOfSightPostMask?: boolean
+  useRoomFloorMask?: boolean
+  roomFloorMaskRuntime?: RoomFloorMaskRuntime | null
+  dynamicPointLightsActive?: boolean
 }
 
 type BatchedTileEntryChunk = {
@@ -45,6 +50,9 @@ export function BatchedTileEntries({
   sourceKind = 'static',
   transactionId,
   useLineOfSightPostMask = false,
+  useRoomFloorMask = false,
+  roomFloorMaskRuntime = null,
+  dynamicPointLightsActive = false,
 }: BatchedTileEntriesProps) {
   const entryChunks = useMemo(
     () => partitionTileEntriesByChunk(entries),
@@ -64,6 +72,9 @@ export function BatchedTileEntries({
           sourceKind={sourceKind}
           transactionId={transactionId}
           useLineOfSightPostMask={useLineOfSightPostMask}
+          useRoomFloorMask={useRoomFloorMask}
+          roomFloorMaskRuntime={roomFloorMaskRuntime}
+          dynamicPointLightsActive={dynamicPointLightsActive}
         />
       ))}
     </>
@@ -78,17 +89,24 @@ function BatchedTileEntriesChunk({
   sourceKind = 'static',
   transactionId,
   useLineOfSightPostMask = false,
+  useRoomFloorMask = false,
+  roomFloorMaskRuntime = null,
+  dynamicPointLightsActive = false,
 }: BatchedTileEntriesChunkProps) {
   const fogOfWar = useFogOfWarRuntime()
   const lightFlickerEnabled = useDungeonStore((state) => state.lightFlickerEnabled)
+  const registeredLightSources = useRegisteredLightSources(floorId)
+  const hasLocalPointLights = dynamicPointLightsActive || registeredLightSources.length > 0
   const descriptors = useMemo(
     () => buildBatchDescriptors(entries, {
       floorId,
       fogOfWarEnabled: fogOfWar !== null,
       useLineOfSightPostMask,
       lightFlickerEnabled,
+      roomFloorMaskRuntime: useRoomFloorMask ? roomFloorMaskRuntime : null,
+      dynamicPointLightsActive: hasLocalPointLights,
     }),
-    [entries, floorId, fogOfWar, lightFlickerEnabled, useLineOfSightPostMask],
+    [entries, floorId, fogOfWar, hasLocalPointLights, lightFlickerEnabled, roomFloorMaskRuntime, useLineOfSightPostMask, useRoomFloorMask],
   )
   const tracedDescriptorStateRef = useRef<{
     bucketKeys: readonly string[]
@@ -149,6 +167,9 @@ function BatchedTileEntriesChunk({
           key={entry.key}
           entry={entry}
           useLineOfSightPostMask={useLineOfSightPostMask}
+          useRoomFloorMask={useRoomFloorMask}
+          roomFloorMaskRuntime={roomFloorMaskRuntime}
+          dynamicPointLightsActive={hasLocalPointLights}
         />
       ))}
     </>
@@ -164,7 +185,10 @@ const MemoizedBatchedTileEntriesChunk = memo(
     && previous.sourceId === next.sourceId
     && previous.sourceKind === next.sourceKind
     && previous.transactionId === next.transactionId
-    && previous.useLineOfSightPostMask === next.useLineOfSightPostMask,
+    && previous.useLineOfSightPostMask === next.useLineOfSightPostMask
+    && previous.useRoomFloorMask === next.useRoomFloorMask
+    && previous.roomFloorMaskRuntime?.signature === next.roomFloorMaskRuntime?.signature
+    && previous.dynamicPointLightsActive === next.dynamicPointLightsActive,
 )
 
 function ResolvedBatchedTileEntries({
@@ -233,18 +257,27 @@ function ResolvedBatchedTileEntries({
         return []
       }
 
-      return descriptor.entries
+      return descriptor.entries.map((entry) => ({
+        entry,
+        useLineOfSightPostMask: descriptor.useLineOfSightPostMask,
+        useRoomFloorMask: descriptor.useRoomFloorMask,
+        roomFloorMaskRuntime: descriptor.roomFloorMaskRuntime ?? null,
+        dynamicPointLightsActive: descriptor.dynamicPointLightsActive,
+      }))
     }),
     [descriptors.batched, scenesByUrl],
   )
 
   return (
     <>
-      {sourceKind === 'static' && unresolvedEntries.map((entry) => (
+      {sourceKind === 'static' && unresolvedEntries.map((fallbackEntry) => (
         <FallbackTileEntry
-          key={entry.key}
-          entry={entry}
-          useLineOfSightPostMask={descriptorUsesPostMask(descriptors)}
+          key={fallbackEntry.entry.key}
+          entry={fallbackEntry.entry}
+          useLineOfSightPostMask={fallbackEntry.useLineOfSightPostMask}
+          useRoomFloorMask={fallbackEntry.useRoomFloorMask}
+          roomFloorMaskRuntime={fallbackEntry.roomFloorMaskRuntime}
+          dynamicPointLightsActive={fallbackEntry.dynamicPointLightsActive}
         />
       ))}
     </>
@@ -254,9 +287,15 @@ function ResolvedBatchedTileEntries({
 function FallbackTileEntry({
   entry,
   useLineOfSightPostMask,
+  useRoomFloorMask,
+  roomFloorMaskRuntime,
+  dynamicPointLightsActive,
 }: {
   entry: StaticTileEntry
   useLineOfSightPostMask: boolean
+  useRoomFloorMask: boolean
+  roomFloorMaskRuntime: RoomFloorMaskRuntime | null
+  dynamicPointLightsActive: boolean
 }) {
   const groupRef = useRef<THREE.Group>(null)
   const buildAnimation = useMemo<BuildAnimationState | null>(
@@ -298,9 +337,13 @@ function FallbackTileEntry({
         propInstanceKey={entry.variant === 'prop' ? entry.key : undefined}
         visibility={entry.visibility}
         bakedLightField={entry.bakedLightField}
+        bakedLight={entry.bakedLight}
         bakedLightDirection={entry.bakedLightDirection}
         bakedLightDirectionSecondary={entry.bakedLightDirectionSecondary}
         useLineOfSightPostMask={useLineOfSightPostMask}
+        useRoomFloorMask={useRoomFloorMask && entry.variant === 'floor'}
+        roomFloorMaskRuntime={entry.variant === 'floor' ? roomFloorMaskRuntime : null}
+        dynamicPointLightsActive={dynamicPointLightsActive}
         clipBelowGround={buildAnimation !== null}
         objectProps={entry.objectProps}
         castShadow={buildAnimation ? false : undefined}
@@ -317,9 +360,6 @@ function subtractStringSets(
   return values.filter((value) => !removals.has(value))
 }
 
-function descriptorUsesPostMask(descriptors: ReturnType<typeof buildBatchDescriptors>) {
-  return descriptors.batched[0]?.useLineOfSightPostMask ?? false
-}
 
 function partitionTileEntriesByChunk(entries: readonly StaticTileEntry[]): BatchedTileEntryChunk[] {
   const groupedEntries = new Map<string, StaticTileEntry[]>()

@@ -1,4 +1,4 @@
-import { getCellKey, type GridCell } from '../../hooks/useSnapToGrid'
+import { getCellKey, GRID_SIZE, type GridCell } from '../../hooks/useSnapToGrid'
 import type { PaintedCells } from '../../store/useDungeonStore'
 import { getMirroredWallKey } from '../../store/manualWalls'
 
@@ -61,6 +61,32 @@ export function getCornerInteriorLightDirections(wallKeys: string[]) {
   }
 }
 
+export function getWallSpanSurfaceLightSamplePositions(
+  wallKeys: string[],
+  paintedCells: PaintedCells,
+  {
+    sampleHeight = 1.1,
+    inwardOffset = GRID_SIZE * 0.28,
+  }: {
+    sampleHeight?: number
+    inwardOffset?: number
+  } = {},
+) {
+  const spanCenter = getWallSpanWorldCenter(wallKeys)
+  if (!spanCenter) {
+    return []
+  }
+
+  const interiorDirections = getWallSpanInteriorLightDirections(wallKeys, paintedCells)
+  return [interiorDirections.primary, interiorDirections.secondary]
+    .filter((direction): direction is [number, number, number] => Boolean(direction))
+    .map((direction) => ([
+      spanCenter[0] + direction[0] * inwardOffset,
+      sampleHeight,
+      spanCenter[1] + direction[2] * inwardOffset,
+    ] as const))
+}
+
 function getWallCellKey(wallKey: string): string | null {
   const parts = wallKey.split(':')
   if (parts.length !== 3) {
@@ -74,6 +100,59 @@ function getWallCellKey(wallKey: string): string | null {
   }
 
   return getCellKey([x, z] as GridCell)
+}
+
+function getWallSpanWorldCenter(wallKeys: string[]) {
+  if (wallKeys.length === 0) {
+    return null
+  }
+
+  let sumX = 0
+  let sumZ = 0
+  let count = 0
+  wallKeys.forEach((wallKey) => {
+    const center = getWallWorldCenter(wallKey)
+    if (!center) {
+      return
+    }
+
+    sumX += center[0]
+    sumZ += center[1]
+    count += 1
+  })
+
+  if (count === 0) {
+    return null
+  }
+
+  return [sumX / count, sumZ / count] as const
+}
+
+function getWallWorldCenter(wallKey: string) {
+  const parts = wallKey.split(':')
+  if (parts.length !== 3) {
+    return null
+  }
+
+  const x = Number.parseInt(parts[0] ?? '', 10)
+  const z = Number.parseInt(parts[1] ?? '', 10)
+  const direction = parts[2]
+  if (!Number.isFinite(x) || !Number.isFinite(z)) {
+    return null
+  }
+
+  switch (direction) {
+    case 'north':
+      return [x * GRID_SIZE + GRID_SIZE * 0.5, (z + 1) * GRID_SIZE] as const
+    case 'south':
+      return [x * GRID_SIZE + GRID_SIZE * 0.5, z * GRID_SIZE] as const
+    case 'east':
+      return [(x + 1) * GRID_SIZE, z * GRID_SIZE + GRID_SIZE * 0.5] as const
+    case 'west':
+      return [x * GRID_SIZE, z * GRID_SIZE + GRID_SIZE * 0.5] as const
+    default:
+      return null
+  }
 }
 
 function pushUniqueDirection(

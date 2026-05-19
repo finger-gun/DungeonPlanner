@@ -3,6 +3,15 @@ import { getOpeningSegments } from '../../store/openingSegments'
 import { getMirroredWallKey, type InnerWallRecord } from '../../store/manualWalls'
 import { buildOpenWallSegmentSet } from '../../store/openWallSegments'
 import { isOpeningOpen } from '../../store/openingState'
+import {
+  createActiveSplineWallQueryCache,
+  doesLineCrossBlockingSplineWall,
+  findSplineWallLineHits,
+  getSplineRoomCellCoverage,
+  sampleSplineWallSegment,
+  type SplineWallQueryCache,
+} from '../../store/splineWallQueries'
+import type { SplineWallGraph } from '../../store/splineWallGraph'
 import type { OpeningRecord, PaintedCells } from '../../store/useDungeonStore'
 
 const MASK_BASE_SAMPLE_COUNT = 1024
@@ -11,6 +20,7 @@ const MASK_DISTANCE_EPSILON = 0.0005
 const MASK_OPENING_INSET = GRID_SIZE * 0.22
 const LOS_BLOCKER_RAYCAST_Y = 0.38
 const EMPTY_EXPLORED_CELLS: Record<string, true> = {}
+const MIN_VISIBILITY_ROOM_COVERAGE = 0.75
 
 export type VisibilityPolygon = Array<readonly [x: number, z: number]>
 
@@ -66,6 +76,7 @@ export type PlayVisibilityWorkerInput = {
   wallSurfaceAssetIds: Record<string, string>
   wallSurfaceProps: Record<string, Record<string, unknown>>
   innerWalls: Record<string, InnerWallRecord>
+  splineWallGraph?: SplineWallGraph
   origins: GridCell[]
   range: number
   blockingCellKeys: string[]
@@ -74,6 +85,7 @@ export type PlayVisibilityWorkerInput = {
 
 type BlockerLookup = Map<string, BlockerCellEntry>
 type WallDirection = 'north' | 'south' | 'east' | 'west'
+type AdjacentTraversalResult = 'blocked' | 'clear' | 'open'
 
 type PortalSegment = {
   orientation: 'horizontal' | 'vertical'
@@ -105,6 +117,7 @@ export function computePlayVisibilityData(input: PlayVisibilityWorkerInput): Pla
     solidWalls,
     input.wallSurfaceProps,
     input.wallSurfaceAssetIds,
+    input.splineWallGraph,
   )
 
   return { visibleCellKeys, mask }
@@ -124,6 +137,7 @@ export function computeVisibleCellKeysFromInput(input: PlayVisibilityWorkerInput
     solidWalls,
     input.wallSurfaceProps,
     input.wallSurfaceAssetIds,
+    input.splineWallGraph,
   )
 }
 
@@ -137,8 +151,10 @@ export function computeVisibleCellKeys(
   solidWalls: Set<string> = new Set(),
   wallSurfaceProps: Record<string, Record<string, unknown>> = {},
   wallSurfaceAssetIds: Record<string, string> = {},
+  splineWallGraph?: SplineWallGraph,
 ): string[] {
   const openWalls = buildOpenWallSegmentSet(wallOpenings, wallSurfaceAssetIds, wallSurfaceProps)
+  const splineWallQueryCache = createIndoorVisibilityQueryCache(splineWallGraph, paintedCells, wallOpenings)
   const blockingCells = new Set(blockingCellKeys)
   const visible = new Set<string>()
   const maxOffset = Math.ceil(range)
@@ -160,11 +176,26 @@ export function computeVisibleCellKeys(
 
         const targetCell: GridCell = [origin[0] + deltaX, origin[1] + deltaZ]
         const targetKey = getCellKey(targetCell)
-        if (visible.has(targetKey) || !paintedCells[targetKey]) {
+        if (
+          visible.has(targetKey)
+          || !paintedCells[targetKey]
+          || !isSplineVisibilityCellTraversable(targetCell, paintedCells, splineWallQueryCache)
+        ) {
           continue
         }
 
-        if (hasLineOfSight(origin, targetCell, paintedCells, openWalls, solidWalls, blockingCells, blockerLookup)) {
+        if (
+          hasLineOfSight(
+            origin,
+            targetCell,
+            paintedCells,
+            openWalls,
+            solidWalls,
+            blockingCells,
+            blockerLookup,
+            splineWallQueryCache,
+          )
+        ) {
           visible.add(targetKey)
         }
       }
@@ -196,12 +227,12 @@ function hasLineOfSight(
   solidWalls: Set<string>,
   blockingCells: Set<string>,
   blockerLookup: BlockerLookup,
+  splineWallQueryCache: SplineWallQueryCache | null,
 ) {
   if (origin[0] === target[0] && origin[1] === target[1]) {
     return true
   }
 
-  let current: GridCell = [origin[0], origin[1]]
   const originPoint: readonly [number, number] = [
     (origin[0] + 0.5) * GRID_SIZE,
     (origin[1] + 0.5) * GRID_SIZE,
@@ -210,6 +241,149 @@ function hasLineOfSight(
     (target[0] + 0.5) * GRID_SIZE,
     (target[1] + 0.5) * GRID_SIZE,
   ]
+
+  if (splineWallQueryCache) {
+    const blockedBySplineWall = doesLineCrossBlockingSplineWall(splineWallQueryCache, originPoint, targetPoint)
+    if (
+      !isSplineVisibilityCellTraversable(origin, paintedCells, splineWallQueryCache)
+      || !isSplineVisibilityCellTraversable(target, paintedCells, splineWallQueryCache)
+    ) {
+      return false
+    }
+
+    if (!blockedBySplineWall) {
+      return hasLineOfSightThroughBlockingCells(origin, target, blockingCells, blockerLookup, originPoint, targetPoint)
+    }
+
+    const legacyResult = hasLegacyLineOfSight(
+      origin,
+      target,
+      paintedCells,
+      openWalls,
+      solidWalls,
+      blockingCells,
+      blockerLookup,
+      originPoint,
+      targetPoint,
+    )
+    return legacyResult.visible && legacyResult.usedPortal
+  }
+
+  return hasLegacyLineOfSight(
+    origin,
+    target,
+    paintedCells,
+    openWalls,
+    solidWalls,
+    blockingCells,
+    blockerLookup,
+    originPoint,
+    targetPoint,
+  ).visible
+}
+
+function hasLegacyLineOfSight(
+  origin: GridCell,
+  target: GridCell,
+  paintedCells: PaintedCells,
+  openWalls: Set<string>,
+  solidWalls: Set<string>,
+  blockingCells: Set<string>,
+  blockerLookup: BlockerLookup,
+  originPoint: readonly [number, number],
+  targetPoint: readonly [number, number],
+) {
+  let current: GridCell = [origin[0], origin[1]]
+  let usedPortal = false
+  const dx = target[0] - origin[0]
+  const dz = target[1] - origin[1]
+  const stepX = Math.sign(dx)
+  const stepZ = Math.sign(dz)
+  const tDeltaX = stepX === 0 ? Number.POSITIVE_INFINITY : 1 / Math.abs(dx)
+  const tDeltaZ = stepZ === 0 ? Number.POSITIVE_INFINITY : 1 / Math.abs(dz)
+  let tMaxX = stepX === 0 ? Number.POSITIVE_INFINITY : tDeltaX * 0.5
+  let tMaxZ = stepZ === 0 ? Number.POSITIVE_INFINITY : tDeltaZ * 0.5
+
+  while (current[0] !== target[0] || current[1] !== target[1]) {
+    if (approximatelyEqual(tMaxX, tMaxZ)) {
+      if (stepX === 0 || stepZ === 0) {
+        return { visible: false, usedPortal }
+      }
+
+      const nextDiagonal: GridCell = [current[0] + stepX, current[1] + stepZ]
+      const viaX: GridCell = [current[0] + stepX, current[1]]
+      const viaZ: GridCell = [current[0], current[1] + stepZ]
+      const viaXStepA = getAdjacentTraversalResult(current, viaX, paintedCells, openWalls, solidWalls)
+      const viaXStepB = getAdjacentTraversalResult(viaX, nextDiagonal, paintedCells, openWalls, solidWalls)
+      const viaZStepA = getAdjacentTraversalResult(current, viaZ, paintedCells, openWalls, solidWalls)
+      const viaZStepB = getAdjacentTraversalResult(viaZ, nextDiagonal, paintedCells, openWalls, solidWalls)
+      const canPassViaX = viaXStepA !== 'blocked'
+        && !isBlockingSightCell(viaX, target, blockingCells, blockerLookup, originPoint, targetPoint)
+        && viaXStepB !== 'blocked'
+      const canPassViaZ = viaZStepA !== 'blocked'
+        && !isBlockingSightCell(viaZ, target, blockingCells, blockerLookup, originPoint, targetPoint)
+        && viaZStepB !== 'blocked'
+
+      if (!canPassViaX && !canPassViaZ) {
+        return { visible: false, usedPortal }
+      }
+
+      if (canPassViaX) {
+        usedPortal = usedPortal || viaXStepA === 'open' || viaXStepB === 'open'
+      }
+      if (canPassViaZ) {
+        usedPortal = usedPortal || viaZStepA === 'open' || viaZStepB === 'open'
+      }
+
+      current = nextDiagonal
+      if (isBlockingSightCell(current, target, blockingCells, blockerLookup, originPoint, targetPoint)) {
+        return { visible: false, usedPortal }
+      }
+      tMaxX += tDeltaX
+      tMaxZ += tDeltaZ
+      continue
+    }
+
+    if (tMaxX < tMaxZ) {
+      const nextCell: GridCell = [current[0] + stepX, current[1]]
+      const stepResult = getAdjacentTraversalResult(current, nextCell, paintedCells, openWalls, solidWalls)
+      if (stepResult === 'blocked') {
+        return { visible: false, usedPortal }
+      }
+      usedPortal = usedPortal || stepResult === 'open'
+      current = nextCell
+      if (isBlockingSightCell(current, target, blockingCells, blockerLookup, originPoint, targetPoint)) {
+        return { visible: false, usedPortal }
+      }
+      tMaxX += tDeltaX
+      continue
+    }
+
+    const nextCell: GridCell = [current[0], current[1] + stepZ]
+    const stepResult = getAdjacentTraversalResult(current, nextCell, paintedCells, openWalls, solidWalls)
+    if (stepResult === 'blocked') {
+      return { visible: false, usedPortal }
+    }
+    usedPortal = usedPortal || stepResult === 'open'
+    current = nextCell
+    if (isBlockingSightCell(current, target, blockingCells, blockerLookup, originPoint, targetPoint)) {
+      return { visible: false, usedPortal }
+    }
+    tMaxZ += tDeltaZ
+  }
+
+  return { visible: true, usedPortal }
+}
+
+function hasLineOfSightThroughBlockingCells(
+  origin: GridCell,
+  target: GridCell,
+  blockingCells: Set<string>,
+  blockerLookup: BlockerLookup,
+  originPoint: readonly [number, number],
+  targetPoint: readonly [number, number],
+) {
+  let current: GridCell = [origin[0], origin[1]]
   const dx = target[0] - origin[0]
   const dz = target[1] - origin[1]
   const stepX = Math.sign(dx)
@@ -228,13 +402,8 @@ function hasLineOfSight(
       const nextDiagonal: GridCell = [current[0] + stepX, current[1] + stepZ]
       const viaX: GridCell = [current[0] + stepX, current[1]]
       const viaZ: GridCell = [current[0], current[1] + stepZ]
-      const canPassViaX = canTraverseAdjacent(current, viaX, paintedCells, openWalls, solidWalls)
-        && !isBlockingSightCell(viaX, target, blockingCells, blockerLookup, originPoint, targetPoint)
-        && canTraverseAdjacent(viaX, nextDiagonal, paintedCells, openWalls, solidWalls)
-      const canPassViaZ = canTraverseAdjacent(current, viaZ, paintedCells, openWalls, solidWalls)
-        && !isBlockingSightCell(viaZ, target, blockingCells, blockerLookup, originPoint, targetPoint)
-        && canTraverseAdjacent(viaZ, nextDiagonal, paintedCells, openWalls, solidWalls)
-
+      const canPassViaX = !isBlockingSightCell(viaX, target, blockingCells, blockerLookup, originPoint, targetPoint)
+      const canPassViaZ = !isBlockingSightCell(viaZ, target, blockingCells, blockerLookup, originPoint, targetPoint)
       if (!canPassViaX && !canPassViaZ) {
         return false
       }
@@ -249,11 +418,7 @@ function hasLineOfSight(
     }
 
     if (tMaxX < tMaxZ) {
-      const nextCell: GridCell = [current[0] + stepX, current[1]]
-      if (!canTraverseAdjacent(current, nextCell, paintedCells, openWalls, solidWalls)) {
-        return false
-      }
-      current = nextCell
+      current = [current[0] + stepX, current[1]]
       if (isBlockingSightCell(current, target, blockingCells, blockerLookup, originPoint, targetPoint)) {
         return false
       }
@@ -261,11 +426,7 @@ function hasLineOfSight(
       continue
     }
 
-    const nextCell: GridCell = [current[0], current[1] + stepZ]
-    if (!canTraverseAdjacent(current, nextCell, paintedCells, openWalls, solidWalls)) {
-      return false
-    }
-    current = nextCell
+    current = [current[0], current[1] + stepZ]
     if (isBlockingSightCell(current, target, blockingCells, blockerLookup, originPoint, targetPoint)) {
       return false
     }
@@ -275,16 +436,16 @@ function hasLineOfSight(
   return true
 }
 
-function canTraverseAdjacent(
+function getAdjacentTraversalResult(
   from: GridCell,
   to: GridCell,
   paintedCells: PaintedCells,
   openWalls: Set<string>,
   solidWalls: Set<string>,
-) {
+): AdjacentTraversalResult {
   const direction = getDirection(from, to)
   if (!direction) {
-    return false
+    return 'blocked'
   }
 
   const fromKey = getCellKey(from)
@@ -292,19 +453,19 @@ function canTraverseAdjacent(
   const fromRecord = paintedCells[fromKey]
   const toRecord = paintedCells[toKey]
   if (!fromRecord || !toRecord) {
-    return false
+    return 'blocked'
   }
 
   const wallKey = `${fromKey}:${direction}`
   if (solidWalls.has(wallKey)) {
-    return false
+    return 'blocked'
   }
 
   if ((fromRecord.roomId ?? null) === (toRecord.roomId ?? null)) {
-    return true
+    return 'clear'
   }
 
-  return openWalls.has(wallKey)
+  return openWalls.has(wallKey) ? 'open' : 'blocked'
 }
 
 function getDirection(from: GridCell, to: GridCell): WallDirection | null {
@@ -356,6 +517,7 @@ export function computeVisibilityMask(
   solidWalls: Set<string> = new Set(),
   wallSurfaceProps: Record<string, Record<string, unknown>> = {},
   wallSurfaceAssetIds: Record<string, string> = {},
+  splineWallGraph?: SplineWallGraph,
 ): PlayVisibilityMask | null {
   const paintedCellKeys = Object.keys(paintedCells)
   if (paintedCellKeys.length === 0 || origins.length === 0) {
@@ -364,6 +526,7 @@ export function computeVisibilityMask(
 
   const blockingCells = new Set(blockingCellKeys)
   const portalLookup = buildPortalLookup(wallOpenings, wallSurfaceProps, wallSurfaceAssetIds)
+  const splineWallQueryCache = createIndoorVisibilityQueryCache(splineWallGraph, paintedCells, wallOpenings)
   const sources = origins
     .map((origin) => {
       const samples = computeVisibilitySamples(
@@ -374,6 +537,7 @@ export function computeVisibilityMask(
         blockingCells,
         range,
         blockerLookup,
+        splineWallQueryCache,
       )
       const polygon = samples.map((sample) => sample.point)
       const sectors = splitVisibilityPolygonIntoSectors(
@@ -385,6 +549,7 @@ export function computeVisibilityMask(
         blockingCells,
         range * GRID_SIZE,
         blockerLookup,
+        splineWallQueryCache,
       )
       if (sectors.length === 0) {
         return null
@@ -429,13 +594,14 @@ export function computeVisibilitySamples(
   blockingCells: Set<string>,
   range: number,
   blockerLookup: BlockerLookup = new Map(),
+  splineWallQueryCache: SplineWallQueryCache | null = null,
 ): VisibilitySample[] {
   const origin: readonly [number, number] = [
     (originCell[0] + 0.5) * GRID_SIZE,
     (originCell[1] + 0.5) * GRID_SIZE,
   ]
   const maxDistance = range * GRID_SIZE
-  return buildMaskAngles(origin, portalLookup, blockingCells, maxDistance)
+  return buildMaskAngles(origin, portalLookup, blockingCells, maxDistance, splineWallQueryCache)
     .map((angle) => normalizeAngle(angle))
     .sort((left, right) => left - right)
     .map((angle) => ({
@@ -450,6 +616,7 @@ export function computeVisibilitySamples(
         blockingCells,
         maxDistance,
         blockerLookup,
+        splineWallQueryCache,
       ),
     }))
 }
@@ -463,6 +630,7 @@ function splitVisibilityPolygonIntoSectors(
   blockingCells: Set<string>,
   maxDistance: number,
   blockerLookup: BlockerLookup,
+  splineWallQueryCache: SplineWallQueryCache | null,
 ): VisibilityPolygon[] {
   if (samples.length < 3) {
     return []
@@ -488,6 +656,7 @@ function splitVisibilityPolygonIntoSectors(
         blockingCells,
         maxDistance,
         blockerLookup,
+        splineWallQueryCache,
       )
     ) {
       breaks.add(index)
@@ -528,6 +697,7 @@ function shouldSplitVisibilitySector(
   blockingCells: Set<string>,
   maxDistance: number,
   blockerLookup: BlockerLookup,
+  splineWallQueryCache: SplineWallQueryCache | null,
 ) {
   const angleDelta = normalizeAngleDelta(right.angle - left.angle)
   if (angleDelta <= MASK_ANGLE_EPSILON * 4) {
@@ -544,6 +714,7 @@ function shouldSplitVisibilitySector(
     blockingCells,
     maxDistance,
     blockerLookup,
+    splineWallQueryCache,
   )
   const midpointDistance = pointDistance(origin, midpoint)
   const edgeDistance = Math.min(pointDistance(origin, left.point), pointDistance(origin, right.point))
@@ -560,6 +731,7 @@ export function castVisibilityMaskRay(
   blockerLookup: BlockerLookup = new Map(),
   solidWalls: Set<string> = new Set(),
   wallSurfaceProps: Record<string, Record<string, unknown>> = {},
+  splineWallGraph?: SplineWallGraph,
 ): readonly [number, number] {
   const origin: readonly [number, number] = [
     (originCell[0] + 0.5) * GRID_SIZE,
@@ -575,6 +747,7 @@ export function castVisibilityMaskRay(
     new Set(blockingCellKeys),
     range * GRID_SIZE,
     blockerLookup,
+    createIndoorVisibilityQueryCache(splineWallGraph, paintedCells, wallOpenings),
   )
 }
 
@@ -588,8 +761,15 @@ function castVisibilityMaskRayWithLookup(
   blockingCells: Set<string>,
   maxDistance: number,
   blockerLookup: BlockerLookup,
+  splineWallQueryCache: SplineWallQueryCache | null,
 ): readonly [number, number] {
   const direction: readonly [number, number] = [Math.cos(angle), Math.sin(angle)]
+  const splineWallMaxDistance = splineWallQueryCache
+    ? getSplineWallBlockDistance(splineWallQueryCache, origin, direction, maxDistance)
+    : null
+  const cappedMaxDistance = splineWallMaxDistance == null
+    ? maxDistance
+    : Math.max(0, splineWallMaxDistance - MASK_DISTANCE_EPSILON)
   const stepX = Math.sign(direction[0])
   const stepZ = Math.sign(direction[1])
   const tDeltaX = stepX === 0 ? Number.POSITIVE_INFINITY : GRID_SIZE / Math.abs(direction[0])
@@ -604,23 +784,29 @@ function castVisibilityMaskRayWithLookup(
       ? Number.POSITIVE_INFINITY
       : ((((stepZ > 0 ? current[1] + 1 : current[1]) * GRID_SIZE) - origin[1]) / direction[1])
 
-  while (Math.min(tMaxX, tMaxZ) <= maxDistance) {
+  while (Math.min(tMaxX, tMaxZ) <= cappedMaxDistance) {
     if (approximatelyEqual(tMaxX, tMaxZ)) {
       const distance = tMaxX
       const crossPoint = pointAtDistance(origin, direction, distance)
       const viaX: GridCell = [current[0] + stepX, current[1]]
       const viaZ: GridCell = [current[0], current[1] + stepZ]
       const diagonal: GridCell = [current[0] + stepX, current[1] + stepZ]
-      const canPassViaX =
-        stepX !== 0 &&
-        stepZ !== 0 &&
-        canTraverseRayBoundary(current, viaX, crossPoint, paintedCells, portalLookup, solidWalls) &&
-        canTraverseRayBoundary(viaX, diagonal, crossPoint, paintedCells, portalLookup, solidWalls)
-      const canPassViaZ =
-        stepX !== 0 &&
-        stepZ !== 0 &&
-        canTraverseRayBoundary(current, viaZ, crossPoint, paintedCells, portalLookup, solidWalls) &&
-        canTraverseRayBoundary(viaZ, diagonal, crossPoint, paintedCells, portalLookup, solidWalls)
+      const canPassViaX = splineWallQueryCache
+        ? stepX !== 0
+          && stepZ !== 0
+          && !isMaskBlockingCell(viaX, originCell, blockingCells)
+        : stepX !== 0
+          && stepZ !== 0
+          && canTraverseRayBoundary(current, viaX, crossPoint, paintedCells, portalLookup, solidWalls)
+          && canTraverseRayBoundary(viaX, diagonal, crossPoint, paintedCells, portalLookup, solidWalls)
+      const canPassViaZ = splineWallQueryCache
+        ? stepX !== 0
+          && stepZ !== 0
+          && !isMaskBlockingCell(viaZ, originCell, blockingCells)
+        : stepX !== 0
+          && stepZ !== 0
+          && canTraverseRayBoundary(current, viaZ, crossPoint, paintedCells, portalLookup, solidWalls)
+          && canTraverseRayBoundary(viaZ, diagonal, crossPoint, paintedCells, portalLookup, solidWalls)
 
       if (!canPassViaX && !canPassViaZ) {
         return pointAtDistance(origin, direction, Math.max(0, distance - MASK_DISTANCE_EPSILON))
@@ -635,7 +821,7 @@ function castVisibilityMaskRayWithLookup(
         origin,
         direction,
         distance,
-        Math.min(maxDistance, Math.min(nextTMaxX, nextTMaxZ)),
+        Math.min(cappedMaxDistance, Math.min(nextTMaxX, nextTMaxZ)),
         blockingCells,
         blockerLookup,
       )
@@ -652,7 +838,10 @@ function castVisibilityMaskRayWithLookup(
       const distance = tMaxX
       const nextCell: GridCell = [current[0] + stepX, current[1]]
       const crossPoint = pointAtDistance(origin, direction, distance)
-      if (!canTraverseRayBoundary(current, nextCell, crossPoint, paintedCells, portalLookup, solidWalls)) {
+      if (
+        !splineWallQueryCache
+        && !canTraverseRayBoundary(current, nextCell, crossPoint, paintedCells, portalLookup, solidWalls)
+      ) {
         return pointAtDistance(origin, direction, Math.max(0, distance - MASK_DISTANCE_EPSILON))
       }
 
@@ -664,7 +853,7 @@ function castVisibilityMaskRayWithLookup(
         origin,
         direction,
         distance,
-        Math.min(maxDistance, Math.min(nextTMaxX, tMaxZ)),
+        Math.min(cappedMaxDistance, Math.min(nextTMaxX, tMaxZ)),
         blockingCells,
         blockerLookup,
       )
@@ -679,7 +868,10 @@ function castVisibilityMaskRayWithLookup(
     const distance = tMaxZ
     const nextCell: GridCell = [current[0], current[1] + stepZ]
     const crossPoint = pointAtDistance(origin, direction, distance)
-    if (!canTraverseRayBoundary(current, nextCell, crossPoint, paintedCells, portalLookup, solidWalls)) {
+    if (
+      !splineWallQueryCache
+      && !canTraverseRayBoundary(current, nextCell, crossPoint, paintedCells, portalLookup, solidWalls)
+    ) {
       return pointAtDistance(origin, direction, Math.max(0, distance - MASK_DISTANCE_EPSILON))
     }
 
@@ -691,7 +883,7 @@ function castVisibilityMaskRayWithLookup(
       origin,
       direction,
       distance,
-      Math.min(maxDistance, Math.min(tMaxX, nextTMaxZ)),
+      Math.min(cappedMaxDistance, Math.min(tMaxX, nextTMaxZ)),
       blockingCells,
       blockerLookup,
     )
@@ -701,7 +893,7 @@ function castVisibilityMaskRayWithLookup(
     tMaxZ = nextTMaxZ
   }
 
-  return pointAtDistance(origin, direction, maxDistance)
+  return pointAtDistance(origin, direction, cappedMaxDistance)
 }
 
 function buildMaskAngles(
@@ -709,6 +901,7 @@ function buildMaskAngles(
   portalLookup: Map<string, PortalSegment>,
   blockingCells: Set<string>,
   maxDistance: number,
+  splineWallQueryCache: SplineWallQueryCache | null,
 ) {
   const angles = Array.from({ length: MASK_BASE_SAMPLE_COUNT }, (_, index) =>
     (index / MASK_BASE_SAMPLE_COUNT) * Math.PI * 2,
@@ -750,6 +943,24 @@ function buildMaskAngles(
     addEdgeAngles(angles, origin, [maxX, minZ], maxDistance)
     addEdgeAngles(angles, origin, [maxX, maxZ], maxDistance)
   }
+  if (splineWallQueryCache) {
+    Object.values(splineWallQueryCache.segments).forEach((segment) => {
+      segment.edges.forEach((edge) => {
+        addEdgeAngles(angles, origin, edge.start, maxDistance)
+        addEdgeAngles(angles, origin, edge.end, maxDistance)
+      })
+      segment.cutouts.forEach((cutout) => {
+        const start = sampleSplineWallSegment(splineWallQueryCache, segment.segmentId, cutout.startRatio)
+        const end = sampleSplineWallSegment(splineWallQueryCache, segment.segmentId, cutout.endRatio)
+        if (start) {
+          addEdgeAngles(angles, origin, start.position, maxDistance)
+        }
+        if (end) {
+          addEdgeAngles(angles, origin, end.position, maxDistance)
+        }
+      })
+    })
+  }
   return angles
 }
 
@@ -766,6 +977,47 @@ function addEdgeAngles(
   }
   const angle = Math.atan2(dz, dx)
   angles.push(angle - MASK_ANGLE_EPSILON, angle, angle + MASK_ANGLE_EPSILON)
+}
+
+function createIndoorVisibilityQueryCache(
+  splineWallGraph: SplineWallGraph | undefined,
+  _paintedCells: PaintedCells,
+  _wallOpenings: Record<string, OpeningRecord>,
+) {
+  return createActiveSplineWallQueryCache(splineWallGraph)
+}
+
+function isSplineVisibilityCellTraversable(
+  cell: GridCell,
+  paintedCells: PaintedCells,
+  splineWallQueryCache: SplineWallQueryCache | null,
+) {
+  if (!splineWallQueryCache) {
+    return true
+  }
+
+  const roomId = paintedCells[getCellKey(cell)]?.roomId
+  if (!roomId) {
+    return true
+  }
+
+  return getSplineRoomCellCoverage(splineWallQueryCache, roomId, cell) + 1e-5 >= MIN_VISIBILITY_ROOM_COVERAGE
+}
+
+function getSplineWallBlockDistance(
+  splineWallQueryCache: SplineWallQueryCache,
+  origin: readonly [number, number],
+  direction: readonly [number, number],
+  maxDistance: number,
+) {
+  const target: readonly [number, number] = [
+    origin[0] + direction[0] * maxDistance,
+    origin[1] + direction[1] * maxDistance,
+  ]
+  const hit = findSplineWallLineHits(splineWallQueryCache, origin, target, {
+    maxHits: 1,
+  })[0]
+  return hit?.distance ?? null
 }
 
 export function buildPortalLookup(

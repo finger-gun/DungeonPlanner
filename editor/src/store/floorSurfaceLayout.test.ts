@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { PaintedCells } from './useDungeonStore'
+import { upsertSplineWallGraphRoomPath } from './splineWallGraph'
 import {
   buildFloorRenderPlan,
   createFloorSurfacePlacement,
@@ -103,6 +104,38 @@ describe('floorSurfaceLayout', () => {
     })
   })
 
+  it('keeps painted room floor groups scoped to their owning room for floor masks', () => {
+    const paintedCells = createPaintedCells([
+      [0, 0], [1, 0], [0, 1], [1, 1],
+    ])
+    Object.values(paintedCells).forEach((record) => {
+      record.roomId = 'room-painted'
+    })
+
+    const plan = buildFloorRenderPlan(
+      paintedCells,
+      {
+        'room-painted': {
+          id: 'room-painted',
+          name: 'Painted Room',
+          layerId: 'layer-1',
+          roomSetId: 'dungeon',
+          floorAssetId: null,
+          wallAssetId: null,
+          geometrySource: 'paint',
+        },
+      },
+      'dungeon.floor_floor_tile_small',
+      {},
+    )
+
+    expect(plan.baseGroups).toHaveLength(1)
+    expect(plan.baseGroups[0]).toMatchObject({
+      roomId: 'room-painted',
+      cells: [[0, 0], [1, 0], [0, 1], [1, 1]],
+    })
+  })
+
   it('avoids obvious diagonal repetition in cave floor variation', () => {
     const paintedCells = createPaintedCells(
       Array.from({ length: 6 }, (_, z) =>
@@ -140,6 +173,52 @@ describe('floorSurfaceLayout', () => {
 
     expect(new Set(signatures).size).toBeGreaterThan(4)
     expect(new Set(diagonalSignatures).size).toBeGreaterThan(2)
+  })
+
+  it('plans graph-backed room floors from spline-covered cells beyond painted ownership', () => {
+    const paintedCells = createPaintedCells([
+      [3, 0], [4, 0],
+      [3, 1], [4, 1],
+      [3, 2], [4, 2],
+    ])
+    Object.values(paintedCells).forEach((record) => {
+      record.roomId = 'room-graph'
+    })
+
+    const plan = buildFloorRenderPlan(
+      paintedCells,
+      {
+        'room-graph': {
+          id: 'room-graph',
+          name: 'Graph Room',
+          layerId: 'layer-1',
+          roomSetId: 'dungeon',
+          floorAssetId: null,
+          wallAssetId: null,
+        },
+      },
+      'dungeon.floor_floor_tile_small',
+      {},
+      upsertSplineWallGraphRoomPath({ nodes: {}, segments: {}, paths: {} }, {
+        roomId: 'room-graph',
+        layerId: 'layer-1',
+        nodes: [
+          { position: [2, 0], cornerMode: 'square', cornerAmount: 0 },
+          { position: [5, 0], cornerMode: 'square', cornerAmount: 0 },
+          { position: [5, 3], cornerMode: 'square', cornerAmount: 0 },
+          { position: [2, 3], cornerMode: 'square', cornerAmount: 0 },
+        ],
+      }),
+    )
+
+    expect(plan.baseGroups).toContainEqual(expect.objectContaining({
+      roomId: 'room-graph',
+      cells: expect.arrayContaining([
+        [2, 0], [3, 0], [4, 0],
+        [2, 1], [3, 1], [4, 1],
+        [2, 2], [3, 2], [4, 2],
+      ]),
+    }))
   })
 })
 

@@ -14,6 +14,7 @@ export const dungeonDoorWall1Asset = createDungeonAsset({
   metadata: {
     snapsTo: 'GRID',
     openingWidth: 1,
+    openingKind: 'door',
     connectors: [
       {
         point: [0, 0, 0],

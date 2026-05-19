@@ -3,7 +3,14 @@ import { getMetadataConnectors } from '../../content-packs/connectors'
 import { Euler, Plane, Ray, Vector3 } from 'three'
 import type { ContentPackAsset, Connector, SnapsTo } from '../../content-packs/types'
 import { GRID_SIZE, cellToWorldPosition, getCellKey, type GridCell, snapWorldPointToGrid } from '../../hooks/useSnapToGrid'
+import { getRepresentativeOpeningWallKey } from '../../store/openingPlacement'
 import { sampleOutdoorTerrainHeight, type OutdoorTerrainHeightfield } from '../../store/outdoorTerrain'
+import {
+  findNearestSplineWallSegment,
+  isPointInsideSplineRoom,
+  type SplineWallQueryCache,
+} from '../../store/splineWallQueries'
+import { DEFAULT_SPLINE_WALL_THICKNESS } from '../../store/splineWalls'
 import type { PaintedCellRecord } from '../../store/useDungeonStore'
 import { isWallBoundary } from '../../store/wallSegments'
 
@@ -26,6 +33,7 @@ type CursorRay = {
 type WallSnapPoint = {
   position: readonly [number, number, number]
   normal: readonly [number, number, number]
+  tangent: readonly [number, number, number]
   direction: 'north' | 'south' | 'east' | 'west'
   supportCell: GridCell
   supportCellKey: string
@@ -42,7 +50,7 @@ type SnapCandidate = SnapResult & {
   distance: number
 }
 
-const WALL_SURFACE_OFFSET = 0.5
+const WALL_SURFACE_OFFSET = DEFAULT_SPLINE_WALL_THICKNESS / 2
 
 function getAssetConnectors(asset: ContentPackAsset): Connector[] {
   warnIfUsesDeprecatedConnectsTo(asset)
@@ -100,25 +108,31 @@ function getWallAnchor(
     }
   }
 
-  if (wall.direction === 'north' || wall.direction === 'south') {
-    return [cursorPoint.x, wall.position[1], wall.position[2]]
+  const tangentLength = Math.hypot(wall.tangent[0], wall.tangent[2])
+  if (tangentLength <= 1e-5) {
+    return wall.position
   }
 
-  return [wall.position[0], wall.position[1], cursorPoint.z]
+  const tangent = [wall.tangent[0] / tangentLength, 0, wall.tangent[2] / tangentLength] as const
+  const offset = [
+    cursorPoint.x - wall.position[0],
+    0,
+    cursorPoint.z - wall.position[2],
+  ] as const
+  const projection = offset[0] * tangent[0] + offset[2] * tangent[2]
+
+  return [
+    wall.position[0] + tangent[0] * projection,
+    wall.position[1],
+    wall.position[2] + tangent[2] * projection,
+  ]
 }
 
 function calculateWallRotation(
-  direction: WallSnapPoint['direction'],
+  wall: Pick<WallSnapPoint, 'normal'>,
   connectorRotation?: readonly [number, number, number],
 ): readonly [number, number, number] {
-  const baseRotationY =
-    direction === 'north'
-      ? Math.PI
-      : direction === 'south'
-        ? 0
-        : direction === 'east'
-          ? -Math.PI / 2
-          : Math.PI / 2
+  const baseRotationY = normalizeAngle(Math.atan2(wall.normal[0], wall.normal[2]) + Math.PI)
 
   if (!connectorRotation) {
     return [0, baseRotationY, 0]
@@ -126,15 +140,97 @@ function calculateWallRotation(
 
   return [
     connectorRotation[0],
-    baseRotationY + connectorRotation[1],
+    normalizeAngle(baseRotationY + connectorRotation[1]),
     connectorRotation[2],
+  ]
+}
+
+function normalizeAngle(angle: number) {
+  const wrapped = (angle + Math.PI) % (Math.PI * 2)
+  return wrapped < 0 ? wrapped + Math.PI : wrapped - Math.PI
+}
+
+function resolveSplineWallSurfacePosition(
+  wallQueryCache: SplineWallQueryCache,
+  hit: {
+    roomId: string | null
+    centerlinePoint: readonly [number, number]
+    normal: readonly [number, number]
+    surfacePoint: readonly [number, number]
+    wallThickness: number
+  },
+  point: readonly [number, number, number],
+): readonly [number, number, number] {
+  if (!hit.roomId) {
+    return [hit.surfacePoint[0], point[1], hit.surfacePoint[1]]
+  }
+
+  const roomSampleOffset = Math.max(hit.wallThickness * 0.25, 0.05)
+  const positiveSample: [number, number] = [
+    hit.centerlinePoint[0] + hit.normal[0] * roomSampleOffset,
+    hit.centerlinePoint[1] + hit.normal[1] * roomSampleOffset,
+  ]
+  const negativeSample: [number, number] = [
+    hit.centerlinePoint[0] - hit.normal[0] * roomSampleOffset,
+    hit.centerlinePoint[1] - hit.normal[1] * roomSampleOffset,
+  ]
+  const positiveInsideRoom = isPointInsideSplineRoom(wallQueryCache, hit.roomId, positiveSample)
+  const negativeInsideRoom = isPointInsideSplineRoom(wallQueryCache, hit.roomId, negativeSample)
+
+  if (positiveInsideRoom === negativeInsideRoom) {
+    return [hit.surfacePoint[0], point[1], hit.surfacePoint[1]]
+  }
+
+  const signedDistance =
+    (point[0] - hit.centerlinePoint[0]) * hit.normal[0]
+    + (point[2] - hit.centerlinePoint[1]) * hit.normal[1]
+  const pointInsideRoom = isPointInsideSplineRoom(wallQueryCache, hit.roomId, [point[0], point[2]])
+  const pointNearCenterline = Math.abs(signedDistance) <= roomSampleOffset + 1e-5
+
+  if (!pointInsideRoom && !pointNearCenterline) {
+    return [hit.surfacePoint[0], point[1], hit.surfacePoint[1]]
+  }
+
+  const roomFacingSide = positiveInsideRoom ? 1 : -1
+  return [
+    hit.centerlinePoint[0] + hit.normal[0] * (hit.wallThickness / 2) * roomFacingSide,
+    point[1],
+    hit.centerlinePoint[1] + hit.normal[1] * (hit.wallThickness / 2) * roomFacingSide,
   ]
 }
 
 function findNearbyWalls(
   point: readonly [number, number, number],
   paintedCells: Record<string, PaintedCellRecord>,
+  wallQueryCache?: SplineWallQueryCache | null,
 ): WallSnapPoint[] {
+  if (wallQueryCache) {
+    const hit = findNearestSplineWallSegment(wallQueryCache, [point[0], point[2]])
+    if (hit) {
+      const wallKey = getRepresentativeOpeningWallKey(
+        paintedCells,
+        hit.centerlinePoint,
+        [hit.normal[0], hit.normal[1]],
+        hit.roomId,
+      ) ?? buildFallbackWallKey(hit.centerlinePoint, hit.normal)
+      const supportCell = parseWallCellKey(wallKey)
+      const direction = getDirectionFromWallKey(wallKey)
+
+      if (supportCell && direction) {
+        const surfacePosition = resolveSplineWallSurfacePosition(wallQueryCache, hit, point)
+        return [{
+          position: surfacePosition,
+          normal: [hit.normal[0], 0, hit.normal[1]],
+          tangent: [hit.tangent[0], 0, hit.tangent[1]],
+          direction,
+          supportCell,
+          supportCellKey: getCellKey(supportCell),
+          distance: Math.hypot(point[0] - surfacePosition[0], point[2] - surfacePosition[2]),
+        }]
+      }
+    }
+  }
+
   const walls: WallSnapPoint[] = []
   const [x, , z] = point
 
@@ -192,6 +288,7 @@ function findNearbyWalls(
       walls.push({
         position: surfacePosition,
         normal,
+        tangent: direction === 'north' || direction === 'south' ? [1, 0, 0] : [0, 0, 1],
         direction,
         supportCell,
         supportCellKey,
@@ -261,14 +358,15 @@ function createWallCandidates(
   paintedCells: Record<string, PaintedCellRecord>,
   snapsTo: SnapsTo,
   cursorRay?: CursorRay | null,
+  wallQueryCache?: SplineWallQueryCache | null,
 ): SnapCandidate[] {
-  const walls = findNearbyWalls(selectionPoint, paintedCells)
+  const walls = findNearbyWalls(selectionPoint, paintedCells, wallQueryCache)
 
   return connectors
     .filter((connector) => connector.type === 'WALL')
     .flatMap((connector) =>
       walls.map((wall) => {
-        const rotation = calculateWallRotation(wall.direction, connector.rotation)
+        const rotation = calculateWallRotation(wall, connector.rotation)
         const finalAnchor = getWallAnchor(wall, cursorPoint, snapsTo, cursorRay)
 
         return {
@@ -375,12 +473,13 @@ export function calculatePropSnapPosition(
   allowUnpaintedCells = false,
   outdoorTerrainHeights?: OutdoorTerrainHeightfield,
   floorCellOverride?: GridCell,
+  wallQueryCache?: SplineWallQueryCache | null,
 ): SnapResult | null {
   const connectors = getAssetConnectors(asset)
   const snapsTo = asset.metadata?.snapsTo ?? 'FREE'
   const selectionPoint = getSelectionPoint(cursorPoint, surfaceHit)
   const candidates = [
-    ...createWallCandidates(connectors, selectionPoint, cursorPoint, paintedCells, snapsTo, cursorRay),
+    ...createWallCandidates(connectors, selectionPoint, cursorPoint, paintedCells, snapsTo, cursorRay, wallQueryCache),
     ...createSurfaceCandidates(connectors, selectionPoint, surfaceHit),
     ...createFloorCandidates(
       connectors,
@@ -413,4 +512,29 @@ export function calculatePropSnapPosition(
     localPosition: chosen.localPosition,
     localRotation: chosen.localRotation,
   }
+}
+
+function getDirectionFromWallKey(wallKey: string): WallSnapPoint['direction'] | null {
+  const direction = wallKey.split(':')[2]
+  return direction === 'north' || direction === 'south' || direction === 'east' || direction === 'west'
+    ? direction
+    : null
+}
+
+function parseWallCellKey(wallKey: string): GridCell | null {
+  const [cellXText, cellZText] = wallKey.split(':')
+  const cellX = Number.parseInt(cellXText ?? '', 10)
+  const cellZ = Number.parseInt(cellZText ?? '', 10)
+  if (Number.isNaN(cellX) || Number.isNaN(cellZ)) {
+    return null
+  }
+  return [cellX, cellZ]
+}
+
+function buildFallbackWallKey(point: readonly [number, number], normal: readonly [number, number]) {
+  const snapped = snapWorldPointToGrid({ x: point[0], y: 0, z: point[1] })
+  const direction = Math.abs(normal[0]) > Math.abs(normal[1])
+    ? (normal[0] >= 0 ? 'west' : 'east')
+    : (normal[1] >= 0 ? 'south' : 'north')
+  return `${getCellKey(snapped.cell)}:${direction}`
 }

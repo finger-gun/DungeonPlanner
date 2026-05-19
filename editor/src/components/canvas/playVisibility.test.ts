@@ -10,6 +10,7 @@ import {
   computeVisibleCellKeys,
   getOrBuildPlayVisibilityDerivedState,
   getObjectVisibilityState,
+  getRoomVisibilityState,
   isVisiblePlayerOrigin,
   shouldActivatePlayVisibility,
   usePlayVisibility,
@@ -100,25 +101,6 @@ describe('computeVisibleCellKeys', () => {
     expect(computeVisibleCellKeys(paintedCells, wallOpenings, [[0, 0]], 3)).toEqual(
       expect.arrayContaining(['0:0', '1:0']),
     )
-  })
-
-  it('passes through wall segments with open wall state', () => {
-    const paintedCells = makeCells([
-      { cell: [0, 0], roomId: 'room-a' },
-      { cell: [1, 0], roomId: 'room-b' },
-    ])
-
-    expect(
-      computeVisibleCellKeys(
-        paintedCells,
-        {},
-        [[0, 0]],
-        3,
-        [],
-        new Map(),
-        { '0:0:east': { open: true } },
-      ),
-    ).toEqual(expect.arrayContaining(['0:0', '1:0']))
   })
 
   it('shows the occluding cell but hides cells behind a blocking prop', () => {
@@ -402,21 +384,6 @@ describe('castVisibilityMaskRay', () => {
     expect(point[0]).toBeGreaterThan(2.3)
   })
 
-  it('treats opened wall state as a full-width LOS portal', () => {
-    const paintedCells = makeCells([
-      { cell: [0, 0], roomId: 'room-a' },
-      { cell: [1, 0], roomId: 'room-b' },
-      { cell: [2, 0], roomId: 'room-c' },
-      { cell: [1, 1], roomId: 'room-b' },
-      { cell: [2, 1], roomId: 'room-c' },
-    ])
-
-    const point = castVisibilityMaskRay([0, 0], 0.67, paintedCells, {}, 3, [], new Map(), {
-      '0:0:east': { open: true },
-    })
-
-    expect(point[0]).toBeGreaterThan(2.3)
-  })
 })
 
 describe('computeVisibilitySamples', () => {
@@ -746,6 +713,26 @@ describe('getObjectVisibilityState', () => {
     ).toBe('explored')
   })
 
+})
+
+describe('getRoomVisibilityState', () => {
+  it('returns the highest visibility across a rooms painted cells', () => {
+    const paintedCells = makeCells([
+      { cell: [0, 0], roomId: 'room-a' },
+      { cell: [1, 0], roomId: 'room-a' },
+      { cell: [2, 0], roomId: 'room-b' },
+    ])
+
+    expect(getRoomVisibilityState('room-a', paintedCells, (cellKey) => {
+      if (cellKey === '1:0') {
+        return 'explored'
+      }
+      return 'hidden'
+    })).toBe('explored')
+
+    expect(getRoomVisibilityState('room-b', paintedCells, () => 'visible')).toBe('visible')
+    expect(getRoomVisibilityState('missing-room', paintedCells, () => 'visible')).toBe('hidden')
+  })
 })
 
 describe('usePlayVisibility', () => {

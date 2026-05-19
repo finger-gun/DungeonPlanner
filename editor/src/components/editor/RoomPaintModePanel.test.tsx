@@ -13,10 +13,10 @@ describe('RoomPaintModePanel', () => {
     cleanup()
   })
 
-  it('switches into inner walls mode from the room context toolbar', () => {
+  it('switches into spline walls mode from the room context toolbar', () => {
     render(<RoomPaintModePanel sidebarVisible={false} />)
 
-    fireEvent.click(screen.getByRole('button', { name: 'Inner walls' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Spline walls' }))
 
     expect(useDungeonStore.getState().roomEditMode).toBe('walls')
   })

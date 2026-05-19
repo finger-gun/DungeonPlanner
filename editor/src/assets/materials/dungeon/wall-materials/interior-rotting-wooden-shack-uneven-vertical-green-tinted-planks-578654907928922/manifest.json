@@ -1,0 +1,13 @@
+{
+  "id": "interior-rotting-wooden-shack-uneven-vertical-green-tinted-planks-578654907928922",
+  "name": "Rotting Wooden Shack Uneven Vertical Green Tinted Planks 578654907928922",
+  "sourceImage": "/Volumes/roblinas/sd/wall-texture-578654907928922.png",
+  "sourceDepth": "/Volumes/roblinas/sd/wall-depth-578654907928922.png",
+  "size": 1024,
+  "normalStrength": 4,
+  "parallaxScale": 0.12,
+  "parallaxSteps": 16,
+  "bumpScale": 0.16,
+  "parallaxInvert": true,
+  "heightMean": 0.4464
+}

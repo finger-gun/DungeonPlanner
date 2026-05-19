@@ -1,4 +1,12 @@
 export const AUTOFOCUS_RAYCAST_INTERVAL_MS = 120
+export const AUTOFOCUS_RAYCAST_LAYER = 29
+
+type AutofocusRaycasterLayerTarget = {
+  layers: {
+    mask: number
+    enable: (layer: number) => void
+  }
+}
 
 export type AutofocusPoint = {
   x: number
@@ -51,6 +59,14 @@ export function shouldRefreshAutofocusRaycast({
   }
 
   return nowMs - lastSampleTimeMs >= AUTOFOCUS_RAYCAST_INTERVAL_MS
+}
+
+export function configureAutofocusRaycasterLayers(
+  raycaster: AutofocusRaycasterLayerTarget,
+  cameraLayerMask: number,
+) {
+  raycaster.layers.mask = cameraLayerMask
+  raycaster.layers.enable(AUTOFOCUS_RAYCAST_LAYER)
 }
 
 function matchesPoint(previous: AutofocusPoint, next: AutofocusPoint) {

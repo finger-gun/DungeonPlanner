@@ -2,7 +2,7 @@ import type { ContentPackModelTransform } from '../../types'
 import { createDungeonAsset } from '../shared/createDungeonAsset'
 
 const transform: ContentPackModelTransform = {
-  position: [0, 0, -0.5],
+  position: [0, 0, -0.375],
   rotation: [0, 0, 0],
 }
 

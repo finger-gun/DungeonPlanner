@@ -23,17 +23,20 @@ import {
   vec2,
   vec4,
 } from 'three/tsl'
-import { GRID_SIZE, getCellKey, type GridCell } from '../../hooks/useSnapToGrid'
-import { getMirroredWallKey, type InnerWallRecord } from '../../store/manualWalls'
-import { buildOpenWallSegmentSet } from '../../store/openWallSegments'
-import { useDungeonStore, type OpeningRecord } from '../../store/useDungeonStore'
+import { GRID_SIZE } from '../../hooks/useSnapToGrid'
+import { useDungeonStore } from '../../store/useDungeonStore'
 import {
   ACTIVE_FLOOR_VISIBILITY_DOMAINS,
   useActiveFloorSnapshot,
 } from '../../store/useActiveFloorSnapshot'
 import type { PlayVisibility } from './playVisibility'
 import { FogOfWarContext } from './fogOfWarHooks'
-import type { FogOfWarRuntime } from './fogOfWarShared'
+import {
+  buildFogOfWarExploredStates,
+  buildFogOfWarLayout,
+  getFogOfWarDdaMaxSteps,
+  type FogOfWarRuntime,
+} from './fogOfWarShared'
 
 const PLAYER_VISION_RANGE_CELLS = 8
 const VISION_RADIUS_WORLD = PLAYER_VISION_RANGE_CELLS * GRID_SIZE
@@ -47,25 +50,6 @@ const FOG_GRID_MAX_HEIGHT = 128
 const FOG_GRID_MAX_CELLS = FOG_GRID_MAX_WIDTH * FOG_GRID_MAX_HEIGHT
 const GPU_LOS_DDA_MAX_STEPS = getFogOfWarDdaMaxSteps()
 
-type FogOfWarLayout = {
-  minCellX: number
-  minCellZ: number
-  width: number
-  height: number
-  occupancyWidth: number
-  occupancyHeight: number
-  occupancy: Int32Array
-}
-
-type WallDirection = 'north' | 'south' | 'east' | 'west'
-
-const WALL_DIRECTIONS: Record<WallDirection, { delta: GridCell }> = {
-  north: { delta: [0, 1] },
-  south: { delta: [0, -1] },
-  east: { delta: [1, 0] },
-  west: { delta: [-1, 0] },
-}
-
 export function FogOfWarProvider({
   visibility,
   children,
@@ -76,10 +60,11 @@ export function FogOfWarProvider({
   const renderer = useThree((state) => state.gl) as any
   const invalidate = useThree((state) => state.invalidate)
   const exploredCells = useDungeonStore((state) => state.exploredCells)
-  const { paintedCells, wallOpenings, innerWalls, wallSurfaceAssetIds, wallSurfaceProps } = useActiveFloorSnapshot(
+  const { paintedCells, splineWallGraph, wallOpenings, innerWalls, wallSurfaceAssetIds, wallSurfaceProps } = useActiveFloorSnapshot(
     ACTIVE_FLOOR_VISIBILITY_DOMAINS,
     (state) => ({
       paintedCells: state.paintedCells,
+      splineWallGraph: state.splineWallGraph,
       wallOpenings: state.wallOpenings,
       innerWalls: state.innerWalls,
       wallSurfaceAssetIds: state.wallSurfaceAssetIds,
@@ -90,6 +75,7 @@ export function FogOfWarProvider({
     () => buildFogOfWarLayout({
       active: visibility.active,
       paintedCells,
+      splineWallGraph,
       wallOpenings,
       innerWalls,
       wallSurfaceAssetIds,
@@ -98,6 +84,7 @@ export function FogOfWarProvider({
     [
       innerWalls,
       paintedCells,
+      splineWallGraph,
       visibility.active,
       wallOpenings,
       wallSurfaceAssetIds,
@@ -337,264 +324,4 @@ function traceVisibilityRayNode(runtime: FogOfWarRuntime, originWorld: any, targ
   })
 
   return visibility
-}
-
-function getFogOfWarDdaMaxSteps(
-  visionRangeCells = PLAYER_VISION_RANGE_CELLS,
-  occupancySubdivisions = OCCUPANCY_SUBDIVISIONS,
-) {
-  return Math.max(1, Math.ceil(visionRangeCells * occupancySubdivisions * 2))
-}
-
-function buildFogOfWarLayout({
-  active,
-  paintedCells,
-  wallOpenings,
-  innerWalls,
-  wallSurfaceAssetIds,
-  wallSurfaceProps,
-}: {
-  active: boolean
-  paintedCells: ReturnType<typeof useDungeonStore.getState>['paintedCells']
-  wallOpenings: Record<string, OpeningRecord>
-  innerWalls: Record<string, InnerWallRecord>
-  wallSurfaceAssetIds: Record<string, string>
-  wallSurfaceProps: Record<string, Record<string, unknown>>
-}): FogOfWarLayout | null {
-  if (!active) {
-    return null
-  }
-
-  const cells = Object.values(paintedCells)
-  if (cells.length === 0) {
-    return null
-  }
-
-  let minCellX = Number.POSITIVE_INFINITY
-  let maxCellX = Number.NEGATIVE_INFINITY
-  let minCellZ = Number.POSITIVE_INFINITY
-  let maxCellZ = Number.NEGATIVE_INFINITY
-
-  cells.forEach(({ cell }) => {
-    minCellX = Math.min(minCellX, cell[0])
-    maxCellX = Math.max(maxCellX, cell[0])
-    minCellZ = Math.min(minCellZ, cell[1])
-    maxCellZ = Math.max(maxCellZ, cell[1])
-  })
-
-  if (!Number.isFinite(minCellX) || !Number.isFinite(minCellZ)) {
-    return null
-  }
-
-  const width = maxCellX - minCellX + 1
-  const height = maxCellZ - minCellZ + 1
-  if (width > FOG_GRID_MAX_WIDTH || height > FOG_GRID_MAX_HEIGHT) {
-    throw new Error(
-      `Fog-of-war grid ${width}x${height} exceeds fixed storage buffer capacity ${FOG_GRID_MAX_WIDTH}x${FOG_GRID_MAX_HEIGHT}.`,
-    )
-  }
-  const occupancyWidth = width * OCCUPANCY_SUBDIVISIONS + 1
-  const occupancyHeight = height * OCCUPANCY_SUBDIVISIONS + 1
-  const occupancy = new Int32Array(occupancyWidth * occupancyHeight)
-  occupancy.fill(1)
-
-  const openWalls = buildOpenWallSegmentSet(wallOpenings, wallSurfaceAssetIds, wallSurfaceProps)
-  const solidWalls = buildSolidWallSet(innerWalls)
-
-  cells.forEach(({ cell }) => {
-    const [cellX, cellZ] = cell
-    const localX = cellX - minCellX
-    const localZ = cellZ - minCellZ
-    const occupancyX = localX * OCCUPANCY_SUBDIVISIONS
-    const occupancyZ = localZ * OCCUPANCY_SUBDIVISIONS
-    fillOccupancyRect(
-      occupancy,
-      occupancyWidth,
-      occupancyX + 1,
-      occupancyX + OCCUPANCY_SUBDIVISIONS - 1,
-      occupancyZ + 1,
-      occupancyZ + OCCUPANCY_SUBDIVISIONS - 1,
-      0,
-    )
-  })
-
-  cells.forEach(({ cell }) => {
-    const localX = cell[0] - minCellX
-    const localZ = cell[1] - minCellZ
-    const occupancyX = localX * OCCUPANCY_SUBDIVISIONS
-    const occupancyZ = localZ * OCCUPANCY_SUBDIVISIONS
-    const northOpen = canTraverseWall(cell, 'north', paintedCells, openWalls, solidWalls)
-    const southOpen = canTraverseWall(cell, 'south', paintedCells, openWalls, solidWalls)
-    const eastOpen = canTraverseWall(cell, 'east', paintedCells, openWalls, solidWalls)
-    const westOpen = canTraverseWall(cell, 'west', paintedCells, openWalls, solidWalls)
-
-    if (northOpen) {
-      fillOccupancyRect(
-        occupancy,
-        occupancyWidth,
-        occupancyX + 1,
-        occupancyX + OCCUPANCY_SUBDIVISIONS - 1,
-        occupancyZ + OCCUPANCY_SUBDIVISIONS,
-        occupancyZ + OCCUPANCY_SUBDIVISIONS,
-        0,
-      )
-    }
-
-    if (southOpen) {
-      fillOccupancyRect(
-        occupancy,
-        occupancyWidth,
-        occupancyX + 1,
-        occupancyX + OCCUPANCY_SUBDIVISIONS - 1,
-        occupancyZ,
-        occupancyZ,
-        0,
-      )
-    }
-
-    if (eastOpen) {
-      fillOccupancyRect(
-        occupancy,
-        occupancyWidth,
-        occupancyX + OCCUPANCY_SUBDIVISIONS,
-        occupancyX + OCCUPANCY_SUBDIVISIONS,
-        occupancyZ + 1,
-        occupancyZ + OCCUPANCY_SUBDIVISIONS - 1,
-        0,
-      )
-    }
-
-    if (westOpen) {
-      fillOccupancyRect(
-        occupancy,
-        occupancyWidth,
-        occupancyX,
-        occupancyX,
-        occupancyZ + 1,
-        occupancyZ + OCCUPANCY_SUBDIVISIONS - 1,
-        0,
-      )
-    }
-
-    if (northOpen && eastOpen) {
-      occupancy[(occupancyZ + OCCUPANCY_SUBDIVISIONS) * occupancyWidth + (occupancyX + OCCUPANCY_SUBDIVISIONS)] = 0
-    }
-    if (northOpen && westOpen) {
-      occupancy[(occupancyZ + OCCUPANCY_SUBDIVISIONS) * occupancyWidth + occupancyX] = 0
-    }
-    if (southOpen && eastOpen) {
-      occupancy[occupancyZ * occupancyWidth + (occupancyX + OCCUPANCY_SUBDIVISIONS)] = 0
-    }
-    if (southOpen && westOpen) {
-      occupancy[occupancyZ * occupancyWidth + occupancyX] = 0
-    }
-  })
-
-  return {
-    minCellX,
-    minCellZ,
-    width,
-    height,
-    occupancyWidth,
-    occupancyHeight,
-    occupancy,
-  }
-}
-
-function buildFogOfWarExploredStates(
-  layout: FogOfWarLayout | null,
-  exploredCells: Record<string, true>,
-) {
-  if (!layout) {
-    return null
-  }
-
-  const exploredStates = new Int32Array(layout.width * layout.height)
-
-  Object.keys(exploredCells).forEach((cellKey) => {
-    const [cellXString, cellZString] = cellKey.split(':')
-    const cellX = Number(cellXString)
-    const cellZ = Number(cellZString)
-    if (!Number.isFinite(cellX) || !Number.isFinite(cellZ)) {
-      return
-    }
-
-    const localX = cellX - layout.minCellX
-    const localZ = cellZ - layout.minCellZ
-    if (
-      localX < 0 ||
-      localZ < 0 ||
-      localX >= layout.width ||
-      localZ >= layout.height
-    ) {
-      return
-    }
-
-    exploredStates[localZ * layout.width + localX] = 1
-  })
-
-  return exploredStates
-}
-
-function fillOccupancyRect(
-  occupancy: Int32Array,
-  occupancyWidth: number,
-  minX: number,
-  maxX: number,
-  minZ: number,
-  maxZ: number,
-  value: 0 | 1,
-) {
-  for (let z = minZ; z <= maxZ; z += 1) {
-    for (let x = minX; x <= maxX; x += 1) {
-      occupancy[z * occupancyWidth + x] = value
-    }
-  }
-}
-
-function buildSolidWallSet(innerWalls: Record<string, InnerWallRecord>) {
-  const solidWalls = new Set<string>()
-
-  Object.keys(innerWalls).forEach((wallKey) => {
-    solidWalls.add(wallKey)
-    const mirroredWallKey = getMirroredWallKey(wallKey)
-    if (mirroredWallKey) {
-      solidWalls.add(mirroredWallKey)
-    }
-  })
-
-  return solidWalls
-}
-
-function canTraverseWall(
-  cell: GridCell,
-  direction: WallDirection,
-  paintedCells: ReturnType<typeof useDungeonStore.getState>['paintedCells'],
-  openWalls: Set<string>,
-  solidWalls: Set<string>,
-) {
-  const cellKey = getCellKey(cell)
-  const record = paintedCells[cellKey]
-  if (!record) {
-    return false
-  }
-
-  const delta = WALL_DIRECTIONS[direction].delta
-  const neighbor: GridCell = [cell[0] + delta[0], cell[1] + delta[1]]
-  const neighborKey = getCellKey(neighbor)
-  const neighborRecord = paintedCells[neighborKey]
-  if (!neighborRecord) {
-    return false
-  }
-
-  const wallKey = `${cellKey}:${direction}`
-  if (solidWalls.has(wallKey)) {
-    return false
-  }
-
-  if ((record.roomId ?? null) === (neighborRecord.roomId ?? null)) {
-    return true
-  }
-
-  return openWalls.has(wallKey)
 }

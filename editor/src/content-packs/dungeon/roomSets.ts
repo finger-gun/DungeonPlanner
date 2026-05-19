@@ -9,18 +9,8 @@ export const dungeonRoomSets: ContentPackRoomSet[] = [
     previewWallAssetId: 'dungeon.wall_wall',
     wallAssetId: 'dungeon.wall_wall',
     pillarAssetId: 'dungeon.props_pillars_pillar',
-    floor: {
-      kind: 'single',
-      assetId: 'dungeon.floor_floor_tile_small',
-    },
-  },
-  {
-    id: 'timber-frame',
-    name: 'Timber Frame',
-    previewWallAssetId: 'dungeon.wall_wall_scaffold',
-    wallAssetId: 'dungeon.wall_wall_scaffold',
-    pillarAssetId: 'dungeon.props_pillars_pillar',
-    openingAssetId: 'dungeon.wall_wall_doorway_scaffold',
+    wallStyleId: 'dungeon-stone',
+    wallMaterialSetId: 'kaykit-stone',
     floor: {
       kind: 'single',
       assetId: 'dungeon.floor_floor_tile_small',
@@ -28,10 +18,12 @@ export const dungeonRoomSets: ContentPackRoomSet[] = [
   },
   {
     id: 'cave',
-    name: 'Cave',
+    name: 'Rocky Cave',
     previewWallAssetId: 'dungeon.wall_wall_cave',
     wallAssetId: 'dungeon.wall_wall_cave',
     pillarAssetId: 'dungeon.props_pillars_cave_pillar',
+    wallStyleId: 'rocky-cave',
+    wallMaterialSetId: 'rough-rockface-1-pbr-material',
     floor: {
       kind: 'randomized',
       assetIds: [
@@ -41,6 +33,19 @@ export const dungeonRoomSets: ContentPackRoomSet[] = [
         'dungeon.floor_floor_dirt_small_D',
       ],
       randomQuarterTurns: true,
+    },
+  },
+  {
+    id: 'ai-gothic',
+    name: 'AI Gothic',
+    previewWallAssetId: 'dungeon.wall_wall',
+    wallAssetId: 'dungeon.wall_wall',
+    pillarAssetId: 'dungeon.props_pillars_pillar',
+    wallStyleId: 'ai-gothic',
+    wallMaterialSetId: 'ai-gothic-depth-wall',
+    floor: {
+      kind: 'single',
+      assetId: 'dungeon.floor_floor_tile_small',
     },
   },
 ]

@@ -102,7 +102,6 @@ type DebugPanelAssetState = {
   assetBrowser: AssetBrowserState
   selectedObject: DungeonObjectRecord | null
   selectedOpening: OpeningRecord | null
-  selectedWallAssetId?: string | null
 }
 
 export function getDebugPanelAssetId(state: DebugPanelAssetState) {
@@ -112,10 +111,6 @@ export function getDebugPanelAssetId(state: DebugPanelAssetState) {
 
   if (state.selectedOpening?.assetId) {
     return state.selectedOpening.assetId
-  }
-
-  if (state.selectedWallAssetId) {
-    return state.selectedWallAssetId
   }
 
   if (state.tool === 'character') {

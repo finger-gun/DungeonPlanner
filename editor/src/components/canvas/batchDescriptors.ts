@@ -6,6 +6,7 @@ import {
   DEFAULT_FLOOR_RENDER_CHUNK_SIZE,
   getFloorChunkKeyForCell,
 } from '../../store/floorChunkKeys'
+import type { RoomFloorMaskRuntime } from './roomFloorMaskRuntime'
 
 export type ResolvedStaticTileEntry = StaticTileEntry & ResolvedBatchedTileAsset
 
@@ -29,6 +30,9 @@ export type BatchDescriptor = {
   useSecondaryDirectionAttribute: boolean
   shouldRenderBase: boolean
   useLineOfSightPostMask: boolean
+  useRoomFloorMask: boolean
+  roomFloorMaskRuntime: RoomFloorMaskRuntime | null
+  dynamicPointLightsActive: boolean
 }
 
 export type BatchDescriptorBundle = {
@@ -41,6 +45,8 @@ export type BuildBatchDescriptorOptions = {
   fogOfWarEnabled: boolean
   useLineOfSightPostMask: boolean
   lightFlickerEnabled: boolean
+  roomFloorMaskRuntime?: RoomFloorMaskRuntime | null
+  dynamicPointLightsActive?: boolean
 }
 
 function shouldUseBatchedGpuFog(
@@ -55,6 +61,7 @@ function buildBucketKey(
   entry: ResolvedStaticTileEntry,
   usesGpuFog: boolean,
   lightFlickerEnabled: boolean,
+  roomFloorMaskRuntime: RoomFloorMaskRuntime | null,
 ): string {
   const useBakedFlicker =
     lightFlickerEnabled
@@ -73,6 +80,9 @@ function buildBucketKey(
       : 'unlit',
     entry.bakedLightDirectionSecondary ? 'double-direction' : 'single-direction',
     useBakedFlicker ? 'flicker' : 'steady',
+    roomFloorMaskRuntime && entry.variant === 'floor'
+      ? `room-floor-mask:${roomFloorMaskRuntime.signature}`
+      : 'no-room-floor-mask',
   ].join('|')
 }
 
@@ -188,13 +198,22 @@ function buildRenderSignature(
   entries: ResolvedStaticTileEntry[],
   usesGpuFog: boolean,
   useLineOfSightPostMask: boolean,
+  roomFloorMaskRuntime: RoomFloorMaskRuntime | null,
+  dynamicPointLightsActive: boolean,
 ) {
   return entries.map((entry) => [
     entry.key,
     entry.visibility,
     usesGpuFog ? 'gpu-fog' : 'no-fog',
+    serializeOptionalVector(entry.bakedLight),
     buildBakedLightFieldPipelineSignature(entry.bakedLightField),
     useLineOfSightPostMask ? 'post-mask' : 'no-post-mask',
+    entry.variant === 'wall'
+      ? (dynamicPointLightsActive ? 'dynamic-point-lights:on' : 'dynamic-point-lights:off')
+      : 'dynamic-point-lights:n/a',
+    roomFloorMaskRuntime && entry.variant === 'floor'
+      ? `room-floor-mask:${roomFloorMaskRuntime.signature}`
+      : 'no-room-floor-mask',
   ].join('|')).join(';')
 }
 
@@ -212,6 +231,8 @@ export function buildBatchDescriptors(
       fogOfWarEnabled: options,
       useLineOfSightPostMask: false,
       lightFlickerEnabled: false,
+      roomFloorMaskRuntime: null,
+      dynamicPointLightsActive: false,
     }
     : options
   const resolved: ResolvedStaticTileEntry[] = []
@@ -241,7 +262,13 @@ export function buildBatchDescriptors(
   const bucketMap = new Map<string, ResolvedStaticTileEntry[]>()
   resolved.forEach((entry) => {
     const usesGpuFog = shouldUseBatchedGpuFog(entry.variant, resolvedOptions.fogOfWarEnabled)
-    const bucketKey = buildBucketKey(resolvedOptions.floorId, entry, usesGpuFog, resolvedOptions.lightFlickerEnabled)
+    const bucketKey = buildBucketKey(
+      resolvedOptions.floorId,
+      entry,
+      usesGpuFog,
+      resolvedOptions.lightFlickerEnabled,
+      resolvedOptions.roomFloorMaskRuntime ?? null,
+      )
     if (!bucketMap.has(bucketKey)) {
       bucketMap.set(bucketKey, [])
     }
@@ -271,7 +298,13 @@ export function buildBatchDescriptors(
       assetUrl: firstEntry.assetUrl,
       usesGpuFog,
       geometrySignature: buildGeometrySignature(groupEntries),
-      renderSignature: buildRenderSignature(groupEntries, usesGpuFog, resolvedOptions.useLineOfSightPostMask),
+      renderSignature: buildRenderSignature(
+        groupEntries,
+        usesGpuFog,
+        resolvedOptions.useLineOfSightPostMask,
+        resolvedOptions.roomFloorMaskRuntime ?? null,
+        resolvedOptions.dynamicPointLightsActive ?? false,
+      ),
       variant: firstEntry.variant,
       visibility: firstEntry.visibility,
       receiveShadow: firstEntry.receiveShadow,
@@ -281,6 +314,9 @@ export function buildBatchDescriptors(
       useSecondaryDirectionAttribute,
       shouldRenderBase,
       useLineOfSightPostMask: resolvedOptions.useLineOfSightPostMask,
+      useRoomFloorMask: resolvedOptions.roomFloorMaskRuntime != null,
+      roomFloorMaskRuntime: resolvedOptions.roomFloorMaskRuntime ?? null,
+      dynamicPointLightsActive: resolvedOptions.dynamicPointLightsActive ?? false,
     })
   })
 

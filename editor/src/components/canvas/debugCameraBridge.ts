@@ -5,6 +5,7 @@ export type DebugCameraPose = {
 
 let getDebugCameraPoseReader: null | (() => DebugCameraPose) = null
 let getDebugWorldProjector: null | ((point: readonly [number, number, number]) => { x: number; y: number } | null) = null
+let requestDebugRenderReader: null | (() => void) = null
 
 export function registerDebugCameraPoseReader(reader: null | (() => DebugCameraPose)) {
   getDebugCameraPoseReader = reader
@@ -16,10 +17,18 @@ export function registerDebugWorldProjector(
   getDebugWorldProjector = projector
 }
 
+export function registerDebugRenderRequester(requester: null | (() => void)) {
+  requestDebugRenderReader = requester
+}
+
 export function getDebugCameraPose() {
   return getDebugCameraPoseReader?.() ?? null
 }
 
 export function projectDebugWorldPoint(point: readonly [number, number, number]) {
   return getDebugWorldProjector?.(point) ?? null
+}
+
+export function requestDebugRender() {
+  requestDebugRenderReader?.()
 }

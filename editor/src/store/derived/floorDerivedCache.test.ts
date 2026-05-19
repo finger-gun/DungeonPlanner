@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import { createFloorDirtyInfo } from '../floorDirtyDomains'
+import { createEmptySplineWallGraph } from '../splineWallGraph'
 import type { DungeonRoomData } from './floorDerived'
 import {
   clearFloorDerivedCache,
@@ -59,7 +60,7 @@ describe('floorDerivedCache', () => {
     expect(derivedB.bakedLightBuildInput).toBe(derivedA.bakedLightBuildInput)
   })
 
-  it('reuses cached scene bundles and omits render-only tile slices', () => {
+  it('reuses cached scene bundles and preserves visible slices needed by scene-level overlays', () => {
     const data = createFloorData()
     const derivedA = getOrBuildCachedFloorSceneDerivedBundle({
       data,
@@ -77,8 +78,8 @@ describe('floorDerivedCache', () => {
     expect(derivedB.topLevelObjects).toBe(derivedA.topLevelObjects)
     expect(derivedB.childrenByParent).toBe(derivedA.childrenByParent)
     expect(derivedB.bakedLightBuildInput).toBe(derivedA.bakedLightBuildInput)
-    expect('visiblePaintedCellRecords' in derivedB).toBe(false)
-    expect('visibleOpenings' in derivedB).toBe(false)
+    expect(derivedB.visiblePaintedCellRecords).toBe(derivedA.visiblePaintedCellRecords)
+    expect(derivedB.visibleOpenings).toBe(derivedA.visibleOpenings)
   })
 
   it('keeps opening-derived state stable across localized room paints without opening changes', () => {
@@ -174,8 +175,11 @@ function createFloorData(): DungeonRoomData {
       },
     },
     floorTileAssetIds: {},
+    wallStyleAssignments: {},
+    wallCoreAssignments: {},
     wallSurfaceAssetIds: {},
     wallSurfaceProps: {},
+    splineWallGraph: createEmptySplineWallGraph(),
     globalFloorAssetId: null,
     globalWallAssetId: null,
   }

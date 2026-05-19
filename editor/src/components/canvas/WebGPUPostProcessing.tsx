@@ -29,7 +29,12 @@ import {
 import { useDungeonStore } from '../../store/useDungeonStore'
 import { getRegisteredObject, useObjectRegistryVersion } from './objectRegistry'
 import { getAutofocusDistance, resolveAutofocusTarget } from './autofocusTarget'
-import { getWebGpuPostProcessingPipeline } from './webgpuPostProcessingMode'
+import { configureAutofocusRaycasterLayers } from './autofocusRaycast'
+import {
+  applyWebGpuScenePassStencilSupport,
+  getWebGpuPostProcessingPipeline,
+  WEBGPU_SCENE_PASS_OPTIONS,
+} from './webgpuPostProcessingMode'
 import { traceBuildPerf } from '../../performance/runtimeBuildTrace'
 
 export function WebGPUPostProcessing() {
@@ -113,7 +118,11 @@ export function WebGPUPostProcessing() {
 
     // Single shared scene pass — tiltShift, LoS, and outline all read from
     // this one node so the scene is only rendered once per frame.
-    const baseScenePass = pass(scene as any, camera as any) as any
+    const baseScenePass = pass(scene as any, camera as any, WEBGPU_SCENE_PASS_OPTIONS) as any
+    applyWebGpuScenePassStencilSupport(
+      baseScenePass,
+      Reflect.get(renderer as object, 'reversedDepthBuffer') === true,
+    )
     const baseSceneColor = baseScenePass.getTextureNode() as any
     const baseSceneDepth = baseScenePass.getTextureNode('depth') as any
     const baseSceneViewZ = (camera as any).isOrthographicCamera
@@ -265,7 +274,7 @@ export function WebGPUPostProcessing() {
     }
 
     const raycaster = focusRaycasterRef.current
-    raycaster.layers.mask = (cam as any).layers.mask
+    configureAutofocusRaycasterLayers(raycaster, (cam as any).layers.mask)
     raycaster.setFromCamera(focusNdcRef.current, cam as any)
 
     const hit = raycaster

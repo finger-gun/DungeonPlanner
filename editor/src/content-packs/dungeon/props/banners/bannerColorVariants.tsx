@@ -27,7 +27,7 @@ export const ALL_PLAIN_BANNER_SWATCHES = buildDungeonColorVariants({
 
 export const BANNER_WALL_CONNECTORS = [
   {
-    point: [0, 0, 0.5] as const,
+    point: [0, 0, 0.7] as const,
     type: 'WALL' as const,
   },
 ]

@@ -5,6 +5,8 @@ import type { SerializableState } from './serialization'
 import type { FloorRecord } from './useDungeonStore'
 import { DEFAULT_POST_PROCESSING_SETTINGS } from '../postprocessing/tiltShiftMath'
 import { DEFAULT_OUTDOOR_TERRAIN_STYLE } from './outdoorTerrainStyles'
+import { createEmptySplineWallGraph, upsertSplineWallGraphRoomPath } from './splineWallGraph'
+import { createSplineWallSegmentSideKey } from './wallStyleAssignments'
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 
@@ -16,6 +18,9 @@ function emptyFloorSnapshot() {
   return {
     tool: 'select' as const,
     activeRoomSetId: 'dungeon',
+    activeWallMaterialSetId: 'kaykit-stone',
+    activeInteriorWallStyleId: 'dungeon-stone',
+    activeExteriorWallStyleId: 'dungeon-stone',
     selectedAssetIds: { floor: null, wall: null, prop: null, opening: null, player: null },
     selection: null,
     layers: { default: { id: 'default', name: 'Default', visible: true, locked: false } },
@@ -28,11 +33,14 @@ function emptyFloorSnapshot() {
     outdoorTerrainStyleCells: {},
     exploredCells: {},
     floorTileAssetIds: {},
+    wallStyleAssignments: {},
+    wallCoreAssignments: {},
     wallSurfaceAssetIds: {},
     wallSurfaceProps: {},
     placedObjects: {},
     wallOpenings: {},
     innerWalls: {},
+    splineWallGraph: createEmptySplineWallGraph(),
     occupancy: {},
     nextRoomNumber: 1,
   }
@@ -113,6 +121,80 @@ describe('serializeDungeon / deserializeDungeon roundtrip', () => {
     expect(result!.outdoorTimeOfDay).toBe(0.8)
   })
 
+  it('preserves spline-owned opening placement data', () => {
+    const state = baseState()
+    state.splineWallGraph = upsertSplineWallGraphRoomPath(createEmptySplineWallGraph(), {
+      roomId: 'room-a',
+      layerId: 'default',
+      nodes: [
+        { position: [0, 0], cornerMode: 'square', cornerAmount: 0 },
+        { position: [2, 2], cornerMode: 'square', cornerAmount: 0 },
+        { position: [0, 4], cornerMode: 'square', cornerAmount: 0 },
+      ],
+    })
+    state.wallOpenings = {
+      'opening-a': {
+        id: 'opening-a',
+        assetId: 'core.opening_door_custom',
+        wallKey: '1:1:south',
+        width: 1,
+        segmentId: 'room-a:path:0:segment:0',
+        segmentStartRatio: 0.35,
+        segmentEndRatio: 0.65,
+        flipped: false,
+        objectProps: {},
+        layerId: 'default',
+        source: 'manual',
+      },
+    }
+    state.floors!['floor-1']!.snapshot.splineWallGraph = state.splineWallGraph
+    state.floors!['floor-1']!.snapshot.wallOpenings = state.wallOpenings
+
+    const result = deserializeDungeon(serializeDungeon(state))
+
+    expect(result?.wallOpenings['opening-a']).toMatchObject({
+      segmentId: 'room-a:path:0:segment:0',
+      segmentStartRatio: 0.35,
+      segmentEndRatio: 0.65,
+    })
+  })
+
+  it('hydrates missing spline opening ownership on load when a graph-backed wall exists', () => {
+    const state = baseState()
+    state.splineWallGraph = upsertSplineWallGraphRoomPath(createEmptySplineWallGraph(), {
+      roomId: 'room-a',
+      layerId: 'default',
+      nodes: [
+        { position: [0, 0], cornerMode: 'square', cornerAmount: 0 },
+        { position: [2, 2], cornerMode: 'square', cornerAmount: 0 },
+        { position: [0, 4], cornerMode: 'square', cornerAmount: 0 },
+      ],
+    })
+    state.wallOpenings = {
+      'opening-a': {
+        id: 'opening-a',
+        assetId: null,
+        wallKey: '1:1:south',
+        width: 1,
+        segmentId: null,
+        segmentStartRatio: null,
+        segmentEndRatio: null,
+        flipped: false,
+        objectProps: {},
+        layerId: 'default',
+        source: 'manual',
+      },
+    }
+    state.floors!['floor-1']!.snapshot.splineWallGraph = state.splineWallGraph
+    state.floors!['floor-1']!.snapshot.wallOpenings = state.wallOpenings
+
+    const result = deserializeDungeon(serializeDungeon(state))
+
+    expect(result?.wallOpenings['opening-a']?.segmentId).toBe('room-a:path:0:segment:0')
+    expect(result?.wallOpenings['opening-a']?.segmentStartRatio).not.toBeNull()
+    expect(result?.wallOpenings['opening-a']?.segmentEndRatio).not.toBeNull()
+  })
+
   it('preserves outdoor terrain brush settings', () => {
     const state = baseState()
     state.mapMode = 'outdoor'
@@ -156,6 +238,7 @@ describe('serializeDungeon / deserializeDungeon roundtrip', () => {
       name: 'Cave Room',
       layerId: 'default',
       roomSetId: 'cave',
+      wallMaterialSetId: 'rough-rockface-1-pbr-material',
       floorAssetId: null,
       wallAssetId: null,
     }
@@ -165,6 +248,66 @@ describe('serializeDungeon / deserializeDungeon roundtrip', () => {
     expect(result).not.toBeNull()
     expect(result!.activeRoomSetId).toBe('cave')
     expect(result!.rooms['room-1']?.roomSetId).toBe('cave')
+    expect(result!.rooms['room-1']?.wallMaterialSetId).toBe('rough-rockface-1-pbr-material')
+  })
+
+  it('preserves the active wall material set selection', () => {
+    const state = baseState()
+    state.activeWallMaterialSetId = 'wedged-cobblestone'
+    state.floors!['floor-1'].snapshot.activeWallMaterialSetId = 'wedged-cobblestone'
+
+    const result = deserializeDungeon(serializeDungeon(state))
+
+    expect(result).not.toBeNull()
+    expect(result!.activeWallMaterialSetId).toBe('wedged-cobblestone')
+    expect(result!.floors?.['floor-1']?.snapshot.activeWallMaterialSetId).toBe('wedged-cobblestone')
+  })
+
+  it('preserves active interior and exterior wall style selections', () => {
+    const state = baseState()
+    state.activeInteriorWallStyleId = 'rocky-cave'
+    state.activeExteriorWallStyleId = 'ai-gothic'
+    state.floors!['floor-1'].snapshot.activeInteriorWallStyleId = 'rocky-cave'
+    state.floors!['floor-1'].snapshot.activeExteriorWallStyleId = 'ai-gothic'
+
+    const result = deserializeDungeon(serializeDungeon(state))
+
+    expect(result).not.toBeNull()
+    expect(result!.activeInteriorWallStyleId).toBe('rocky-cave')
+    expect(result!.activeExteriorWallStyleId).toBe('ai-gothic')
+    expect(result!.floors?.['floor-1']?.snapshot.activeInteriorWallStyleId).toBe('rocky-cave')
+    expect(result!.floors?.['floor-1']?.snapshot.activeExteriorWallStyleId).toBe('ai-gothic')
+  })
+
+  it('preserves per-segment-side wall style assignments', () => {
+    const state = baseState()
+    state.wallStyleAssignments = {
+      [createSplineWallSegmentSideKey('room-a:path:0:segment:0', 'left')]: 'stone-keep',
+      [createSplineWallSegmentSideKey('room-a:path:0:segment:0', 'right')]: 'manor-plaster',
+    }
+    state.wallCoreAssignments = {
+      'room-a:path:0:segment:0': 'manor-plaster',
+    }
+    state.floors!['floor-1']!.snapshot.wallStyleAssignments = { ...state.wallStyleAssignments }
+    state.floors!['floor-1']!.snapshot.wallCoreAssignments = { ...state.wallCoreAssignments }
+
+    const result = deserializeDungeon(serializeDungeon(state))
+
+    expect(result).not.toBeNull()
+    expect(result!.wallStyleAssignments).toEqual({
+      [createSplineWallSegmentSideKey('room-a:path:0:segment:0', 'left')]: 'stone-keep',
+      [createSplineWallSegmentSideKey('room-a:path:0:segment:0', 'right')]: 'manor-plaster',
+    })
+    expect(result!.floors?.['floor-1']?.snapshot.wallStyleAssignments).toEqual({
+      [createSplineWallSegmentSideKey('room-a:path:0:segment:0', 'left')]: 'stone-keep',
+      [createSplineWallSegmentSideKey('room-a:path:0:segment:0', 'right')]: 'manor-plaster',
+    })
+    expect(result!.wallCoreAssignments).toEqual({
+      'room-a:path:0:segment:0': 'manor-plaster',
+    })
+    expect(result!.floors?.['floor-1']?.snapshot.wallCoreAssignments).toEqual({
+      'room-a:path:0:segment:0': 'manor-plaster',
+    })
   })
 
   it('preserves blocked cells', () => {
@@ -237,6 +380,66 @@ describe('serializeDungeon / deserializeDungeon roundtrip', () => {
     const wallSurfaceAssetIds = result!.wallSurfaceAssetIds ?? result!.floors?.['floor-1']?.snapshot?.wallSurfaceAssetIds
     expect(floorTileAssetIds?.['2:3']).toBe('dungeon.floor_floor_tile_small_broken_A')
     expect(wallSurfaceAssetIds?.['2:3:north']).toBe('dungeon.wall_wall')
+  })
+
+  it('preserves spline wall graphs across serialization', () => {
+    const state = baseState()
+    state.floors!['floor-1'].snapshot.splineWallGraph = {
+      nodes: {
+        'room-1:path:0:node:0': {
+          id: 'room-1:path:0:node:0',
+          position: [0, 0],
+          layerId: 'default',
+          roomId: 'room-1',
+          cornerMode: 'diagonal',
+          cornerAmount: 1,
+        },
+        'room-1:path:0:node:1': {
+          id: 'room-1:path:0:node:1',
+          position: [2, 0],
+          layerId: 'default',
+          roomId: 'room-1',
+        },
+      },
+      segments: {
+        'room-1:path:0:segment:0': {
+          id: 'room-1:path:0:segment:0',
+          pathId: 'room-1:path:0',
+          startNodeId: 'room-1:path:0:node:0',
+          endNodeId: 'room-1:path:0:node:1',
+          layerId: 'default',
+          roomId: 'room-1',
+          wallKey: '0:0:north',
+          wallHeight: null,
+          wallThickness: null,
+          cutouts: [],
+        },
+      },
+      paths: {
+        'room-1:path:0': {
+          id: 'room-1:path:0',
+          layerId: 'default',
+          roomId: 'room-1',
+          closed: false,
+          nodeIds: ['room-1:path:0:node:0', 'room-1:path:0:node:1'],
+          segmentIds: ['room-1:path:0:segment:0'],
+        },
+      },
+    }
+
+    const result = deserializeDungeon(serializeDungeon(state))
+
+    expect(result?.splineWallGraph.paths['room-1:path:0']).toMatchObject({
+      roomId: 'room-1',
+      nodeIds: ['room-1:path:0:node:0', 'room-1:path:0:node:1'],
+    })
+    expect(result?.floors?.['floor-1']?.snapshot.splineWallGraph.nodes['room-1:path:0:node:1']).toMatchObject({
+      position: [2, 0],
+    })
+    expect(result?.floors?.['floor-1']?.snapshot.splineWallGraph.nodes['room-1:path:0:node:0']).toMatchObject({
+      cornerMode: 'diagonal',
+      cornerAmount: 1,
+    })
   })
 
   it('preserves placed objects', () => {

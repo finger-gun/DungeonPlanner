@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { createEmptySplineWallGraph } from '../splineWallGraph'
 import {
   buildBakedLightBuildInput,
   buildFloorDerivedBundle,
@@ -86,8 +87,11 @@ describe('buildFloorDerivedBundle', () => {
         },
       },
       floorTileAssetIds: {},
+      wallStyleAssignments: {},
+      wallCoreAssignments: {},
       wallSurfaceAssetIds: {},
       wallSurfaceProps: {},
+      splineWallGraph: createEmptySplineWallGraph(),
       globalFloorAssetId: null,
       globalWallAssetId: null,
     }
@@ -142,8 +146,11 @@ describe('buildFloorDerivedBundle', () => {
         },
       },
       floorTileAssetIds: {},
+      wallStyleAssignments: {},
+      wallCoreAssignments: {},
       wallSurfaceAssetIds: {},
       wallSurfaceProps: {},
+      splineWallGraph: createEmptySplineWallGraph(),
       globalFloorAssetId: null,
       globalWallAssetId: null,
     }

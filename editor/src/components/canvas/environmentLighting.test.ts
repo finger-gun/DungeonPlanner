@@ -2,6 +2,22 @@ import { describe, expect, it } from 'vitest'
 import { getEnvironmentLightingState } from './environmentLighting'
 
 describe('getEnvironmentLightingState', () => {
+  it('uses neutral light colors at outdoor noon', () => {
+    const noon = getEnvironmentLightingState('outdoor', 0.5)
+
+    expect(noon.ambientColor.getHexString()).toBe('ffffff')
+    expect(noon.keyColor.getHexString()).toBe('ffffff')
+    expect(noon.fillColor.getHexString()).toBe('ffffff')
+  })
+
+  it('uses neutral light colors at indoor noon', () => {
+    const noon = getEnvironmentLightingState('indoor', 0.5)
+
+    expect(noon.ambientColor.getHexString()).toBe('ffffff')
+    expect(noon.keyColor.getHexString()).toBe('ffffff')
+    expect(noon.fillColor.getHexString()).toBe('ffffff')
+  })
+
   it('keeps outdoor noon brighter than outdoor night', () => {
     const noon = getEnvironmentLightingState('outdoor', 0.5)
     const night = getEnvironmentLightingState('outdoor', 1)

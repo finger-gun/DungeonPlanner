@@ -95,6 +95,32 @@ export {
 } from './FloorLightComputePrototype'
 
 export {
+  canDispatchSplineWallComputePrototype,
+  cloneStorageBufferAttributeArray,
+  dispatchSplineWallComputePrototype,
+  type SplineWallComputeRenderer,
+} from './SplineWallComputeRuntime'
+
+export {
+  createSplineWallComputePrototypeDispatch,
+  DEFAULT_SPLINE_WALL_COMPUTE_WORKGROUP_SIZE,
+  extractSplineWallComputePrototypeGeometry,
+  getSplineWallComputePrototypeTransferables,
+  packSplineWallComputePrototype,
+  populateSplineWallComputePrototypeFallbackOutputs,
+  prepareSplineWallComputePrototype,
+  collectSplineWallComputePrototypeDebugCutouts,
+  type PreparedSplineWallComputePrototype,
+  type SplineWallComputePrototypeBuffer,
+  type SplineWallComputePrototypeDebugCutout,
+  type SplineWallComputePrototypeDispatch,
+  type SplineWallComputePrototypeIndexBuffer,
+  type SplineWallComputePrototypeOptions,
+  type SplineWallComputePrototypePackedBuffers,
+  type SplineWallComputePrototypePackedJob,
+} from './SplineWallComputePrototype'
+
+export {
   TileGpuStream,
   getTileGpuStreamMountId,
   type TilePageStatus,

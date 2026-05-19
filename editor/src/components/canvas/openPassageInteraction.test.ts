@@ -1,9 +1,14 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
+import { buildSplineWallOpeningPlacement } from '../../store/openingPlacement'
 import {
   getEligibleOpenPassageWallKey,
   shouldAllowObjectContextDelete,
 } from './openPassageInteraction'
 import type { PaintedCellRecord } from '../../store/useDungeonStore'
+
+vi.mock('../../store/openingPlacement', () => ({
+  buildSplineWallOpeningPlacement: vi.fn(),
+}))
 
 describe('openPassageInteraction', () => {
   it('limits object context deletion to prop placement and character tools', () => {
@@ -38,5 +43,27 @@ describe('openPassageInteraction', () => {
       paintedCells,
       new Set(),
     )).toBeNull()
+  })
+
+  it('uses spline wall placement when a graph-backed wall is available', () => {
+    vi.mocked(buildSplineWallOpeningPlacement).mockReturnValueOnce({
+      wallKey: '0:0:east',
+      width: 1,
+      position: [0, 0, 0],
+      rotation: [0, 0, 0],
+      spanWorldWidth: 1,
+      valid: true,
+      segmentId: 'segment-1',
+      segmentStartRatio: 0.25,
+      segmentEndRatio: 0.5,
+    })
+
+    expect(getEligibleOpenPassageWallKey(
+      { x: 1.5, y: 0, z: 1.5 },
+      {},
+      new Set(['0:0:east']),
+      { nodes: {}, segments: {}, paths: {} },
+      {} as never,
+    )).toBe('0:0:east')
   })
 })

@@ -4,10 +4,14 @@ import {
 } from '../content-packs/registry'
 import { getCellKey, type GridCell } from '../hooks/useSnapToGrid'
 import { getOpeningSegments } from './openingSegments'
-import { WALL_DIRECTIONS } from './wallSegments'
+import { buildSplineWallOpeningPlacement } from './openingPlacement'
+import { createSplineWallQueryCache } from './splineWallQueries'
+import type { SplineWallGraph } from './splineWallGraph'
+import { WALL_DIRECTIONS, wallKeyToWorldPosition } from './wallSegments'
 import type { OpeningRecord, OpeningSource, PaintedCellRecord } from './useDungeonStore'
 
 const GENERATED_SURFACE_DOOR_ASSET_ID = 'dungeon.wall_wall_doorway'
+const GENERATED_SPLINE_DOOR_ASSET_ID = 'core.opening_door_custom'
 const GENERATED_SURFACE_DOOR_MARKER = 'generatedConnector'
 
 type SharedBoundaryUnit = {
@@ -41,6 +45,8 @@ export type ProceduralRoomLayoutInput = {
   wallOpenings: Record<string, OpeningRecord>
   wallSurfaceAssetIds: Record<string, string>
   wallSurfaceProps: Record<string, Record<string, unknown>>
+  graphBackedRoomIds?: ReadonlySet<string>
+  splineWallGraph?: SplineWallGraph | null
   selection: string | null
   createOpeningId: () => string
 }
@@ -156,9 +162,12 @@ export function reconcileProceduralRoomLayout({
   wallOpenings,
   wallSurfaceAssetIds,
   wallSurfaceProps,
+  graphBackedRoomIds = new Set(),
+  splineWallGraph = { nodes: {}, segments: {}, paths: {} },
   selection,
   createOpeningId,
 }: ProceduralRoomLayoutInput): ProceduralRoomLayoutResult {
+  const resolvedSplineWallGraph = splineWallGraph ?? { nodes: {}, segments: {}, paths: {} }
   const manualOpenings = Object.values(wallOpenings).filter((opening) => opening.source !== 'generated')
   const generatedOpenings = Object.values(wallOpenings).filter((opening) => opening.source === 'generated')
   const wallOpeningsById: Record<string, OpeningRecord> = Object.fromEntries(
@@ -170,6 +179,8 @@ export function reconcileProceduralRoomLayout({
     manualOpenings,
     wallSurfaceAssetIds,
     wallSurfaceProps,
+    graphBackedRoomIds,
+    resolvedSplineWallGraph,
   )
   let nextSelection = selection
 
@@ -303,6 +314,26 @@ function buildGeneratedConnectorIntents(
   manualOpenings: OpeningRecord[],
   wallSurfaceAssetIds: Record<string, string>,
   wallSurfaceProps: Record<string, Record<string, unknown>>,
+  graphBackedRoomIds: ReadonlySet<string>,
+  splineWallGraph: SplineWallGraph,
+): GeneratedConnectorIntent[] {
+  return buildGeneratedLegacyConnectorIntents(
+    paintedCells,
+    manualOpenings,
+    wallSurfaceAssetIds,
+    wallSurfaceProps,
+    graphBackedRoomIds,
+    splineWallGraph,
+  )
+}
+
+function buildGeneratedLegacyConnectorIntents(
+  paintedCells: Record<string, PaintedCellRecord>,
+  manualOpenings: OpeningRecord[],
+  wallSurfaceAssetIds: Record<string, string>,
+  wallSurfaceProps: Record<string, Record<string, unknown>>,
+  graphBackedRoomIds: ReadonlySet<string>,
+  splineWallGraph: SplineWallGraph,
 ): GeneratedConnectorIntent[] {
   const generatedSurfaceDoorAssetId = resolveGeneratedSurfaceDoorAssetId()
   const manualOpeningSegments = manualOpenings.map((opening) =>
@@ -316,6 +347,7 @@ function buildGeneratedConnectorIntents(
       .map(([wallKey]) => wallKey),
   )
   const occupiedRoomSides = new Set<RoomSideKey>()
+  const queryCache = createSplineWallQueryCache(splineWallGraph)
 
   buildSharedBoundaryRuns(paintedCells).forEach((run) => {
     const runSegments = new Set(run.wallKeys)
@@ -330,7 +362,6 @@ function buildGeneratedConnectorIntents(
   })
 
   const intents: GeneratedConnectorIntent[] = []
-
   buildSharedBoundaryRuns(paintedCells)
     .filter((run) => {
       const runSegments = new Set(run.wallKeys)
@@ -353,6 +384,10 @@ function buildGeneratedConnectorIntents(
       const intent = buildGeneratedConnectorIntent(
         run,
         generatedSurfaceDoorAssetId,
+        run.roomIds.every((roomId) => graphBackedRoomIds.has(roomId)),
+        splineWallGraph,
+        queryCache,
+        paintedCells,
       )
       if (!intent) {
         return
@@ -368,11 +403,21 @@ function buildGeneratedConnectorIntents(
 function buildGeneratedConnectorIntent(
   run: SharedBoundaryRun,
   generatedSurfaceDoorAssetId: string | undefined,
+  useGraphOpening: boolean,
+  splineWallGraph: SplineWallGraph,
+  queryCache: ReturnType<typeof createSplineWallQueryCache>,
+  paintedCells: Record<string, PaintedCellRecord>,
 ): GeneratedConnectorIntent | null {
   if (run.wallKeys.length === 1) {
     const wallKey = run.wallKeys[0]
     if (!wallKey) {
       return null
+    }
+
+    if (useGraphOpening) {
+      return {
+        opening: buildGeneratedGraphConnectorOpening(run, wallKey, null, splineWallGraph, queryCache, paintedCells),
+      }
     }
 
     return {
@@ -397,12 +442,66 @@ function buildGeneratedConnectorIntent(
     return null
   }
 
+  if (useGraphOpening) {
+    return {
+      opening: buildGeneratedGraphConnectorOpening(
+        run,
+        wallKey,
+        GENERATED_SPLINE_DOOR_ASSET_ID,
+        splineWallGraph,
+        queryCache,
+        paintedCells,
+      ),
+    }
+  }
+
   return {
     surfaceDoor: {
       wallKey,
       assetId: generatedSurfaceDoorAssetId,
     },
   }
+}
+
+function buildGeneratedGraphConnectorOpening(
+  run: SharedBoundaryRun,
+  wallKey: string,
+  assetId: string | null,
+  splineWallGraph: SplineWallGraph,
+  queryCache: ReturnType<typeof createSplineWallQueryCache>,
+  paintedCells: Record<string, PaintedCellRecord>,
+) {
+  const wallTransform = wallKeyToWorldPosition(wallKey)
+  const placement = wallTransform
+    ? buildSplineWallOpeningPlacement(
+        { x: wallTransform.position[0], z: wallTransform.position[2] },
+        splineWallGraph,
+        queryCache,
+        paintedCells,
+        assetId,
+      )
+    : null
+
+  return buildGeneratedSplineOpeningRecord(assetId, wallKey, run.layerId, placement)
+}
+
+function buildGeneratedSplineOpeningRecord(
+  assetId: string | null,
+  wallKey: string,
+  layerId: string,
+  placement: ReturnType<typeof buildSplineWallOpeningPlacement> | null,
+) {
+  return {
+    assetId,
+    wallKey: placement?.wallKey ?? wallKey,
+    width: 1,
+    segmentId: placement?.segmentId ?? null,
+    segmentStartRatio: placement?.segmentStartRatio ?? null,
+    segmentEndRatio: placement?.segmentEndRatio ?? null,
+    flipped: false,
+    layerId,
+    source: 'generated' satisfies OpeningSource,
+  } satisfies Omit<OpeningRecord, 'id'>
 }
 
 function buildRoomSideKey(roomId: string, direction: string, line: number, layerId: string): RoomSideKey {
@@ -429,6 +528,9 @@ function buildOpeningSignature(opening: Omit<OpeningRecord, 'id'> | OpeningRecor
     opening.assetId ?? 'open',
     opening.wallKey,
     opening.width,
+    opening.segmentId ?? 'no-segment',
+    opening.segmentStartRatio ?? 'no-start',
+    opening.segmentEndRatio ?? 'no-end',
     opening.flipped ? 'flipped' : 'normal',
     opening.layerId,
     opening.source ?? 'manual',

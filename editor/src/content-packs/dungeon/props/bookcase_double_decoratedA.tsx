@@ -12,7 +12,7 @@ export const dungeonBookcaseDoubleDecoratedaAsset = createDungeonAsset({
     snapsTo: 'GRID',
     connectors: [
       {
-        point: [0, 0, 0.125],
+        point: [0, 0, -0.70],
         type: 'WALL',
         rotation: [0, 0, 0],
       },

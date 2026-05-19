@@ -1,6 +1,7 @@
 import * as THREE from 'three'
 import { describe, expect, it } from 'vitest'
 import { GRID_SIZE } from '../hooks/useSnapToGrid'
+import { upsertSplineWallGraphRoomPath } from '../store/splineWallGraph'
 import type {
   DungeonObjectRecord,
   PaintedCells,
@@ -22,9 +23,10 @@ import {
   prepareBakedFloorLightFieldBuild,
   prepareBakedFloorLightFieldWorkerBuild,
   pruneBakedFloorLightFieldCache,
-  getStaticLightSourcesForBounds,
+  getRelevantStaticLightSourcesForBounds,
   sampleStaticLightAtWorldPosition,
   sampleBakedLightFieldAtWorldPosition,
+  sampleOccludedSurfaceLightAtWorldPosition,
   type ResolvedDungeonLightSource,
 } from './dungeonLightField'
 import { doesLineIntersectClosedWall, getWallWorldSegment } from './dungeonLightFieldOcclusion'
@@ -439,6 +441,54 @@ describe('dungeonLightField', () => {
       [3, 0, 3],
       new Set(['0:0:east']),
     )).toBe(true)
+  })
+
+  it('blocks baked light across diagonal spline walls', () => {
+    clearBakedFloorLightFieldCache()
+
+    const paintedCells: PaintedCells = {
+      '0:0': { cell: [0, 0], layerId: 'default', roomId: 'room-a' },
+      '0:1': { cell: [0, 1], layerId: 'default', roomId: 'room-a' },
+      '0:2': { cell: [0, 2], layerId: 'default', roomId: 'room-a' },
+      '0:3': { cell: [0, 3], layerId: 'default', roomId: 'room-a' },
+      '1:1': { cell: [1, 1], layerId: 'default', roomId: 'room-a' },
+      '1:2': { cell: [1, 2], layerId: 'default', roomId: 'room-a' },
+      '1:3': { cell: [1, 3], layerId: 'default', roomId: 'room-a' },
+      '2:2': { cell: [2, 2], layerId: 'default', roomId: 'room-a' },
+      '2:3': { cell: [2, 3], layerId: 'default', roomId: 'room-a' },
+      '3:3': { cell: [3, 3], layerId: 'default', roomId: 'room-a' },
+    }
+    const splineWallGraph = upsertSplineWallGraphRoomPath({
+      nodes: {},
+      segments: {},
+      paths: {},
+    }, {
+      roomId: 'room-a',
+      layerId: 'default',
+      nodes: [
+        { position: [0, 0], cornerMode: 'square', cornerAmount: 0 },
+        { position: [4, 4], cornerMode: 'square', cornerAmount: 0 },
+        { position: [0, 4], cornerMode: 'square', cornerAmount: 0 },
+      ],
+    })
+
+    const field = getOrBuildBakedFloorLightField({
+      floorId: 'floor-diagonal-occlusion',
+      floorCells: Object.values(paintedCells).map((record) => record.cell),
+      staticLightSources: [createResolvedLightSource('torch', [1, 1.5, 5])],
+      occlusionInput: {
+        paintedCells,
+        splineWallGraph,
+        wallOpenings: {},
+        innerWalls: {},
+      },
+    })
+
+    const visibleSample = sampleBakedLightFieldAtWorldPosition(field, [1, 0, 5])
+    const blockedSample = sampleBakedLightFieldAtWorldPosition(field, [5, 0, 1])
+
+    expect(visibleSample[0]).toBeGreaterThan(0.2)
+    expect(blockedSample).toEqual([0, 0, 0])
   })
 
   it('caps overlapping baked light intensity at the configured ceiling', () => {
@@ -953,6 +1003,65 @@ describe('dungeonLightField', () => {
     expect(middle[0]).toBeLessThan(right[0])
   })
 
+  it('samples surface probe light from the interpolated field instead of flat cell colors', () => {
+    clearBakedFloorLightFieldCache()
+
+    const field = getOrBuildBakedFloorLightField({
+      floorId: 'floor-surface-interpolation',
+      floorCells: [[0, 0], [1, 0]],
+      staticLightSources: [createResolvedLightSource('torch', [3.5, 1.8, 1], {
+        ...TORCH_LIGHT,
+        intensity: 0.9,
+      })],
+    })
+
+    const leftSideOfCell = sampleOccludedSurfaceLightAtWorldPosition(field, [0.5, 0, 0.5])
+    const rightSideOfCell = sampleOccludedSurfaceLightAtWorldPosition(field, [1.5, 0, 0.5])
+
+    expect(rightSideOfCell[0]).toBeGreaterThan(leftSideOfCell[0])
+  })
+
+  it('removes blocked color channels from smooth surface probe samples', () => {
+    clearBakedFloorLightFieldCache()
+
+    const field = getOrBuildBakedFloorLightField({
+      floorId: 'floor-surface-channel-visibility',
+      floorCells: [[0, 0], [1, 0]],
+      staticLightSources: [
+        createResolvedLightSource('red', [1, 1.5, 1], {
+          ...TORCH_LIGHT,
+          color: '#ff0000',
+          intensity: 1,
+        }),
+        createResolvedLightSource('blue', [3, 1.5, 1], {
+          ...TORCH_LIGHT,
+          color: '#0000ff',
+          intensity: 1,
+        }),
+      ],
+      occlusionInput: {
+        paintedCells: createPaintedCells(),
+        wallOpenings: {},
+        innerWalls: {
+          separator: { wallKey: '0:0:east', layerId: 'default' },
+        },
+      },
+    })
+    const leakedSample = [0.35, 0, 0.7] as const
+    field.cornerSampleByKey['0:0'] = leakedSample
+    field.cornerSampleByKey['1:0'] = leakedSample
+    field.cornerSampleByKey['0:1'] = leakedSample
+    field.cornerSampleByKey['1:1'] = leakedSample
+
+    const samplePosition = [1.45, 1.1, 1] as const
+    const smoothSample = sampleBakedLightFieldAtWorldPosition(field, samplePosition)
+    const occludedSurfaceSample = sampleOccludedSurfaceLightAtWorldPosition(field, samplePosition)
+
+    expect(smoothSample[2]).toBeGreaterThan(0.5)
+    expect(occludedSurfaceSample[0]).toBeGreaterThan(0.1)
+    expect(occludedSurfaceSample[2]).toBeLessThan(0.05)
+  })
+
   it('limits prop probe sampling to lights whose influence overlaps the prop chunks', () => {
     clearBakedFloorLightFieldCache()
     const localProbeLight: PropLight = {
@@ -969,12 +1078,12 @@ describe('dungeonLightField', () => {
       ],
     })
 
-    const localLights = getStaticLightSourcesForBounds(
+    const localLights = getRelevantStaticLightSourcesForBounds(
       field,
       new THREE.Box3(new THREE.Vector3(0.75, 0, 0.75), new THREE.Vector3(1.25, 2, 1.25)),
     )
 
-    expect(localLights.map((lightSource) => lightSource.key)).toEqual(['near'])
+    expect(localLights.map((lightSource: ResolvedDungeonLightSource) => lightSource.key)).toEqual(['near'])
   })
 
   it('only flags props inside dirty light chunks for baked probe recompute', () => {

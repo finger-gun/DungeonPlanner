@@ -19,10 +19,13 @@ type ViewActionKeys =
   | 'setShowGrid'
   | 'setShowLosDebugMask'
   | 'setShowLosDebugRays'
+  | 'setShowRoomFloorMaskDebug'
+  | 'setShowSplineWallCutoutDebug'
   | 'setShowLensFocusDebugPoint'
   | 'setShowChunkDebugOverlay'
   | 'setShowProjectionDebugMesh'
   | 'setShowPropProbeDebug'
+  | 'setShowSurfaceProbeDebug'
   | 'setSlowBuildAnimationDebug'
   | 'setBuildPerformanceTracingEnabled'
   | 'setLightEffectsEnabled'
@@ -161,6 +164,12 @@ export function createDungeonStoreViewActions({
     setShowLosDebugRays: (show) => {
       set((state) => ({ ...state, showLosDebugRays: show }))
     },
+    setShowRoomFloorMaskDebug: (show) => {
+      set((state) => ({ ...state, showRoomFloorMaskDebug: show }))
+    },
+    setShowSplineWallCutoutDebug: (show) => {
+      set((state) => ({ ...state, showSplineWallCutoutDebug: show }))
+    },
     setShowLensFocusDebugPoint: (show) => {
       set((state) => ({ ...state, showLensFocusDebugPoint: show }))
     },
@@ -172,6 +181,9 @@ export function createDungeonStoreViewActions({
     },
     setShowPropProbeDebug: (show) => {
       set((state) => ({ ...state, showPropProbeDebug: show }))
+    },
+    setShowSurfaceProbeDebug: (show) => {
+      set((state) => ({ ...state, showSurfaceProbeDebug: show }))
     },
     setSlowBuildAnimationDebug: (show) => {
       set((state) => ({ ...state, slowBuildAnimationDebug: show }))
