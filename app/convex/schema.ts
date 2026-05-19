@@ -7,6 +7,7 @@ import {
   canonicalPackEntryValidator,
   packDefaultAssetRefsValidator,
   packKindValidator,
+  packSourceProvenanceValidator,
   packVisibilityValidator,
   roleValidator,
 } from './model'
@@ -116,6 +117,7 @@ export default defineSchema({
   actorPacks: defineTable({
     workspaceId: v.id('workspaces'),
     ownerUserId: v.id('users'),
+    systemKey: v.optional(v.string()),
     name: v.string(),
     description: v.optional(v.string()),
     isActive: v.boolean(),
@@ -123,7 +125,8 @@ export default defineSchema({
     updatedAt: v.number(),
   })
     .index('by_ownerUserId', ['ownerUserId'])
-    .index('by_workspaceId', ['workspaceId']),
+    .index('by_workspaceId', ['workspaceId'])
+    .index('by_ownerUserId_and_workspaceId_and_systemKey', ['ownerUserId', 'workspaceId', 'systemKey']),
   packs: defineTable({
     workspaceId: v.id('workspaces'),
     uploaderUserId: v.id('users'),
@@ -137,6 +140,8 @@ export default defineSchema({
     manifestStorageId: v.optional(v.id('_storage')),
     thumbnailStorageId: v.optional(v.id('_storage')),
     defaultAssetRefs: v.optional(packDefaultAssetRefsValidator),
+    domains: v.optional(v.any()),
+    sourceProvenance: v.optional(packSourceProvenanceValidator),
     entries: v.array(canonicalPackEntryValidator),
     createdAt: v.number(),
     updatedAt: v.number(),

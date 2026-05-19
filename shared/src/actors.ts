@@ -23,8 +23,24 @@ export type EditorActorRecord = {
   thumbnailUrl: string | null
   width: number | null
   height: number | null
+  dragonbaneSummary: EditorDragonbaneCharacterSummary | null
   createdAt: string
   updatedAt: string
+}
+
+export type EditorDragonbaneCharacterSummary = {
+  system: 'dragonbane'
+  name: string
+  movement: number
+  hp: { current: number; max: number }
+  wp: { current: number; max: number }
+  conditions: Array<{ id: string; checked: boolean }>
+  weapons: Array<{ ref: string; name: string; damage?: string }>
+  armor: Array<{ ref: string; name: string; rating: number }>
+  carryingLoad: {
+    carried: number
+    capacity: number
+  }
 }
 
 export function buildEditorActorAssetId(actorId: string) {

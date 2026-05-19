@@ -33,9 +33,19 @@ def estimate_background_color(
 def apply_alpha_mask(
     image: Image.Image,
     mask: Image.Image,
+    *,
+    background_color: tuple[int, int, int] | None = None,
 ) -> Image.Image:
     alpha = np.asarray(mask.convert("L"), dtype=np.float32) / 255.0
     rgb = np.asarray(image.convert("RGB"), dtype=np.float32) / 255.0
+
+    if background_color is not None:
+        background = np.asarray(background_color, dtype=np.float32) / 255.0
+        alpha_channel = alpha[..., None]
+        safe_alpha = np.clip(alpha_channel, 1e-3, 1.0)
+        decontaminated = (rgb - (background * (1.0 - alpha_channel))) / safe_alpha
+        edge_pixels = (alpha_channel > 0.0) & (alpha_channel < 1.0)
+        rgb = np.where(edge_pixels, np.clip(decontaminated, 0.0, 1.0), rgb)
 
     rgba = np.dstack((np.clip(rgb, 0.0, 1.0), alpha[..., None]))
     return Image.fromarray((rgba * 255.0).round().astype(np.uint8), mode="RGBA")
@@ -69,6 +79,54 @@ def expand_face_box(face_box: FaceBox, image_size: Tuple[int, int], padding_rati
 def crop_portrait(image: Image.Image, face_box: FaceBox, padding_ratio: float) -> Image.Image:
     crop_box = expand_face_box(face_box, image.size, padding_ratio)
     return image.crop(crop_box)
+
+
+def crop_to_visible_bounds(
+    image: Image.Image,
+    *,
+    alpha_threshold: int = 18,
+    padding: int = 8,
+) -> Image.Image:
+    rgba = image.convert("RGBA")
+    alpha = rgba.getchannel("A").point(lambda value: 255 if value > alpha_threshold else 0)
+    bounds = alpha.getbbox()
+    if bounds is None:
+        return rgba
+
+    left, top, right, bottom = bounds
+    return rgba.crop((
+        max(0, left - padding),
+        max(0, top - padding),
+        min(rgba.width, right + padding),
+        min(rgba.height, bottom + padding),
+    ))
+
+
+def create_alpha_mask_image(image: Image.Image) -> Image.Image:
+    alpha = image.convert("RGBA").getchannel("A")
+    opaque = Image.new("L", alpha.size, 255)
+    return Image.merge("RGBA", (alpha, alpha, alpha, opaque))
+
+
+def create_thumbnail_image(
+    image: Image.Image,
+    *,
+    size: int = 256,
+    contain_ratio: float = 0.84,
+) -> Image.Image:
+    rgba = image.convert("RGBA")
+    thumbnail = Image.new("RGBA", (size, size), (0, 0, 0, 0))
+    scale = min((size * contain_ratio) / max(rgba.width, 1), (size * contain_ratio) / max(rgba.height, 1))
+    resized = rgba.resize(
+        (
+            max(1, int(round(rgba.width * scale))),
+            max(1, int(round(rgba.height * scale))),
+        ),
+        Image.Resampling.LANCZOS,
+    )
+    offset = ((size - resized.width) // 2, (size - resized.height) // 2)
+    thumbnail.paste(resized, offset, resized)
+    return thumbnail
 
 
 def estimate_head_box(

@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { cleanup, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import App from './App'
@@ -29,20 +29,159 @@ const mock = vi.hoisted(() => ({
       'roles.revokeRoleByEmail': vi.fn(),
       'dungeons.issueEditorAccessToken': vi.fn(),
       'dungeons.copyViewerDungeon': vi.fn(),
+      'dungeons.copySharedDungeon': vi.fn(),
       'dungeons.deleteViewerDungeon': vi.fn(),
       'dungeons.saveDungeon': vi.fn(),
     'sessions.createSession': vi.fn(),
     'sessions.joinSessionByCode': vi.fn(),
     'sessions.issueServerAccessTicket': vi.fn(),
     'actors.saveActorPack': vi.fn(),
+    'actors.deleteActorPack': vi.fn(),
     'actors.setActorPackActive': vi.fn(),
     'actors.saveActor': vi.fn(),
     'actors.deleteActor': vi.fn(),
+    'actors.deleteUploadedActorImages': vi.fn(),
+    'characters.saveCharacter': vi.fn(),
+    'characters.deleteCharacter': vi.fn(),
     'sessions.attachCharacterToSession': vi.fn(),
     'packs.generatePackUploadUrl': vi.fn(),
     'packs.savePackRecord': vi.fn(),
     'packs.setPackActive': vi.fn(),
   } as Record<string, ReturnType<typeof vi.fn>>,
+}))
+
+const dragonbaneRulesPack = {
+  _id: 'pack-1',
+  packId: 'core',
+  name: 'Core Pack',
+  kind: 'rules',
+  version: '1.0.0',
+  visibility: 'public',
+  isActive: true,
+  entries: [],
+  defaultAssetRefs: null,
+  manifestStorageId: null,
+  thumbnailStorageId: null,
+  sourceProvenance: {
+    sourceRepository: 'fixture',
+    sourcePath: '.',
+    packVersion: '1.0.0',
+    importedAt: '2026-05-16T00:00:00.000Z',
+    importer: 'dragonbane-unbound',
+  },
+  domains: {
+    dragonbane: {
+      schemaVersion: 1,
+      kins: [{ ref: 'core:kin.human', id: 'human', name: 'Human', movement: 10, playableByPlayers: true }],
+      professions: [
+        {
+          ref: 'core:profession.fighter',
+          id: 'fighter',
+          name: 'Fighter',
+          keyAttributeIds: ['STR'],
+          trainedSkillRefs: ['core:skill.swords'],
+          startingEquipment: {
+            weaponRefs: ['core:weapon.broadsword'],
+            armorRefs: [],
+            itemRefs: [],
+            copper: 10,
+          },
+        },
+      ],
+      skills: [
+        { ref: 'core:skill.swords', id: 'swords', name: 'Swords', attributeId: 'STR', isSecondary: false },
+        { ref: 'core:skill.lore', id: 'lore', name: 'Lore', attributeId: 'INT', isSecondary: false },
+      ],
+      rules: {
+        characterCreation: {
+          ref: 'core:rule.character-creation',
+          id: 'character-creation',
+          ageSkillSlots: {
+            Young: { total: 2, fromProfession: 1, freeChoice: 1 },
+            'Middle-Aged': { total: 2, fromProfession: 1, freeChoice: 1 },
+            Old: { total: 2, fromProfession: 1, freeChoice: 1 },
+          },
+          damageBonusRanges: {
+            STR: [{ min: 1, bonus: 'none' }],
+            AGL: [{ min: 1, bonus: 'none' }],
+          },
+          movementAgilityModifiers: [{ min: 1, modifier: 0 }],
+        },
+        appearanceOptions: [],
+        mementoOptions: [],
+        weaknesses: [],
+        heroicAbilities: [],
+        magic: {
+          rules: { schools: [] },
+          schools: [],
+        },
+      },
+      equipment: {
+        weapons: [{ ref: 'core:weapon.broadsword', id: 'broadsword', name: 'Broadsword', features: [] }],
+        armor: [],
+      },
+    },
+  },
+}
+
+vi.mock('./lib/dragonbanePacks', () => ({
+  useBundledDragonbanePacks: () => ({
+    registry: {
+      packs: [
+        {
+          packId: 'core',
+          name: 'Core Pack',
+          system: 'dragonbane',
+          kind: 'rules',
+          version: '1.0.0',
+          alwaysActive: true,
+          bundled: true,
+          path: '/api/content-packs/core.pack.json',
+        },
+      ],
+    },
+    packs: [
+      {
+        ...dragonbaneRulesPack,
+        system: 'dragonbane',
+        visibility: 'global',
+        alwaysActive: true,
+        bundled: true,
+        description: undefined,
+        entries: [],
+        sourceProvenance: {
+          sourceRepository: 'fixture',
+          sourcePath: '.',
+          packVersion: '1.0.0',
+          importedAt: '2026-05-16T00:00:00.000Z',
+          importer: 'dragonbane-unbound',
+        },
+      },
+    ],
+    alwaysActivePacks: [
+      {
+        ...dragonbaneRulesPack,
+        system: 'dragonbane',
+        visibility: 'global',
+        alwaysActive: true,
+        bundled: true,
+        description: undefined,
+        entries: [],
+        sourceProvenance: {
+          sourceRepository: 'fixture',
+          sourcePath: '.',
+          packVersion: '1.0.0',
+          importedAt: '2026-05-16T00:00:00.000Z',
+          importer: 'dragonbane-unbound',
+        },
+      },
+    ],
+    error: null,
+    isLoading: false,
+  }),
+  loadBundledPackManifest: vi.fn(),
+  toWorkspaceRulesPackSaveInput: (pack: unknown) => pack,
+  mergeRuntimeRulesPacks: (_bundled: unknown[], workspace: unknown[]) => workspace,
 }))
 
 vi.mock('./lib/backendAuth', () => ({
@@ -65,6 +204,7 @@ vi.mock('../convex/_generated/api', () => ({
       getViewerDungeon: 'dungeons.getViewerDungeon',
       issueEditorAccessToken: 'dungeons.issueEditorAccessToken',
       copyViewerDungeon: 'dungeons.copyViewerDungeon',
+      copySharedDungeon: 'dungeons.copySharedDungeon',
       deleteViewerDungeon: 'dungeons.deleteViewerDungeon',
       saveDungeon: 'dungeons.saveDungeon',
     },
@@ -79,9 +219,16 @@ vi.mock('../convex/_generated/api', () => ({
       listViewerActorPacks: 'actors.listViewerActorPacks',
       listViewerActors: 'actors.listViewerActors',
       saveActorPack: 'actors.saveActorPack',
+      deleteActorPack: 'actors.deleteActorPack',
       setActorPackActive: 'actors.setActorPackActive',
       saveActor: 'actors.saveActor',
       deleteActor: 'actors.deleteActor',
+      deleteUploadedActorImages: 'actors.deleteUploadedActorImages',
+    },
+    characters: {
+      listViewerCharacters: 'characters.listViewerCharacters',
+      saveCharacter: 'characters.saveCharacter',
+      deleteCharacter: 'characters.deleteCharacter',
     },
     packs: {
       listWorkspacePacks: 'packs.listWorkspacePacks',
@@ -97,6 +244,7 @@ vi.mock('./lib/backendData', () => ({
   useQuery: (queryKey: string, args: unknown) => (args === 'skip' ? undefined : mock.queries[queryKey]),
   useMutation: (mutationKey: string) => mock.mutations[mutationKey] ?? vi.fn(),
   uploadFileThroughBackend: vi.fn(),
+  uploadActorAssetThroughBackend: vi.fn(),
 }))
 
 vi.mock('./lib/auth', () => ({
@@ -191,7 +339,7 @@ describe('authenticated app shell', () => {
 
     render(<App />)
 
-    expect(screen.getByRole('button', { name: 'New in editor' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'New map' })).toBeTruthy()
     expect(screen.queryByRole('button', { name: 'Open selected in editor' })).toBeNull()
     expect(screen.queryByText('Import dungeon file')).toBeNull()
     expect(screen.queryByLabelText('Portable dungeon JSON')).toBeNull()
@@ -227,7 +375,7 @@ describe('authenticated app shell', () => {
 
     render(<App />)
 
-    await user.click(screen.getByRole('button', { name: 'New in editor' }))
+    await user.click(screen.getByRole('button', { name: 'New map' }))
 
     await waitFor(() =>
       expect(mock.mutations['dungeons.issueEditorAccessToken']).toHaveBeenCalledWith({}),
@@ -236,8 +384,8 @@ describe('authenticated app shell', () => {
     expect(openSpy.mock.calls[0]?.[0]).toContain('appEditorToken=token-123')
   })
 
-  it('reveals admin debug views only after the hidden shortcut', async () => {
-    window.location.hash = '#/app/dev/users'
+  it('shows admin pages in the workspace navigation without a dev menu', async () => {
+    window.location.hash = '#/app/admin/users'
     mock.authState.isAuthenticated = true
     mock.viewerIdentity = {
       viewer: { name: 'Admin User', email: 'admin@example.com' },
@@ -264,14 +412,41 @@ describe('authenticated app shell', () => {
 
     const mainNav = screen.getByRole('navigation', { name: 'Main navigation' })
     expect(within(mainNav).queryByRole('link', { name: 'Dev' })).toBeNull()
-    expect(screen.queryByRole('heading', { name: 'User access tools' })).toBeNull()
-
-    fireEvent.keyDown(window, { key: 'F12', code: 'F12', ctrlKey: true, shiftKey: true })
-
-    expect(within(mainNav).getByRole('link', { name: 'Dev' })).toBeTruthy()
-    expect(screen.getByRole('heading', { name: 'User access tools' })).toBeTruthy()
-    expect(screen.getByRole('navigation', { name: 'Dev pages' })).toBeTruthy()
+    expect(screen.queryByRole('navigation', { name: 'Dev pages' })).toBeNull()
+    expect(screen.getByRole('link', { name: 'Users' })).toBeTruthy()
+    expect(screen.getByRole('heading', { name: 'User access' })).toBeTruthy()
     expect(screen.getByRole('link', { name: 'Packs' })).toBeTruthy()
+  })
+
+  it('shows the Dragonbane character creator from the regular workspace menu for players', async () => {
+    window.location.hash = '#/app/characters'
+    mock.authState.isAuthenticated = true
+    mock.viewerIdentity = {
+      viewer: { name: 'Player Builder', email: 'player@example.com' },
+      workspace: { name: 'Player Workspace' },
+      roles: ['player'],
+      access: {
+        isAdmin: false,
+        canManageUsers: false,
+        canManagePacks: false,
+        canManageDungeons: true,
+        canManageSessions: false,
+        canUseCharacterLibrary: true,
+      },
+    }
+    mock.queries = {
+      'sessions.listViewerSessions': [],
+      'packs.listWorkspacePacks': [dragonbaneRulesPack],
+      'actors.listViewerActorPacks': [],
+      'actors.listViewerActors': [],
+    }
+
+    render(<App />)
+
+    expect(screen.getByRole('link', { name: 'Characters' })).toBeTruthy()
+    expect(screen.getAllByRole('heading', { name: 'Character library' }).length).toBeGreaterThan(0)
+    expect(screen.getByRole('button', { name: 'Create new character' })).toBeTruthy()
+    expect(screen.queryByRole('heading', { name: 'Create a playable character or NPC' })).toBeNull()
   })
 
   it('opens a saved dungeon in the editor from its card', async () => {
@@ -320,8 +495,13 @@ describe('authenticated app shell', () => {
     expect(openSpy.mock.calls[0]?.[0]).toContain('appEditorToken=token-123')
   })
 
-  it('copies and deletes dungeons from their library cards', async () => {
+  it('searches, copies share links, copies, and deletes dungeons from their library cards', async () => {
     const user = userEvent.setup()
+    const writeText = vi.fn().mockResolvedValue(undefined)
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText },
+    })
     window.location.hash = '#/app/library'
     mock.authState.isAuthenticated = true
     mock.viewerIdentity = {
@@ -342,7 +522,7 @@ describe('authenticated app shell', () => {
         {
           _id: 'dungeon-1',
           title: 'Archived Keep',
-          description: 'Basement layout',
+          description: 'Basement layout #keep',
           createdAt: 1,
           updatedAt: 2,
         },
@@ -362,6 +542,16 @@ describe('authenticated app shell', () => {
 
     render(<App />)
 
+    expect(screen.getAllByRole('button', { name: '#keep' }).length).toBeGreaterThan(0)
+
+    await user.type(screen.getByLabelText('Search library'), 'missing')
+    expect(screen.getByText('No maps match the current search.')).toBeTruthy()
+    await user.clear(screen.getByLabelText('Search library'))
+
+    await user.click(screen.getByRole('button', { name: 'Share link' }))
+    await waitFor(() => expect(writeText).toHaveBeenCalledTimes(1))
+    expect(writeText.mock.calls[0]?.[0]).toContain('#/app/library/share/dungeon-1')
+
     await user.click(screen.getByRole('button', { name: 'Copy' }))
     await waitFor(() =>
       expect(mock.mutations['dungeons.copyViewerDungeon']).toHaveBeenCalledWith({
@@ -378,8 +568,51 @@ describe('authenticated app shell', () => {
     )
   })
 
-  it('shows dedicated admin user management pages for administrators after dev unlock', async () => {
-    window.location.hash = '#/app/dev/users'
+  it('imports a shared dungeon link as a private copy', async () => {
+    window.location.hash = '#/app/library/share/dungeon-1'
+    mock.authState.isAuthenticated = true
+    mock.viewerIdentity = {
+      viewer: { name: 'Player Builder', email: 'player@example.com' },
+      workspace: { name: 'Player Workspace' },
+      roles: ['player'],
+      access: {
+        isAdmin: false,
+        canManageUsers: false,
+        canManagePacks: false,
+        canManageDungeons: true,
+        canManageSessions: false,
+        canUseCharacterLibrary: true,
+      },
+    }
+    mock.queries = {
+      'dungeons.listViewerDungeons': [],
+      'sessions.listViewerSessions': [],
+      'characters.listViewerCharacters': [],
+    }
+    mock.mutations['dungeons.copySharedDungeon'].mockResolvedValue({
+      copied: true,
+      dungeon: {
+        _id: 'dungeon-2',
+        title: 'Archived Keep (Shared)',
+        description: 'Basement layout',
+        createdAt: 3,
+        updatedAt: 3,
+      },
+    })
+
+    render(<App />)
+
+    await waitFor(() =>
+      expect(mock.mutations['dungeons.copySharedDungeon']).toHaveBeenCalledWith({
+        dungeonId: 'dungeon-1',
+      }),
+    )
+    await waitFor(() => expect(window.location.hash).toBe('#/app/library'))
+    expect(screen.getByText('Added "Archived Keep (Shared)" to your library.')).toBeTruthy()
+  })
+
+  it('shows dedicated admin user management pages for administrators', async () => {
+    window.location.hash = '#/app/admin/users'
     mock.authState.isAuthenticated = true
     mock.viewerIdentity = {
       viewer: { name: 'Admin User', email: 'admin@example.com' },
@@ -404,13 +637,57 @@ describe('authenticated app shell', () => {
 
     render(<App />)
 
-    fireEvent.keyDown(window, { key: 'F12', code: 'F12', ctrlKey: true, shiftKey: true })
-
     const mainNav = screen.getByRole('navigation', { name: 'Main navigation' })
-    expect(screen.getByRole('heading', { name: 'User access tools' })).toBeTruthy()
+    expect(screen.getByRole('heading', { name: 'User access' })).toBeTruthy()
     expect(screen.getByLabelText('User email')).toBeTruthy()
-    expect(within(mainNav).getByRole('link', { name: 'Dev' })).toBeTruthy()
-    expect(screen.getByRole('navigation', { name: 'Dev pages' })).toBeTruthy()
+    expect(within(mainNav).queryByRole('link', { name: 'Dev' })).toBeNull()
+    expect(screen.queryByRole('navigation', { name: 'Dev pages' })).toBeNull()
+    expect(screen.getByRole('link', { name: 'Users' })).toBeTruthy()
     expect(screen.getByRole('link', { name: 'Packs' })).toBeTruthy()
+  })
+
+  it('lets admins activate or deactivate installed packs without editing pack JSON', async () => {
+    const user = userEvent.setup()
+    window.location.hash = '#/app/admin/packs'
+    mock.authState.isAuthenticated = true
+    mock.viewerIdentity = {
+      viewer: { name: 'Admin User', email: 'admin@example.com' },
+      workspace: { name: 'Guild Hall' },
+      roles: ['admin'],
+      access: {
+        isAdmin: true,
+        canManageUsers: true,
+        canManagePacks: true,
+        canManageDungeons: true,
+        canManageSessions: true,
+        canUseCharacterLibrary: true,
+      },
+    }
+    mock.queries = {
+      'dungeons.listViewerDungeons': [],
+      'sessions.listViewerSessions': [],
+      'characters.listViewerCharacters': [],
+      'packs.listWorkspacePacks': [dragonbaneRulesPack],
+      'roles.listActiveWorkspaceUsers': [],
+    }
+    mock.mutations['packs.setPackActive'].mockResolvedValue('pack-1')
+
+    render(<App />)
+
+    expect(screen.getByText('Core Pack')).toBeTruthy()
+    expect(screen.queryByText('Dragonbane domains JSON')).toBeNull()
+    expect(screen.queryByText('Source provenance JSON')).toBeNull()
+
+    await user.click(screen.getByRole('button', { name: 'Deactivate' }))
+
+    await waitFor(() =>
+      expect(mock.mutations['packs.setPackActive']).toHaveBeenCalledWith(
+        expect.objectContaining({
+          packRecordId: 'pack-1',
+          isActive: false,
+        }),
+      ),
+    )
+    expect(mock.mutations['packs.savePackRecord']).not.toHaveBeenCalled()
   })
 })

@@ -34,17 +34,17 @@ import { FloorLightsGpuResourceFactory } from './rendering/gpu'
 function MySceneComponent() {
   const manager = useFloorGpuResources({ maxFloors: 10 })
   const activeFloorId = useDungeonStore(state => state.activeFloorId)
-  
+
   // Register factory once during initialization
   useEffect(() => {
     const factory = new FloorLightsGpuResourceFactory(256)
     manager.registerFactory(factory)
     return () => manager.unregisterFactory('lights')
   }, [manager])
-  
+
   // Get or create resource for active floor
   const lightsResource = manager.getOrCreateResource(activeFloorId, 'lights')
-  
+
   // Use the resource
   if (lightsResource && !lightsResource.isDisposed()) {
     const lightData = lightsResource.getLightData()
@@ -64,15 +64,15 @@ import type { FloorDirtyInfo } from '../store/floorDirtyDomains'
 class MyCustomGpuResource implements FloorGpuResource {
   readonly type = 'custom' as const
   readonly floorId: string
-  
+
   private _disposed = false
   private _data: YourDataType | null = null
-  
+
   constructor(floorId: string) {
     this.floorId = floorId
     // Initialize GPU resources
   }
-  
+
   dispose(): void {
     if (!this._disposed) {
       // Clean up GPU resources
@@ -80,14 +80,14 @@ class MyCustomGpuResource implements FloorGpuResource {
       this._disposed = true
     }
   }
-  
+
   isDisposed(): boolean {
     return this._disposed
   }
-  
+
   update(dirtyInfo: FloorDirtyInfo): boolean {
     if (this._disposed) return false
-    
+
     // Check relevant dirty flags and update if needed
     // Return true if updated, false if no update was needed
     return true
@@ -102,7 +102,7 @@ import type { FloorGpuResourceFactory } from './rendering/gpu'
 
 class MyCustomGpuResourceFactory implements FloorGpuResourceFactory<MyCustomGpuResource> {
   readonly resourceType = 'custom' as const
-  
+
   create(floorId: string): MyCustomGpuResource {
     return new MyCustomGpuResource(floorId)
   }

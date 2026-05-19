@@ -14,6 +14,7 @@ export type EditorLaunchSession = {
   backendUrl: string
   accessToken: string
   dungeonId: string | null
+  generatedPackIndexUrl: string | null
 }
 
 type BrowserLocationLike = Pick<Location, 'hostname' | 'protocol'>
@@ -21,6 +22,7 @@ type BrowserLocationLike = Pick<Location, 'hostname' | 'protocol'>
 const APP_BACKEND_URL_QUERY_KEY = 'appBackendUrl'
 const APP_EDITOR_TOKEN_QUERY_KEY = 'appEditorToken'
 const APP_DUNGEON_ID_QUERY_KEY = 'appDungeonId'
+const APP_GENERATED_PACK_INDEX_URL_QUERY_KEY = 'appGeneratedPackIndexUrl'
 
 export function resolveEditorBaseUrl(
   browserLocation: BrowserLocationLike,
@@ -42,11 +44,13 @@ export function buildEditorLaunchUrl({
   backendUrl,
   accessToken,
   dungeonId,
+  generatedPackIndexUrl,
 }: {
   editorBaseUrl: string
   backendUrl?: string
   accessToken?: string
   dungeonId?: string
+  generatedPackIndexUrl?: string
 }) {
   const url = new URL(editorBaseUrl)
 
@@ -56,6 +60,10 @@ export function buildEditorLaunchUrl({
 
     if (dungeonId) {
       url.searchParams.set(APP_DUNGEON_ID_QUERY_KEY, dungeonId)
+    }
+
+    if (generatedPackIndexUrl) {
+      url.searchParams.set(APP_GENERATED_PACK_INDEX_URL_QUERY_KEY, generatedPackIndexUrl)
     }
   }
 
@@ -67,6 +75,7 @@ export function parseEditorLaunchSession(search: string): EditorLaunchSession | 
   const backendUrl = params.get(APP_BACKEND_URL_QUERY_KEY)
   const accessToken = params.get(APP_EDITOR_TOKEN_QUERY_KEY)
   const dungeonId = params.get(APP_DUNGEON_ID_QUERY_KEY)
+  const generatedPackIndexUrl = params.get(APP_GENERATED_PACK_INDEX_URL_QUERY_KEY)
 
   if (!backendUrl || !accessToken) {
     return null
@@ -76,6 +85,7 @@ export function parseEditorLaunchSession(search: string): EditorLaunchSession | 
     backendUrl,
     accessToken,
     dungeonId,
+    generatedPackIndexUrl,
   }
 }
 
@@ -84,6 +94,7 @@ export function stripEditorLaunchSession(search: string) {
   params.delete(APP_BACKEND_URL_QUERY_KEY)
   params.delete(APP_EDITOR_TOKEN_QUERY_KEY)
   params.delete(APP_DUNGEON_ID_QUERY_KEY)
+  params.delete(APP_GENERATED_PACK_INDEX_URL_QUERY_KEY)
   const next = params.toString()
   return next ? `?${next}` : ''
 }

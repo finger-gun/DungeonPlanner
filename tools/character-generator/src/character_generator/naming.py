@@ -21,7 +21,7 @@ def trait_index_token(index: int, total_traits: int) -> str:
 
 
 def next_serial(output_dir: Path, stem: str) -> int:
-    pattern = re.compile(rf"^{re.escape(stem)}-(main|portrait)-(?P<serial>\d+)\.png$")
+    pattern = re.compile(rf"^{re.escape(stem)}-(main|portrait|processed|alpha-mask|thumbnail)-(?P<serial>\d+)\.png$")
     latest = 0
 
     if not output_dir.exists():
@@ -59,4 +59,7 @@ def allocate_output_pair(
         serial=serial,
         main_path=target_dir / f"{stem}-main-{serial_token}.png",
         portrait_path=target_dir / f"{stem}-portrait-{serial_token}.png",
+        processed_path=target_dir / f"{stem}-processed-{serial_token}.png",
+        alpha_mask_path=target_dir / f"{stem}-alpha-mask-{serial_token}.png",
+        thumbnail_path=target_dir / f"{stem}-thumbnail-{serial_token}.png",
     )

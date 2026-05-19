@@ -58,6 +58,11 @@ function buildCopiedDungeonTitle(title: string) {
   return trimmedTitle.replace(/\(Copy(?: \d+)?\)$/, `(Copy ${nextCopyNumber})`)
 }
 
+function buildSharedDungeonTitle(title: string) {
+  const trimmedTitle = title.trim()
+  return trimmedTitle.endsWith('(Shared)') ? trimmedTitle : `${trimmedTitle} (Shared)`
+}
+
 async function getViewerOwnedDungeon(
   ctx: Pick<QueryCtx, 'db'> | Pick<MutationCtx, 'db'>,
   dungeonId: Id<'dungeons'>,
@@ -258,6 +263,50 @@ export const copyViewerDungeon = mutation({
       createdAt: now,
       updatedAt: now,
     })
+  },
+})
+
+export const copySharedDungeon = mutation({
+  args: {
+    dungeonId: v.id('dungeons'),
+  },
+  handler: async (ctx, args) => {
+    const { viewer, workspaceId } = await requireRoleInActiveWorkspace(ctx, 'player')
+    const sharedDungeon = await ctx.db.get(args.dungeonId)
+
+    if (!sharedDungeon || sharedDungeon.workspaceId !== workspaceId) {
+      throw new Error('Shared dungeon not found.')
+    }
+
+    if (viewerOwnsDungeon(sharedDungeon, viewer._id)) {
+      return {
+        copied: false,
+        dungeon: buildDungeonSummary(sharedDungeon),
+      }
+    }
+
+    const sharedTitle = buildSharedDungeonTitle(sharedDungeon.title)
+    const now = Date.now()
+    const dungeonId = await ctx.db.insert('dungeons', {
+      ownerUserId: viewer._id,
+      workspaceId,
+      title: sharedTitle,
+      description: sharedDungeon.description,
+      serializedDungeon: sharedDungeon.serializedDungeon,
+      createdAt: now,
+      updatedAt: now,
+    })
+
+    return {
+      copied: true,
+      dungeon: buildDungeonSummary({
+        _id: dungeonId,
+        title: sharedTitle,
+        description: sharedDungeon.description,
+        createdAt: now,
+        updatedAt: now,
+      }),
+    }
   },
 })
 

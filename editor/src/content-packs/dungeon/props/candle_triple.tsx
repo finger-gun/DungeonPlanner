@@ -37,7 +37,7 @@ export const dungeonCandleTripleAsset = createGenericColorSwatch({
       { offset: [0, 0.34, 0], scale: 0.15, intensity: 0.5 },
       { offset: [0.11, 0.4, -0.02], scale: 0.15, intensity: 0.5 },
       { offset: [0.1, 0.3, 0.07], scale: 0.15, intensity: 0.5 },
-      
+
     ],
   }),
   getPlayModeNextProps: (objectProps) => {

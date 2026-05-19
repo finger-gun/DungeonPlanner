@@ -4,7 +4,7 @@ import { createDungeonAsset } from '../shared/createDungeonAsset'
 const transform: ContentPackModelTransform = {
   position: [0, 0, -0.375],
   rotation: [0, 0, 0],
-} 
+}
 
 export const dungeonShelvesDecoratedAsset = createDungeonAsset({
   id: 'dungeon.props_shelves_decorated',

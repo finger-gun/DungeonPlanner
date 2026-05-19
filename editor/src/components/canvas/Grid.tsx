@@ -216,6 +216,9 @@ export function Grid({ size = 120, playMode = false, bakedLightField = null }: G
   const selectedCharacterAsset = selectedCharacterAssetId
     ? getContentPackAssetById(selectedCharacterAssetId)
     : null
+  const selectedCharacterRecord = useDungeonStore((state) =>
+    selectedCharacterAssetId ? state.generatedCharacters[selectedCharacterAssetId] ?? null : null,
+  )
   const selectedOpeningAsset = selectedOpeningAssetId
     ? getContentPackAssetById(selectedOpeningAssetId)
     : null
@@ -1828,6 +1831,9 @@ export function Grid({ size = 120, playMode = false, bakedLightField = null }: G
         props: {
           connector: propPlacement.connector,
           direction: propPlacement.direction,
+          ...(normalizedObjectType === 'player'
+            ? { movementMeters: selectedCharacterRecord?.dragonbaneSummary?.movement }
+            : {}),
         },
         cell: propPlacement.cell,
         cellKey: propPlacement.anchorKey ?? propPlacement.supportCellKey,

@@ -33,6 +33,10 @@ const TEST_CHARACTER: GeneratedCharacterRecord = {
   thumbnailUrl: 'data:image/png;base64,ghi',
   width: 300,
   height: 600,
+  packId: null,
+  packName: null,
+  packDescription: null,
+  packScope: null,
   createdAt: '2026-04-16T00:00:00.000Z',
   updatedAt: '2026-04-16T00:00:00.000Z',
 }

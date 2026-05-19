@@ -1,4 +1,9 @@
 import { ConvexError, v } from 'convex/values'
+import {
+  createDragonbaneCharacterSummary,
+  normalizeDragonbaneCharacterSheet,
+} from '@dungeonplanner/shared/dragonbane/characterSheet'
+import { normalizePersistedCharacterSheet } from './dragonbaneSheets'
 import type { Doc, Id } from './_generated/dataModel'
 import { internalQuery, mutation, query, type MutationCtx, type QueryCtx } from './_generated/server'
 import { viewerOwnsActorPack, viewerOwnsCharacter } from './accessPolicies'
@@ -13,6 +18,8 @@ function buildEditorActorAssetId(actorId: string) {
 
 type ActorRecord = Doc<'characters'>
 type ActorPackRecord = Doc<'actorPacks'>
+const DEFAULT_ACTOR_PACK_NAME = 'Misc'
+const DEFAULT_ACTOR_PACK_SYSTEM_KEY = 'default'
 
 function normalizeActorName(name: string) {
   return name.trim()
@@ -56,6 +63,7 @@ async function buildActorSummary(
   actorPackName: string | null,
 ) {
   const imageUrls = await getActorImageUrls(ctx, actor)
+  const dragonbaneSheet = normalizeDragonbaneCharacterSheet(actor.sheet)
 
   return {
     _id: actor._id,
@@ -64,6 +72,8 @@ async function buildActorSummary(
     name: actor.name,
     kind: actor.kind ?? 'character',
     prompt: actor.prompt ?? '',
+    contentRef: actor.contentRef ?? null,
+    sheet: dragonbaneSheet,
     model: actor.model ?? null,
     size: actor.size ?? 'M',
     storageId: actor.storageId ?? actor.thumbnailStorageId ?? null,
@@ -77,6 +87,7 @@ async function buildActorSummary(
     thumbnailUrl: imageUrls.thumbnailUrl,
     width: actor.width ?? null,
     height: actor.height ?? null,
+    dragonbaneSummary: dragonbaneSheet ? createDragonbaneCharacterSummary(dragonbaneSheet) : null,
     createdAt: actor.createdAt,
     updatedAt: actor.updatedAt,
   }
@@ -134,6 +145,37 @@ async function loadActorPackMap(
     .collect()
 
   return new Map(actorPacks.map((actorPack) => [actorPack._id, actorPack]))
+}
+
+async function ensureViewerDefaultActorPack(
+  ctx: Pick<MutationCtx, 'db'>,
+  viewerId: Id<'users'>,
+  workspaceId: Id<'workspaces'>,
+) {
+  const existing = await ctx.db
+    .query('actorPacks')
+    .withIndex('by_ownerUserId_and_workspaceId_and_systemKey', (q) =>
+      q.eq('ownerUserId', viewerId).eq('workspaceId', workspaceId).eq('systemKey', DEFAULT_ACTOR_PACK_SYSTEM_KEY))
+    .first()
+
+  if (existing) {
+    if (!existing.isActive) {
+      await ctx.db.patch(existing._id, { isActive: true, updatedAt: Date.now() })
+    }
+    return existing._id
+  }
+
+  const now = Date.now()
+  return ctx.db.insert('actorPacks', {
+    workspaceId,
+    ownerUserId: viewerId,
+    systemKey: DEFAULT_ACTOR_PACK_SYSTEM_KEY,
+    name: DEFAULT_ACTOR_PACK_NAME,
+    description: 'Default character group',
+    isActive: true,
+    createdAt: now,
+    updatedAt: now,
+  })
 }
 
 function collectActorStorageIds(actor: Pick<
@@ -208,7 +250,10 @@ export const saveActorPack = mutation({
     const now = Date.now()
 
     if (args.actorPackId) {
-      await getViewerActorPack(ctx, args.actorPackId, viewer._id, workspaceId)
+      const existingActorPack = await getViewerActorPack(ctx, args.actorPackId, viewer._id, workspaceId)
+      if (existingActorPack.systemKey === DEFAULT_ACTOR_PACK_SYSTEM_KEY && name.trim().toLowerCase() !== DEFAULT_ACTOR_PACK_NAME.toLowerCase()) {
+        throw new ConvexError('The default actor pack cannot be renamed.')
+      }
       await ctx.db.patch(args.actorPackId, {
         name,
         description,
@@ -243,6 +288,48 @@ export const setActorPackActive = mutation({
       updatedAt: Date.now(),
     })
     return args.actorPackId
+  },
+})
+
+export const deleteActorPack = mutation({
+  args: {
+    actorPackId: v.id('actorPacks'),
+  },
+  handler: async (ctx, args) => {
+    const { viewer, workspaceId } = await requireRoleInActiveWorkspace(ctx, 'player')
+    const actorPack = await getViewerActorPack(ctx, args.actorPackId, viewer._id, workspaceId)
+    const actors = await ctx.db
+      .query('characters')
+      .withIndex('by_ownerUserId', (q) => q.eq('ownerUserId', viewer._id))
+      .collect()
+    const actorsInPack = actors.filter((actor) => actor.workspaceId === workspaceId && actor.actorPackId === args.actorPackId)
+
+    if (actorsInPack.length > 0) {
+      if (actorPack.systemKey === DEFAULT_ACTOR_PACK_SYSTEM_KEY) {
+        throw new ConvexError('Cannot delete the default Misc group while it contains characters.')
+      }
+
+      const defaultActorPackId = await ensureViewerDefaultActorPack(ctx, viewer._id, workspaceId)
+      const now = Date.now()
+      await Promise.all(
+        actorsInPack.map((actor) =>
+          ctx.db.patch(actor._id, {
+            actorPackId: defaultActorPackId,
+            updatedAt: now,
+          })),
+      )
+    }
+
+    await ctx.db.delete(args.actorPackId)
+    return args.actorPackId
+  },
+})
+
+export const generateActorUploadUrl = mutation({
+  args: {},
+  handler: async (ctx) => {
+    await requireRoleInActiveWorkspace(ctx, 'player')
+    return ctx.storage.generateUploadUrl()
   },
 })
 
@@ -282,10 +369,12 @@ export const getViewerActor = query({
 export const saveActor = mutation({
   args: {
     actorId: v.optional(v.id('characters')),
-    actorPackId: v.id('actorPacks'),
+    actorPackId: v.optional(v.id('actorPacks')),
     name: v.string(),
     kind: actorKindValidator,
     prompt: v.string(),
+    contentRef: v.optional(v.string()),
+    sheet: v.optional(v.any()),
     model: v.optional(v.string()),
     size: actorSizeValidator,
     storageId: v.optional(v.string()),
@@ -302,7 +391,9 @@ export const saveActor = mutation({
   },
   handler: async (ctx, args) => {
     const { viewer, workspaceId } = await requireRoleInActiveWorkspace(ctx, 'player')
-    await getViewerActorPack(ctx, args.actorPackId, viewer._id, workspaceId)
+    if (args.actorPackId !== undefined) {
+      await getViewerActorPack(ctx, args.actorPackId, viewer._id, workspaceId)
+    }
     const name = normalizeActorName(args.name)
 
     if (!name) {
@@ -311,10 +402,12 @@ export const saveActor = mutation({
 
     const prompt = normalizeActorPrompt(args.prompt)
     const model = normalizeActorModel(args.model)
+    const sheet = args.sheet === undefined ? undefined : normalizePersistedCharacterSheet(args.sheet)
     const now = Date.now()
 
     if (args.actorId) {
       const actor = await getViewerOwnedActor(ctx, args.actorId, viewer._id, workspaceId)
+      const actorPackPatch = args.actorPackId !== undefined ? { actorPackId: args.actorPackId } : {}
       const nextOriginalImageStorageId = args.originalImageStorageId ?? actor.originalImageStorageId
       const nextProcessedImageStorageId = args.processedImageStorageId ?? actor.processedImageStorageId
       const nextAlphaMaskStorageId = args.alphaMaskStorageId ?? actor.alphaMaskStorageId
@@ -328,10 +421,12 @@ export const saveActor = mutation({
         ].filter((storageId): storageId is Id<'_storage'> => Boolean(storageId)),
       )
       await ctx.db.patch(args.actorId, {
-        actorPackId: args.actorPackId,
+        ...actorPackPatch,
         name,
         kind: args.kind,
         prompt,
+        contentRef: args.contentRef ?? actor.contentRef,
+        sheet: sheet ?? actor.sheet,
         model,
         size: args.size,
         storageId: args.storageId || actor.storageId || undefined,
@@ -361,6 +456,8 @@ export const saveActor = mutation({
       name,
       kind: args.kind,
       prompt,
+      contentRef: args.contentRef,
+      sheet: sheet ?? {},
       model,
       size: args.size,
       storageId: args.storageId || undefined,
@@ -374,8 +471,6 @@ export const saveActor = mutation({
       thumbnailUrl: args.thumbnailStorageId ? undefined : (args.thumbnailUrl || undefined),
       width: args.width,
       height: args.height,
-      contentRef: undefined,
-      sheet: {},
       createdAt: now,
       updatedAt: now,
     })
@@ -428,20 +523,25 @@ export const listEditorActors = internalQuery({
       actors
         .filter((actor) =>
           Boolean(
-            actor.actorPackId &&
-            activeActorPackIds.has(actor.actorPackId) &&
-            (actor.processedImageStorageId || actor.processedImageUrl) &&
-            (actor.thumbnailStorageId || actor.thumbnailUrl) &&
-            actor.width &&
-            actor.height,
+            (!actor.actorPackId || activeActorPackIds.has(actor.actorPackId)) &&
+            (
+              (
+                (actor.processedImageStorageId || actor.processedImageUrl) &&
+                (actor.thumbnailStorageId || actor.thumbnailUrl) &&
+                actor.width &&
+                actor.height
+              ) ||
+              normalizeDragonbaneCharacterSheet(actor.sheet)
+            ),
           ))
         .sort((left, right) => left.name.localeCompare(right.name))
         .map(async (actor) => {
           const imageUrls = await getActorImageUrls(ctx, actor)
+          const dragonbaneSheet = normalizeDragonbaneCharacterSheet(actor.sheet)
           return {
             actorId: actor._id,
-            actorPackId: actor.actorPackId!,
-            actorPackName: actorPackNameById.get(actor.actorPackId!) ?? 'Actor Pack',
+            actorPackId: actor.actorPackId ?? 'untagged',
+            actorPackName: actor.actorPackId ? actorPackNameById.get(actor.actorPackId) ?? 'Actor Pack' : 'Untagged',
             assetId: buildEditorActorAssetId(actor._id),
             name: actor.name,
             kind: actor.kind ?? 'character',
@@ -455,6 +555,7 @@ export const listEditorActors = internalQuery({
             thumbnailUrl: imageUrls.thumbnailUrl,
             width: actor.width ?? null,
             height: actor.height ?? null,
+            dragonbaneSummary: dragonbaneSheet ? createDragonbaneCharacterSummary(dragonbaneSheet) : null,
             createdAt: new Date(actor.createdAt).toISOString(),
             updatedAt: new Date(actor.updatedAt).toISOString(),
           }

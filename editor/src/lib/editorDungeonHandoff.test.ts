@@ -11,18 +11,23 @@ import {
 describe('editor dungeon handoff helpers', () => {
   it('parses a complete handoff from URL search params', () => {
     expect(
-      parseEditorDungeonHandoff('?appDungeonId=d1&appEditorToken=t1&appBackendUrl=http%3A%2F%2F127.0.0.1%3A3210'),
+      parseEditorDungeonHandoff(
+        '?appDungeonId=d1&appEditorToken=t1&appBackendUrl=http%3A%2F%2F127.0.0.1%3A3210&appGeneratedPackIndexUrl=http%3A%2F%2F127.0.0.1%3A3210%2Fgenerated-character-packs%2Findex.json',
+      ),
     ).toEqual({
       dungeonId: 'd1',
       accessToken: 't1',
       backendUrl: 'http://127.0.0.1:3210',
+      generatedPackIndexUrl: 'http://127.0.0.1:3210/generated-character-packs/index.json',
     })
   })
 
   it('removes only handoff params from the URL', () => {
-    expect(stripEditorDungeonHandoff('?foo=bar&appDungeonId=d1&appEditorToken=t1&appBackendUrl=http%3A%2F%2Fx')).toBe(
-      '?foo=bar',
-    )
+    expect(
+      stripEditorDungeonHandoff(
+        '?foo=bar&appDungeonId=d1&appEditorToken=t1&appBackendUrl=http%3A%2F%2Fx&appGeneratedPackIndexUrl=http%3A%2F%2Fx%2Fgenerated-character-packs%2Findex.json',
+      ),
+    ).toBe('?foo=bar')
   })
 
   it('posts the dungeon handoff request to the backend', async () => {
@@ -36,6 +41,7 @@ describe('editor dungeon handoff helpers', () => {
         dungeonId: 'd1',
         accessToken: 't1',
         backendUrl: 'http://127.0.0.1:3210',
+        generatedPackIndexUrl: null,
       },
       fetchMock as unknown as typeof fetch,
     )

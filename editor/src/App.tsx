@@ -22,6 +22,7 @@ import {
   requestDebugRender,
 } from './components/canvas/debugCameraBridge'
 import { migrateLegacyGeneratedCharacters } from './generated-characters/migration'
+import { loadGeneratedCharacterPackRecords } from './generated-characters/packLoader'
 import type { GeneratedCharacterRecord } from './generated-characters/types'
 import { useDungeonStore } from './store/useDungeonStore'
 import { useBlurPointerRangeInputOnRelease } from './hooks/useBlurPointerRangeInputOnRelease'
@@ -57,7 +58,7 @@ import {
   stripEditorDungeonHandoff,
 } from './lib/editorDungeonHandoff'
 import { listEditorActors } from './lib/editorActors'
-import type { SavedDungeonSummary } from '@dungeonplanner/shared/editorAccess'
+import type { EditorLaunchSession, SavedDungeonSummary } from '@dungeonplanner/shared/editorAccess'
 import type { EditorActorRecord } from '@dungeonplanner/shared/actors'
 
 const Scene = lazy(() =>
@@ -73,6 +74,7 @@ const FpsOverlay = lazy(() =>
 )
 
 const EDITOR_LIBRARY_SESSION_STORAGE_KEY = 'dungeonplanner.editor-library-access'
+type EditorLibraryAccessSession = Pick<EditorLaunchSession, 'backendUrl' | 'accessToken' | 'generatedPackIndexUrl'>
 
 function isPromiseLike<T>(value: T | PromiseLike<T> | undefined): value is PromiseLike<T> {
   const isObjectLike = (typeof value === 'object' && value !== null) || typeof value === 'function'
@@ -298,10 +300,7 @@ function App() {
   const [sidebarPanel, setSidebarPanel] = useState<'tool' | 'settings'>('tool')
   const [sidebarOpen, setSidebarOpen] = useState(true)
   const [debugPanelOpen, setDebugPanelOpen] = useState(false)
-  const [editorLibraryAccess, setEditorLibraryAccess] = useState<{
-    backendUrl: string
-    accessToken: string
-  } | null>(null)
+  const [editorLibraryAccess, setEditorLibraryAccess] = useState<EditorLibraryAccessSession | null>(null)
   const [editorLibraryOpen, setEditorLibraryOpen] = useState(false)
   const [editorLibraryRecords, setEditorLibraryRecords] = useState<SavedDungeonSummary[]>([])
   const [editorLibraryBusyAction, setEditorLibraryBusyAction] = useState<string | null>(null)
@@ -443,10 +442,7 @@ function App() {
           return null
         }
 
-        return JSON.parse(raw) as {
-          backendUrl: string
-          accessToken: string
-        }
+        return JSON.parse(raw) as EditorLibraryAccessSession
       } catch {
         return null
       }
@@ -455,6 +451,7 @@ function App() {
       ? {
           backendUrl: handoff.backendUrl,
           accessToken: handoff.accessToken,
+          generatedPackIndexUrl: handoff.generatedPackIndexUrl,
         }
       : storedAccess
 
@@ -520,6 +517,29 @@ function App() {
       cancelled = true
     }
   }, [ingestGeneratedCharacters])
+
+  useEffect(() => {
+    let cancelled = false
+    const indexUrls = editorLibraryAccess?.generatedPackIndexUrl
+      ? ['/generated-character-packs/index.json', editorLibraryAccess.generatedPackIndexUrl]
+      : undefined
+
+    void loadGeneratedCharacterPackRecords({ indexUrls })
+      .then((records) => {
+        if (cancelled || records.length === 0) {
+          return
+        }
+
+        ingestGeneratedCharacters(records)
+      })
+      .catch((error) => {
+        console.error(error)
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [editorLibraryAccess?.generatedPackIndexUrl, ingestGeneratedCharacters])
 
   async function refreshEditorLibrary(access = editorLibraryAccess) {
     if (!access) {
@@ -991,7 +1011,7 @@ function App() {
             </div>
           )}
         </section>
-        
+
         {/* Paint tools widget - positioned absolutely on canvas */}
         <RoomPaintModePanel sidebarVisible={sidebarVisible} />
       </div>
@@ -1035,6 +1055,11 @@ function mapEditorActorToGeneratedCharacter(actor: EditorActorRecord): Generated
     thumbnailUrl: actor.thumbnailUrl,
     width: actor.width,
     height: actor.height,
+    dragonbaneSummary: actor.dragonbaneSummary,
+    packId: null,
+    packName: null,
+    packDescription: null,
+    packScope: null,
     createdAt: actor.createdAt,
     updatedAt: actor.updatedAt,
   }

@@ -26,6 +26,8 @@ import { DungeonRoom } from './rooms/DungeonRoom.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const PORT = Number(process.env.PORT) || 2567
+const GENERATED_CHARACTER_PACK_PUBLIC_PATH = '/generated-character-packs'
+const BUNDLED_CONTENT_PACK_PUBLIC_PATH = '/api/content-packs'
 // ── Express app ───────────────────────────────────────────────────────────────
 const app = express()
 
@@ -88,6 +90,29 @@ app.delete('/api/generated-characters/assets/:storageId', async (req, res) => {
 })
 
 app.use(GENERATED_CHARACTER_ASSET_PUBLIC_PATH, express.static(GENERATED_CHARACTER_STORAGE_DIR))
+const generatedCharacterPackDir = path.resolve(__dirname, '..', '..', 'editor', 'public', 'generated-character-packs')
+app.use(GENERATED_CHARACTER_PACK_PUBLIC_PATH, express.static(generatedCharacterPackDir))
+const bundledContentPackDir = path.resolve(__dirname, '..', 'content-packs')
+app.get(`${BUNDLED_CONTENT_PACK_PUBLIC_PATH}/:fileName`, (req, res) => {
+  const fileName = path.basename(req.params.fileName)
+  const filePath = path.join(bundledContentPackDir, fileName)
+
+  if (!fileName.endsWith('.json') || !filePath.startsWith(bundledContentPackDir) || !existsSync(filePath)) {
+    res.status(404).json({ error: 'Content pack not found.' })
+    return
+  }
+
+  try {
+    const manifest = JSON.parse(readFileSync(filePath, 'utf8')) as { visibility?: unknown }
+    if (fileName !== 'registry.json' && manifest.visibility !== 'global' && manifest.visibility !== 'public') {
+      res.status(403).json({ error: 'Content pack is not public.' })
+      return
+    }
+    res.sendFile(filePath)
+  } catch {
+    res.status(500).json({ error: 'Content pack manifest could not be read.' })
+  }
+})
 
 // Serve the built editor frontend from ../../editor/dist in both source and
 // compiled server layouts.

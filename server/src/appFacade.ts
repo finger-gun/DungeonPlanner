@@ -4,6 +4,7 @@ import { resolveRequestAccessToken } from './authFacade.js'
 
 const DEFAULT_CONVEX_URL = 'http://127.0.0.1:3210'
 const DEFAULT_CONVEX_SITE_URL = 'http://127.0.0.1:3211'
+const STORAGE_UPLOAD_TIMEOUT_MS = Number(process.env.STORAGE_UPLOAD_TIMEOUT_MS ?? 30_000)
 
 function getConvexDeploymentUrl() {
   return (
@@ -99,6 +100,7 @@ const APP_QUERY_ROUTES = [
   { method: 'get', path: '/api/app/workspace/users', convexFunction: 'roles:listActiveWorkspaceUsers' },
   { method: 'get', path: '/api/app/dungeons', convexFunction: 'dungeons:listViewerDungeons' },
   { method: 'get', path: '/api/app/sessions', convexFunction: 'sessions:listViewerSessions' },
+  { method: 'get', path: '/api/app/characters', convexFunction: 'characters:listViewerCharacters' },
   { method: 'get', path: '/api/app/actor-packs', convexFunction: 'actors:listViewerActorPacks' },
   { method: 'get', path: '/api/app/actors', convexFunction: 'actors:listViewerActors' },
   { method: 'get', path: '/api/app/packs', convexFunction: 'packs:listWorkspacePacks' },
@@ -111,13 +113,17 @@ const APP_MUTATION_ROUTES = [
   { method: 'post', path: '/api/app/roles/revoke', convexFunction: 'roles:revokeRoleByEmail' },
   { method: 'post', path: '/api/app/editor-access-token', convexFunction: 'dungeons:issueEditorAccessToken' },
   { method: 'post', path: '/api/app/dungeons/copy', convexFunction: 'dungeons:copyViewerDungeon' },
+  { method: 'post', path: '/api/app/dungeons/share', convexFunction: 'dungeons:copySharedDungeon' },
   { method: 'post', path: '/api/app/dungeons/delete', convexFunction: 'dungeons:deleteViewerDungeon' },
   { method: 'post', path: '/api/app/sessions/create', convexFunction: 'sessions:createSession' },
   { method: 'post', path: '/api/app/sessions/join', convexFunction: 'sessions:joinSessionByCode' },
   { method: 'post', path: '/api/app/sessions/access-ticket', convexFunction: 'sessions:issueServerAccessTicket' },
+  { method: 'post', path: '/api/app/characters/save', convexFunction: 'characters:saveCharacter' },
+  { method: 'post', path: '/api/app/characters/delete', convexFunction: 'characters:deleteCharacter' },
   { method: 'post', path: '/api/app/packs/save', convexFunction: 'packs:savePackRecord' },
   { method: 'post', path: '/api/app/packs/set-active', convexFunction: 'packs:setPackActive' },
   { method: 'post', path: '/api/app/actor-packs/save', convexFunction: 'actors:saveActorPack' },
+  { method: 'post', path: '/api/app/actor-packs/delete', convexFunction: 'actors:deleteActorPack' },
   { method: 'post', path: '/api/app/actor-packs/set-active', convexFunction: 'actors:setActorPackActive' },
   { method: 'post', path: '/api/app/actors/save', convexFunction: 'actors:saveActor' },
   { method: 'post', path: '/api/app/actors/delete', convexFunction: 'actors:deleteActor' },
@@ -229,42 +235,61 @@ export function registerAppFacadeRoutes(app: Express) {
     '/api/app/storage/upload',
     express.raw({ type: '*/*', limit: '50mb' }),
     async (request, response) => {
-      const client = await withAuthenticatedConvexClient(request, response)
+      await handleStorageUpload(request, response, 'packs:generatePackUploadUrl')
+    },
+  )
 
-      if (!client) {
-        return
-      }
-
-      const body = request.body
-
-      if (!(body instanceof Buffer) || body.length === 0) {
-        sendApiError(response, 'A file payload is required.', 400)
-        return
-      }
-
-      try {
-        const uploadUrl = await client.mutation('packs:generatePackUploadUrl' as never, {} as never)
-        const uploadResponse = await fetch(uploadUrl as string, {
-          method: 'POST',
-          headers: {
-            'Content-Type': request.header('content-type') ?? 'application/octet-stream',
-          },
-          body,
-        })
-
-        if (!uploadResponse.ok) {
-          throw new Error('Pack file upload failed.')
-        }
-
-        const payload = (await uploadResponse.json()) as { storageId: string }
-        response.json(payload)
-      } catch (error) {
-        sendApiError(response, error, 502)
-      }
+  app.post(
+    '/api/app/actor-assets/upload',
+    express.raw({ type: '*/*', limit: '50mb' }),
+    async (request, response) => {
+      await handleStorageUpload(request, response, 'actors:generateActorUploadUrl')
     },
   )
 
   for (const route of EDITOR_PROXY_ROUTES) {
     registerConvexSiteProxyRoute(app, route)
+  }
+}
+
+async function handleStorageUpload(
+  request: Request,
+  response: Response,
+  uploadUrlFunction: string,
+) {
+  const client = await withAuthenticatedConvexClient(request, response)
+
+  if (!client) {
+    return
+  }
+
+  const body = request.body
+
+  if (!(body instanceof Buffer) || body.length === 0) {
+    sendApiError(response, 'A file payload is required.', 400)
+    return
+  }
+
+  try {
+    const uploadUrl = await client.mutation(uploadUrlFunction as never, {} as never)
+    const controller = new AbortController()
+    const timeout = setTimeout(() => controller.abort(), STORAGE_UPLOAD_TIMEOUT_MS)
+    const uploadResponse = await fetch(uploadUrl as string, {
+      method: 'POST',
+      headers: {
+        'Content-Type': request.header('content-type') ?? 'application/octet-stream',
+      },
+      body,
+      signal: controller.signal,
+    }).finally(() => clearTimeout(timeout))
+
+    if (!uploadResponse.ok) {
+      throw new Error('File upload failed.')
+    }
+
+    const payload = (await uploadResponse.json()) as { storageId: string }
+    response.json(payload)
+  } catch (error) {
+    sendApiError(response, error instanceof Error && error.name === 'AbortError' ? 'File upload timed out.' : error, error instanceof Error && error.name === 'AbortError' ? 504 : 502)
   }
 }

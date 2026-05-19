@@ -1,4 +1,9 @@
 import { ConvexError, v } from 'convex/values'
+import {
+  createDragonbaneCharacterSummary,
+  normalizeDragonbaneCharacterSheet,
+} from '@dungeonplanner/shared/dragonbane/characterSheet'
+import { normalizePersistedCharacterSheet } from './dragonbaneSheets'
 import type { Doc } from './_generated/dataModel'
 import { mutation, query } from './_generated/server'
 import { ensureSavedCharacterActorPack } from './actorPackMigration'
@@ -8,10 +13,13 @@ import { requireCurrentUser, requireRole } from './helpers'
 import { normalizeContentRef } from '../shared/contentRefs'
 
 function mapCharacterSummary(character: Doc<'characters'>) {
+  const dragonbaneSheet = normalizeDragonbaneCharacterSheet(character.sheet)
+
   return {
     _id: character._id,
     name: character.name,
     contentRef: character.contentRef ?? null,
+    dragonbaneSummary: dragonbaneSheet ? createDragonbaneCharacterSummary(dragonbaneSheet) : null,
     createdAt: character.createdAt,
     updatedAt: character.updatedAt,
   }
@@ -44,11 +52,14 @@ export const getViewerCharacter = query({
       throw new Error('Character not found.')
     }
 
+    const dragonbaneSheet = normalizeDragonbaneCharacterSheet(character.sheet)
+
     return {
       _id: character._id,
       name: character.name,
       contentRef: character.contentRef ?? null,
       sheet: character.sheet,
+      dragonbaneSummary: dragonbaneSheet ? createDragonbaneCharacterSummary(dragonbaneSheet) : null,
       createdAt: character.createdAt,
       updatedAt: character.updatedAt,
     }
@@ -75,6 +86,7 @@ export const saveCharacter = mutation({
     const contentRef = args.contentRef?.trim()
       ? normalizeContentRef(args.contentRef, 'character-library') ?? undefined
       : undefined
+    const sheet = normalizePersistedCharacterSheet(args.sheet)
 
     if (args.characterId) {
       const existingCharacter = await ctx.db.get(args.characterId)
@@ -95,7 +107,7 @@ export const saveCharacter = mutation({
         actorPackId,
         name,
         contentRef,
-        sheet: args.sheet,
+        sheet,
         updatedAt: now,
       })
 
@@ -112,7 +124,7 @@ export const saveCharacter = mutation({
       actorPackId,
       name,
       contentRef,
-      sheet: args.sheet,
+      sheet,
       createdAt: now,
       updatedAt: now,
     })

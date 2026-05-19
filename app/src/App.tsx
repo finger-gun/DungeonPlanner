@@ -1,20 +1,25 @@
 import './App.css'
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { api } from '../convex/_generated/api'
 import type { Id } from '../convex/_generated/dataModel'
 import { useAuthActions, useBackendAuthState } from './lib/backendAuth'
-import { uploadFileThroughBackend, useMutation, useQuery } from './lib/backendData'
+import { useMutation, useQuery } from './lib/backendData'
 import { resolveBackendApiBaseUrl } from './lib/backendAuthApi'
 import { useViewerIdentity } from './lib/auth'
 import { type PlatformRole } from './lib/roles'
 import { buildEditorLaunchUrl, resolveEditorBaseUrl } from './lib/editorLaunch'
 import { useAuthenticatedAppState } from './store/useAppStore'
-import { ActorLibraryPanel } from './components/ActorLibraryPanel'
+import { DragonbaneCharacterCreator } from './components/DragonbaneCharacterCreator'
+import {
+  loadBundledPackManifest,
+  mergeRuntimeRulesPacks,
+  toWorkspaceRulesPackSaveInput,
+  useBundledDragonbanePacks,
+  type WorkspaceRulesPackRecord,
+} from './lib/dragonbanePacks'
 
-type WorkspacePage = 'overview' | 'library' | 'dev' | 'sessions' | 'characters' | 'admin-users' | 'admin-packs'
-type DevWorkspacePage = 'sessions' | 'characters' | 'admin-users' | 'admin-packs'
-
-const DEV_WORKSPACE_PAGES: readonly DevWorkspacePage[] = ['sessions', 'characters', 'admin-users', 'admin-packs']
+type WorkspacePage = 'overview' | 'library' | 'sessions' | 'characters' | 'admin-users' | 'admin-packs'
+const GENERATED_CHARACTER_PACK_INDEX_PATH = '/generated-character-packs/index.json'
 
 const GITHUB_ICON_PATH =
   'M12 2C6.48 2 2 6.59 2 12.25c0 4.53 2.87 8.37 6.84 9.72.5.1.68-.22.68-.49 0-.24-.01-1.04-.01-1.89-2.78.62-3.37-1.22-3.37-1.22-.46-1.2-1.12-1.52-1.12-1.52-.92-.64.07-.63.07-.63 1.01.08 1.55 1.08 1.55 1.08.91 1.6 2.38 1.14 2.96.87.09-.68.36-1.14.65-1.4-2.22-.26-4.56-1.14-4.56-5.09 0-1.12.39-2.03 1.03-2.74-.1-.26-.45-1.31.1-2.73 0 0 .85-.28 2.78 1.05a9.33 9.33 0 0 1 5.06 0c1.93-1.33 2.78-1.05 2.78-1.05.55 1.42.2 2.47.1 2.73.64.71 1.03 1.62 1.03 2.74 0 3.96-2.34 4.83-4.57 5.08.37.33.7.97.7 1.96 0 1.42-.01 2.57-.01 2.92 0 .27.18.59.69.49A10.25 10.25 0 0 0 22 12.25C22 6.59 17.52 2 12 2Z'
@@ -68,13 +73,15 @@ function readHashPath() {
 }
 
 function getWorkspacePageFromPath(path: string): WorkspacePage | null {
+  if (path.startsWith('/app/library/share/')) {
+    return 'library'
+  }
+
   switch (path) {
     case '/app':
       return 'overview'
     case '/app/library':
       return 'library'
-    case '/app/dev':
-      return 'dev'
     case '/app/sessions':
     case '/app/dev/sessions':
       return 'sessions'
@@ -92,8 +99,24 @@ function getWorkspacePageFromPath(path: string): WorkspacePage | null {
   }
 }
 
-function isDevWorkspacePage(page: WorkspacePage | null): page is DevWorkspacePage {
-  return page !== null && DEV_WORKSPACE_PAGES.includes(page as DevWorkspacePage)
+function getSharedDungeonIdFromPath(path: string) {
+  const prefix = '/app/library/share/'
+  return path.startsWith(prefix) ? decodeURIComponent(path.slice(prefix.length)) : null
+}
+
+function normalizeSearchValue(value: string) {
+  return value.trim().toLowerCase()
+}
+
+function getDungeonTags(record: { title: string; description?: string | null }) {
+  const source = `${record.title} ${record.description ?? ''}`
+  const matches = source.match(/#[a-z0-9][a-z0-9-]*/gi) ?? []
+  return [...new Set(matches.map((tag) => tag.toLowerCase()))]
+}
+
+function buildDungeonShareLink(dungeonId: string) {
+  const { origin, pathname, search } = window.location
+  return `${origin}${pathname}${search}#/app/library/share/${encodeURIComponent(dungeonId)}`
 }
 
 function GitHubMark() {
@@ -276,6 +299,13 @@ function PasswordAuthCard() {
 
 function SignedInOverview({ identity }: { identity: ReturnType<typeof useViewerIdentity> }) {
   const { signOut } = useAuthActions()
+  const bundledPackState = useBundledDragonbanePacks()
+  const [remotePackUrl, setRemotePackUrl] = useState('')
+  const [remotePackError, setRemotePackError] = useState<string | null>(null)
+  const [remotePackNotice, setRemotePackNotice] = useState<string | null>(null)
+  const [isImportingRemotePack, setIsImportingRemotePack] = useState(false)
+  const [dungeonSearch, setDungeonSearch] = useState('')
+  const [selectedDungeonTag, setSelectedDungeonTag] = useState<string | null>(null)
   const {
     shell,
     roleManager,
@@ -286,11 +316,8 @@ function SignedInOverview({ identity }: { identity: ReturnType<typeof useViewerI
     setDungeonLibrary,
     setSessionTools,
     setPackTools,
-    startNewPackDraft,
-    hydratePackDraft,
   } = useAuthenticatedAppState()
   const currentPath = shell.currentPath
-  const isDevMenuVisible = shell.isDevMenuVisible
   const canAccessDungeonLibrary = identity.access.canManageDungeons
   const workspaceMembers = useQuery(
     api.roles.listActiveWorkspaceUsers,
@@ -301,18 +328,15 @@ function SignedInOverview({ identity }: { identity: ReturnType<typeof useViewerI
     canAccessDungeonLibrary ? {} : 'skip',
   )
   const sessionRecords = useQuery(api.sessions.listViewerSessions, {})
-  const characterRecords = useQuery(
-    api.actors.listViewerActors,
-    identity.access.canUseCharacterLibrary ? {} : 'skip',
-  )
   const packRecords = useQuery(
     api.packs.listWorkspacePacks,
-    identity.access.canManagePacks ? {} : 'skip',
-  )
+    identity.access.canManagePacks || identity.access.canUseCharacterLibrary ? {} : 'skip',
+  ) as WorkspaceRulesPackRecord[] | undefined
   const grantRoleByEmail = useMutation(api.roles.grantRoleByEmail)
   const revokeRoleByEmail = useMutation(api.roles.revokeRoleByEmail)
   const issueEditorAccessToken = useMutation(api.dungeons.issueEditorAccessToken)
   const copyViewerDungeon = useMutation(api.dungeons.copyViewerDungeon)
+  const copySharedDungeon = useMutation(api.dungeons.copySharedDungeon)
   const deleteViewerDungeon = useMutation(api.dungeons.deleteViewerDungeon)
   const createSession = useMutation(api.sessions.createSession)
   const joinSessionByCode = useMutation(api.sessions.joinSessionByCode)
@@ -324,7 +348,39 @@ function SignedInOverview({ identity }: { identity: ReturnType<typeof useViewerI
     sessionTools.selectedSessionId ? { sessionId: sessionTools.selectedSessionId } : 'skip',
   )
   const selectedSession = sessionRecords?.find((session) => session._id === sessionTools.selectedSessionId) ?? null
-  const selectedPackRecord = packRecords?.find((pack) => pack._id === packTools.selectedPackRecordId) ?? null
+  const bundledPacks = bundledPackState.packs
+  const bundledRegistry = bundledPackState.registry
+  const installedPackById = useMemo(
+    () => new Map((packRecords ?? []).map((pack) => [pack.packId, pack])),
+    [packRecords],
+  )
+  const availableBundledPackEntries = useMemo(
+    () => bundledRegistry?.packs.filter((entry) => !entry.alwaysActive && !installedPackById.has(entry.packId)) ?? [],
+    [bundledRegistry, installedPackById],
+  )
+  const runtimeCharacterPacks = useMemo(
+    () => mergeRuntimeRulesPacks(bundledPackState.alwaysActivePacks, packRecords),
+    [bundledPackState.alwaysActivePacks, packRecords],
+  )
+  const dungeonTags = useMemo(() => {
+    const tags = new Set<string>()
+    for (const record of libraryRecords ?? []) {
+      getDungeonTags(record).forEach((tag) => tags.add(tag))
+    }
+    return [...tags].sort((left, right) => left.localeCompare(right))
+  }, [libraryRecords])
+  const filteredLibraryRecords = useMemo(() => {
+    const search = normalizeSearchValue(dungeonSearch)
+    return (libraryRecords ?? []).filter((record) => {
+      const tags = getDungeonTags(record)
+      const matchesTag = selectedDungeonTag ? tags.includes(selectedDungeonTag) : true
+      const matchesSearch = search
+        ? normalizeSearchValue(`${record.title} ${record.description ?? ''} ${tags.join(' ')}`).includes(search)
+        : true
+
+      return matchesTag && matchesSearch
+    })
+  }, [dungeonSearch, libraryRecords, selectedDungeonTag])
   const dungeonError = dungeonLibrary.error
   const dungeonNotice = dungeonLibrary.notice
   const roleEmail = roleManager.email
@@ -352,97 +408,112 @@ function SignedInOverview({ identity }: { identity: ReturnType<typeof useViewerI
   const setSessionAccessPayload = (accessPayload: typeof sessionTools.accessPayload) => setSessionTools({ accessPayload })
   const setSessionNotice = (notice: string | null) => setSessionTools({ notice })
   const setSessionError = (error: string | null) => setSessionTools({ error })
-  const selectedPackRecordId = packTools.selectedPackRecordId
-  const packIdDraft = packTools.packIdDraft
-  const packNameDraft = packTools.nameDraft
-  const packKindDraft = packTools.kindDraft
-  const packVersionDraft = packTools.versionDraft
-  const packVisibilityDraft = packTools.visibilityDraft
-  const packIsActiveDraft = packTools.isActiveDraft
-  const packDescriptionDraft = packTools.descriptionDraft
-  const packEntriesJson = packTools.entriesJsonDraft
-  const packDefaultRefsJson = packTools.defaultRefsJsonDraft
-  const manifestFile = packTools.manifestFile
-  const thumbnailFile = packTools.thumbnailFile
-  const manifestStorageId = packTools.manifestStorageId
-  const thumbnailStorageId = packTools.thumbnailStorageId
   const packError = packTools.error
   const packNotice = packTools.notice
   const isWorkingPacks = packTools.isWorking
-  const setPackIdDraft = (nextPackIdDraft: string) => setPackTools({ packIdDraft: nextPackIdDraft })
-  const setPackNameDraft = (nameDraft: string) => setPackTools({ nameDraft })
-  const setPackKindDraft = (kindDraft: typeof packTools.kindDraft) => setPackTools({ kindDraft })
-  const setPackVersionDraft = (versionDraft: string) => setPackTools({ versionDraft })
-  const setPackVisibilityDraft = (visibilityDraft: typeof packTools.visibilityDraft) => setPackTools({ visibilityDraft })
-  const setPackIsActiveDraft = (isActiveDraft: boolean) => setPackTools({ isActiveDraft })
-  const setPackDescriptionDraft = (descriptionDraft: string) => setPackTools({ descriptionDraft })
-  const setManifestFile = (nextManifestFile: File | null) => setPackTools({ manifestFile: nextManifestFile })
-  const setThumbnailFile = (nextThumbnailFile: File | null) => setPackTools({ thumbnailFile: nextThumbnailFile })
-  const setPackDefaultRefsJson = (defaultRefsJsonDraft: string) => setPackTools({ defaultRefsJsonDraft })
-  const setPackEntriesJson = (entriesJsonDraft: string) => setPackTools({ entriesJsonDraft })
-  const canAccessDevMenu = identity.access.isAdmin && isDevMenuVisible
   const editorBaseUrl = resolveEditorBaseUrl(window.location, import.meta.env.VITE_EDITOR_URL)
   const backendUrl = resolveBackendApiBaseUrl(window.location, import.meta.env.VITE_BACKEND_URL)
   const requestedPage = getWorkspacePageFromPath(currentPath)
+  const sharedDungeonId = getSharedDungeonIdFromPath(currentPath)
   const workspaceNavItems = [
     { id: 'overview', label: 'Overview', href: '#/app' },
     canAccessDungeonLibrary && { id: 'library', label: 'Dungeon Library', href: '#/app/library' },
-    canAccessDevMenu && {
-      id: 'dev',
-      label: 'Dev',
-      href: '#/app/dev',
-    },
-  ].filter((item): item is { id: string; label: string; href: string } => Boolean(item))
-  const devNavItems = [
-    identity.access.canManageSessions && { id: 'sessions', label: 'Sessions', href: '#/app/dev/sessions' },
-    identity.access.canUseCharacterLibrary && { id: 'characters', label: 'Characters', href: '#/app/dev/characters' },
-    identity.access.canManageUsers && { id: 'admin-users', label: 'Users', href: '#/app/dev/users' },
-    identity.access.canManagePacks && { id: 'admin-packs', label: 'Packs', href: '#/app/dev/packs' },
-  ].filter((item): item is { id: DevWorkspacePage; label: string; href: string } => Boolean(item))
+    identity.access.canManageSessions && { id: 'sessions', label: 'Sessions', href: '#/app/sessions' },
+    identity.access.canUseCharacterLibrary && { id: 'characters', label: 'Characters', href: '#/app/characters' },
+    identity.access.canManageUsers && { id: 'admin-users', label: 'Users', href: '#/app/admin/users' },
+    identity.access.canManagePacks && { id: 'admin-packs', label: 'Packs', href: '#/app/admin/packs' },
+  ].filter((item): item is { id: WorkspacePage; label: string; href: string } => Boolean(item))
   const activePage: WorkspacePage =
     requestedPage === 'library' && canAccessDungeonLibrary
       ? 'library'
-      : requestedPage === 'dev' && canAccessDevMenu
-        ? 'dev'
-        : isDevWorkspacePage(requestedPage) && canAccessDevMenu && devNavItems.some((item) => item.id === requestedPage)
-          ? requestedPage
-          : 'overview'
+      : requestedPage === 'sessions' && identity.access.canManageSessions
+        ? 'sessions'
+        : requestedPage === 'characters' && identity.access.canUseCharacterLibrary
+          ? 'characters'
+          : requestedPage === 'admin-users' && identity.access.canManageUsers
+            ? 'admin-users'
+            : requestedPage === 'admin-packs' && identity.access.canManagePacks
+              ? 'admin-packs'
+              : 'overview'
+
+  useEffect(() => {
+    if (!sharedDungeonId || activePage !== 'library') {
+      return
+    }
+
+    let isCancelled = false
+
+    async function copySharedMap() {
+      setDungeonLibrary({
+        error: null,
+        notice: null,
+        activeAction: `import:${sharedDungeonId}`,
+      })
+
+      try {
+        const result = await copySharedDungeon({ dungeonId: sharedDungeonId as Id<'dungeons'> })
+
+        if (isCancelled) {
+          return
+        }
+
+        setDungeonLibrary({
+          notice: result.copied
+            ? `Added "${result.dungeon.title}" to your library.`
+            : `"${result.dungeon.title}" is already in your library.`,
+          activeAction: null,
+        })
+        window.location.hash = '#/app/library'
+      } catch (mutationError) {
+        console.error(mutationError)
+
+        if (!isCancelled) {
+          setDungeonLibrary({
+            error: 'Opening the shared map failed.',
+            activeAction: null,
+          })
+          window.location.hash = '#/app/library'
+        }
+      }
+    }
+
+    void copySharedMap()
+
+    return () => {
+      isCancelled = true
+    }
+  }, [activePage, copySharedDungeon, setDungeonLibrary, sharedDungeonId])
 
   const pageIntro = {
     overview: {
       eyebrow: 'Overview',
-      title: 'Your DungeonPlanner workspace',
-      copy: 'Open your private dungeon library, review your access, and get ready for your next session.',
+      title: 'Workspace',
+      copy: 'Your dungeons, characters, sessions, and table tools live here.',
     },
     library: {
       eyebrow: 'Dungeons',
       title: 'Dungeon library',
-      copy: 'Open your private dungeon maps in the editor, duplicate a draft, or remove the ones you no longer need.',
-    },
-    dev: {
-      eyebrow: 'Debug',
-      title: 'Developer workspace',
-      copy: 'Open the internal app views for sessions, characters, user roles, and pack management.',
+      copy: 'Open saved maps, duplicate useful starts, and keep your prep organized.',
     },
     sessions: {
-      eyebrow: 'Debug',
+      eyebrow: 'Sessions',
       title: 'Session tools',
-      copy: 'Use the current development session flows for creating tables, joining by code, and issuing server access tickets.',
+      copy: 'Create play sessions, join by code, and prepare access for your table.',
     },
     characters: {
-      eyebrow: 'Debug',
-      title: 'Character tools',
-      copy: 'Use the current development character flows for saved sheets and session attachments.',
+      eyebrow: 'Characters',
+      title: 'Character library',
+      copy: 'Create Dragonbane characters, save standees, and keep your cast ready for play.',
     },
     'admin-users': {
-      eyebrow: 'Debug',
-      title: 'User access tools',
-      copy: 'Grant or remove roles by email and inspect workspace membership from the current admin debug view.',
+      eyebrow: 'Admin',
+      title: 'User access',
+      copy: 'Invite the right people and manage what they can do in this workspace.',
     },
     'admin-packs': {
-      eyebrow: 'Debug',
-      title: 'Content pack tools',
-      copy: 'Use the internal pack registry view for uploads, visibility, and activation settings.',
+      eyebrow: 'Admin',
+      title: 'Content packs',
+      copy: 'Choose which rules and content packs are available in this workspace.',
     },
   } satisfies Record<WorkspacePage, { eyebrow: string; title: string; copy: string }>
 
@@ -505,6 +576,7 @@ function SignedInOverview({ identity }: { identity: ReturnType<typeof useViewerI
             backendUrl,
             accessToken: access.accessToken,
             dungeonId: dungeonId ? String(dungeonId) : undefined,
+            generatedPackIndexUrl: new URL(GENERATED_CHARACTER_PACK_INDEX_PATH, backendUrl).toString(),
           }),
           '_blank',
           'noopener,noreferrer',
@@ -541,6 +613,30 @@ function SignedInOverview({ identity }: { identity: ReturnType<typeof useViewerI
     } catch (mutationError) {
       console.error(mutationError)
       setDungeonLibrary({ error: 'Copying the dungeon failed.' })
+    }
+
+    setDungeonLibrary({ activeAction: null })
+  }
+
+  async function handleCopyShareLink(dungeonId: Id<'dungeons'>, title: string) {
+    const shareLink = buildDungeonShareLink(String(dungeonId))
+
+    setDungeonLibrary({
+      error: null,
+      notice: null,
+      activeAction: `share:${dungeonId}`,
+    })
+
+    try {
+      if (!navigator.clipboard) {
+        throw new Error('Clipboard API unavailable.')
+      }
+
+      await navigator.clipboard.writeText(shareLink)
+      setDungeonLibrary({ notice: `Copied share link for "${title}".` })
+    } catch (clipboardError) {
+      console.error(clipboardError)
+      setDungeonLibrary({ notice: `Share code for "${title}": ${String(dungeonId)}` })
     }
 
     setDungeonLibrary({ activeAction: null })
@@ -667,111 +763,66 @@ function SignedInOverview({ identity }: { identity: ReturnType<typeof useViewerI
     setSessionTools({ isWorking: false })
   }
 
-  function handleNewPackDraft() {
-    startNewPackDraft()
-  }
+  async function installRulesPack(packUrl: string, packRecordId?: Id<'packs'>) {
+    const manifest = await loadBundledPackManifest(packUrl)
 
-  async function uploadPackFile(file: File) {
-    const payload = await uploadFileThroughBackend(file) as { storageId: Id<'_storage'> }
-    return payload.storageId
-  }
-
-  async function handleSavePack() {
-    const normalizedPackId = packTools.packIdDraft.trim()
-    const normalizedName = packTools.nameDraft.trim()
-    const normalizedVersion = packTools.versionDraft.trim()
-
-    if (!normalizedPackId || !normalizedName || !normalizedVersion) {
-      setPackTools({
-        error: 'Pack ID, name, and version are required before saving.',
-        notice: null,
-      })
-      return
-    }
-
-    let parsedEntries: unknown
-    let parsedDefaultRefs: unknown
-
-    try {
-      parsedEntries = JSON.parse(packTools.entriesJsonDraft)
-      parsedDefaultRefs = JSON.parse(packTools.defaultRefsJsonDraft)
-    } catch {
-      setPackTools({
-        error: 'Pack entries JSON and default refs JSON must both be valid JSON.',
-        notice: null,
-      })
-      return
-    }
-
-    setPackTools({
-      isWorking: true,
-      error: null,
-      notice: null,
+    return savePackRecord({
+      packRecordId,
+      ...toWorkspaceRulesPackSaveInput(manifest),
     })
+  }
+
+  async function handleInstallBundledPack(packUrl: string, packId: string, name: string) {
+    setPackTools({ error: null, notice: null, isWorking: true })
+    setRemotePackError(null)
+    setRemotePackNotice(null)
 
     try {
-      const entriesForMutation = Array.isArray(parsedEntries)
-        ? parsedEntries.map((entry) => ({
-            id: typeof entry?.id === 'string' ? entry.id : '',
-            localId: typeof entry?.localId === 'string' ? entry.localId : '',
-            name: typeof entry?.name === 'string' ? entry.name : '',
-            entryKind: entry?.entryKind === 'rules-data' ? ('rules-data' as const) : ('scene-asset' as const),
-            category: typeof entry?.category === 'string' ? entry.category : '',
-            assetFileRef: typeof entry?.assetFileRef === 'string' ? entry.assetFileRef : undefined,
-            thumbnailFileRef: typeof entry?.thumbnailFileRef === 'string' ? entry.thumbnailFileRef : undefined,
-            placement: typeof entry?.placement === 'object' && entry.placement !== null ? entry.placement : undefined,
-             browser: typeof entry?.browser === 'object' && entry.browser !== null ? entry.browser : undefined,
-             light: typeof entry?.light === 'object' && entry.light !== null ? entry.light : undefined,
-             effects: Array.isArray(entry?.effects) ? entry.effects : undefined,
-           }))
-        : []
-      const nextManifestStorageId = packTools.manifestFile ? await uploadPackFile(packTools.manifestFile) : packTools.manifestStorageId ?? undefined
-      const nextThumbnailStorageId = packTools.thumbnailFile ? await uploadPackFile(packTools.thumbnailFile) : packTools.thumbnailStorageId ?? undefined
-
-      const savedPackRecordId = await savePackRecord({
-        packRecordId: packTools.selectedPackRecordId ?? undefined,
-        packId: normalizedPackId,
-        name: normalizedName,
-        kind: packTools.kindDraft,
-        version: normalizedVersion,
-        visibility: packTools.visibilityDraft,
-        description: packTools.descriptionDraft.trim() || undefined,
-        isActive: packTools.visibilityDraft === 'global' ? true : packTools.isActiveDraft,
-        manifestStorageId: nextManifestStorageId,
-        thumbnailStorageId: nextThumbnailStorageId,
-        defaultAssetRefs: parsedDefaultRefs as {
-          floor?: string
-          wall?: string
-          opening?: string
-          prop?: string
-          player?: string
-        },
-        entries: entriesForMutation,
-      })
-
-      setPackTools({
-        selectedPackRecordId: savedPackRecordId,
-        manifestStorageId: nextManifestStorageId ?? null,
-        thumbnailStorageId: nextThumbnailStorageId ?? null,
-        manifestFile: null,
-        thumbnailFile: null,
-        notice: packTools.selectedPackRecordId ? 'Updated the pack registry record.' : 'Saved a new pack registry record.',
-      })
+      const existingPackRecord = installedPackById.get(packId)
+      await installRulesPack(packUrl, existingPackRecord?._id as Id<'packs'> | undefined)
+      setPackTools({ notice: existingPackRecord ? `Updated "${name}".` : `Installed "${name}".` })
     } catch (mutationError) {
       console.error(mutationError)
-      setPackTools({
-        error: 'Saving the pack failed. Check the canonical metadata JSON and admin permissions.',
-      })
+      setPackTools({ error: `Installing "${name}" failed.` })
     }
 
     setPackTools({ isWorking: false })
   }
 
-  async function handleTogglePackActive() {
-    if (!packTools.selectedPackRecordId || !selectedPackRecord) {
+  async function handleInstallRemotePack() {
+    const normalizedUrl = remotePackUrl.trim()
+
+    if (!normalizedUrl) {
+      setRemotePackError('Enter a pack URL first.')
+      setRemotePackNotice(null)
       return
     }
 
+    setIsImportingRemotePack(true)
+    setRemotePackError(null)
+    setRemotePackNotice(null)
+    setPackTools({ error: null, notice: null })
+
+    try {
+      const manifest = await loadBundledPackManifest(normalizedUrl)
+      const existingPackRecord = installedPackById.get(manifest.packId)
+
+      await savePackRecord({
+        packRecordId: existingPackRecord?._id as Id<'packs'> | undefined,
+        ...toWorkspaceRulesPackSaveInput(manifest),
+      })
+
+      setRemotePackNotice(existingPackRecord ? `Updated "${manifest.name}" from ${normalizedUrl}.` : `Installed "${manifest.name}" from ${normalizedUrl}.`)
+      setRemotePackUrl('')
+    } catch (mutationError) {
+      console.error(mutationError)
+      setRemotePackError('Importing the remote pack failed. Make sure the URL returns a valid pack JSON document.')
+    }
+
+    setIsImportingRemotePack(false)
+  }
+
+  async function handleTogglePackActive(pack: WorkspaceRulesPackRecord) {
     setPackTools({
       isWorking: true,
       error: null,
@@ -780,13 +831,12 @@ function SignedInOverview({ identity }: { identity: ReturnType<typeof useViewerI
 
     try {
       await setPackActive({
-        packRecordId: packTools.selectedPackRecordId,
-        isActive: !selectedPackRecord.isActive,
+        packRecordId: pack._id,
+        isActive: !pack.isActive,
       })
 
       setPackTools({
-        isActiveDraft: !selectedPackRecord.isActive,
-        notice: `${selectedPackRecord.isActive ? 'Deactivated' : 'Activated'} "${selectedPackRecord.name}".`,
+        notice: `${pack.isActive ? 'Deactivated' : 'Activated'} "${pack.name}".`,
       })
     } catch (mutationError) {
       console.error(mutationError)
@@ -800,11 +850,11 @@ function SignedInOverview({ identity }: { identity: ReturnType<typeof useViewerI
     <>
       <section className="signed-in-card signed-in-card--overview" aria-labelledby="signed-in-title">
         <div>
-          <p className="app-shell__eyebrow">Your table</p>
+          <p className="app-shell__eyebrow">Workspace</p>
           <h2 className="panel__title" id="signed-in-title">
             {identity.viewer?.name ?? identity.viewer?.email ?? 'DungeonPlanner user'}
           </h2>
-          <p className="panel__copy">Welcome back. Your private workspace is ready when you are.</p>
+          <p className="panel__copy">Pick up your prep, manage your table, or open a saved map.</p>
         </div>
 
         <div className="signed-in-card__meta">
@@ -822,7 +872,7 @@ function SignedInOverview({ identity }: { identity: ReturnType<typeof useViewerI
                   </span>
                 ))
               ) : (
-                <span className="role-badge role-badge--muted">provisioning</span>
+                <span className="role-badge role-badge--muted">pending</span>
               )}
             </div>
           </div>
@@ -844,40 +894,23 @@ function SignedInOverview({ identity }: { identity: ReturnType<typeof useViewerI
         ))}
       </nav>
 
-      {canAccessDevMenu && (activePage === 'dev' || isDevWorkspacePage(activePage)) ? (
-        <nav className="workspace-nav workspace-nav--nested" aria-label="Dev pages">
-          <a className={`workspace-nav__link ${activePage === 'dev' ? 'workspace-nav__link--active' : ''}`} href="#/app/dev">
-            Dev Home
-          </a>
-          {devNavItems.map((item) => (
-            <a
-              className={`workspace-nav__link ${activePage === item.id ? 'workspace-nav__link--active' : ''}`}
-              href={item.href}
-              key={item.id}
-            >
-              {item.label}
-            </a>
-          ))}
-        </nav>
-      ) : null}
-
       {activePage === 'overview' ? (
         <section className="panels" aria-label="Workspace overview">
           {canAccessDungeonLibrary ? (
             <article className="status-card overview-card">
-              <p className="status-card__label">Dungeon Library</p>
+              <p className="status-card__label">Dungeons</p>
               <p className="status-card__value">{libraryRecords?.length ?? 0} saved</p>
-              <p className="status-card__copy">Build dungeons for yourself, keep them private, and load any draft back into editing.</p>
+              <p className="status-card__copy">Saved maps are ready to reopen, duplicate, or continue in the editor.</p>
               <a className="hero-panel__button hero-panel__button--secondary" href="#/app/library">
-                Open Dungeon Library
+                Open library
               </a>
             </article>
           ) : null}
           <article className="status-card overview-card">
-            <p className="status-card__label">Roles</p>
-            <p className="status-card__value">{identity.roles.length > 0 ? identity.roles.join(', ') : 'provisioning'}</p>
+            <p className="status-card__label">Access</p>
+            <p className="status-card__value">{identity.roles.length > 0 ? identity.roles.join(', ') : 'pending'}</p>
             <p className="status-card__copy">
-              Everyone can build private dungeons. Dungeon master tools stay limited to users with DM access.
+              Your roles determine which library, session, and admin tools are available.
             </p>
           </article>
         </section>
@@ -897,128 +930,161 @@ function SignedInOverview({ identity }: { identity: ReturnType<typeof useViewerI
       activePage === 'overview' ? (
         <section className="signed-in-card">
           <div>
-            <p className="app-shell__eyebrow">Player access</p>
-            <h2 className="panel__title">Your workspace is open</h2>
-            <p className="panel__copy">Start building private dungeons now. Session-running tools appear when your access expands.</p>
+            <p className="app-shell__eyebrow">Player tools</p>
+            <h2 className="panel__title">Your workspace is ready</h2>
+            <p className="panel__copy">You can create private dungeons now. More table tools appear when your role changes.</p>
           </div>
         </section>
       ) : null}
 
       <section className="panels" aria-label="Authenticated product modules">
-        {activePage === 'dev' ? (
-          <article className="panel panel--library">
-            <p className="panel__eyebrow">Development</p>
-            <h2 className="panel__title">Hidden development views</h2>
-            <p className="panel__copy">
-              These screens stay tucked behind the debug shortcut so the main product surface can stay focused on player-facing workflows.
-            </p>
-
-            <div className="panels">
-              {devNavItems.map((item) => (
-                <article className="status-card overview-card" key={item.id}>
-                  <p className="status-card__label">{item.label}</p>
-                  <p className="status-card__value">
-                    {item.id === 'sessions'
-                      ? `${sessionRecords?.length ?? 0} active`
-                      : item.id === 'characters'
-                        ? `${characterRecords?.length ?? 0} ready`
-                        : item.id === 'admin-users'
-                          ? `${workspaceMembers?.length ?? 0} visible`
-                          : `${packRecords?.length ?? 0} registered`}
-                  </p>
-                  <p className="status-card__copy">
-                    {item.id === 'sessions'
-                      ? 'Open the current session creation, join, and access-ticket view.'
-                      : item.id === 'characters'
-                        ? 'Open the current character library and session-attachment view.'
-                        : item.id === 'admin-users'
-                          ? 'Open the current role and workspace membership management view.'
-                          : 'Open the current pack upload and activation management view.'}
-                  </p>
-                  <a className="hero-panel__button hero-panel__button--secondary" href={item.href}>
-                    Open {item.label}
-                  </a>
-                </article>
-              ))}
-            </div>
-          </article>
-        ) : null}
-
         {activePage === 'library' && canAccessDungeonLibrary ? (
           <article className="panel panel--library">
             <p className="panel__eyebrow">Dungeon Library</p>
-            <h2 className="panel__title">Saved dungeons</h2>
+            <h2 className="panel__title">Your saved maps</h2>
             <p className="panel__copy">
-              Browse your private dungeon library and continue building any saved map in the main editor.
+              Find, open, duplicate, or share the maps you have prepared for this workspace.
             </p>
 
-            <div className="library-sync-state library-sync-state--muted">
-              <div>
-                <p className="status-card__label">Library status</p>
-                <p className="library-sync-state__title">{libraryRecords?.length ?? 0} saved dungeons</p>
+            <div className="library-toolbar">
+              <label className="auth-card__field library-toolbar__search">
+                <span>Search library</span>
+                <input
+                  onChange={(event) => setDungeonSearch(event.target.value)}
+                  placeholder="Search by title, description, or #tag"
+                  type="search"
+                  value={dungeonSearch}
+                />
+              </label>
+              <button
+                className="hero-panel__button hero-panel__button--primary"
+                disabled={dungeonLibrary.activeAction === 'new'}
+                onClick={() => void handleLaunchEditor()}
+                type="button"
+              >
+                {dungeonLibrary.activeAction === 'new' ? 'Opening...' : 'New map'}
+              </button>
+            </div>
+
+            {dungeonTags.length > 0 ? (
+              <div className="library-tags" aria-label="Dungeon tags">
+                <button
+                  className={`library-tag ${selectedDungeonTag === null ? 'library-tag--active' : ''}`}
+                  onClick={() => setSelectedDungeonTag(null)}
+                  type="button"
+                >
+                  All
+                </button>
+                {dungeonTags.map((tag) => (
+                  <button
+                    className={`library-tag ${selectedDungeonTag === tag ? 'library-tag--active' : ''}`}
+                    key={tag}
+                    onClick={() => setSelectedDungeonTag(tag)}
+                    type="button"
+                  >
+                    {tag}
+                  </button>
+                ))}
               </div>
-              <p className="panel__copy">
-                Open any saved dungeon straight in the editor, or duplicate and tidy up your library from here.
-              </p>
+            ) : null}
+
+            <div className="library-summary-row">
+              <div className="library-sync-state library-sync-state--muted">
+                <p className="status-card__label">Saved maps</p>
+                <p className="library-sync-state__title">{libraryRecords?.length ?? 0}</p>
+              </div>
+              <div className="library-sync-state library-sync-state--muted">
+                <p className="status-card__label">Showing</p>
+                <p className="library-sync-state__title">{filteredLibraryRecords.length}</p>
+              </div>
+              <div className="library-sync-state library-sync-state--muted">
+                <p className="status-card__label">Tags</p>
+                <p className="library-sync-state__title">{dungeonTags.length}</p>
+              </div>
             </div>
 
             <div className="library-grid">
               <section className="library-card">
                 <div className="library-card__header">
                   <div>
-                    <p className="status-card__label">Saved records</p>
-                    <h3 className="library-card__title">Dungeon library</h3>
+                    <p className="status-card__label">Maps</p>
+                    <h3 className="library-card__title">Saved in this workspace</h3>
                   </div>
-                  <button
-                    className="hero-panel__button hero-panel__button--secondary"
-                    disabled={dungeonLibrary.activeAction === 'new'}
-                    onClick={() => void handleLaunchEditor()}
-                    type="button"
-                  >
-                    {dungeonLibrary.activeAction === 'new' ? 'Opening...' : 'New in editor'}
-                  </button>
                 </div>
 
                 {libraryRecords && libraryRecords.length > 0 ? (
                   <div className="library-records">
-                    {libraryRecords.map((record) => (
-                      <article className="library-record" key={record._id}>
-                        <div>
-                          <p className="library-record__title">{record.title}</p>
-                          <p className="panel__copy">{record.description ?? 'No description yet.'}</p>
-                          <p className="library-record__meta">Updated {new Date(record.updatedAt).toLocaleString()}</p>
-                        </div>
-                        <div className="library-record__actions">
-                          <button
-                            className="hero-panel__button hero-panel__button--secondary"
-                            disabled={!backendUrl || dungeonLibrary.activeAction === `open:${record._id}`}
-                            onClick={() => void handleLaunchEditor(record._id)}
-                            type="button"
-                          >
-                            {dungeonLibrary.activeAction === `open:${record._id}` ? 'Opening...' : 'Open'}
-                          </button>
-                          <button
-                            className="hero-panel__button hero-panel__button--secondary"
-                            disabled={dungeonLibrary.activeAction === `copy:${record._id}`}
-                            onClick={() => void handleCopyDungeon(record._id)}
-                            type="button"
-                          >
-                            {dungeonLibrary.activeAction === `copy:${record._id}` ? 'Copying...' : 'Copy'}
-                          </button>
-                          <button
-                            className="hero-panel__button hero-panel__button--secondary library-record__button--danger"
-                            disabled={dungeonLibrary.activeAction === `delete:${record._id}`}
-                            onClick={() => void handleDeleteDungeon(record._id, record.title)}
-                            type="button"
-                          >
-                            {dungeonLibrary.activeAction === `delete:${record._id}` ? 'Deleting...' : 'Delete'}
-                          </button>
-                        </div>
-                      </article>
-                    ))}
+                    {filteredLibraryRecords.length > 0 ? filteredLibraryRecords.map((record) => {
+                      const tags = getDungeonTags(record)
+
+                      return (
+                        <article className="library-record" key={record._id}>
+                          <div className="library-record__body">
+                            <p className="library-record__title">{record.title}</p>
+                            <p className="panel__copy">{record.description ?? 'No description yet.'}</p>
+                            {tags.length > 0 ? (
+                              <div className="library-record__tags">
+                                {tags.map((tag) => (
+                                  <button
+                                    className="library-tag library-tag--small"
+                                    key={tag}
+                                    onClick={() => setSelectedDungeonTag(tag)}
+                                    type="button"
+                                  >
+                                    {tag}
+                                  </button>
+                                ))}
+                              </div>
+                            ) : null}
+                            <p className="library-record__meta">Updated {new Date(record.updatedAt).toLocaleString()}</p>
+                          </div>
+                          <div className="library-record__controls">
+                            <div className="library-record__actions">
+                              <button
+                                className="hero-panel__button hero-panel__button--secondary"
+                                disabled={!backendUrl || dungeonLibrary.activeAction === `open:${record._id}`}
+                                onClick={() => void handleLaunchEditor(record._id)}
+                                type="button"
+                              >
+                                {dungeonLibrary.activeAction === `open:${record._id}` ? 'Opening...' : 'Open'}
+                              </button>
+                              <button
+                                className="hero-panel__button hero-panel__button--secondary"
+                                disabled={dungeonLibrary.activeAction === `copy:${record._id}`}
+                                onClick={() => void handleCopyDungeon(record._id)}
+                                type="button"
+                              >
+                                {dungeonLibrary.activeAction === `copy:${record._id}` ? 'Copying...' : 'Copy'}
+                              </button>
+                              <button
+                                className="hero-panel__button hero-panel__button--secondary library-record__button--danger"
+                                disabled={dungeonLibrary.activeAction === `delete:${record._id}`}
+                                onClick={() => void handleDeleteDungeon(record._id, record.title)}
+                                type="button"
+                              >
+                                {dungeonLibrary.activeAction === `delete:${record._id}` ? 'Deleting...' : 'Delete'}
+                              </button>
+                              <button
+                                className="hero-panel__button hero-panel__button--secondary"
+                                disabled={dungeonLibrary.activeAction === `share:${record._id}`}
+                                onClick={() => void handleCopyShareLink(record._id, record.title)}
+                                type="button"
+                              >
+                                {dungeonLibrary.activeAction === `share:${record._id}` ? 'Copying...' : 'Share link'}
+                              </button>
+                            </div>
+                            <p className="library-record__share-note">
+                              Opens as a private copy for another workspace user.
+                            </p>
+                          </div>
+                        </article>
+                      )
+                    }) : (
+                      <p className="panel__copy">No maps match the current search.</p>
+                    )}
                   </div>
                 ) : (
-                  <p className="panel__copy">No dungeons have been saved here yet.</p>
+                  <p className="panel__copy">No maps have been saved here yet.</p>
                 )}
 
                 {!backendUrl ? (
@@ -1179,189 +1245,165 @@ function SignedInOverview({ identity }: { identity: ReturnType<typeof useViewerI
         ) : null}
 
         {activePage === 'characters' && identity.access.canUseCharacterLibrary ? (
-          <ActorLibraryPanel />
+          <DragonbaneCharacterCreator packs={runtimeCharacterPacks} />
         ) : null}
 
         {activePage === 'admin-packs' && identity.access.canManagePacks ? (
           <article className="panel panel--packs">
-            <p className="panel__eyebrow">Admin</p>
-            <h2 className="panel__title">Content packs</h2>
-            <p className="panel__copy">
-              Keep your pack catalog organized, set defaults, and control what your group can use.
-            </p>
+            <header className="packs-hero">
+              <div>
+                <p className="panel__eyebrow">Admin</p>
+                <h2 className="panel__title">Content packs</h2>
+                <p className="panel__copy">
+                  Add rules content for your workspace and choose which packs are active.
+                </p>
+              </div>
+              <div className="packs-metrics" aria-label="Pack summary">
+                <div className="packs-metric">
+                  <span>Installed</span>
+                  <strong>{packRecords?.length ?? 0}</strong>
+                </div>
+                <div className="packs-metric">
+                  <span>Active</span>
+                  <strong>{packRecords?.filter((pack) => pack.isActive).length ?? 0}</strong>
+                </div>
+                <div className="packs-metric">
+                  <span>Bundled</span>
+                  <strong>{bundledRegistry?.packs.length ?? 0}</strong>
+                </div>
+              </div>
+            </header>
 
-            <div className="library-grid">
-              <section className="library-card">
-                <div className="library-card__header">
+            {packError ? <p className="auth-card__error">{packError}</p> : null}
+            {packNotice ? <p className="library-notice">{packNotice}</p> : null}
+
+            <div className="packs-layout packs-layout--registry">
+              <section className="packs-card packs-card--installed" aria-labelledby="installed-packs-title">
+                <div className="packs-section-heading">
                   <div>
-                    <p className="status-card__label">Registry records</p>
-                    <h3 className="library-card__title">Available packs</h3>
+                    <p className="status-card__label">Workspace registry</p>
+                    <h3 className="library-card__title" id="installed-packs-title">Installed packs</h3>
                   </div>
-                  <button className="hero-panel__button hero-panel__button--secondary" onClick={handleNewPackDraft} type="button">
-                    New pack
-                  </button>
+                  <p className="panel__copy">
+                    Active packs are available to character tools and play sessions.
+                  </p>
                 </div>
 
                 {packRecords && packRecords.length > 0 ? (
-                  <div className="library-records">
-                    {packRecords.map((pack) => (
-                      <button
-                        className={`library-record ${selectedPackRecordId === pack._id ? 'library-record--selected' : ''}`}
-                        key={pack._id}
-                        onClick={() => hydratePackDraft(pack)}
-                        type="button"
-                      >
-                        <div>
-                          <p className="library-record__title">{pack.name}</p>
-                          <p className="panel__copy">
-                            {pack.packId} · {pack.kind} · {pack.visibility} · {pack.isActive ? 'active' : 'inactive'}
-                          </p>
-                        </div>
-                        <p className="library-record__meta">{pack.entries.length} canonical entr{pack.entries.length === 1 ? 'y' : 'ies'}</p>
-                      </button>
-                    ))}
+                  <div className="packs-records packs-records--grid">
+                    {packRecords.map((pack) => {
+                      const isForcedActive = pack.visibility === 'global'
+
+                      return (
+                        <article className={`packs-record packs-record--static ${pack.isActive ? 'packs-record--active' : ''}`} key={pack._id}>
+                          <div className="packs-record__body">
+                            <span className="packs-record__kind">{pack.kind}</span>
+                            <strong>{pack.name}</strong>
+                            <span>{pack.packId} · {pack.version} · {pack.visibility}</span>
+                            <small>{pack.entries.length} canonical entr{pack.entries.length === 1 ? 'y' : 'ies'}</small>
+                            {pack.description ? <p className="panel__copy">{pack.description}</p> : null}
+                          </div>
+                          <div className="library-card__actions">
+                            <span className={pack.isActive ? 'packs-state packs-state--active' : 'packs-state'}>
+                              {pack.isActive ? 'Active' : 'Inactive'}
+                            </span>
+                            <button
+                              className="hero-panel__button hero-panel__button--tiny hero-panel__button--secondary"
+                              disabled={isWorkingPacks || isForcedActive}
+                              onClick={() => void handleTogglePackActive(pack)}
+                              type="button"
+                            >
+                              {isForcedActive ? 'Always active' : pack.isActive ? 'Deactivate' : 'Activate'}
+                            </button>
+                          </div>
+                        </article>
+                      )
+                    })}
                   </div>
                 ) : (
-                  <p className="panel__copy">No packs have been registered yet.</p>
+                  <p className="panel__copy">No packs are installed yet. Add one from the bundled list or import a pack URL.</p>
                 )}
               </section>
 
-              <section className="library-card">
-                <div className="library-card__header">
+              <aside className="packs-sidebar" aria-label="Install content packs">
+                <details className="packs-card packs-disclosure" open>
+                  <summary>
+                    <span>
+                      <span className="status-card__label">Included packs</span>
+                      <strong>Ready to add</strong>
+                    </span>
+                  </summary>
+
+                  {bundledPackState.error ? <p className="auth-card__error">{bundledPackState.error}</p> : null}
+                  {bundledPackState.isLoading ? <p className="panel__copy">Loading bundled packs...</p> : null}
+                  {availableBundledPackEntries.length > 0 ? (
+                    <div className="packs-records">
+                      {availableBundledPackEntries.map((registryEntry) => {
+                        const manifest = bundledPacks.find((pack) => pack.packId === registryEntry.packId)
+
+                        return (
+                          <div className="packs-record packs-record--static" key={registryEntry.packId}>
+                            <div>
+                              <strong>{registryEntry.name}</strong>
+                              <p className="panel__copy">
+                                {registryEntry.packId} · {registryEntry.version} · optional
+                              </p>
+                              <p className="library-record__meta">{registryEntry.path}</p>
+                            </div>
+                            <div className="library-card__actions">
+                              <button
+                                className="hero-panel__button hero-panel__button--tiny hero-panel__button--primary"
+                                disabled={isWorkingPacks || !manifest}
+                                onClick={() => void handleInstallBundledPack(registryEntry.path, registryEntry.packId, registryEntry.name)}
+                                type="button"
+                              >
+                                Install
+                              </button>
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  ) : bundledPackState.isLoading ? null : (
+                    <p className="panel__copy">All included packs have already been added.</p>
+                  )}
+                </details>
+
+                <section className="packs-card packs-import">
                   <div>
-                    <p className="status-card__label">Canonical draft</p>
-                    <h3 className="library-card__title">Pack metadata editor</h3>
+                    <p className="status-card__label">Import</p>
+                    <h3 className="library-card__title">Add pack from URL</h3>
                   </div>
-                </div>
-
-                <div className="role-manager">
-                  <label className="auth-card__field">
-                    <span>Pack ID</span>
-                    <input onChange={(event) => setPackIdDraft(event.target.value)} placeholder="dungeon" type="text" value={packIdDraft} />
-                  </label>
 
                   <label className="auth-card__field">
-                    <span>Name</span>
-                    <input onChange={(event) => setPackNameDraft(event.target.value)} placeholder="Dungeon Core" type="text" value={packNameDraft} />
-                  </label>
-
-                  <label className="auth-card__field">
-                    <span>Kind</span>
-                    <select className="auth-card__select" onChange={(event) => setPackKindDraft(event.target.value as 'asset' | 'rules')} value={packKindDraft}>
-                      <option value="asset">asset</option>
-                      <option value="rules">rules</option>
-                    </select>
-                  </label>
-
-                  <label className="auth-card__field">
-                    <span>Version</span>
-                    <input onChange={(event) => setPackVersionDraft(event.target.value)} placeholder="1.0.0" type="text" value={packVersionDraft} />
-                  </label>
-
-                  <label className="auth-card__field">
-                    <span>Visibility</span>
-                    <select
-                      className="auth-card__select"
-                      onChange={(event) => setPackVisibilityDraft(event.target.value as 'global' | 'public' | 'private')}
-                      value={packVisibilityDraft}
-                    >
-                      <option value="global">global</option>
-                      <option value="public">public</option>
-                      <option value="private">private</option>
-                    </select>
-                  </label>
-
-                  <label className="auth-card__field">
-                    <span>Active</span>
-                    <select
-                      className="auth-card__select"
-                      disabled={packVisibilityDraft === 'global'}
-                      onChange={(event) => setPackIsActiveDraft(event.target.value === 'true')}
-                      value={packVisibilityDraft === 'global' ? 'true' : String(packIsActiveDraft)}
-                    >
-                      <option value="true">true</option>
-                      <option value="false">false</option>
-                    </select>
-                  </label>
-                </div>
-
-                <label className="auth-card__field">
-                  <span>Description</span>
-                  <input
-                    onChange={(event) => setPackDescriptionDraft(event.target.value)}
-                    placeholder="Core dungeon tiles and openings"
-                    type="text"
-                    value={packDescriptionDraft}
-                  />
-                </label>
-
-                <div className="role-manager">
-                  <label className="auth-card__field">
-                    <span>Manifest file</span>
+                    <span>Pack URL</span>
                     <input
-                      onChange={(event) => setManifestFile(event.target.files?.[0] ?? null)}
-                      type="file"
+                      onChange={(event) => setRemotePackUrl(event.target.value)}
+                      placeholder="https://example.com/my-pack.json"
+                      type="url"
+                      value={remotePackUrl}
                     />
-                    <span className="panel__copy">{manifestFile?.name ?? (manifestStorageId ? `Stored: ${manifestStorageId}` : 'Optional')}</span>
                   </label>
 
-                  <label className="auth-card__field">
-                    <span>Thumbnail file</span>
-                    <input
-                      accept="image/*"
-                      onChange={(event) => setThumbnailFile(event.target.files?.[0] ?? null)}
-                      type="file"
-                    />
-                    <span className="panel__copy">{thumbnailFile?.name ?? (thumbnailStorageId ? `Stored: ${thumbnailStorageId}` : 'Optional')}</span>
-                  </label>
-                </div>
+                  <p className="panel__copy">
+                    Use a direct link to a compatible pack file. Re-importing the same pack updates it.
+                  </p>
 
-                <label className="auth-card__field">
-                  <span>Default asset refs JSON</span>
-                  <textarea
-                    className="library-editor"
-                    onChange={(event) => setPackDefaultRefsJson(event.target.value)}
-                    rows={6}
-                    value={packDefaultRefsJson}
-                  />
-                </label>
+                  {remotePackError ? <p className="auth-card__error">{remotePackError}</p> : null}
+                  {remotePackNotice ? <p className="library-notice">{remotePackNotice}</p> : null}
 
-                <label className="auth-card__field">
-                  <span>Canonical entries JSON</span>
-                  <textarea
-                    className="library-editor"
-                    onChange={(event) => setPackEntriesJson(event.target.value)}
-                    rows={14}
-                    value={packEntriesJson}
-                  />
-                </label>
-
-                {packError ? <p className="auth-card__error">{packError}</p> : null}
-                {packNotice ? <p className="library-notice">{packNotice}</p> : null}
-
-                <div className="library-card__actions">
-                  <button
-                    className="hero-panel__button hero-panel__button--primary"
-                    disabled={isWorkingPacks}
-                    onClick={() => void handleSavePack()}
-                    type="button"
-                  >
-                    {selectedPackRecordId ? 'Update pack' : 'Save pack'}
-                  </button>
-                  <button
-                    className="hero-panel__button hero-panel__button--secondary"
-                    disabled={!selectedPackRecordId || isWorkingPacks}
-                    onClick={() => void handleTogglePackActive()}
-                    type="button"
-                  >
-                    {selectedPackRecord?.isActive ? 'Deactivate pack' : 'Activate pack'}
-                  </button>
-                </div>
-
-                <p className="panel__copy">
-                  Pack-managed references use <code>packId:localId</code> so assets stay tidy across your library.
-                </p>
-              </section>
+                  <div className="library-card__actions">
+                    <button
+                      className="hero-panel__button hero-panel__button--primary"
+                      disabled={isImportingRemotePack}
+                      onClick={() => void handleInstallRemotePack()}
+                      type="button"
+                    >
+                      {isImportingRemotePack ? 'Importing...' : 'Import pack'}
+                    </button>
+                  </div>
+                </section>
+              </aside>
             </div>
           </article>
         ) : null}
@@ -1371,10 +1413,10 @@ function SignedInOverview({ identity }: { identity: ReturnType<typeof useViewerI
           <div className="auth-card__header">
             <p className="app-shell__eyebrow">Admin</p>
             <h2 className="panel__title" id="role-manager-title">
-              User access
+              Manage users
             </h2>
             <p className="panel__copy">
-              Add new users, grant roles by email, and keep the right tools in the right hands.
+              Grant or remove workspace roles by email.
             </p>
           </div>
 
@@ -1476,9 +1518,8 @@ function SignedInOverview({ identity }: { identity: ReturnType<typeof useViewerI
 function App() {
   const { isAuthenticated, isLoading } = useBackendAuthState()
   const identity = useViewerIdentity()
-  const { shell, setCurrentPath, toggleDevMenuVisible, setDevMenuVisible, resetWorkspaceState } = useAuthenticatedAppState()
+  const { shell, setCurrentPath, resetWorkspaceState } = useAuthenticatedAppState()
   const currentPath = shell.currentPath
-  const isDevMenuVisible = shell.isDevMenuVisible
   const publicPath = currentPath === '/login' ? '/login' : '/'
 
   useEffect(() => {
@@ -1495,35 +1536,10 @@ function App() {
   }, [setCurrentPath])
 
   useEffect(() => {
-    if (!isAuthenticated || !identity.access.isAdmin) return
-
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.ctrlKey && event.shiftKey && event.key === 'F12') {
-        event.preventDefault()
-        toggleDevMenuVisible()
-      }
-    }
-
-    window.addEventListener('keydown', handleKeyDown)
-
-    return () => {
-      window.removeEventListener('keydown', handleKeyDown)
-    }
-  }, [identity.access.isAdmin, isAuthenticated, toggleDevMenuVisible])
-
-  useEffect(() => {
     if (!isAuthenticated) {
       resetWorkspaceState()
     }
   }, [isAuthenticated, resetWorkspaceState])
-
-  useEffect(() => {
-    if (!identity.access.isAdmin && isDevMenuVisible) {
-      setDevMenuVisible(false)
-    }
-  }, [identity.access.isAdmin, isDevMenuVisible, setDevMenuVisible])
-
-  const showDevHeaderLink = isAuthenticated && identity.access.isAdmin && isDevMenuVisible
 
   return (
     <div className="app-shell">
@@ -1544,19 +1560,11 @@ function App() {
               <GitHubMark />
               GitHub
             </a>
-            {showDevHeaderLink ? (
-              <a
-                className={currentPath.startsWith('/app/dev') ? 'header-nav__link--active' : undefined}
-                href="#/app/dev"
-              >
-                Dev
-              </a>
-            ) : null}
             <a
               className={
                 !isAuthenticated && publicPath === '/login'
                   ? 'header-nav__link--active'
-                  : isAuthenticated && currentPath.startsWith('/app') && !currentPath.startsWith('/app/dev')
+                  : isAuthenticated && currentPath.startsWith('/app')
                     ? 'header-nav__link--active'
                     : undefined
               }

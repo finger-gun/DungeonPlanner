@@ -2,8 +2,8 @@ export const devSeedAccounts = Object.freeze([
   {
     key: 'admin',
     name: 'Dev Admin',
-    email: 'admin@dungeonplanner.local',
-    password: 'DungeonPlanner123!',
+    email: 'admin@dungeonplanner.com',
+    password: 'password',
     workspaceName: 'Admin Workspace',
     workspaceRoles: ['dm', 'player'],
     globalRoles: ['admin'],
@@ -11,8 +11,8 @@ export const devSeedAccounts = Object.freeze([
   {
     key: 'dm',
     name: 'Dev DM',
-    email: 'dm@dungeonplanner.local',
-    password: 'DungeonPlanner123!',
+    email: 'dm@dungeonplanner.com',
+    password: 'password',
     workspaceName: 'DM Workspace',
     workspaceRoles: ['dm', 'player'],
     globalRoles: [],
@@ -20,8 +20,8 @@ export const devSeedAccounts = Object.freeze([
   {
     key: 'player',
     name: 'Dev Player',
-    email: 'player@dungeonplanner.local',
-    password: 'DungeonPlanner123!',
+    email: 'player@dungeonplanner.com',
+    password: 'password',
     workspaceName: 'Player Workspace',
     workspaceRoles: ['player'],
     globalRoles: [],

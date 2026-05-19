@@ -237,7 +237,7 @@ export function RoomResizeOverlay({ bakedLightField = null }: RoomResizeOverlayP
     dragStateRef.current = null
     setDragState(null)
     setRoomResizeHandleActive(false)
-    
+
     // Ensure controls are re-enabled when overlay is hidden
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const orbitControls = controls as any

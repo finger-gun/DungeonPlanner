@@ -4,9 +4,10 @@ import type { MutationCtx } from './_generated/server'
 export const SAVED_CHARACTER_ACTOR_PACK_NAME = 'Saved Characters'
 export const SAVED_CHARACTER_ACTOR_PACK_DESCRIPTION =
   'Auto-created to keep saved character records available in actor packs.'
+export const SAVED_CHARACTER_ACTOR_PACK_SYSTEM_KEY = 'saved-characters'
 
 type CharacterRecord = Pick<Doc<'characters'>, '_id' | 'actorPackId' | 'workspaceId'>
-type ActorPackRecord = Pick<Doc<'actorPacks'>, '_id' | 'workspaceId' | 'description'>
+type ActorPackRecord = Pick<Doc<'actorPacks'>, '_id' | 'workspaceId' | 'description' | 'systemKey'>
 
 export function needsSavedCharacterActorPackMigration(
   character: CharacterRecord,
@@ -30,7 +31,7 @@ export function findSavedCharacterActorPack(
   return actorPacks.find(
     (actorPack) =>
       actorPack.workspaceId === workspaceId
-      && actorPack.description === SAVED_CHARACTER_ACTOR_PACK_DESCRIPTION,
+      && actorPack.systemKey === SAVED_CHARACTER_ACTOR_PACK_SYSTEM_KEY,
   ) ?? null
 }
 
@@ -42,6 +43,7 @@ export function buildSavedCharacterActorPackRecord(
   return {
     workspaceId,
     ownerUserId,
+    systemKey: SAVED_CHARACTER_ACTOR_PACK_SYSTEM_KEY,
     name: SAVED_CHARACTER_ACTOR_PACK_NAME,
     description: SAVED_CHARACTER_ACTOR_PACK_DESCRIPTION,
     isActive: true,

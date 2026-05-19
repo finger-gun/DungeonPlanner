@@ -27,6 +27,7 @@ const QUERY_ROUTES: Record<string, BackendDataRoute> = {
   'roles:listActiveWorkspaceUsers': { path: '/api/app/workspace/users', method: 'GET' },
   'dungeons:listViewerDungeons': { path: '/api/app/dungeons', method: 'GET' },
   'sessions:listViewerSessions': { path: '/api/app/sessions', method: 'GET' },
+  'characters:listViewerCharacters': { path: '/api/app/characters', method: 'GET' },
   'actors:listViewerActorPacks': { path: '/api/app/actor-packs', method: 'GET' },
   'actors:listViewerActors': { path: '/api/app/actors', method: 'GET' },
   'packs:listWorkspacePacks': { path: '/api/app/packs', method: 'GET' },
@@ -39,13 +40,17 @@ const MUTATION_ROUTES: Record<string, BackendDataRoute> = {
   'roles:revokeRoleByEmail': { path: '/api/app/roles/revoke', method: 'POST' },
   'dungeons:issueEditorAccessToken': { path: '/api/app/editor-access-token', method: 'POST' },
   'dungeons:copyViewerDungeon': { path: '/api/app/dungeons/copy', method: 'POST' },
+  'dungeons:copySharedDungeon': { path: '/api/app/dungeons/share', method: 'POST' },
   'dungeons:deleteViewerDungeon': { path: '/api/app/dungeons/delete', method: 'POST' },
   'sessions:createSession': { path: '/api/app/sessions/create', method: 'POST' },
   'sessions:joinSessionByCode': { path: '/api/app/sessions/join', method: 'POST' },
   'sessions:issueServerAccessTicket': { path: '/api/app/sessions/access-ticket', method: 'POST' },
+  'characters:saveCharacter': { path: '/api/app/characters/save', method: 'POST' },
+  'characters:deleteCharacter': { path: '/api/app/characters/delete', method: 'POST' },
   'packs:savePackRecord': { path: '/api/app/packs/save', method: 'POST' },
   'packs:setPackActive': { path: '/api/app/packs/set-active', method: 'POST' },
   'actors:saveActorPack': { path: '/api/app/actor-packs/save', method: 'POST' },
+  'actors:deleteActorPack': { path: '/api/app/actor-packs/delete', method: 'POST' },
   'actors:setActorPackActive': { path: '/api/app/actor-packs/set-active', method: 'POST' },
   'actors:saveActor': { path: '/api/app/actors/save', method: 'POST' },
   'actors:deleteActor': { path: '/api/app/actors/delete', method: 'POST' },
@@ -124,7 +129,22 @@ export async function uploadFileThroughBackend(
   file: File,
   fetchImpl: typeof fetch = fetch,
 ) {
-  const response = await fetchImpl(new URL('/api/app/storage/upload', `${getBackendBaseUrl()}/`).toString(), {
+  return uploadFileToBackendRoute('/api/app/storage/upload', file, fetchImpl)
+}
+
+export async function uploadActorAssetThroughBackend(
+  file: File,
+  fetchImpl: typeof fetch = fetch,
+) {
+  return uploadFileToBackendRoute('/api/app/actor-assets/upload', file, fetchImpl)
+}
+
+async function uploadFileToBackendRoute(
+  routePath: string,
+  file: File,
+  fetchImpl: typeof fetch,
+) {
+  const response = await fetchImpl(new URL(routePath, `${getBackendBaseUrl()}/`).toString(), {
     method: 'POST',
     credentials: 'include',
     headers: {
@@ -134,7 +154,7 @@ export async function uploadFileThroughBackend(
   })
 
   if (!response.ok) {
-    let message = 'Pack file upload failed.'
+    let message = 'File upload failed.'
 
     try {
       const errorBody = (await response.json()) as { error?: string }

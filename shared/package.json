@@ -5,6 +5,11 @@
   "type": "module",
   "exports": {
     "./actors": "./src/actors.ts",
+    "./dragonbane/characterCreation": "./src/dragonbane/characterCreation.ts",
+    "./dragonbane/characterSheet": "./src/dragonbane/characterSheet.ts",
+    "./dragonbane/contentRefs": "./src/dragonbane/contentRefs.ts",
+    "./dragonbane/rulesPack": "./src/dragonbane/rulesPack.ts",
+    "./dragonbane/validation": "./src/dragonbane/validation.ts",
     "./editorAccess": "./src/editorAccess.ts",
     "./generated-characters/api": "./src/generated-characters/api.ts",
     "./generated-characters/prompt": "./src/generated-characters/prompt.ts",

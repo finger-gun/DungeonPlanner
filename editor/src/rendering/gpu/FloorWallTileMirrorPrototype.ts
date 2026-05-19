@@ -210,4 +210,3 @@ function getDirectionCode(direction: string) {
       return -1
   }
 }
-

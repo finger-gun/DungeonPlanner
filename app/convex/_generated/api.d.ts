@@ -15,6 +15,7 @@ import type * as auth from "../auth.js";
 import type * as characters from "../characters.js";
 import type * as crossOriginHttp from "../crossOriginHttp.js";
 import type * as devSeedAccounts from "../devSeedAccounts.js";
+import type * as dragonbaneSheets from "../dragonbaneSheets.js";
 import type * as dungeons from "../dungeons.js";
 import type * as errors from "../errors.js";
 import type * as helpers from "../helpers.js";
@@ -43,6 +44,7 @@ declare const fullApi: ApiFromModules<{
   characters: typeof characters;
   crossOriginHttp: typeof crossOriginHttp;
   devSeedAccounts: typeof devSeedAccounts;
+  dragonbaneSheets: typeof dragonbaneSheets;
   dungeons: typeof dungeons;
   errors: typeof errors;
   helpers: typeof helpers;

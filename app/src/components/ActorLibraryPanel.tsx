@@ -5,7 +5,7 @@ import { composeGeneratedCharacterPrompt } from '@dungeonplanner/shared/generate
 import { processGeneratedCharacterImage } from '@dungeonplanner/shared/generated-characters/processing'
 import type { Id } from '../../convex/_generated/dataModel'
 import { api } from '../../convex/_generated/api'
-import { uploadFileThroughBackend, useMutation, useQuery } from '../lib/backendData'
+import { uploadActorAssetThroughBackend, useMutation, useQuery } from '../lib/backendData'
 import { resolveBackendApiBaseUrl } from '../lib/backendAuthApi'
 
 const DEFAULT_ACTOR_KIND: ActorKind = 'character'
@@ -282,10 +282,10 @@ export function ActorLibraryPanel() {
       const processed = await processGeneratedCharacterImage(generated.imageDataUrl)
       const previousDraftStorageIds = actorDraft.actorId ? [] : collectDraftStorageIds(actorDraft)
       const [originalImageStorageId, processedImageStorageId, alphaMaskStorageId, thumbnailStorageId] = await Promise.all([
-        uploadFileThroughBackend(await dataUrlToFile(generated.imageDataUrl, 'original.png')),
-        uploadFileThroughBackend(await dataUrlToFile(processed.processedImageDataUrl, 'processed.png')),
-        uploadFileThroughBackend(await dataUrlToFile(processed.alphaMaskDataUrl, 'alpha-mask.png')),
-        uploadFileThroughBackend(await dataUrlToFile(processed.thumbnailDataUrl, 'thumbnail.png')),
+        uploadActorAssetThroughBackend(await dataUrlToFile(generated.imageDataUrl, 'original.png')),
+        uploadActorAssetThroughBackend(await dataUrlToFile(processed.processedImageDataUrl, 'processed.png')),
+        uploadActorAssetThroughBackend(await dataUrlToFile(processed.alphaMaskDataUrl, 'alpha-mask.png')),
+        uploadActorAssetThroughBackend(await dataUrlToFile(processed.thumbnailDataUrl, 'thumbnail.png')),
       ])
 
       if (previousDraftStorageIds.length > 0) {

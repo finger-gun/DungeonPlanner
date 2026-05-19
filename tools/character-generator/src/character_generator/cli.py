@@ -1,16 +1,19 @@
 from __future__ import annotations
 
 import argparse
+from datetime import datetime, UTC
 import io
 import subprocess
 import shutil
 import sys
 from pathlib import Path
+from typing import Mapping
 
-from .config import ModelConfig, RuntimeConfig
+from .config import ModelConfig, PackConfig, RuntimeConfig
 from .inference import AnimeFaceDetector, RMBGBackgroundRemover, ZImageTurboImageGenerator
 from .inputs import load_input_items, load_yaml_config
 from .model_cache import ModelRegistry
+from .pack_output import write_generated_pack_output
 from .pipeline import CharacterPortraitPipeline
 from .runtime import describe_device_resolution, resolve_background_removal_device
 from .types import PromptItem
@@ -33,6 +36,102 @@ def _resolve_prompt_text(value: str) -> str:
 
 def _resolve_base_prompt(value: str) -> str:
     return _resolve_prompt_text(value)
+
+
+def _resolve_config_value(config_data: Mapping[str, object], key: str, cli_value: object, default_value: object) -> object:
+    configured_value = config_data.get(key)
+    return configured_value if cli_value == default_value and configured_value is not None else cli_value
+
+
+def _resolve_path_config_value(config_data: Mapping[str, object], key: str, cli_value: Path, default_value: Path) -> Path:
+    configured_value = config_data.get(key)
+    if cli_value == default_value and isinstance(configured_value, str) and configured_value.strip():
+        return Path(configured_value).expanduser()
+    return cli_value
+
+
+def _parse_bool_config(value: object, key: str) -> bool:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if normalized == "true":
+            return True
+        if normalized == "false":
+            return False
+    raise ValueError(f"Config field '{key}' must be a boolean.")
+
+
+def _parse_int_config(value: object, key: str) -> int:
+    if isinstance(value, int) and not isinstance(value, bool):
+        return value
+    if isinstance(value, str) and value.strip().lstrip("-").isdigit():
+        return int(value)
+    raise ValueError(f"Config field '{key}' must be an integer.")
+
+
+def _parse_optional_int_config(value: object, key: str) -> int | None:
+    if value is None:
+        return None
+    return _parse_int_config(value, key)
+
+
+def _parse_float_config(value: object, key: str) -> float:
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        return float(value)
+    if isinstance(value, str):
+        try:
+            return float(value.strip())
+        except ValueError:
+            pass
+    raise ValueError(f"Config field '{key}' must be a number.")
+
+
+def _load_pack_config(config_data: Mapping[str, object]) -> PackConfig | None:
+    raw_pack_config = config_data.get("pack")
+    if raw_pack_config is None:
+        return None
+    if not isinstance(raw_pack_config, Mapping):
+        raise ValueError("Config field 'pack' must be a YAML object.")
+
+    raw_pack_id = raw_pack_config.get("id")
+    raw_name = raw_pack_config.get("name")
+    if not isinstance(raw_pack_id, str) or not raw_pack_id.strip():
+        raise ValueError("Config field 'pack.id' must be a non-empty string.")
+    if not isinstance(raw_name, str) or not raw_name.strip():
+        raise ValueError("Config field 'pack.name' must be a non-empty string.")
+
+    raw_description = raw_pack_config.get("description", "")
+    if raw_description is None:
+        raw_description = ""
+    if not isinstance(raw_description, str):
+        raise ValueError("Config field 'pack.description' must be a string.")
+
+    raw_scope = raw_pack_config.get("scope", "global")
+    if raw_scope not in {"global", "workspace"}:
+        raise ValueError("Config field 'pack.scope' must be 'global' or 'workspace'.")
+
+    raw_kind = raw_pack_config.get("kind", "npc")
+    if raw_kind not in {"player", "npc"}:
+        raise ValueError("Config field 'pack.kind' must be 'player' or 'npc'.")
+
+    raw_size = raw_pack_config.get("size", "M")
+    if raw_size not in {"S", "M", "XL", "XXL"}:
+        raise ValueError("Config field 'pack.size' must be one of S, M, XL, or XXL.")
+
+    raw_tags = raw_pack_config.get("tags", [])
+    if not isinstance(raw_tags, list) or any(not isinstance(tag, str) or not tag.strip() for tag in raw_tags):
+        raise ValueError("Config field 'pack.tags' must be a YAML list of non-empty strings.")
+
+    return PackConfig(
+        pack_id=raw_pack_id.strip(),
+        name=raw_name.strip(),
+        description=raw_description.strip(),
+        scope=raw_scope,
+        tags=tuple(tag.strip() for tag in raw_tags),
+        kind=raw_kind,
+        size=raw_size,
+    )
 
 
 class ConsoleStatusReporter:
@@ -117,6 +216,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--rmbg-model-id", default=DEFAULT_MODEL_CONFIG.rmbg_model_id, help="Hugging Face model ID for background removal.")
     parser.add_argument("--face-model-id", default=DEFAULT_MODEL_CONFIG.face_model_id, help="Hugging Face model ID for face detection.")
     parser.add_argument("--face-model-filename", default=DEFAULT_MODEL_CONFIG.face_model_filename, help="Filename of the face detector weights in the Hugging Face repo.")
+
     return parser
 
 
@@ -125,25 +225,57 @@ def build_runtime_config(args: argparse.Namespace) -> RuntimeConfig:
     base_prompt_value = args.base_prompt
     if base_prompt_value is None:
         base_prompt_value = str(config_data.get("base_prompt", DEFAULT_RUNTIME_CONFIG.base_prompt))
-    width_value = args.width
-    configured_width = config_data.get("width")
-    if width_value == DEFAULT_RUNTIME_CONFIG.width and isinstance(configured_width, int):
-        width_value = configured_width
-    height_value = args.height
-    configured_height = config_data.get("height")
-    if height_value == DEFAULT_RUNTIME_CONFIG.height and isinstance(configured_height, int):
-        height_value = configured_height
-    guidance_scale_value = args.guidance_scale
-    configured_guidance_scale = config_data.get("guidance_scale")
-    if guidance_scale_value == DEFAULT_RUNTIME_CONFIG.guidance_scale and isinstance(configured_guidance_scale, (int, float)):
-        guidance_scale_value = float(configured_guidance_scale)
-    num_inference_steps_value = args.num_inference_steps
-    configured_num_inference_steps = config_data.get("num_inference_steps")
-    if num_inference_steps_value == DEFAULT_RUNTIME_CONFIG.num_inference_steps and isinstance(configured_num_inference_steps, int):
-        num_inference_steps_value = configured_num_inference_steps
+    width_value = _resolve_config_value(config_data, "width", args.width, DEFAULT_RUNTIME_CONFIG.width)
+    height_value = _resolve_config_value(config_data, "height", args.height, DEFAULT_RUNTIME_CONFIG.height)
+    guidance_scale_value = _resolve_config_value(
+        config_data,
+        "guidance_scale",
+        args.guidance_scale,
+        DEFAULT_RUNTIME_CONFIG.guidance_scale,
+    )
+    num_inference_steps_value = _resolve_config_value(
+        config_data,
+        "num_inference_steps",
+        args.num_inference_steps,
+        DEFAULT_RUNTIME_CONFIG.num_inference_steps,
+    )
+    seed_value = _resolve_config_value(config_data, "seed", args.seed, DEFAULT_RUNTIME_CONFIG.seed)
+    device_value = _resolve_config_value(config_data, "device", args.device, DEFAULT_RUNTIME_CONFIG.device)
+    portrait_padding_value = _resolve_config_value(
+        config_data,
+        "portrait_padding",
+        args.portrait_padding,
+        DEFAULT_RUNTIME_CONFIG.portrait_padding,
+    )
+    face_confidence_value = _resolve_config_value(
+        config_data,
+        "face_confidence",
+        args.face_confidence,
+        DEFAULT_RUNTIME_CONFIG.face_confidence,
+    )
+    serial_width_value = _resolve_config_value(config_data, "serial_width", args.serial_width, DEFAULT_RUNTIME_CONFIG.serial_width)
+    fail_fast_value = _resolve_config_value(config_data, "fail_fast", args.fail_fast, DEFAULT_RUNTIME_CONFIG.fail_fast)
+    max_combinations_value = _resolve_config_value(
+        config_data,
+        "max_combinations",
+        args.max_combinations,
+        DEFAULT_RUNTIME_CONFIG.max_combinations,
+    )
+    randomize_order_value = _resolve_config_value(
+        config_data,
+        "randomize_order",
+        args.random,
+        DEFAULT_RUNTIME_CONFIG.randomize_order,
+    )
+    preview_kitten_value = _resolve_config_value(
+        config_data,
+        "preview_kitten",
+        args.preview_kitten,
+        DEFAULT_RUNTIME_CONFIG.preview_kitten,
+    )
     return RuntimeConfig(
         base_prompt=_resolve_base_prompt(base_prompt_value),
-        output_dir=args.output_dir,
+        output_dir=_resolve_path_config_value(config_data, "output_dir", args.output_dir, DEFAULT_RUNTIME_CONFIG.output_dir),
         genders=tuple(item.name for item in load_input_items(
             config_value=config_data.get("genders"),
             file_path=args.genders_file,
@@ -153,19 +285,20 @@ def build_runtime_config(args: argparse.Namespace) -> RuntimeConfig:
         )) if any(
             value is not None for value in [config_data.get("genders"), args.genders_file, args.genders_json, args.gender]
         ) else DEFAULT_RUNTIME_CONFIG.genders,
-        width=width_value,
-        height=height_value,
-        guidance_scale=guidance_scale_value,
-        num_inference_steps=num_inference_steps_value,
-        preview_kitten=args.preview_kitten,
-        seed=args.seed,
-        device=args.device,
-        portrait_padding=args.portrait_padding,
-        face_confidence=args.face_confidence,
-        serial_width=args.serial_width,
-        fail_fast=args.fail_fast,
-        max_combinations=args.max_combinations,
-        randomize_order=args.random,
+        width=_parse_int_config(width_value, "width"),
+        height=_parse_int_config(height_value, "height"),
+        guidance_scale=_parse_float_config(guidance_scale_value, "guidance_scale"),
+        num_inference_steps=_parse_int_config(num_inference_steps_value, "num_inference_steps"),
+        preview_kitten=_parse_bool_config(preview_kitten_value, "preview_kitten"),
+        seed=_parse_optional_int_config(seed_value, "seed"),
+        device=str(device_value),
+        portrait_padding=_parse_float_config(portrait_padding_value, "portrait_padding"),
+        face_confidence=_parse_float_config(face_confidence_value, "face_confidence"),
+        serial_width=_parse_int_config(serial_width_value, "serial_width"),
+        fail_fast=_parse_bool_config(fail_fast_value, "fail_fast"),
+        max_combinations=_parse_optional_int_config(max_combinations_value, "max_combinations"),
+        randomize_order=_parse_bool_config(randomize_order_value, "randomize_order"),
+        pack=_load_pack_config(config_data),
     )
 
 
@@ -234,10 +367,7 @@ def main() -> int:
     downloaded_models = model_registry.ensure_downloaded()
 
     status_reporter.announce("Loading image model into memory...")
-    image_generator = ZImageTurboImageGenerator(
-        model_path=downloaded_models.image_model_path,
-        device=device,
-    )
+    image_generator = ZImageTurboImageGenerator(model_path=downloaded_models.image_model_path, device=device)
     status_reporter.announce("Loading background remover into memory...")
     background_remover = RMBGBackgroundRemover(model_path=downloaded_models.rmbg_model_path, device=rmbg_device)
     status_reporter.announce("Loading face detector into memory...")
@@ -263,6 +393,16 @@ def main() -> int:
         result = pipeline.run(kins=kins, genders=genders, professions=professions, traits=traits)
     finally:
         status_reporter.clear()
+
+    if runtime_config.pack is not None and result.records:
+        manifest_path = write_generated_pack_output(
+            runtime_config=runtime_config,
+            pack_config=runtime_config.pack,
+            records=result.records,
+            generated_at=datetime.now(UTC).isoformat().replace("+00:00", "Z"),
+            model_name=args.image_model_id,
+        )
+        print(f"wrote generated pack manifest to {manifest_path}")
 
     print(f"completed {len(result.records)} combinations with {len(result.failures)} failures")
 

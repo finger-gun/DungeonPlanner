@@ -55,8 +55,16 @@ def test_pipeline_generates_expected_output_files(tmp_path: Path) -> None:
     assert record.outputs.portrait_path.parent == tmp_path / "human" / "mage"
     assert record.outputs.main_path.name == "human-female-mage-01-main-0001.png"
     assert record.outputs.portrait_path.name == "human-female-mage-01-portrait-0001.png"
+    assert record.outputs.processed_path.name == "human-female-mage-01-processed-0001.png"
+    assert record.outputs.alpha_mask_path.name == "human-female-mage-01-alpha-mask-0001.png"
+    assert record.outputs.thumbnail_path.name == "human-female-mage-01-thumbnail-0001.png"
     assert record.outputs.main_path.exists()
     assert record.outputs.portrait_path.exists()
+    assert record.outputs.processed_path.exists()
+    assert record.outputs.alpha_mask_path.exists()
+    assert record.outputs.thumbnail_path.exists()
+    assert record.processed_width > 0
+    assert record.processed_height > 0
 
 
 def test_pipeline_collects_failures_when_fail_fast_is_disabled(tmp_path: Path) -> None:

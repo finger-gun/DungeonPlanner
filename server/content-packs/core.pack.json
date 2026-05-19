@@ -1,0 +1,4728 @@
+{
+  "packId": "core",
+  "name": "Core Pack",
+  "system": "dragonbane",
+  "kind": "rules",
+  "version": "0.1.0",
+  "visibility": "global",
+  "description": "Local dev core content pack",
+  "isActive": true,
+  "alwaysActive": true,
+  "bundled": true,
+  "entries": [
+    {
+      "id": "core:kin.human",
+      "localId": "human",
+      "name": "Human",
+      "entryKind": "rules-data",
+      "category": "dragonbane.kin"
+    },
+    {
+      "id": "core:kin.halfling",
+      "localId": "halfling",
+      "name": "Halfling",
+      "entryKind": "rules-data",
+      "category": "dragonbane.kin"
+    },
+    {
+      "id": "core:kin.dwarf",
+      "localId": "dwarf",
+      "name": "Dwarf",
+      "entryKind": "rules-data",
+      "category": "dragonbane.kin"
+    },
+    {
+      "id": "core:kin.elf",
+      "localId": "elf",
+      "name": "Elf",
+      "entryKind": "rules-data",
+      "category": "dragonbane.kin"
+    },
+    {
+      "id": "core:kin.mallard",
+      "localId": "mallard",
+      "name": "Mallard",
+      "entryKind": "rules-data",
+      "category": "dragonbane.kin"
+    },
+    {
+      "id": "core:kin.wolfkin",
+      "localId": "wolfkin",
+      "name": "Wolfkin",
+      "entryKind": "rules-data",
+      "category": "dragonbane.kin"
+    },
+    {
+      "id": "core:profession.bard",
+      "localId": "bard",
+      "name": "Bard",
+      "entryKind": "rules-data",
+      "category": "dragonbane.profession"
+    },
+    {
+      "id": "core:profession.artisan",
+      "localId": "artisan",
+      "name": "Artisan",
+      "entryKind": "rules-data",
+      "category": "dragonbane.profession"
+    },
+    {
+      "id": "core:profession.hunter",
+      "localId": "hunter",
+      "name": "Hunter",
+      "entryKind": "rules-data",
+      "category": "dragonbane.profession"
+    },
+    {
+      "id": "core:profession.fighter",
+      "localId": "fighter",
+      "name": "Fighter",
+      "entryKind": "rules-data",
+      "category": "dragonbane.profession"
+    },
+    {
+      "id": "core:profession.scholar",
+      "localId": "scholar",
+      "name": "Scholar",
+      "entryKind": "rules-data",
+      "category": "dragonbane.profession"
+    },
+    {
+      "id": "core:profession.mage",
+      "localId": "mage",
+      "name": "Mage",
+      "entryKind": "rules-data",
+      "category": "dragonbane.profession"
+    },
+    {
+      "id": "core:profession.merchant",
+      "localId": "merchant",
+      "name": "Merchant",
+      "entryKind": "rules-data",
+      "category": "dragonbane.profession"
+    },
+    {
+      "id": "core:profession.knight",
+      "localId": "knight",
+      "name": "Knight",
+      "entryKind": "rules-data",
+      "category": "dragonbane.profession"
+    },
+    {
+      "id": "core:profession.mariner",
+      "localId": "mariner",
+      "name": "Mariner",
+      "entryKind": "rules-data",
+      "category": "dragonbane.profession"
+    },
+    {
+      "id": "core:profession.thief",
+      "localId": "thief",
+      "name": "Thief",
+      "entryKind": "rules-data",
+      "category": "dragonbane.profession"
+    },
+    {
+      "id": "core:skill.bestiologi",
+      "localId": "bestiologi",
+      "name": "Beast Lore",
+      "entryKind": "rules-data",
+      "category": "dragonbane.skill"
+    },
+    {
+      "id": "core:skill.bluffa",
+      "localId": "bluffa",
+      "name": "Bluffing",
+      "entryKind": "rules-data",
+      "category": "dragonbane.skill"
+    },
+    {
+      "id": "core:skill.fingerfardighet",
+      "localId": "fingerfardighet",
+      "name": "Sleight of Hand",
+      "entryKind": "rules-data",
+      "category": "dragonbane.skill"
+    },
+    {
+      "id": "core:skill.finna_dolda_ting",
+      "localId": "finna_dolda_ting",
+      "name": "Spot Hidden",
+      "entryKind": "rules-data",
+      "category": "dragonbane.skill"
+    },
+    {
+      "id": "core:skill.frammande_sprak",
+      "localId": "frammande_sprak",
+      "name": "Languages",
+      "entryKind": "rules-data",
+      "category": "dragonbane.skill"
+    },
+    {
+      "id": "core:skill.hantverk",
+      "localId": "hantverk",
+      "name": "Crafting",
+      "entryKind": "rules-data",
+      "category": "dragonbane.skill"
+    },
+    {
+      "id": "core:skill.hoppa_klattra",
+      "localId": "hoppa_klattra",
+      "name": "Acrobatics",
+      "entryKind": "rules-data",
+      "category": "dragonbane.skill"
+    },
+    {
+      "id": "core:skill.jakt_fiske",
+      "localId": "jakt_fiske",
+      "name": "Hunting & Fishing",
+      "entryKind": "rules-data",
+      "category": "dragonbane.skill"
+    },
+    {
+      "id": "core:skill.kopsla",
+      "localId": "kopsla",
+      "name": "Bartering",
+      "entryKind": "rules-data",
+      "category": "dragonbane.skill"
+    },
+    {
+      "id": "core:skill.lakekonst",
+      "localId": "lakekonst",
+      "name": "Healing",
+      "entryKind": "rules-data",
+      "category": "dragonbane.skill"
+    },
+    {
+      "id": "core:skill.myter_legender",
+      "localId": "myter_legender",
+      "name": "Myths & Legends",
+      "entryKind": "rules-data",
+      "category": "dragonbane.skill"
+    },
+    {
+      "id": "core:skill.rida",
+      "localId": "rida",
+      "name": "Riding",
+      "entryKind": "rules-data",
+      "category": "dragonbane.skill"
+    },
+    {
+      "id": "core:skill.simma",
+      "localId": "simma",
+      "name": "Swimming",
+      "entryKind": "rules-data",
+      "category": "dragonbane.skill"
+    },
+    {
+      "id": "core:skill.sjokunnighet",
+      "localId": "sjokunnighet",
+      "name": "Seamanship",
+      "entryKind": "rules-data",
+      "category": "dragonbane.skill"
+    },
+    {
+      "id": "core:skill.smyga",
+      "localId": "smyga",
+      "name": "Sneaking",
+      "entryKind": "rules-data",
+      "category": "dragonbane.skill"
+    },
+    {
+      "id": "core:skill.undvika",
+      "localId": "undvika",
+      "name": "Evade",
+      "entryKind": "rules-data",
+      "category": "dragonbane.skill"
+    },
+    {
+      "id": "core:skill.upptrada",
+      "localId": "upptrada",
+      "name": "Performance",
+      "entryKind": "rules-data",
+      "category": "dragonbane.skill"
+    },
+    {
+      "id": "core:skill.upptacka_fara",
+      "localId": "upptacka_fara",
+      "name": "Awareness",
+      "entryKind": "rules-data",
+      "category": "dragonbane.skill"
+    },
+    {
+      "id": "core:skill.vildmarksvana",
+      "localId": "vildmarksvana",
+      "name": "Bushcraft",
+      "entryKind": "rules-data",
+      "category": "dragonbane.skill"
+    },
+    {
+      "id": "core:skill.overtala",
+      "localId": "overtala",
+      "name": "Persuasion",
+      "entryKind": "rules-data",
+      "category": "dragonbane.skill"
+    },
+    {
+      "id": "core:skill.armborst",
+      "localId": "armborst",
+      "name": "Crossbows",
+      "entryKind": "rules-data",
+      "category": "dragonbane.skill"
+    },
+    {
+      "id": "core:skill.hammare",
+      "localId": "hammare",
+      "name": "Hammers",
+      "entryKind": "rules-data",
+      "category": "dragonbane.skill"
+    },
+    {
+      "id": "core:skill.kniv",
+      "localId": "kniv",
+      "name": "Knives",
+      "entryKind": "rules-data",
+      "category": "dragonbane.skill"
+    },
+    {
+      "id": "core:skill.pilbage",
+      "localId": "pilbage",
+      "name": "Bows",
+      "entryKind": "rules-data",
+      "category": "dragonbane.skill"
+    },
+    {
+      "id": "core:skill.slagsm_l",
+      "localId": "slagsm_l",
+      "name": "Brawling",
+      "entryKind": "rules-data",
+      "category": "dragonbane.skill"
+    },
+    {
+      "id": "core:skill.slunga",
+      "localId": "slunga",
+      "name": "Slings",
+      "entryKind": "rules-data",
+      "category": "dragonbane.skill"
+    },
+    {
+      "id": "core:skill.spjut",
+      "localId": "spjut",
+      "name": "Spears",
+      "entryKind": "rules-data",
+      "category": "dragonbane.skill"
+    },
+    {
+      "id": "core:skill.stav",
+      "localId": "stav",
+      "name": "Staves",
+      "entryKind": "rules-data",
+      "category": "dragonbane.skill"
+    },
+    {
+      "id": "core:skill.svard",
+      "localId": "svard",
+      "name": "Swords",
+      "entryKind": "rules-data",
+      "category": "dragonbane.skill"
+    },
+    {
+      "id": "core:skill.yxa",
+      "localId": "yxa",
+      "name": "Axes",
+      "entryKind": "rules-data",
+      "category": "dragonbane.skill"
+    },
+    {
+      "id": "core:skill.animism",
+      "localId": "animism",
+      "name": "Animism",
+      "entryKind": "rules-data",
+      "category": "dragonbane.skill"
+    },
+    {
+      "id": "core:skill.elementalism",
+      "localId": "elementalism",
+      "name": "Elementalism",
+      "entryKind": "rules-data",
+      "category": "dragonbane.skill"
+    },
+    {
+      "id": "core:skill.mentalism",
+      "localId": "mentalism",
+      "name": "Mentalism",
+      "entryKind": "rules-data",
+      "category": "dragonbane.skill"
+    },
+    {
+      "id": "core:rule.character-creation",
+      "localId": "character-creation",
+      "name": "Character Creation",
+      "entryKind": "rules-data",
+      "category": "dragonbane.rule"
+    },
+    {
+      "id": "core:rule.appearance.ugly_scar_across_the_cheek",
+      "localId": "appearance.ugly_scar_across_the_cheek",
+      "name": "Ugly scar across the cheek",
+      "entryKind": "rules-data",
+      "category": "dragonbane.appearance"
+    },
+    {
+      "id": "core:rule.appearance.peculiar_headwear",
+      "localId": "appearance.peculiar_headwear",
+      "name": "Peculiar headwear",
+      "entryKind": "rules-data",
+      "category": "dragonbane.appearance"
+    },
+    {
+      "id": "core:rule.appearance.abnormally_pale_and_gaunt",
+      "localId": "appearance.abnormally_pale_and_gaunt",
+      "name": "Abnormally pale and gaunt",
+      "entryKind": "rules-data",
+      "category": "dragonbane.appearance"
+    },
+    {
+      "id": "core:rule.appearance.permanent_smile",
+      "localId": "appearance.permanent_smile",
+      "name": "Permanent smile",
+      "entryKind": "rules-data",
+      "category": "dragonbane.appearance"
+    },
+    {
+      "id": "core:rule.appearance.ice-cold_penetrating_gaze",
+      "localId": "appearance.ice-cold_penetrating_gaze",
+      "name": "Ice-cold, penetrating gaze",
+      "entryKind": "rules-data",
+      "category": "dragonbane.appearance"
+    },
+    {
+      "id": "core:rule.appearance.a_few_extra_pounds_around_the_middle",
+      "localId": "appearance.a_few_extra_pounds_around_the_middle",
+      "name": "A few extra pounds around the middle",
+      "entryKind": "rules-data",
+      "category": "dragonbane.appearance"
+    },
+    {
+      "id": "core:rule.appearance.thin_and_wiry",
+      "localId": "appearance.thin_and_wiry",
+      "name": "Thin and wiry",
+      "entryKind": "rules-data",
+      "category": "dragonbane.appearance"
+    },
+    {
+      "id": "core:rule.appearance.abnormally_thick_body_hair_kin_dependent",
+      "localId": "appearance.abnormally_thick_body_hair_kin_dependent",
+      "name": "Abnormally thick body hair (kin dependent)",
+      "entryKind": "rules-data",
+      "category": "dragonbane.appearance"
+    },
+    {
+      "id": "core:rule.appearance.very_thin_hair_kin_dependent",
+      "localId": "appearance.very_thin_hair_kin_dependent",
+      "name": "Very thin hair (kin dependent)",
+      "entryKind": "rules-data",
+      "category": "dragonbane.appearance"
+    },
+    {
+      "id": "core:rule.appearance.prominent_tattoo",
+      "localId": "appearance.prominent_tattoo",
+      "name": "Prominent tattoo",
+      "entryKind": "rules-data",
+      "category": "dragonbane.appearance"
+    },
+    {
+      "id": "core:rule.appearance.smells_bad",
+      "localId": "appearance.smells_bad",
+      "name": "Smells bad",
+      "entryKind": "rules-data",
+      "category": "dragonbane.appearance"
+    },
+    {
+      "id": "core:rule.appearance.magnificent_hairstyle",
+      "localId": "appearance.magnificent_hairstyle",
+      "name": "Magnificent hairstyle",
+      "entryKind": "rules-data",
+      "category": "dragonbane.appearance"
+    },
+    {
+      "id": "core:rule.appearance.limping_gait",
+      "localId": "appearance.limping_gait",
+      "name": "Limping gait",
+      "entryKind": "rules-data",
+      "category": "dragonbane.appearance"
+    },
+    {
+      "id": "core:rule.appearance.dirty",
+      "localId": "appearance.dirty",
+      "name": "Dirty",
+      "entryKind": "rules-data",
+      "category": "dragonbane.appearance"
+    },
+    {
+      "id": "core:rule.appearance.honest_blue_eyes",
+      "localId": "appearance.honest_blue_eyes",
+      "name": "Honest blue eyes",
+      "entryKind": "rules-data",
+      "category": "dragonbane.appearance"
+    },
+    {
+      "id": "core:rule.appearance.silver_tooth",
+      "localId": "appearance.silver_tooth",
+      "name": "Silver tooth",
+      "entryKind": "rules-data",
+      "category": "dragonbane.appearance"
+    },
+    {
+      "id": "core:rule.appearance.well-perfumed",
+      "localId": "appearance.well-perfumed",
+      "name": "Well-perfumed",
+      "entryKind": "rules-data",
+      "category": "dragonbane.appearance"
+    },
+    {
+      "id": "core:rule.appearance.different_colored_eyes",
+      "localId": "appearance.different_colored_eyes",
+      "name": "Different colored eyes",
+      "entryKind": "rules-data",
+      "category": "dragonbane.appearance"
+    },
+    {
+      "id": "core:rule.appearance.wheezing_voice",
+      "localId": "appearance.wheezing_voice",
+      "name": "Wheezing voice",
+      "entryKind": "rules-data",
+      "category": "dragonbane.appearance"
+    },
+    {
+      "id": "core:rule.appearance.weather-beaten_face",
+      "localId": "appearance.weather-beaten_face",
+      "name": "Weather-beaten face",
+      "entryKind": "rules-data",
+      "category": "dragonbane.appearance"
+    },
+    {
+      "id": "core:rule.memento.your_trusty_old_shoes",
+      "localId": "memento.your_trusty_old_shoes",
+      "name": "Your trusty old shoes",
+      "entryKind": "rules-data",
+      "category": "dragonbane.memento"
+    },
+    {
+      "id": "core:rule.memento.a_simple_silver_medallion",
+      "localId": "memento.a_simple_silver_medallion",
+      "name": "A simple silver medallion",
+      "entryKind": "rules-data",
+      "category": "dragonbane.memento"
+    },
+    {
+      "id": "core:rule.memento.a_letter_from_an_old_friend_or_relative",
+      "localId": "memento.a_letter_from_an_old_friend_or_relative",
+      "name": "A letter from an old friend or relative",
+      "entryKind": "rules-data",
+      "category": "dragonbane.memento"
+    },
+    {
+      "id": "core:rule.memento.an_old_worn_diary",
+      "localId": "memento.an_old_worn_diary",
+      "name": "An old worn diary",
+      "entryKind": "rules-data",
+      "category": "dragonbane.memento"
+    },
+    {
+      "id": "core:rule.memento.a_family_heirloom_bracelet",
+      "localId": "memento.a_family_heirloom_bracelet",
+      "name": "A family heirloom bracelet",
+      "entryKind": "rules-data",
+      "category": "dragonbane.memento"
+    },
+    {
+      "id": "core:rule.memento.a_carved_wooden_figurine_you_got_as_a_child",
+      "localId": "memento.a_carved_wooden_figurine_you_got_as_a_child",
+      "name": "A carved wooden figurine you got as a child",
+      "entryKind": "rules-data",
+      "category": "dragonbane.memento"
+    },
+    {
+      "id": "core:rule.memento.a_peculiarly_shaped_stone",
+      "localId": "memento.a_peculiarly_shaped_stone",
+      "name": "A peculiarly shaped stone",
+      "entryKind": "rules-data",
+      "category": "dragonbane.memento"
+    },
+    {
+      "id": "core:rule.memento.a_copper_coin_from_a_treasure_your_parent_sought",
+      "localId": "memento.a_copper_coin_from_a_treasure_your_parent_sought",
+      "name": "A copper coin from a treasure your parent sought",
+      "entryKind": "rules-data",
+      "category": "dragonbane.memento"
+    },
+    {
+      "id": "core:rule.memento.an_old_tin_flask",
+      "localId": "memento.an_old_tin_flask",
+      "name": "An old tin flask",
+      "entryKind": "rules-data",
+      "category": "dragonbane.memento"
+    },
+    {
+      "id": "core:rule.memento.a_horn_taken_as_trophy_from_a_monster",
+      "localId": "memento.a_horn_taken_as_trophy_from_a_monster",
+      "name": "A horn taken as trophy from a monster",
+      "entryKind": "rules-data",
+      "category": "dragonbane.memento"
+    },
+    {
+      "id": "core:rule.memento.a_fang_taken_as_trophy_from_a_beast",
+      "localId": "memento.a_fang_taken_as_trophy_from_a_beast",
+      "name": "A fang taken as trophy from a beast",
+      "entryKind": "rules-data",
+      "category": "dragonbane.memento"
+    },
+    {
+      "id": "core:rule.memento.a_pair_of_simple_bone_dice",
+      "localId": "memento.a_pair_of_simple_bone_dice",
+      "name": "A pair of simple bone dice",
+      "entryKind": "rules-data",
+      "category": "dragonbane.memento"
+    },
+    {
+      "id": "core:rule.memento.a_charm_with_a_lock_of_hair",
+      "localId": "memento.a_charm_with_a_lock_of_hair",
+      "name": "A charm with a lock of hair",
+      "entryKind": "rules-data",
+      "category": "dragonbane.memento"
+    },
+    {
+      "id": "core:rule.memento.an_ornamented_key",
+      "localId": "memento.an_ornamented_key",
+      "name": "An ornamented key",
+      "entryKind": "rules-data",
+      "category": "dragonbane.memento"
+    },
+    {
+      "id": "core:rule.memento.a_hand-drawn_map_you_inherited",
+      "localId": "memento.a_hand-drawn_map_you_inherited",
+      "name": "A hand-drawn map you inherited",
+      "entryKind": "rules-data",
+      "category": "dragonbane.memento"
+    },
+    {
+      "id": "core:rule.memento.a_ring_with_an_inscription",
+      "localId": "memento.a_ring_with_an_inscription",
+      "name": "A ring with an inscription",
+      "entryKind": "rules-data",
+      "category": "dragonbane.memento"
+    },
+    {
+      "id": "core:rule.memento.a_bone_whistle",
+      "localId": "memento.a_bone_whistle",
+      "name": "A bone whistle",
+      "entryKind": "rules-data",
+      "category": "dragonbane.memento"
+    },
+    {
+      "id": "core:rule.memento.your_parent_s_worn_hat",
+      "localId": "memento.your_parent_s_worn_hat",
+      "name": "Your parent's worn hat",
+      "entryKind": "rules-data",
+      "category": "dragonbane.memento"
+    },
+    {
+      "id": "core:rule.memento.a_feather_from_a_griffon",
+      "localId": "memento.a_feather_from_a_griffon",
+      "name": "A feather from a griffon",
+      "entryKind": "rules-data",
+      "category": "dragonbane.memento"
+    },
+    {
+      "id": "core:rule.memento.a_well-carved_pipe",
+      "localId": "memento.a_well-carved_pipe",
+      "name": "A well-carved pipe",
+      "entryKind": "rules-data",
+      "category": "dragonbane.memento"
+    },
+    {
+      "id": "core:rule.weakness.gullible",
+      "localId": "weakness.gullible",
+      "name": "Gullible",
+      "entryKind": "rules-data",
+      "category": "dragonbane.weakness"
+    },
+    {
+      "id": "core:rule.weakness.greedy",
+      "localId": "weakness.greedy",
+      "name": "Greedy",
+      "entryKind": "rules-data",
+      "category": "dragonbane.weakness"
+    },
+    {
+      "id": "core:rule.weakness.easily_offended",
+      "localId": "weakness.easily_offended",
+      "name": "Easily Offended",
+      "entryKind": "rules-data",
+      "category": "dragonbane.weakness"
+    },
+    {
+      "id": "core:rule.weakness.foolhardy",
+      "localId": "weakness.foolhardy",
+      "name": "Foolhardy",
+      "entryKind": "rules-data",
+      "category": "dragonbane.weakness"
+    },
+    {
+      "id": "core:rule.weakness.fearful",
+      "localId": "weakness.fearful",
+      "name": "Fearful",
+      "entryKind": "rules-data",
+      "category": "dragonbane.weakness"
+    },
+    {
+      "id": "core:rule.weakness.monster_hater",
+      "localId": "weakness.monster_hater",
+      "name": "Monster Hater",
+      "entryKind": "rules-data",
+      "category": "dragonbane.weakness"
+    },
+    {
+      "id": "core:rule.weakness.intolerant",
+      "localId": "weakness.intolerant",
+      "name": "Intolerant",
+      "entryKind": "rules-data",
+      "category": "dragonbane.weakness"
+    },
+    {
+      "id": "core:rule.weakness.lazy",
+      "localId": "weakness.lazy",
+      "name": "Lazy",
+      "entryKind": "rules-data",
+      "category": "dragonbane.weakness"
+    },
+    {
+      "id": "core:rule.weakness.foodie",
+      "localId": "weakness.foodie",
+      "name": "Foodie",
+      "entryKind": "rules-data",
+      "category": "dragonbane.weakness"
+    },
+    {
+      "id": "core:rule.weakness.kleptomaniac",
+      "localId": "weakness.kleptomaniac",
+      "name": "Kleptomaniac",
+      "entryKind": "rules-data",
+      "category": "dragonbane.weakness"
+    },
+    {
+      "id": "core:rule.weakness.vain",
+      "localId": "weakness.vain",
+      "name": "Vain",
+      "entryKind": "rules-data",
+      "category": "dragonbane.weakness"
+    },
+    {
+      "id": "core:rule.weakness.daredevil",
+      "localId": "weakness.daredevil",
+      "name": "Daredevil",
+      "entryKind": "rules-data",
+      "category": "dragonbane.weakness"
+    },
+    {
+      "id": "core:rule.weakness.arcanophobe",
+      "localId": "weakness.arcanophobe",
+      "name": "Arcanophobe",
+      "entryKind": "rules-data",
+      "category": "dragonbane.weakness"
+    },
+    {
+      "id": "core:rule.weakness.bookworm",
+      "localId": "weakness.bookworm",
+      "name": "Bookworm",
+      "entryKind": "rules-data",
+      "category": "dragonbane.weakness"
+    },
+    {
+      "id": "core:rule.weakness.wild",
+      "localId": "weakness.wild",
+      "name": "Wild",
+      "entryKind": "rules-data",
+      "category": "dragonbane.weakness"
+    },
+    {
+      "id": "core:rule.weakness.braggart",
+      "localId": "weakness.braggart",
+      "name": "Braggart",
+      "entryKind": "rules-data",
+      "category": "dragonbane.weakness"
+    },
+    {
+      "id": "core:rule.weakness.violent",
+      "localId": "weakness.violent",
+      "name": "Violent",
+      "entryKind": "rules-data",
+      "category": "dragonbane.weakness"
+    },
+    {
+      "id": "core:rule.weakness.know-it-all",
+      "localId": "weakness.know-it-all",
+      "name": "Know-It-All",
+      "entryKind": "rules-data",
+      "category": "dragonbane.weakness"
+    },
+    {
+      "id": "core:rule.weakness.pessimist",
+      "localId": "weakness.pessimist",
+      "name": "Pessimist",
+      "entryKind": "rules-data",
+      "category": "dragonbane.weakness"
+    },
+    {
+      "id": "core:rule.weakness.haughty",
+      "localId": "weakness.haughty",
+      "name": "Haughty",
+      "entryKind": "rules-data",
+      "category": "dragonbane.weakness"
+    },
+    {
+      "id": "core:rule.heroic_ability.blixtsnabb",
+      "localId": "heroic_ability.blixtsnabb",
+      "name": "Lightning fast",
+      "entryKind": "rules-data",
+      "category": "dragonbane.heroic-ability"
+    },
+    {
+      "id": "core:rule.heroic_ability.barsark",
+      "localId": "heroic_ability.barsark",
+      "name": "Berserker",
+      "entryKind": "rules-data",
+      "category": "dragonbane.heroic-ability"
+    },
+    {
+      "id": "core:rule.heroic_ability.defensiv",
+      "localId": "heroic_ability.defensiv",
+      "name": "Defensive",
+      "entryKind": "rules-data",
+      "category": "dragonbane.heroic-ability"
+    },
+    {
+      "id": "core:rule.heroic_ability.drakdrapare",
+      "localId": "heroic_ability.drakdrapare",
+      "name": "Dragonslayer",
+      "entryKind": "rules-data",
+      "category": "dragonbane.heroic-ability"
+    },
+    {
+      "id": "core:rule.heroic_ability.dubbelhugg",
+      "localId": "heroic_ability.dubbelhugg",
+      "name": "Double slash",
+      "entryKind": "rules-data",
+      "category": "dragonbane.heroic-ability"
+    },
+    {
+      "id": "core:rule.heroic_ability.enstoring",
+      "localId": "heroic_ability.enstoring",
+      "name": "Lone wolf",
+      "entryKind": "rules-data",
+      "category": "dragonbane.heroic-ability"
+    },
+    {
+      "id": "core:rule.heroic_ability.falkoyo",
+      "localId": "heroic_ability.falkoyo",
+      "name": "Eagle eye",
+      "entryKind": "rules-data",
+      "category": "dragonbane.heroic-ability"
+    },
+    {
+      "id": "core:rule.heroic_ability.fokuserad",
+      "localId": "heroic_ability.fokuserad",
+      "name": "Focused",
+      "entryKind": "rules-data",
+      "category": "dragonbane.heroic-ability"
+    },
+    {
+      "id": "core:rule.heroic_ability.foljeslagare",
+      "localId": "heroic_ability.foljeslagare",
+      "name": "Companion",
+      "entryKind": "rules-data",
+      "category": "dragonbane.heroic-ability"
+    },
+    {
+      "id": "core:rule.heroic_ability.forkladnad",
+      "localId": "heroic_ability.forkladnad",
+      "name": "Disguise",
+      "entryKind": "rules-data",
+      "category": "dragonbane.heroic-ability"
+    },
+    {
+      "id": "core:rule.heroic_ability.forkampe",
+      "localId": "heroic_ability.forkampe",
+      "name": "Guardian",
+      "entryKind": "rules-data",
+      "category": "dragonbane.heroic-ability"
+    },
+    {
+      "id": "core:rule.heroic_ability.garverimastare",
+      "localId": "heroic_ability.garverimastare",
+      "name": "Master tanner",
+      "entryKind": "rules-data",
+      "category": "dragonbane.heroic-ability"
+    },
+    {
+      "id": "core:rule.heroic_ability.gott_lakekott",
+      "localId": "heroic_ability.gott_lakekott",
+      "name": "Fast healer",
+      "entryKind": "rules-data",
+      "category": "dragonbane.heroic-ability"
+    },
+    {
+      "id": "core:rule.heroic_ability.hal_som_en_al",
+      "localId": "heroic_ability.hal_som_en_al",
+      "name": "Fast footwork",
+      "entryKind": "rules-data",
+      "category": "dragonbane.heroic-ability"
+    },
+    {
+      "id": "core:rule.heroic_ability.insikt",
+      "localId": "heroic_ability.insikt",
+      "name": "Insight",
+      "entryKind": "rules-data",
+      "category": "dragonbane.heroic-ability"
+    },
+    {
+      "id": "core:rule.heroic_ability.intuition",
+      "localId": "heroic_ability.intuition",
+      "name": "Intuition",
+      "entryKind": "rules-data",
+      "category": "dragonbane.heroic-ability"
+    },
+    {
+      "id": "core:rule.heroic_ability.jarnnave",
+      "localId": "heroic_ability.jarnnave",
+      "name": "Iron fist",
+      "entryKind": "rules-data",
+      "category": "dragonbane.heroic-ability"
+    },
+    {
+      "id": "core:rule.heroic_ability.jarngrepp",
+      "localId": "heroic_ability.jarngrepp",
+      "name": "Iron grip",
+      "entryKind": "rules-data",
+      "category": "dragonbane.heroic-ability"
+    },
+    {
+      "id": "core:rule.heroic_ability.kastarm",
+      "localId": "heroic_ability.kastarm",
+      "name": "Throwing arm",
+      "entryKind": "rules-data",
+      "category": "dragonbane.heroic-ability"
+    },
+    {
+      "id": "core:rule.heroic_ability.kattfot",
+      "localId": "heroic_ability.kattfot",
+      "name": "Catlike",
+      "entryKind": "rules-data",
+      "category": "dragonbane.heroic-ability"
+    },
+    {
+      "id": "core:rule.heroic_ability.kraftslag",
+      "localId": "heroic_ability.kraftslag",
+      "name": "Massive blow",
+      "entryKind": "rules-data",
+      "category": "dragonbane.heroic-ability"
+    },
+    {
+      "id": "core:rule.heroic_ability.kvartermastare",
+      "localId": "heroic_ability.kvartermastare",
+      "name": "Quartermaster",
+      "entryKind": "rules-data",
+      "category": "dragonbane.heroic-ability"
+    },
+    {
+      "id": "core:rule.heroic_ability.lonnmordare",
+      "localId": "heroic_ability.lonnmordare",
+      "name": "Assassin",
+      "entryKind": "rules-data",
+      "category": "dragonbane.heroic-ability"
+    },
+    {
+      "id": "core:rule.heroic_ability.magisk_talang",
+      "localId": "heroic_ability.magisk_talang",
+      "name": "Magic School",
+      "entryKind": "rules-data",
+      "category": "dragonbane.heroic-ability"
+    },
+    {
+      "id": "core:rule.heroic_ability.monsterjagare",
+      "localId": "heroic_ability.monsterjagare",
+      "name": "Monster Hunter",
+      "entryKind": "rules-data",
+      "category": "dragonbane.heroic-ability"
+    },
+    {
+      "id": "core:rule.heroic_ability.masterbesvjarjare",
+      "localId": "heroic_ability.masterbesvjarjare",
+      "name": "Master spellcaster",
+      "entryKind": "rules-data",
+      "category": "dragonbane.heroic-ability"
+    },
+    {
+      "id": "core:rule.heroic_ability.masterkock",
+      "localId": "heroic_ability.masterkock",
+      "name": "Master Chef",
+      "entryKind": "rules-data",
+      "category": "dragonbane.heroic-ability"
+    },
+    {
+      "id": "core:rule.heroic_ability.mastersmed",
+      "localId": "heroic_ability.mastersmed",
+      "name": "Master blacksmith",
+      "entryKind": "rules-data",
+      "category": "dragonbane.heroic-ability"
+    },
+    {
+      "id": "core:rule.heroic_ability.mastersnickare",
+      "localId": "heroic_ability.mastersnickare",
+      "name": "Master Carpenter",
+      "entryKind": "rules-data",
+      "category": "dragonbane.heroic-ability"
+    },
+    {
+      "id": "core:rule.heroic_ability.ormm_nniska",
+      "localId": "heroic_ability.ormm_nniska",
+      "name": "Contortionist",
+      "entryKind": "rules-data",
+      "category": "dragonbane.heroic-ability"
+    },
+    {
+      "id": "core:rule.heroic_ability.oradd",
+      "localId": "heroic_ability.oradd",
+      "name": "Fearless",
+      "entryKind": "rules-data",
+      "category": "dragonbane.heroic-ability"
+    },
+    {
+      "id": "core:rule.heroic_ability.pilparad",
+      "localId": "heroic_ability.pilparad",
+      "name": "Deflect arrow",
+      "entryKind": "rules-data",
+      "category": "dragonbane.heroic-ability"
+    },
+    {
+      "id": "core:rule.heroic_ability.sjoben",
+      "localId": "heroic_ability.sjoben",
+      "name": "Sea Legs",
+      "entryKind": "rules-data",
+      "category": "dragonbane.heroic-ability"
+    },
+    {
+      "id": "core:rule.heroic_ability.skattletare",
+      "localId": "heroic_ability.skattletare",
+      "name": "Treasure Hunter",
+      "entryKind": "rules-data",
+      "category": "dragonbane.heroic-ability"
+    },
+    {
+      "id": "core:rule.heroic_ability.skoldblockad",
+      "localId": "heroic_ability.skoldblockad",
+      "name": "Shield Block",
+      "entryKind": "rules-data",
+      "category": "dragonbane.heroic-ability"
+    },
+    {
+      "id": "core:rule.heroic_ability.stigfinnare",
+      "localId": "heroic_ability.stigfinnare",
+      "name": "Pathfinder",
+      "entryKind": "rules-data",
+      "category": "dragonbane.heroic-ability"
+    },
+    {
+      "id": "core:rule.heroic_ability.stridsrop",
+      "localId": "heroic_ability.stridsrop",
+      "name": "Battle cry",
+      "entryKind": "rules-data",
+      "category": "dragonbane.heroic-ability"
+    },
+    {
+      "id": "core:rule.heroic_ability.stridsvana",
+      "localId": "heroic_ability.stridsvana",
+      "name": "Veteran",
+      "entryKind": "rules-data",
+      "category": "dragonbane.heroic-ability"
+    },
+    {
+      "id": "core:rule.heroic_ability.tjuvhugg",
+      "localId": "heroic_ability.tjuvhugg",
+      "name": "Backstabbing",
+      "entryKind": "rules-data",
+      "category": "dragonbane.heroic-ability"
+    },
+    {
+      "id": "core:rule.heroic_ability.tonkonst",
+      "localId": "heroic_ability.tonkonst",
+      "name": "Musician",
+      "entryKind": "rules-data",
+      "category": "dragonbane.heroic-ability"
+    },
+    {
+      "id": "core:rule.heroic_ability.tvillingpil",
+      "localId": "heroic_ability.tvillingpil",
+      "name": "Twin shot",
+      "entryKind": "rules-data",
+      "category": "dragonbane.heroic-ability"
+    },
+    {
+      "id": "core:rule.heroic_ability.tva_vapen",
+      "localId": "heroic_ability.tva_vapen",
+      "name": "Dual wield",
+      "entryKind": "rules-data",
+      "category": "dragonbane.heroic-ability"
+    },
+    {
+      "id": "core:rule.heroic_ability.talig",
+      "localId": "heroic_ability.talig",
+      "name": "Robust",
+      "entryKind": "rules-data",
+      "category": "dragonbane.heroic-ability"
+    },
+    {
+      "id": "core:rule.heroic_ability.ynkrygg",
+      "localId": "heroic_ability.ynkrygg",
+      "name": "Weasel",
+      "entryKind": "rules-data",
+      "category": "dragonbane.heroic-ability"
+    },
+    {
+      "id": "core:rule.heroic_ability.adaptive",
+      "localId": "heroic_ability.adaptive",
+      "name": "Adaptive",
+      "entryKind": "rules-data",
+      "category": "dragonbane.heroic-ability"
+    },
+    {
+      "id": "core:rule.heroic_ability.hard_to_catch",
+      "localId": "heroic_ability.hard_to_catch",
+      "name": "Hard to Catch",
+      "entryKind": "rules-data",
+      "category": "dragonbane.heroic-ability"
+    },
+    {
+      "id": "core:rule.heroic_ability.unforgiving",
+      "localId": "heroic_ability.unforgiving",
+      "name": "Unforgiving",
+      "entryKind": "rules-data",
+      "category": "dragonbane.heroic-ability"
+    },
+    {
+      "id": "core:rule.heroic_ability.inner_peace",
+      "localId": "heroic_ability.inner_peace",
+      "name": "Inner Peace",
+      "entryKind": "rules-data",
+      "category": "dragonbane.heroic-ability"
+    },
+    {
+      "id": "core:rule.heroic_ability.ill-tempered",
+      "localId": "heroic_ability.ill-tempered",
+      "name": "Ill-tempered",
+      "entryKind": "rules-data",
+      "category": "dragonbane.heroic-ability"
+    },
+    {
+      "id": "core:rule.heroic_ability.webbed_feet",
+      "localId": "heroic_ability.webbed_feet",
+      "name": "Webbed Feet",
+      "entryKind": "rules-data",
+      "category": "dragonbane.heroic-ability"
+    },
+    {
+      "id": "core:rule.heroic_ability.hunting_instincts",
+      "localId": "heroic_ability.hunting_instincts",
+      "name": "Hunting instincts",
+      "entryKind": "rules-data",
+      "category": "dragonbane.heroic-ability"
+    },
+    {
+      "id": "core:rule.magic_school.general",
+      "localId": "magic_school.general",
+      "name": "General Magic",
+      "entryKind": "rules-data",
+      "category": "dragonbane.magic-school"
+    },
+    {
+      "id": "core:rule.magic_school.animism",
+      "localId": "magic_school.animism",
+      "name": "Animism",
+      "entryKind": "rules-data",
+      "category": "dragonbane.magic-school"
+    },
+    {
+      "id": "core:rule.magic_school.elementalism",
+      "localId": "magic_school.elementalism",
+      "name": "Elementalism",
+      "entryKind": "rules-data",
+      "category": "dragonbane.magic-school"
+    },
+    {
+      "id": "core:rule.magic_school.mentalism",
+      "localId": "magic_school.mentalism",
+      "name": "Mentalism",
+      "entryKind": "rules-data",
+      "category": "dragonbane.magic-school"
+    },
+    {
+      "id": "core:rule.cantrip.general.fetch",
+      "localId": "cantrip.general.fetch",
+      "name": "Fetch",
+      "entryKind": "rules-data",
+      "category": "dragonbane.cantrip"
+    },
+    {
+      "id": "core:rule.cantrip.general.flick",
+      "localId": "cantrip.general.flick",
+      "name": "Flick",
+      "entryKind": "rules-data",
+      "category": "dragonbane.cantrip"
+    },
+    {
+      "id": "core:rule.cantrip.general.sense_magic",
+      "localId": "cantrip.general.sense_magic",
+      "name": "Sense Magic",
+      "entryKind": "rules-data",
+      "category": "dragonbane.cantrip"
+    },
+    {
+      "id": "core:rule.cantrip.general.mend_clothes",
+      "localId": "cantrip.general.mend_clothes",
+      "name": "Mend Clothes",
+      "entryKind": "rules-data",
+      "category": "dragonbane.cantrip"
+    },
+    {
+      "id": "core:rule.cantrip.general.light",
+      "localId": "cantrip.general.light",
+      "name": "Light",
+      "entryKind": "rules-data",
+      "category": "dragonbane.cantrip"
+    },
+    {
+      "id": "core:rule.cantrip.general.open_close",
+      "localId": "cantrip.general.open_close",
+      "name": "Open/Close",
+      "entryKind": "rules-data",
+      "category": "dragonbane.cantrip"
+    },
+    {
+      "id": "core:rule.cantrip.animism.flower_trail",
+      "localId": "cantrip.animism.flower_trail",
+      "name": "Flower Trail",
+      "entryKind": "rules-data",
+      "category": "dragonbane.cantrip"
+    },
+    {
+      "id": "core:rule.cantrip.animism.hairstyle",
+      "localId": "cantrip.animism.hairstyle",
+      "name": "Hairstyle",
+      "entryKind": "rules-data",
+      "category": "dragonbane.cantrip"
+    },
+    {
+      "id": "core:rule.cantrip.animism.birdsong",
+      "localId": "cantrip.animism.birdsong",
+      "name": "Birdsong",
+      "entryKind": "rules-data",
+      "category": "dragonbane.cantrip"
+    },
+    {
+      "id": "core:rule.cantrip.animism.cook",
+      "localId": "cantrip.animism.cook",
+      "name": "Cook",
+      "entryKind": "rules-data",
+      "category": "dragonbane.cantrip"
+    },
+    {
+      "id": "core:rule.cantrip.animism.tidy",
+      "localId": "cantrip.animism.tidy",
+      "name": "Tidy",
+      "entryKind": "rules-data",
+      "category": "dragonbane.cantrip"
+    },
+    {
+      "id": "core:rule.cantrip.elementalism.puff_of_smoke",
+      "localId": "cantrip.elementalism.puff_of_smoke",
+      "name": "Puff of Smoke",
+      "entryKind": "rules-data",
+      "category": "dragonbane.cantrip"
+    },
+    {
+      "id": "core:rule.cantrip.elementalism.ignite",
+      "localId": "cantrip.elementalism.ignite",
+      "name": "Ignite",
+      "entryKind": "rules-data",
+      "category": "dragonbane.cantrip"
+    },
+    {
+      "id": "core:rule.cantrip.elementalism.heat_chill",
+      "localId": "cantrip.elementalism.heat_chill",
+      "name": "Heat/Chill",
+      "entryKind": "rules-data",
+      "category": "dragonbane.cantrip"
+    },
+    {
+      "id": "core:rule.cantrip.mentalism.slow_fall",
+      "localId": "cantrip.mentalism.slow_fall",
+      "name": "Slow Fall",
+      "entryKind": "rules-data",
+      "category": "dragonbane.cantrip"
+    },
+    {
+      "id": "core:rule.cantrip.mentalism.lock_unlock",
+      "localId": "cantrip.mentalism.lock_unlock",
+      "name": "Lock/Unlock",
+      "entryKind": "rules-data",
+      "category": "dragonbane.cantrip"
+    },
+    {
+      "id": "core:rule.cantrip.mentalism.magic_stool",
+      "localId": "cantrip.mentalism.magic_stool",
+      "name": "Magic Stool",
+      "entryKind": "rules-data",
+      "category": "dragonbane.cantrip"
+    },
+    {
+      "id": "core:rule.spell.general.protector",
+      "localId": "spell.general.protector",
+      "name": "Protector",
+      "entryKind": "rules-data",
+      "category": "dragonbane.spell"
+    },
+    {
+      "id": "core:rule.spell.general.dispel",
+      "localId": "spell.general.dispel",
+      "name": "Dispel",
+      "entryKind": "rules-data",
+      "category": "dragonbane.spell"
+    },
+    {
+      "id": "core:rule.spell.general.anti-magic",
+      "localId": "spell.general.anti-magic",
+      "name": "Anti-Magic",
+      "entryKind": "rules-data",
+      "category": "dragonbane.spell"
+    },
+    {
+      "id": "core:rule.spell.general.power_transfer",
+      "localId": "spell.general.power_transfer",
+      "name": "Power Transfer",
+      "entryKind": "rules-data",
+      "category": "dragonbane.spell"
+    },
+    {
+      "id": "core:rule.spell.general.seal",
+      "localId": "spell.general.seal",
+      "name": "Seal",
+      "entryKind": "rules-data",
+      "category": "dragonbane.spell"
+    },
+    {
+      "id": "core:rule.spell.general.charge",
+      "localId": "spell.general.charge",
+      "name": "Charge",
+      "entryKind": "rules-data",
+      "category": "dragonbane.spell"
+    },
+    {
+      "id": "core:rule.spell.general.permanence",
+      "localId": "spell.general.permanence",
+      "name": "Permanence",
+      "entryKind": "rules-data",
+      "category": "dragonbane.spell"
+    },
+    {
+      "id": "core:rule.spell.animism.banish",
+      "localId": "spell.animism.banish",
+      "name": "Banish",
+      "entryKind": "rules-data",
+      "category": "dragonbane.spell"
+    },
+    {
+      "id": "core:rule.spell.animism.lightning",
+      "localId": "spell.animism.lightning",
+      "name": "Lightning",
+      "entryKind": "rules-data",
+      "category": "dragonbane.spell"
+    },
+    {
+      "id": "core:rule.spell.animism.heal",
+      "localId": "spell.animism.heal",
+      "name": "Heal",
+      "entryKind": "rules-data",
+      "category": "dragonbane.spell"
+    },
+    {
+      "id": "core:rule.spell.animism.ensnare",
+      "localId": "spell.animism.ensnare",
+      "name": "Ensnare",
+      "entryKind": "rules-data",
+      "category": "dragonbane.spell"
+    },
+    {
+      "id": "core:rule.spell.animism.speak_with_animals",
+      "localId": "spell.animism.speak_with_animals",
+      "name": "Speak with Animals",
+      "entryKind": "rules-data",
+      "category": "dragonbane.spell"
+    },
+    {
+      "id": "core:rule.spell.animism.chain_lightning",
+      "localId": "spell.animism.chain_lightning",
+      "name": "Chain Lightning",
+      "entryKind": "rules-data",
+      "category": "dragonbane.spell"
+    },
+    {
+      "id": "core:rule.spell.animism.purge",
+      "localId": "spell.animism.purge",
+      "name": "Purge",
+      "entryKind": "rules-data",
+      "category": "dragonbane.spell"
+    },
+    {
+      "id": "core:rule.spell.animism.heal_wound",
+      "localId": "spell.animism.heal_wound",
+      "name": "Heal Wound",
+      "entryKind": "rules-data",
+      "category": "dragonbane.spell"
+    },
+    {
+      "id": "core:rule.spell.animism.engulfing_forest",
+      "localId": "spell.animism.engulfing_forest",
+      "name": "Engulfing Forest",
+      "entryKind": "rules-data",
+      "category": "dragonbane.spell"
+    },
+    {
+      "id": "core:rule.spell.animism.sleep",
+      "localId": "spell.animism.sleep",
+      "name": "Sleep",
+      "entryKind": "rules-data",
+      "category": "dragonbane.spell"
+    },
+    {
+      "id": "core:rule.spell.animism.restoration",
+      "localId": "spell.animism.restoration",
+      "name": "Restoration",
+      "entryKind": "rules-data",
+      "category": "dragonbane.spell"
+    },
+    {
+      "id": "core:rule.spell.animism.thunderbolt",
+      "localId": "spell.animism.thunderbolt",
+      "name": "Thunderbolt",
+      "entryKind": "rules-data",
+      "category": "dragonbane.spell"
+    },
+    {
+      "id": "core:rule.spell.animism.resurrection",
+      "localId": "spell.animism.resurrection",
+      "name": "Resurrection",
+      "entryKind": "rules-data",
+      "category": "dragonbane.spell"
+    },
+    {
+      "id": "core:rule.spell.elementalism.fireball",
+      "localId": "spell.elementalism.fireball",
+      "name": "Fireball",
+      "entryKind": "rules-data",
+      "category": "dragonbane.spell"
+    },
+    {
+      "id": "core:rule.spell.elementalism.frost",
+      "localId": "spell.elementalism.frost",
+      "name": "Frost",
+      "entryKind": "rules-data",
+      "category": "dragonbane.spell"
+    },
+    {
+      "id": "core:rule.spell.elementalism.pillar",
+      "localId": "spell.elementalism.pillar",
+      "name": "Pillar",
+      "entryKind": "rules-data",
+      "category": "dragonbane.spell"
+    },
+    {
+      "id": "core:rule.spell.elementalism.shatter",
+      "localId": "spell.elementalism.shatter",
+      "name": "Shatter",
+      "entryKind": "rules-data",
+      "category": "dragonbane.spell"
+    },
+    {
+      "id": "core:rule.spell.elementalism.gust_of_wind",
+      "localId": "spell.elementalism.gust_of_wind",
+      "name": "Gust of Wind",
+      "entryKind": "rules-data",
+      "category": "dragonbane.spell"
+    },
+    {
+      "id": "core:rule.spell.elementalism.fire_blast",
+      "localId": "spell.elementalism.fire_blast",
+      "name": "Fire Blast",
+      "entryKind": "rules-data",
+      "category": "dragonbane.spell"
+    },
+    {
+      "id": "core:rule.spell.elementalism.tidal_wave",
+      "localId": "spell.elementalism.tidal_wave",
+      "name": "Tidal Wave",
+      "entryKind": "rules-data",
+      "category": "dragonbane.spell"
+    },
+    {
+      "id": "core:rule.spell.elementalism.stone_shield",
+      "localId": "spell.elementalism.stone_shield",
+      "name": "Stone Shield",
+      "entryKind": "rules-data",
+      "category": "dragonbane.spell"
+    },
+    {
+      "id": "core:rule.spell.elementalism.stonewall",
+      "localId": "spell.elementalism.stonewall",
+      "name": "Stonewall",
+      "entryKind": "rules-data",
+      "category": "dragonbane.spell"
+    },
+    {
+      "id": "core:rule.spell.elementalism.whirlwind",
+      "localId": "spell.elementalism.whirlwind",
+      "name": "Whirlwind",
+      "entryKind": "rules-data",
+      "category": "dragonbane.spell"
+    },
+    {
+      "id": "core:rule.spell.elementalism.firebird",
+      "localId": "spell.elementalism.firebird",
+      "name": "Firebird",
+      "entryKind": "rules-data",
+      "category": "dragonbane.spell"
+    },
+    {
+      "id": "core:rule.spell.elementalism.firestorm",
+      "localId": "spell.elementalism.firestorm",
+      "name": "Firestorm",
+      "entryKind": "rules-data",
+      "category": "dragonbane.spell"
+    },
+    {
+      "id": "core:rule.spell.elementalism.gnome",
+      "localId": "spell.elementalism.gnome",
+      "name": "Gnome",
+      "entryKind": "rules-data",
+      "category": "dragonbane.spell"
+    },
+    {
+      "id": "core:rule.spell.elementalism.salamander",
+      "localId": "spell.elementalism.salamander",
+      "name": "Salamander",
+      "entryKind": "rules-data",
+      "category": "dragonbane.spell"
+    },
+    {
+      "id": "core:rule.spell.elementalism.sylph",
+      "localId": "spell.elementalism.sylph",
+      "name": "Sylph",
+      "entryKind": "rules-data",
+      "category": "dragonbane.spell"
+    },
+    {
+      "id": "core:rule.spell.elementalism.undine",
+      "localId": "spell.elementalism.undine",
+      "name": "Undine",
+      "entryKind": "rules-data",
+      "category": "dragonbane.spell"
+    },
+    {
+      "id": "core:rule.spell.mentalism.farsight",
+      "localId": "spell.mentalism.farsight",
+      "name": "Farsight",
+      "entryKind": "rules-data",
+      "category": "dragonbane.spell"
+    },
+    {
+      "id": "core:rule.spell.mentalism.power_fist",
+      "localId": "spell.mentalism.power_fist",
+      "name": "Power Fist",
+      "entryKind": "rules-data",
+      "category": "dragonbane.spell"
+    },
+    {
+      "id": "core:rule.spell.mentalism.levitate",
+      "localId": "spell.mentalism.levitate",
+      "name": "Levitate",
+      "entryKind": "rules-data",
+      "category": "dragonbane.spell"
+    },
+    {
+      "id": "core:rule.spell.mentalism.longstrider",
+      "localId": "spell.mentalism.longstrider",
+      "name": "Longstrider",
+      "entryKind": "rules-data",
+      "category": "dragonbane.spell"
+    },
+    {
+      "id": "core:rule.spell.mentalism.stone_skin",
+      "localId": "spell.mentalism.stone_skin",
+      "name": "Stone Skin",
+      "entryKind": "rules-data",
+      "category": "dragonbane.spell"
+    },
+    {
+      "id": "core:rule.spell.mentalism.divination",
+      "localId": "spell.mentalism.divination",
+      "name": "Divination",
+      "entryKind": "rules-data",
+      "category": "dragonbane.spell"
+    },
+    {
+      "id": "core:rule.spell.mentalism.enchant_weapon",
+      "localId": "spell.mentalism.enchant_weapon",
+      "name": "Enchant Weapon",
+      "entryKind": "rules-data",
+      "category": "dragonbane.spell"
+    },
+    {
+      "id": "core:rule.spell.mentalism.mental_strike",
+      "localId": "spell.mentalism.mental_strike",
+      "name": "Mental Strike",
+      "entryKind": "rules-data",
+      "category": "dragonbane.spell"
+    },
+    {
+      "id": "core:rule.spell.mentalism.telepathy",
+      "localId": "spell.mentalism.telepathy",
+      "name": "Telepathy",
+      "entryKind": "rules-data",
+      "category": "dragonbane.spell"
+    },
+    {
+      "id": "core:rule.spell.mentalism.scrying",
+      "localId": "spell.mentalism.scrying",
+      "name": "Scrying",
+      "entryKind": "rules-data",
+      "category": "dragonbane.spell"
+    },
+    {
+      "id": "core:rule.spell.mentalism.dominate",
+      "localId": "spell.mentalism.dominate",
+      "name": "Dominate",
+      "entryKind": "rules-data",
+      "category": "dragonbane.spell"
+    },
+    {
+      "id": "core:rule.spell.mentalism.flight",
+      "localId": "spell.mentalism.flight",
+      "name": "Flight",
+      "entryKind": "rules-data",
+      "category": "dragonbane.spell"
+    },
+    {
+      "id": "core:rule.spell.mentalism.teleport",
+      "localId": "spell.mentalism.teleport",
+      "name": "Teleport",
+      "entryKind": "rules-data",
+      "category": "dragonbane.spell"
+    },
+    {
+      "id": "core:weapon.unarmed",
+      "localId": "unarmed",
+      "name": "Unarmed",
+      "entryKind": "rules-data",
+      "category": "dragonbane.weapon"
+    },
+    {
+      "id": "core:weapon.light_improvised",
+      "localId": "light_improvised",
+      "name": "Light Improvised",
+      "entryKind": "rules-data",
+      "category": "dragonbane.weapon"
+    },
+    {
+      "id": "core:weapon.heavy_improvised",
+      "localId": "heavy_improvised",
+      "name": "Heavy Improvised",
+      "entryKind": "rules-data",
+      "category": "dragonbane.weapon"
+    },
+    {
+      "id": "core:weapon.knife",
+      "localId": "knife",
+      "name": "Knife",
+      "entryKind": "rules-data",
+      "category": "dragonbane.weapon"
+    },
+    {
+      "id": "core:weapon.dagger",
+      "localId": "dagger",
+      "name": "Dagger",
+      "entryKind": "rules-data",
+      "category": "dragonbane.weapon"
+    },
+    {
+      "id": "core:weapon.parrying_dagger",
+      "localId": "parrying_dagger",
+      "name": "Parrying Dagger",
+      "entryKind": "rules-data",
+      "category": "dragonbane.weapon"
+    },
+    {
+      "id": "core:weapon.short_sword",
+      "localId": "short_sword",
+      "name": "Short Sword",
+      "entryKind": "rules-data",
+      "category": "dragonbane.weapon"
+    },
+    {
+      "id": "core:weapon.broadsword",
+      "localId": "broadsword",
+      "name": "Broadsword",
+      "entryKind": "rules-data",
+      "category": "dragonbane.weapon"
+    },
+    {
+      "id": "core:weapon.bastard_sword",
+      "localId": "bastard_sword",
+      "name": "Bastard Sword",
+      "entryKind": "rules-data",
+      "category": "dragonbane.weapon"
+    },
+    {
+      "id": "core:weapon.two_handed_sword",
+      "localId": "two_handed_sword",
+      "name": "Two-Handed Sword",
+      "entryKind": "rules-data",
+      "category": "dragonbane.weapon"
+    },
+    {
+      "id": "core:weapon.scimitar",
+      "localId": "scimitar",
+      "name": "Scimitar",
+      "entryKind": "rules-data",
+      "category": "dragonbane.weapon"
+    },
+    {
+      "id": "core:weapon.hand_axe",
+      "localId": "hand_axe",
+      "name": "Hand Axe",
+      "entryKind": "rules-data",
+      "category": "dragonbane.weapon"
+    },
+    {
+      "id": "core:weapon.battle_axe",
+      "localId": "battle_axe",
+      "name": "Battle Axe",
+      "entryKind": "rules-data",
+      "category": "dragonbane.weapon"
+    },
+    {
+      "id": "core:weapon.two_handed_axe",
+      "localId": "two_handed_axe",
+      "name": "Two-Handed Axe",
+      "entryKind": "rules-data",
+      "category": "dragonbane.weapon"
+    },
+    {
+      "id": "core:weapon.mace",
+      "localId": "mace",
+      "name": "Mace",
+      "entryKind": "rules-data",
+      "category": "dragonbane.weapon"
+    },
+    {
+      "id": "core:weapon.morning_star",
+      "localId": "morning_star",
+      "name": "Morning Star",
+      "entryKind": "rules-data",
+      "category": "dragonbane.weapon"
+    },
+    {
+      "id": "core:weapon.flail",
+      "localId": "flail",
+      "name": "Flail",
+      "entryKind": "rules-data",
+      "category": "dragonbane.weapon"
+    },
+    {
+      "id": "core:weapon.light_warhammer",
+      "localId": "light_warhammer",
+      "name": "Light Warhammer",
+      "entryKind": "rules-data",
+      "category": "dragonbane.weapon"
+    },
+    {
+      "id": "core:weapon.heavy_warhammer",
+      "localId": "heavy_warhammer",
+      "name": "Heavy Warhammer",
+      "entryKind": "rules-data",
+      "category": "dragonbane.weapon"
+    },
+    {
+      "id": "core:weapon.small_wooden_club",
+      "localId": "small_wooden_club",
+      "name": "Small Wooden Club",
+      "entryKind": "rules-data",
+      "category": "dragonbane.weapon"
+    },
+    {
+      "id": "core:weapon.large_wooden_club",
+      "localId": "large_wooden_club",
+      "name": "Large Wooden Club",
+      "entryKind": "rules-data",
+      "category": "dragonbane.weapon"
+    },
+    {
+      "id": "core:weapon.staff",
+      "localId": "staff",
+      "name": "Staff",
+      "entryKind": "rules-data",
+      "category": "dragonbane.weapon"
+    },
+    {
+      "id": "core:weapon.short_spear",
+      "localId": "short_spear",
+      "name": "Short Spear",
+      "entryKind": "rules-data",
+      "category": "dragonbane.weapon"
+    },
+    {
+      "id": "core:weapon.long_spear",
+      "localId": "long_spear",
+      "name": "Long Spear",
+      "entryKind": "rules-data",
+      "category": "dragonbane.weapon"
+    },
+    {
+      "id": "core:weapon.lance",
+      "localId": "lance",
+      "name": "Lance",
+      "entryKind": "rules-data",
+      "category": "dragonbane.weapon"
+    },
+    {
+      "id": "core:weapon.halberd",
+      "localId": "halberd",
+      "name": "Halberd",
+      "entryKind": "rules-data",
+      "category": "dragonbane.weapon"
+    },
+    {
+      "id": "core:weapon.trident",
+      "localId": "trident",
+      "name": "Trident",
+      "entryKind": "rules-data",
+      "category": "dragonbane.weapon"
+    },
+    {
+      "id": "core:weapon.small_shield",
+      "localId": "small_shield",
+      "name": "Small Shield",
+      "entryKind": "rules-data",
+      "category": "dragonbane.weapon"
+    },
+    {
+      "id": "core:weapon.large_shield",
+      "localId": "large_shield",
+      "name": "Large Shield",
+      "entryKind": "rules-data",
+      "category": "dragonbane.weapon"
+    },
+    {
+      "id": "core:weapon.sling",
+      "localId": "sling",
+      "name": "Sling",
+      "entryKind": "rules-data",
+      "category": "dragonbane.weapon"
+    },
+    {
+      "id": "core:weapon.short_bow",
+      "localId": "short_bow",
+      "name": "Short Bow",
+      "entryKind": "rules-data",
+      "category": "dragonbane.weapon"
+    },
+    {
+      "id": "core:weapon.long_bow",
+      "localId": "long_bow",
+      "name": "Long Bow",
+      "entryKind": "rules-data",
+      "category": "dragonbane.weapon"
+    },
+    {
+      "id": "core:weapon.light_crossbow",
+      "localId": "light_crossbow",
+      "name": "Light Crossbow",
+      "entryKind": "rules-data",
+      "category": "dragonbane.weapon"
+    },
+    {
+      "id": "core:weapon.heavy_crossbow",
+      "localId": "heavy_crossbow",
+      "name": "Heavy Crossbow",
+      "entryKind": "rules-data",
+      "category": "dragonbane.weapon"
+    },
+    {
+      "id": "core:weapon.hand_crossbow",
+      "localId": "hand_crossbow",
+      "name": "Hand Crossbow",
+      "entryKind": "rules-data",
+      "category": "dragonbane.weapon"
+    },
+    {
+      "id": "core:armor.leather",
+      "localId": "leather",
+      "name": "Leather",
+      "entryKind": "rules-data",
+      "category": "dragonbane.armor"
+    },
+    {
+      "id": "core:armor.studded",
+      "localId": "studded",
+      "name": "Studded Leather",
+      "entryKind": "rules-data",
+      "category": "dragonbane.armor"
+    },
+    {
+      "id": "core:armor.chainmail",
+      "localId": "chainmail",
+      "name": "Chainmail",
+      "entryKind": "rules-data",
+      "category": "dragonbane.armor"
+    },
+    {
+      "id": "core:armor.plate",
+      "localId": "plate",
+      "name": "Plate Armor",
+      "entryKind": "rules-data",
+      "category": "dragonbane.armor"
+    },
+    {
+      "id": "core:armor.open_helmet",
+      "localId": "open_helmet",
+      "name": "Open Helmet",
+      "entryKind": "rules-data",
+      "category": "dragonbane.armor"
+    },
+    {
+      "id": "core:armor.great_helmet",
+      "localId": "great_helmet",
+      "name": "Great Helmet",
+      "entryKind": "rules-data",
+      "category": "dragonbane.armor"
+    }
+  ],
+  "domains": {
+    "dragonbane": {
+      "schemaVersion": 1,
+      "kins": [
+        {
+          "ref": "core:kin.human",
+          "id": "human",
+          "name": "Human",
+          "movement": 10,
+          "playableByPlayers": true,
+          "heroicAbilityRef": "core:rule.heroic_ability.adaptive",
+          "source": "DoD_Regelboken_v2.pdf#page=13"
+        },
+        {
+          "ref": "core:kin.halfling",
+          "id": "halfling",
+          "name": "Halfling",
+          "movement": 8,
+          "playableByPlayers": true,
+          "heroicAbilityRef": "core:rule.heroic_ability.hard_to_catch",
+          "source": "DoD_Regelboken_v2.pdf#page=14"
+        },
+        {
+          "ref": "core:kin.dwarf",
+          "id": "dwarf",
+          "name": "Dwarf",
+          "movement": 8,
+          "playableByPlayers": true,
+          "heroicAbilityRef": "core:rule.heroic_ability.unforgiving",
+          "source": "DoD_Regelboken_v2.pdf#page=15"
+        },
+        {
+          "ref": "core:kin.elf",
+          "id": "elf",
+          "name": "Elf",
+          "movement": 10,
+          "playableByPlayers": true,
+          "heroicAbilityRef": "core:rule.heroic_ability.inner_peace",
+          "source": "DoD_Regelboken_v2.pdf#page=16"
+        },
+        {
+          "ref": "core:kin.mallard",
+          "id": "mallard",
+          "name": "Mallard",
+          "movement": 8,
+          "playableByPlayers": true,
+          "heroicAbilityRef": "core:rule.heroic_ability.ill-tempered",
+          "source": "DoD_Regelboken_v2.pdf#page=17"
+        },
+        {
+          "ref": "core:kin.wolfkin",
+          "id": "wolfkin",
+          "name": "Wolfkin",
+          "movement": 12,
+          "playableByPlayers": true,
+          "heroicAbilityRef": "core:rule.heroic_ability.hunting_instincts",
+          "source": "DoD_Regelboken_v2.pdf#page=18"
+        }
+      ],
+      "professions": [
+        {
+          "ref": "core:profession.bard",
+          "id": "bard",
+          "name": "Bard",
+          "keyAttributeIds": [
+            "CHA"
+          ],
+          "trainedSkillRefs": [
+            "core:skill.bluffa",
+            "core:skill.frammande_sprak",
+            "core:skill.hoppa_klattra",
+            "core:skill.kniv",
+            "core:skill.myter_legender",
+            "core:skill.undvika",
+            "core:skill.upptrada",
+            "core:skill.overtala"
+          ],
+          "startingEquipment": {
+            "weaponRefs": [
+              "core:weapon.knife"
+            ],
+            "armorRefs": [],
+            "itemRefs": [
+              "core:rule.lyre",
+              "core:rule.oil_lamp",
+              "core:rule.lamp_oil",
+              "core:rule.flint_steel",
+              "core:rule.rations"
+            ],
+            "copper": 10
+          },
+          "source": "DoD_Regelboken_v2.pdf#page=22"
+        },
+        {
+          "ref": "core:profession.artisan",
+          "id": "artisan",
+          "name": "Artisan",
+          "keyAttributeIds": [
+            "STR"
+          ],
+          "trainedSkillRefs": [
+            "core:skill.fingerfardighet",
+            "core:skill.finna_dolda_ting",
+            "core:skill.hammare",
+            "core:skill.hantverk",
+            "core:skill.kniv",
+            "core:skill.slagsm_l",
+            "core:skill.svard",
+            "core:skill.yxa"
+          ],
+          "startingEquipment": {
+            "weaponRefs": [],
+            "armorRefs": [],
+            "itemRefs": [
+              "core:rule.warhammer_small",
+              "core:rule.leather_armor",
+              "core:rule.smithing_tools",
+              "core:rule.torch",
+              "core:rule.flint_steel",
+              "core:rule.rations"
+            ],
+            "copper": 10
+          },
+          "source": "DoD_Regelboken_v2.pdf#page=23"
+        },
+        {
+          "ref": "core:profession.hunter",
+          "id": "hunter",
+          "name": "Hunter",
+          "keyAttributeIds": [
+            "AGL"
+          ],
+          "trainedSkillRefs": [
+            "core:skill.hoppa_klattra",
+            "core:skill.jakt_fiske",
+            "core:skill.kniv",
+            "core:skill.pilbage",
+            "core:skill.slunga",
+            "core:skill.smyga",
+            "core:skill.upptacka_fara",
+            "core:skill.vildmarksvana"
+          ],
+          "startingEquipment": {
+            "weaponRefs": [
+              "core:weapon.dagger",
+              "core:weapon.short_bow"
+            ],
+            "armorRefs": [],
+            "itemRefs": [
+              "core:rule.quiver",
+              "core:rule.leather_armor",
+              "core:rule.sleeping_fur",
+              "core:rule.torch",
+              "core:rule.flint_steel",
+              "core:rule.rope_hemp",
+              "core:rule.snare",
+              "core:rule.rations"
+            ],
+            "copper": 10
+          },
+          "source": "DoD_Regelboken_v2.pdf#page=24"
+        },
+        {
+          "ref": "core:profession.fighter",
+          "id": "fighter",
+          "name": "Fighter",
+          "keyAttributeIds": [
+            "STR"
+          ],
+          "trainedSkillRefs": [
+            "core:skill.armborst",
+            "core:skill.hammare",
+            "core:skill.pilbage",
+            "core:skill.slagsm_l",
+            "core:skill.spjut",
+            "core:skill.svard",
+            "core:skill.undvika",
+            "core:skill.yxa"
+          ],
+          "startingEquipment": {
+            "weaponRefs": [
+              "core:weapon.small_shield"
+            ],
+            "armorRefs": [
+              "core:armor.chainmail"
+            ],
+            "itemRefs": [
+              "core:rule.broadsword_battle_axe_morning_star",
+              "core:rule.torch",
+              "core:rule.flint_steel",
+              "core:rule.rations"
+            ],
+            "copper": 10
+          },
+          "source": "DoD_Regelboken_v2.pdf#page=25"
+        },
+        {
+          "ref": "core:profession.scholar",
+          "id": "scholar",
+          "name": "Scholar",
+          "keyAttributeIds": [
+            "INT"
+          ],
+          "trainedSkillRefs": [
+            "core:skill.bestiologi",
+            "core:skill.finna_dolda_ting",
+            "core:skill.frammande_sprak",
+            "core:skill.lakekonst",
+            "core:skill.myter_legender",
+            "core:skill.undvika",
+            "core:skill.upptacka_fara",
+            "core:skill.vildmarksvana"
+          ],
+          "startingEquipment": {
+            "weaponRefs": [],
+            "armorRefs": [],
+            "itemRefs": [
+              "core:rule.wooden_staff",
+              "core:rule.notebook",
+              "core:rule.quill_pen",
+              "core:rule.sleeping_fur",
+              "core:rule.torch",
+              "core:rule.flint_steel",
+              "core:rule.rations"
+            ],
+            "copper": 10
+          },
+          "source": "DoD_Regelboken_v2.pdf#page=26"
+        },
+        {
+          "ref": "core:profession.mage",
+          "id": "mage",
+          "name": "Mage",
+          "keyAttributeIds": [
+            "WIL"
+          ],
+          "trainedSkillRefs": [
+            "core:skill.animism",
+            "core:skill.bestiologi",
+            "core:skill.jakt_fiske",
+            "core:skill.lakekonst",
+            "core:skill.smyga",
+            "core:skill.stav",
+            "core:skill.undvika",
+            "core:skill.vildmarksvana",
+            "core:skill.elementalism",
+            "core:skill.finna_dolda_ting",
+            "core:skill.frammande_sprak",
+            "core:skill.myter_legender",
+            "core:skill.upptacka_fara",
+            "core:skill.mentalism",
+            "core:skill.hoppa_klattra",
+            "core:skill.slagsm_l"
+          ],
+          "startingEquipment": {
+            "weaponRefs": [],
+            "armorRefs": [],
+            "itemRefs": [
+              "core:rule.wooden_staff",
+              "core:rule.crystal_ball",
+              "core:rule.spell_book",
+              "core:rule.torch",
+              "core:rule.flint_steel",
+              "core:rule.rations"
+            ],
+            "copper": 10
+          },
+          "source": "DoD_Regelboken_v2.pdf#page=27"
+        },
+        {
+          "ref": "core:profession.merchant",
+          "id": "merchant",
+          "name": "Merchant",
+          "keyAttributeIds": [
+            "CHA"
+          ],
+          "trainedSkillRefs": [
+            "core:skill.bluffa",
+            "core:skill.fingerfardighet",
+            "core:skill.finna_dolda_ting",
+            "core:skill.kniv",
+            "core:skill.kopsla",
+            "core:skill.undvika",
+            "core:skill.upptacka_fara",
+            "core:skill.overtala"
+          ],
+          "startingEquipment": {
+            "weaponRefs": [
+              "core:weapon.dagger"
+            ],
+            "armorRefs": [],
+            "itemRefs": [
+              "core:rule.sleeping_fur",
+              "core:rule.torch",
+              "core:rule.flint_steel",
+              "core:rule.rope_hemp",
+              "core:rule.donkey",
+              "core:rule.rations"
+            ],
+            "copper": 10
+          },
+          "source": "DoD_Regelboken_v2.pdf#page=28"
+        },
+        {
+          "ref": "core:profession.knight",
+          "id": "knight",
+          "name": "Knight",
+          "keyAttributeIds": [
+            "STR"
+          ],
+          "trainedSkillRefs": [
+            "core:skill.bestiologi",
+            "core:skill.hammare",
+            "core:skill.myter_legender",
+            "core:skill.rida",
+            "core:skill.spjut",
+            "core:skill.svard",
+            "core:skill.upptrada",
+            "core:skill.overtala"
+          ],
+          "startingEquipment": {
+            "weaponRefs": [
+              "core:weapon.small_shield"
+            ],
+            "armorRefs": [
+              "core:armor.plate"
+            ],
+            "itemRefs": [
+              "core:rule.broadsword_morning_star",
+              "core:rule.great_helm",
+              "core:rule.torch",
+              "core:rule.flint_steel",
+              "core:rule.rations"
+            ],
+            "copper": 10
+          },
+          "source": "DoD_Regelboken_v2.pdf#page=29"
+        },
+        {
+          "ref": "core:profession.mariner",
+          "id": "mariner",
+          "name": "Mariner",
+          "keyAttributeIds": [
+            "AGL"
+          ],
+          "trainedSkillRefs": [
+            "core:skill.frammande_sprak",
+            "core:skill.hoppa_klattra",
+            "core:skill.jakt_fiske",
+            "core:skill.kniv",
+            "core:skill.simma",
+            "core:skill.sjokunnighet",
+            "core:skill.svard",
+            "core:skill.upptacka_fara"
+          ],
+          "startingEquipment": {
+            "weaponRefs": [
+              "core:weapon.dagger",
+              "core:weapon.short_bow"
+            ],
+            "armorRefs": [],
+            "itemRefs": [
+              "core:rule.quiver",
+              "core:rule.rope_hemp",
+              "core:rule.grappling_hook",
+              "core:rule.sleeping_fur",
+              "core:rule.torch",
+              "core:rule.flint_steel",
+              "core:rule.rations"
+            ],
+            "copper": 10
+          },
+          "source": "DoD_Regelboken_v2.pdf#page=30"
+        },
+        {
+          "ref": "core:profession.thief",
+          "id": "thief",
+          "name": "Thief",
+          "keyAttributeIds": [
+            "AGL"
+          ],
+          "trainedSkillRefs": [
+            "core:skill.bluffa",
+            "core:skill.kniv",
+            "core:skill.fingerfardighet",
+            "core:skill.finna_dolda_ting",
+            "core:skill.hoppa_klattra",
+            "core:skill.smyga",
+            "core:skill.undvika",
+            "core:skill.upptacka_fara"
+          ],
+          "startingEquipment": {
+            "weaponRefs": [
+              "core:weapon.dagger",
+              "core:weapon.sling"
+            ],
+            "armorRefs": [],
+            "itemRefs": [
+              "core:rule.rope_hemp",
+              "core:rule.grappling_hook",
+              "core:rule.torch",
+              "core:rule.flint_steel",
+              "core:rule.rations"
+            ],
+            "copper": 10
+          },
+          "source": "DoD_Regelboken_v2.pdf#page=31"
+        }
+      ],
+      "skills": [
+        {
+          "ref": "core:skill.bestiologi",
+          "id": "bestiologi",
+          "name": "Beast Lore",
+          "attributeId": "INT",
+          "isSecondary": false,
+          "source": "DoD_Regelboken_v2.pdf"
+        },
+        {
+          "ref": "core:skill.bluffa",
+          "id": "bluffa",
+          "name": "Bluffing",
+          "attributeId": "CHA",
+          "isSecondary": false,
+          "source": "DoD_Regelboken_v2.pdf"
+        },
+        {
+          "ref": "core:skill.fingerfardighet",
+          "id": "fingerfardighet",
+          "name": "Sleight of Hand",
+          "attributeId": "AGL",
+          "isSecondary": false,
+          "source": "DoD_Regelboken_v2.pdf"
+        },
+        {
+          "ref": "core:skill.finna_dolda_ting",
+          "id": "finna_dolda_ting",
+          "name": "Spot Hidden",
+          "attributeId": "INT",
+          "isSecondary": false,
+          "source": "DoD_Regelboken_v2.pdf"
+        },
+        {
+          "ref": "core:skill.frammande_sprak",
+          "id": "frammande_sprak",
+          "name": "Languages",
+          "attributeId": "INT",
+          "isSecondary": false,
+          "source": "DoD_Regelboken_v2.pdf"
+        },
+        {
+          "ref": "core:skill.hantverk",
+          "id": "hantverk",
+          "name": "Crafting",
+          "attributeId": "STR",
+          "isSecondary": false,
+          "source": "DoD_Regelboken_v2.pdf"
+        },
+        {
+          "ref": "core:skill.hoppa_klattra",
+          "id": "hoppa_klattra",
+          "name": "Acrobatics",
+          "attributeId": "AGL",
+          "isSecondary": false,
+          "source": "DoD_Regelboken_v2.pdf"
+        },
+        {
+          "ref": "core:skill.jakt_fiske",
+          "id": "jakt_fiske",
+          "name": "Hunting & Fishing",
+          "attributeId": "AGL",
+          "isSecondary": false,
+          "source": "DoD_Regelboken_v2.pdf"
+        },
+        {
+          "ref": "core:skill.kopsla",
+          "id": "kopsla",
+          "name": "Bartering",
+          "attributeId": "CHA",
+          "isSecondary": false,
+          "source": "DoD_Regelboken_v2.pdf"
+        },
+        {
+          "ref": "core:skill.lakekonst",
+          "id": "lakekonst",
+          "name": "Healing",
+          "attributeId": "INT",
+          "isSecondary": false,
+          "source": "DoD_Regelboken_v2.pdf"
+        },
+        {
+          "ref": "core:skill.myter_legender",
+          "id": "myter_legender",
+          "name": "Myths & Legends",
+          "attributeId": "INT",
+          "isSecondary": false,
+          "source": "DoD_Regelboken_v2.pdf"
+        },
+        {
+          "ref": "core:skill.rida",
+          "id": "rida",
+          "name": "Riding",
+          "attributeId": "AGL",
+          "isSecondary": false,
+          "source": "DoD_Regelboken_v2.pdf"
+        },
+        {
+          "ref": "core:skill.simma",
+          "id": "simma",
+          "name": "Swimming",
+          "attributeId": "AGL",
+          "isSecondary": false,
+          "source": "DoD_Regelboken_v2.pdf"
+        },
+        {
+          "ref": "core:skill.sjokunnighet",
+          "id": "sjokunnighet",
+          "name": "Seamanship",
+          "attributeId": "INT",
+          "isSecondary": false,
+          "source": "DoD_Regelboken_v2.pdf"
+        },
+        {
+          "ref": "core:skill.smyga",
+          "id": "smyga",
+          "name": "Sneaking",
+          "attributeId": "AGL",
+          "isSecondary": false,
+          "source": "DoD_Regelboken_v2.pdf"
+        },
+        {
+          "ref": "core:skill.undvika",
+          "id": "undvika",
+          "name": "Evade",
+          "attributeId": "AGL",
+          "isSecondary": false,
+          "source": "DoD_Regelboken_v2.pdf"
+        },
+        {
+          "ref": "core:skill.upptrada",
+          "id": "upptrada",
+          "name": "Performance",
+          "attributeId": "CHA",
+          "isSecondary": false,
+          "source": "DoD_Regelboken_v2.pdf"
+        },
+        {
+          "ref": "core:skill.upptacka_fara",
+          "id": "upptacka_fara",
+          "name": "Awareness",
+          "attributeId": "INT",
+          "isSecondary": false,
+          "source": "DoD_Regelboken_v2.pdf"
+        },
+        {
+          "ref": "core:skill.vildmarksvana",
+          "id": "vildmarksvana",
+          "name": "Bushcraft",
+          "attributeId": "INT",
+          "isSecondary": false,
+          "source": "DoD_Regelboken_v2.pdf"
+        },
+        {
+          "ref": "core:skill.overtala",
+          "id": "overtala",
+          "name": "Persuasion",
+          "attributeId": "CHA",
+          "isSecondary": false,
+          "source": "DoD_Regelboken_v2.pdf"
+        },
+        {
+          "ref": "core:skill.armborst",
+          "id": "armborst",
+          "name": "Crossbows",
+          "attributeId": "AGL",
+          "isSecondary": false,
+          "source": "DoD_Regelboken_v2.pdf"
+        },
+        {
+          "ref": "core:skill.hammare",
+          "id": "hammare",
+          "name": "Hammers",
+          "attributeId": "STR",
+          "isSecondary": false,
+          "source": "DoD_Regelboken_v2.pdf"
+        },
+        {
+          "ref": "core:skill.kniv",
+          "id": "kniv",
+          "name": "Knives",
+          "attributeId": "AGL",
+          "isSecondary": false,
+          "source": "DoD_Regelboken_v2.pdf"
+        },
+        {
+          "ref": "core:skill.pilbage",
+          "id": "pilbage",
+          "name": "Bows",
+          "attributeId": "AGL",
+          "isSecondary": false,
+          "source": "DoD_Regelboken_v2.pdf"
+        },
+        {
+          "ref": "core:skill.slagsm_l",
+          "id": "slagsm_l",
+          "name": "Brawling",
+          "attributeId": "STR",
+          "isSecondary": false,
+          "source": "DoD_Regelboken_v2.pdf"
+        },
+        {
+          "ref": "core:skill.slunga",
+          "id": "slunga",
+          "name": "Slings",
+          "attributeId": "AGL",
+          "isSecondary": false,
+          "source": "DoD_Regelboken_v2.pdf"
+        },
+        {
+          "ref": "core:skill.spjut",
+          "id": "spjut",
+          "name": "Spears",
+          "attributeId": "STR",
+          "isSecondary": false,
+          "source": "DoD_Regelboken_v2.pdf"
+        },
+        {
+          "ref": "core:skill.stav",
+          "id": "stav",
+          "name": "Staves",
+          "attributeId": "AGL",
+          "isSecondary": false,
+          "source": "DoD_Regelboken_v2.pdf"
+        },
+        {
+          "ref": "core:skill.svard",
+          "id": "svard",
+          "name": "Swords",
+          "attributeId": "STR",
+          "isSecondary": false,
+          "source": "DoD_Regelboken_v2.pdf"
+        },
+        {
+          "ref": "core:skill.yxa",
+          "id": "yxa",
+          "name": "Axes",
+          "attributeId": "STR",
+          "isSecondary": false,
+          "source": "DoD_Regelboken_v2.pdf"
+        },
+        {
+          "ref": "core:skill.animism",
+          "id": "animism",
+          "name": "Animism",
+          "attributeId": "INT",
+          "isSecondary": true,
+          "source": "DoD_Regelboken_v2.pdf"
+        },
+        {
+          "ref": "core:skill.elementalism",
+          "id": "elementalism",
+          "name": "Elementalism",
+          "attributeId": "INT",
+          "isSecondary": true,
+          "source": "DoD_Regelboken_v2.pdf"
+        },
+        {
+          "ref": "core:skill.mentalism",
+          "id": "mentalism",
+          "name": "Mentalism",
+          "attributeId": "INT",
+          "isSecondary": true,
+          "source": "DoD_Regelboken_v2.pdf"
+        }
+      ],
+      "rules": {
+        "characterCreation": {
+          "ref": "core:rule.character-creation",
+          "id": "character-creation",
+          "ageSkillSlots": {
+            "Young": {
+              "total": 8,
+              "fromProfession": 6,
+              "freeChoice": 2
+            },
+            "Middle-Aged": {
+              "total": 10,
+              "fromProfession": 6,
+              "freeChoice": 4
+            },
+            "Old": {
+              "total": 12,
+              "fromProfession": 6,
+              "freeChoice": 6
+            }
+          },
+          "damageBonusRanges": {
+            "STR": [
+              {
+                "min": 1,
+                "max": 12,
+                "bonus": "none"
+              },
+              {
+                "min": 13,
+                "max": 16,
+                "bonus": "1d4"
+              },
+              {
+                "min": 17,
+                "max": 18,
+                "bonus": "1d6"
+              }
+            ],
+            "AGL": [
+              {
+                "min": 1,
+                "max": 12,
+                "bonus": "none"
+              },
+              {
+                "min": 13,
+                "max": 16,
+                "bonus": "1d4"
+              },
+              {
+                "min": 17,
+                "max": 18,
+                "bonus": "1d6"
+              }
+            ]
+          },
+          "movementAgilityModifiers": [
+            {
+              "min": 1,
+              "max": 6,
+              "modifier": -4
+            },
+            {
+              "min": 7,
+              "max": 9,
+              "modifier": -2
+            },
+            {
+              "min": 10,
+              "max": 12,
+              "modifier": 0
+            },
+            {
+              "min": 13,
+              "max": 15,
+              "modifier": 2
+            },
+            {
+              "min": 16,
+              "max": 18,
+              "modifier": 4
+            }
+          ]
+        },
+        "appearanceOptions": [
+          {
+            "ref": "core:rule.appearance.ugly_scar_across_the_cheek",
+            "id": "ugly_scar_across_the_cheek",
+            "name": "Ugly scar across the cheek",
+            "roll": 1,
+            "source": "DoD_Regelboken_v2.pdf"
+          },
+          {
+            "ref": "core:rule.appearance.peculiar_headwear",
+            "id": "peculiar_headwear",
+            "name": "Peculiar headwear",
+            "roll": 2,
+            "source": "DoD_Regelboken_v2.pdf"
+          },
+          {
+            "ref": "core:rule.appearance.abnormally_pale_and_gaunt",
+            "id": "abnormally_pale_and_gaunt",
+            "name": "Abnormally pale and gaunt",
+            "roll": 3,
+            "source": "DoD_Regelboken_v2.pdf"
+          },
+          {
+            "ref": "core:rule.appearance.permanent_smile",
+            "id": "permanent_smile",
+            "name": "Permanent smile",
+            "roll": 4,
+            "source": "DoD_Regelboken_v2.pdf"
+          },
+          {
+            "ref": "core:rule.appearance.ice-cold_penetrating_gaze",
+            "id": "ice-cold_penetrating_gaze",
+            "name": "Ice-cold, penetrating gaze",
+            "roll": 5,
+            "source": "DoD_Regelboken_v2.pdf"
+          },
+          {
+            "ref": "core:rule.appearance.a_few_extra_pounds_around_the_middle",
+            "id": "a_few_extra_pounds_around_the_middle",
+            "name": "A few extra pounds around the middle",
+            "roll": 6,
+            "source": "DoD_Regelboken_v2.pdf"
+          },
+          {
+            "ref": "core:rule.appearance.thin_and_wiry",
+            "id": "thin_and_wiry",
+            "name": "Thin and wiry",
+            "roll": 7,
+            "source": "DoD_Regelboken_v2.pdf"
+          },
+          {
+            "ref": "core:rule.appearance.abnormally_thick_body_hair_kin_dependent",
+            "id": "abnormally_thick_body_hair_kin_dependent",
+            "name": "Abnormally thick body hair (kin dependent)",
+            "roll": 8,
+            "source": "DoD_Regelboken_v2.pdf"
+          },
+          {
+            "ref": "core:rule.appearance.very_thin_hair_kin_dependent",
+            "id": "very_thin_hair_kin_dependent",
+            "name": "Very thin hair (kin dependent)",
+            "roll": 9,
+            "source": "DoD_Regelboken_v2.pdf"
+          },
+          {
+            "ref": "core:rule.appearance.prominent_tattoo",
+            "id": "prominent_tattoo",
+            "name": "Prominent tattoo",
+            "roll": 10,
+            "source": "DoD_Regelboken_v2.pdf"
+          },
+          {
+            "ref": "core:rule.appearance.smells_bad",
+            "id": "smells_bad",
+            "name": "Smells bad",
+            "roll": 11,
+            "source": "DoD_Regelboken_v2.pdf"
+          },
+          {
+            "ref": "core:rule.appearance.magnificent_hairstyle",
+            "id": "magnificent_hairstyle",
+            "name": "Magnificent hairstyle",
+            "roll": 12,
+            "source": "DoD_Regelboken_v2.pdf"
+          },
+          {
+            "ref": "core:rule.appearance.limping_gait",
+            "id": "limping_gait",
+            "name": "Limping gait",
+            "roll": 13,
+            "source": "DoD_Regelboken_v2.pdf"
+          },
+          {
+            "ref": "core:rule.appearance.dirty",
+            "id": "dirty",
+            "name": "Dirty",
+            "roll": 14,
+            "source": "DoD_Regelboken_v2.pdf"
+          },
+          {
+            "ref": "core:rule.appearance.honest_blue_eyes",
+            "id": "honest_blue_eyes",
+            "name": "Honest blue eyes",
+            "roll": 15,
+            "source": "DoD_Regelboken_v2.pdf"
+          },
+          {
+            "ref": "core:rule.appearance.silver_tooth",
+            "id": "silver_tooth",
+            "name": "Silver tooth",
+            "roll": 16,
+            "source": "DoD_Regelboken_v2.pdf"
+          },
+          {
+            "ref": "core:rule.appearance.well-perfumed",
+            "id": "well-perfumed",
+            "name": "Well-perfumed",
+            "roll": 17,
+            "source": "DoD_Regelboken_v2.pdf"
+          },
+          {
+            "ref": "core:rule.appearance.different_colored_eyes",
+            "id": "different_colored_eyes",
+            "name": "Different colored eyes",
+            "roll": 18,
+            "source": "DoD_Regelboken_v2.pdf"
+          },
+          {
+            "ref": "core:rule.appearance.wheezing_voice",
+            "id": "wheezing_voice",
+            "name": "Wheezing voice",
+            "roll": 19,
+            "source": "DoD_Regelboken_v2.pdf"
+          },
+          {
+            "ref": "core:rule.appearance.weather-beaten_face",
+            "id": "weather-beaten_face",
+            "name": "Weather-beaten face",
+            "roll": 20,
+            "source": "DoD_Regelboken_v2.pdf"
+          }
+        ],
+        "mementoOptions": [
+          {
+            "ref": "core:rule.memento.your_trusty_old_shoes",
+            "id": "your_trusty_old_shoes",
+            "name": "Your trusty old shoes",
+            "roll": 1,
+            "source": "DoD_Regelboken_v2.pdf"
+          },
+          {
+            "ref": "core:rule.memento.a_simple_silver_medallion",
+            "id": "a_simple_silver_medallion",
+            "name": "A simple silver medallion",
+            "roll": 2,
+            "source": "DoD_Regelboken_v2.pdf"
+          },
+          {
+            "ref": "core:rule.memento.a_letter_from_an_old_friend_or_relative",
+            "id": "a_letter_from_an_old_friend_or_relative",
+            "name": "A letter from an old friend or relative",
+            "roll": 3,
+            "source": "DoD_Regelboken_v2.pdf"
+          },
+          {
+            "ref": "core:rule.memento.an_old_worn_diary",
+            "id": "an_old_worn_diary",
+            "name": "An old worn diary",
+            "roll": 4,
+            "source": "DoD_Regelboken_v2.pdf"
+          },
+          {
+            "ref": "core:rule.memento.a_family_heirloom_bracelet",
+            "id": "a_family_heirloom_bracelet",
+            "name": "A family heirloom bracelet",
+            "roll": 5,
+            "source": "DoD_Regelboken_v2.pdf"
+          },
+          {
+            "ref": "core:rule.memento.a_carved_wooden_figurine_you_got_as_a_child",
+            "id": "a_carved_wooden_figurine_you_got_as_a_child",
+            "name": "A carved wooden figurine you got as a child",
+            "roll": 6,
+            "source": "DoD_Regelboken_v2.pdf"
+          },
+          {
+            "ref": "core:rule.memento.a_peculiarly_shaped_stone",
+            "id": "a_peculiarly_shaped_stone",
+            "name": "A peculiarly shaped stone",
+            "roll": 7,
+            "source": "DoD_Regelboken_v2.pdf"
+          },
+          {
+            "ref": "core:rule.memento.a_copper_coin_from_a_treasure_your_parent_sought",
+            "id": "a_copper_coin_from_a_treasure_your_parent_sought",
+            "name": "A copper coin from a treasure your parent sought",
+            "roll": 8,
+            "source": "DoD_Regelboken_v2.pdf"
+          },
+          {
+            "ref": "core:rule.memento.an_old_tin_flask",
+            "id": "an_old_tin_flask",
+            "name": "An old tin flask",
+            "roll": 9,
+            "source": "DoD_Regelboken_v2.pdf"
+          },
+          {
+            "ref": "core:rule.memento.a_horn_taken_as_trophy_from_a_monster",
+            "id": "a_horn_taken_as_trophy_from_a_monster",
+            "name": "A horn taken as trophy from a monster",
+            "roll": 10,
+            "source": "DoD_Regelboken_v2.pdf"
+          },
+          {
+            "ref": "core:rule.memento.a_fang_taken_as_trophy_from_a_beast",
+            "id": "a_fang_taken_as_trophy_from_a_beast",
+            "name": "A fang taken as trophy from a beast",
+            "roll": 11,
+            "source": "DoD_Regelboken_v2.pdf"
+          },
+          {
+            "ref": "core:rule.memento.a_pair_of_simple_bone_dice",
+            "id": "a_pair_of_simple_bone_dice",
+            "name": "A pair of simple bone dice",
+            "roll": 12,
+            "source": "DoD_Regelboken_v2.pdf"
+          },
+          {
+            "ref": "core:rule.memento.a_charm_with_a_lock_of_hair",
+            "id": "a_charm_with_a_lock_of_hair",
+            "name": "A charm with a lock of hair",
+            "roll": 13,
+            "source": "DoD_Regelboken_v2.pdf"
+          },
+          {
+            "ref": "core:rule.memento.an_ornamented_key",
+            "id": "an_ornamented_key",
+            "name": "An ornamented key",
+            "roll": 14,
+            "source": "DoD_Regelboken_v2.pdf"
+          },
+          {
+            "ref": "core:rule.memento.a_hand-drawn_map_you_inherited",
+            "id": "a_hand-drawn_map_you_inherited",
+            "name": "A hand-drawn map you inherited",
+            "roll": 15,
+            "source": "DoD_Regelboken_v2.pdf"
+          },
+          {
+            "ref": "core:rule.memento.a_ring_with_an_inscription",
+            "id": "a_ring_with_an_inscription",
+            "name": "A ring with an inscription",
+            "roll": 16,
+            "source": "DoD_Regelboken_v2.pdf"
+          },
+          {
+            "ref": "core:rule.memento.a_bone_whistle",
+            "id": "a_bone_whistle",
+            "name": "A bone whistle",
+            "roll": 17,
+            "source": "DoD_Regelboken_v2.pdf"
+          },
+          {
+            "ref": "core:rule.memento.your_parent_s_worn_hat",
+            "id": "your_parent_s_worn_hat",
+            "name": "Your parent's worn hat",
+            "roll": 18,
+            "source": "DoD_Regelboken_v2.pdf"
+          },
+          {
+            "ref": "core:rule.memento.a_feather_from_a_griffon",
+            "id": "a_feather_from_a_griffon",
+            "name": "A feather from a griffon",
+            "roll": 19,
+            "source": "DoD_Regelboken_v2.pdf"
+          },
+          {
+            "ref": "core:rule.memento.a_well-carved_pipe",
+            "id": "a_well-carved_pipe",
+            "name": "A well-carved pipe",
+            "roll": 20,
+            "source": "DoD_Regelboken_v2.pdf"
+          }
+        ],
+        "weaknesses": [
+          {
+            "ref": "core:rule.weakness.gullible",
+            "id": "gullible",
+            "name": "Gullible",
+            "roll": 1,
+            "description": "I trust everything people tell me.",
+            "source": "DoD_Regelboken_v2.pdf"
+          },
+          {
+            "ref": "core:rule.weakness.greedy",
+            "id": "greedy",
+            "name": "Greedy",
+            "roll": 2,
+            "description": "I always want a bigger share of all treasures.",
+            "source": "DoD_Regelboken_v2.pdf"
+          },
+          {
+            "ref": "core:rule.weakness.easily_offended",
+            "id": "easily_offended",
+            "name": "Easily Offended",
+            "roll": 3,
+            "description": "I never tolerate a provocation.",
+            "source": "DoD_Regelboken_v2.pdf"
+          },
+          {
+            "ref": "core:rule.weakness.foolhardy",
+            "id": "foolhardy",
+            "name": "Foolhardy",
+            "roll": 4,
+            "description": "I always go first when danger approaches.",
+            "source": "DoD_Regelboken_v2.pdf"
+          },
+          {
+            "ref": "core:rule.weakness.fearful",
+            "id": "fearful",
+            "name": "Fearful",
+            "roll": 5,
+            "description": "I always stay in the rear.",
+            "source": "DoD_Regelboken_v2.pdf"
+          },
+          {
+            "ref": "core:rule.weakness.monster_hater",
+            "id": "monster_hater",
+            "name": "Monster Hater",
+            "roll": 6,
+            "description": "All monsters are abominations that must be slain.",
+            "source": "DoD_Regelboken_v2.pdf"
+          },
+          {
+            "ref": "core:rule.weakness.intolerant",
+            "id": "intolerant",
+            "name": "Intolerant",
+            "roll": 7,
+            "description": "Night folk like orcs and dark elves are evil and must be fought.",
+            "source": "DoD_Regelboken_v2.pdf"
+          },
+          {
+            "ref": "core:rule.weakness.lazy",
+            "id": "lazy",
+            "name": "Lazy",
+            "roll": 8,
+            "description": "I take every chance to rest.",
+            "source": "DoD_Regelboken_v2.pdf"
+          },
+          {
+            "ref": "core:rule.weakness.foodie",
+            "id": "foodie",
+            "name": "Foodie",
+            "roll": 9,
+            "description": "I take every chance to eat something good.",
+            "source": "DoD_Regelboken_v2.pdf"
+          },
+          {
+            "ref": "core:rule.weakness.kleptomaniac",
+            "id": "kleptomaniac",
+            "name": "Kleptomaniac",
+            "roll": 10,
+            "description": "I can never resist stealing valuables.",
+            "source": "DoD_Regelboken_v2.pdf"
+          },
+          {
+            "ref": "core:rule.weakness.vain",
+            "id": "vain",
+            "name": "Vain",
+            "roll": 11,
+            "description": "I always help those who flatter me.",
+            "source": "DoD_Regelboken_v2.pdf"
+          },
+          {
+            "ref": "core:rule.weakness.daredevil",
+            "id": "daredevil",
+            "name": "Daredevil",
+            "roll": 12,
+            "description": "I always take big risks without considering consequences.",
+            "source": "DoD_Regelboken_v2.pdf"
+          },
+          {
+            "ref": "core:rule.weakness.arcanophobe",
+            "id": "arcanophobe",
+            "name": "Arcanophobe",
+            "roll": 13,
+            "description": "Magic is the force of evil and mages can never be trusted.",
+            "source": "DoD_Regelboken_v2.pdf"
+          },
+          {
+            "ref": "core:rule.weakness.bookworm",
+            "id": "bookworm",
+            "name": "Bookworm",
+            "roll": 14,
+            "description": "The pursuit of knowledge is more important than my friends.",
+            "source": "DoD_Regelboken_v2.pdf"
+          },
+          {
+            "ref": "core:rule.weakness.wild",
+            "id": "wild",
+            "name": "Wild",
+            "roll": 15,
+            "description": "I never sleep indoors.",
+            "source": "DoD_Regelboken_v2.pdf"
+          },
+          {
+            "ref": "core:rule.weakness.braggart",
+            "id": "braggart",
+            "name": "Braggart",
+            "roll": 16,
+            "description": "I always exaggerate my deeds.",
+            "source": "DoD_Regelboken_v2.pdf"
+          },
+          {
+            "ref": "core:rule.weakness.violent",
+            "id": "violent",
+            "name": "Violent",
+            "roll": 17,
+            "description": "I meet every setback with violence.",
+            "source": "DoD_Regelboken_v2.pdf"
+          },
+          {
+            "ref": "core:rule.weakness.know-it-all",
+            "id": "know-it-all",
+            "name": "Know-It-All",
+            "roll": 18,
+            "description": "I always tell others what they should do.",
+            "source": "DoD_Regelboken_v2.pdf"
+          },
+          {
+            "ref": "core:rule.weakness.pessimist",
+            "id": "pessimist",
+            "name": "Pessimist",
+            "roll": 19,
+            "description": "I see the world in black and never believe things will go well.",
+            "source": "DoD_Regelboken_v2.pdf"
+          },
+          {
+            "ref": "core:rule.weakness.haughty",
+            "id": "haughty",
+            "name": "Haughty",
+            "roll": 20,
+            "description": "I look down on everyone I meet.",
+            "source": "DoD_Regelboken_v2.pdf"
+          }
+        ],
+        "heroicAbilities": [
+          {
+            "ref": "core:rule.heroic_ability.blixtsnabb",
+            "id": "blixtsnabb",
+            "name": "Lightning fast",
+            "requirement": "Evade FV 12",
+            "wpCost": 2,
+            "description": "Draw two initiative cards and choose the best. Once per round.",
+            "source": "DoD_Regelboken_v2.pdf"
+          },
+          {
+            "ref": "core:rule.heroic_ability.barsark",
+            "id": "barsark",
+            "name": "Berserker",
+            "requirement": "Melee weapon FV 12",
+            "wpCost": 3,
+            "description": "Become Angry. Advantage on all melee attacks but cannot parry or dodge. Must fight until all enemies defeated or you hit 0 HP. Become Exhausted after.",
+            "source": "DoD_Regelboken_v2.pdf"
+          },
+          {
+            "ref": "core:rule.heroic_ability.defensiv",
+            "id": "defensiv",
+            "name": "Defensive",
+            "requirement": "Melee weapon FV 12",
+            "wpCost": 3,
+            "description": "Parry an attack without using your action. Can be used multiple times per round if WP allows.",
+            "source": "DoD_Regelboken_v2.pdf"
+          },
+          {
+            "ref": "core:rule.heroic_ability.drakdrapare",
+            "id": "drakdrapare",
+            "name": "Dragonslayer",
+            "requirement": "Weapon skill FV 12",
+            "wpCost": 3,
+            "description": "Attack against a monster deals 1d8 extra damage. Activate after hitting, before rolling damage.",
+            "source": "DoD_Regelboken_v2.pdf"
+          },
+          {
+            "ref": "core:rule.heroic_ability.dubbelhugg",
+            "id": "dubbelhugg",
+            "name": "Double slash",
+            "requirement": "Swords or Axes FV 12",
+            "wpCost": 3,
+            "description": "Attack two enemies within 2m with one slash. Single attack roll, separate damage. Can combine with Dual wield.",
+            "source": "DoD_Regelboken_v2.pdf"
+          },
+          {
+            "ref": "core:rule.heroic_ability.enstoring",
+            "id": "enstoring",
+            "name": "Lone wolf",
+            "requirement": "Bushcraft FV 12",
+            "wpCost": 0,
+            "description": "Long rest in wilderness without needing to roll Bushcraft for camp. Only affects yourself.",
+            "source": "DoD_Regelboken_v2.pdf"
+          },
+          {
+            "ref": "core:rule.heroic_ability.falkoyo",
+            "id": "falkoyo",
+            "name": "Eagle eye",
+            "requirement": "Awareness FV 12",
+            "wpCost": 2,
+            "description": "See details at 200m as if close. Lasts 15 min. In combat, no disadvantage for shooting beyond effective range.",
+            "source": "DoD_Regelboken_v2.pdf"
+          },
+          {
+            "ref": "core:rule.heroic_ability.fokuserad",
+            "id": "fokuserad",
+            "name": "Focused",
+            "wpCost": 0,
+            "description": "Max WP permanently increased by 2. Can be taken multiple times.",
+            "source": "DoD_Regelboken_v2.pdf"
+          },
+          {
+            "ref": "core:rule.heroic_ability.foljeslagare",
+            "id": "foljeslagare",
+            "name": "Companion",
+            "requirement": "Hunting & Fishing FV 12",
+            "wpCost": 3,
+            "description": "Make an animal your companion (takes 15 min). One companion at a time. It scouts for you. 3 extra WP for it to attack.",
+            "source": "DoD_Regelboken_v2.pdf"
+          },
+          {
+            "ref": "core:rule.heroic_ability.forkladnad",
+            "id": "forkladnad",
+            "name": "Disguise",
+            "requirement": "Bluffing FV 12",
+            "wpCost": 2,
+            "description": "After 15 min, mimic another person's appearance/voice/behavior. Same kin only. Those who know the person can roll Awareness within 10m.",
+            "source": "DoD_Regelboken_v2.pdf"
+          },
+          {
+            "ref": "core:rule.heroic_ability.forkampe",
+            "id": "forkampe",
+            "name": "Guardian",
+            "requirement": "Hammers, Swords, or Axes FV 12",
+            "wpCost": 2,
+            "description": "When you and allies are in melee with same enemy (within 2m) and enemy targets an ally, force the attack onto yourself. Not an action.",
+            "source": "DoD_Regelboken_v2.pdf"
+          },
+          {
+            "ref": "core:rule.heroic_ability.garverimastare",
+            "id": "garverimastare",
+            "name": "Master tanner",
+            "requirement": "Crafting FV 12",
+            "description": "Requires leather tools. In one shift, craft leather armor from a creature's skin. Armor gets half the beast's protection value (rounded up, min 1). WP cost equals protection value.",
+            "source": "DoD_Regelboken_v2.pdf"
+          },
+          {
+            "ref": "core:rule.heroic_ability.gott_lakekott",
+            "id": "gott_lakekott",
+            "name": "Fast healer",
+            "wpCost": 2,
+            "description": "Heal an extra 1d6 HP during a short rest. Does not affect WP or condition recovery.",
+            "source": "DoD_Regelboken_v2.pdf"
+          },
+          {
+            "ref": "core:rule.heroic_ability.hal_som_en_al",
+            "id": "hal_som_en_al",
+            "name": "Fast footwork",
+            "requirement": "Evade FV 12",
+            "wpCost": 3,
+            "description": "Dodge an attack without using your action. Can use multiple times per round if WP allows.",
+            "source": "DoD_Regelboken_v2.pdf"
+          },
+          {
+            "ref": "core:rule.heroic_ability.insikt",
+            "id": "insikt",
+            "name": "Insight",
+            "requirement": "Bluffing FV 12",
+            "wpCost": 2,
+            "description": "After talking with someone, roll Awareness to determine if they're lying.",
+            "source": "DoD_Regelboken_v2.pdf"
+          },
+          {
+            "ref": "core:rule.heroic_ability.intuition",
+            "id": "intuition",
+            "name": "Intuition",
+            "requirement": "Myths & Legends FV 12",
+            "wpCost": 3,
+            "description": "When facing a hard decision, ask the GM one question and get a useful answer.",
+            "source": "DoD_Regelboken_v2.pdf"
+          },
+          {
+            "ref": "core:rule.heroic_ability.jarnnave",
+            "id": "jarnnave",
+            "name": "Iron fist",
+            "requirement": "Brawling FV 12",
+            "wpCost": 1,
+            "description": "Unarmed attack damage increases by 1d6. Activate as free action after hitting.",
+            "source": "DoD_Regelboken_v2.pdf"
+          },
+          {
+            "ref": "core:rule.heroic_ability.jarngrepp",
+            "id": "jarngrepp",
+            "name": "Iron grip",
+            "requirement": "Brawling FV 12",
+            "wpCost": 1,
+            "description": "Advantage on Brawling to grab someone or resist breaking free.",
+            "source": "DoD_Regelboken_v2.pdf"
+          },
+          {
+            "ref": "core:rule.heroic_ability.kastarm",
+            "id": "kastarm",
+            "name": "Throwing arm",
+            "requirement": "Melee weapon FV 12",
+            "wpCost": 2,
+            "description": "Throw a one-handed melee weapon at an enemy up to STR meters away. Normal attack roll.",
+            "source": "DoD_Regelboken_v2.pdf"
+          },
+          {
+            "ref": "core:rule.heroic_ability.kattfot",
+            "id": "kattfot",
+            "name": "Catlike",
+            "requirement": "Acrobatics FV 12",
+            "description": "Reduce fall damage dice by 1 per WP spent. Can roll Acrobatics first, then activate.",
+            "source": "DoD_Regelboken_v2.pdf"
+          },
+          {
+            "ref": "core:rule.heroic_ability.kraftslag",
+            "id": "kraftslag",
+            "name": "Massive blow",
+            "requirement": "STR-based melee FV 12",
+            "wpCost": 3,
+            "description": "Two-handed melee attack deals 1d8 extra damage. Cannot move in same round. Activate after hitting.",
+            "source": "DoD_Regelboken_v2.pdf"
+          },
+          {
+            "ref": "core:rule.heroic_ability.kvartermastare",
+            "id": "kvartermastare",
+            "name": "Quartermaster",
+            "requirement": "Bushcraft FV 12",
+            "wpCost": 1,
+            "description": "Automatically succeed on Bushcraft to set up camp during expedition.",
+            "source": "DoD_Regelboken_v2.pdf"
+          },
+          {
+            "ref": "core:rule.heroic_ability.lonnmordare",
+            "id": "lonnmordare",
+            "name": "Assassin",
+            "requirement": "Knives FV 12",
+            "wpCost": 3,
+            "description": "Sneak attack deals 1d8 extra damage. Can combine with Backstabbing. Activate after hitting.",
+            "source": "DoD_Regelboken_v2.pdf"
+          },
+          {
+            "ref": "core:rule.heroic_ability.magisk_talang",
+            "id": "magisk_talang",
+            "name": "Magic School",
+            "wpCost": 0,
+            "description": "Learn a new magic school (even if not a mage). Must train separately. Can take multiple times for different schools.",
+            "source": "DoD_Regelboken_v2.pdf"
+          },
+          {
+            "ref": "core:rule.heroic_ability.monsterjagare",
+            "id": "monsterjagare",
+            "name": "Monster Hunter",
+            "requirement": "Beast Lore FV 12",
+            "wpCost": 3,
+            "description": "At a crossroads, learn which direction holds the most dangerous enemies.",
+            "source": "DoD_Regelboken_v2.pdf"
+          },
+          {
+            "ref": "core:rule.heroic_ability.masterbesvjarjare",
+            "id": "masterbesvjarjare",
+            "name": "Master spellcaster",
+            "requirement": "Magic school FV 12",
+            "wpCost": 3,
+            "description": "At your turn, cast two different spells with one action. Can activate after first spell succeeds.",
+            "source": "DoD_Regelboken_v2.pdf"
+          },
+          {
+            "ref": "core:rule.heroic_ability.masterkock",
+            "id": "masterkock",
+            "name": "Master Chef",
+            "wpCost": 1,
+            "description": "Automatically succeed at cooking without Bushcraft roll.",
+            "source": "DoD_Regelboken_v2.pdf"
+          },
+          {
+            "ref": "core:rule.heroic_ability.mastersmed",
+            "id": "mastersmed",
+            "name": "Master blacksmith",
+            "requirement": "Crafting FV 12",
+            "description": "Requires smithing tools. Sharpen a weapon (3 WP, 15 min): armor counts as one step lower vs it. In one shift, craft any metal weapon or armor from the equipment lists. Requires anvil, forge, and iron.",
+            "source": "DoD_Regelboken_v2.pdf"
+          },
+          {
+            "ref": "core:rule.heroic_ability.mastersnickare",
+            "id": "mastersnickare",
+            "name": "Master Carpenter",
+            "requirement": "Crafting FV 12",
+            "description": "Requires carpentry tools. As action: deal 1d12 damage per WP to door/wall/object (ignoring protection). In one shift, craft any wooden item from equipment lists.",
+            "source": "DoD_Regelboken_v2.pdf"
+          },
+          {
+            "ref": "core:rule.heroic_ability.ormm_nniska",
+            "id": "ormm_nniska",
+            "name": "Contortionist",
+            "requirement": "Evade FV 12",
+            "wpCost": 1,
+            "description": "Escape bonds or squeeze through narrow passages without a skill roll.",
+            "source": "DoD_Regelboken_v2.pdf"
+          },
+          {
+            "ref": "core:rule.heroic_ability.oradd",
+            "id": "oradd",
+            "name": "Fearless",
+            "wpCost": 2,
+            "description": "Automatically resist fear without rolling WIL.",
+            "source": "DoD_Regelboken_v2.pdf"
+          },
+          {
+            "ref": "core:rule.heroic_ability.pilparad",
+            "id": "pilparad",
+            "name": "Deflect arrow",
+            "requirement": "Melee weapon FV 12",
+            "wpCost": 1,
+            "description": "Parry a ranged attack with a melee weapon (no shield needed).",
+            "source": "DoD_Regelboken_v2.pdf"
+          },
+          {
+            "ref": "core:rule.heroic_ability.sjoben",
+            "id": "sjoben",
+            "name": "Sea Legs",
+            "requirement": "Swimming FV 12",
+            "wpCost": 1,
+            "description": "Negate all negative effects of being in water for one round, including drowning risk.",
+            "source": "DoD_Regelboken_v2.pdf"
+          },
+          {
+            "ref": "core:rule.heroic_ability.skattletare",
+            "id": "skattletare",
+            "name": "Treasure Hunter",
+            "requirement": "Bartering FV 12",
+            "wpCost": 3,
+            "description": "At a crossroads, learn which direction holds the greatest treasures.",
+            "source": "DoD_Regelboken_v2.pdf"
+          },
+          {
+            "ref": "core:rule.heroic_ability.skoldblockad",
+            "id": "skoldblockad",
+            "name": "Shield Block",
+            "requirement": "STR-based melee FV 12",
+            "wpCost": 2,
+            "description": "Advantage on shield parry. Can also parry non-area monster attacks that normally cannot be parried.",
+            "source": "DoD_Regelboken_v2.pdf"
+          },
+          {
+            "ref": "core:rule.heroic_ability.stigfinnare",
+            "id": "stigfinnare",
+            "name": "Pathfinder",
+            "requirement": "Bushcraft FV 12",
+            "wpCost": 1,
+            "description": "Automatically succeed on Bushcraft to find direction in wilderness.",
+            "source": "DoD_Regelboken_v2.pdf"
+          },
+          {
+            "ref": "core:rule.heroic_ability.stridsrop",
+            "id": "stridsrop",
+            "name": "Battle cry",
+            "wpCost": 3,
+            "description": "As action in combat, all other PCs within earshot heal one condition. Combat only.",
+            "source": "DoD_Regelboken_v2.pdf"
+          },
+          {
+            "ref": "core:rule.heroic_ability.stridsvana",
+            "id": "stridsvana",
+            "name": "Veteran",
+            "requirement": "Weapon skill FV 12",
+            "wpCost": 1,
+            "description": "Keep initiative card from previous round instead of drawing new one. Not an action.",
+            "source": "DoD_Regelboken_v2.pdf"
+          },
+          {
+            "ref": "core:rule.heroic_ability.tjuvhugg",
+            "id": "tjuvhugg",
+            "name": "Backstabbing",
+            "requirement": "Knives FV 12",
+            "wpCost": 3,
+            "description": "When attacking an enemy within 2m of another PC in melee, treat as sneak attack (cannot be dodged/parried, advantage, +1 damage die). Agile weapon only. Not an action.",
+            "source": "DoD_Regelboken_v2.pdf"
+          },
+          {
+            "ref": "core:rule.heroic_ability.tonkonst",
+            "id": "tonkonst",
+            "name": "Musician",
+            "requirement": "Performance FV 12",
+            "wpCost": 3,
+            "description": "As action, give all allies within 10m advantage on all rolls, OR give all enemies within 10m disadvantage. Lasts until your next turn.",
+            "source": "DoD_Regelboken_v2.pdf"
+          },
+          {
+            "ref": "core:rule.heroic_ability.tvillingpil",
+            "id": "tvillingpil",
+            "name": "Twin shot",
+            "requirement": "Bows FV 12",
+            "wpCost": 3,
+            "description": "Fire two arrows instead of one. Single attack roll with disadvantage. Separate damage. Can target same or different targets.",
+            "source": "DoD_Regelboken_v2.pdf"
+          },
+          {
+            "ref": "core:rule.heroic_ability.tva_vapen",
+            "id": "tva_vapen",
+            "name": "Dual wield",
+            "requirement": "Melee weapon FV 12",
+            "wpCost": 3,
+            "description": "With one-handed weapon in each hand, make an extra attack with off-hand (STR requirement +3). Second attack has disadvantage. Can combine with Double Slash.",
+            "source": "DoD_Regelboken_v2.pdf"
+          },
+          {
+            "ref": "core:rule.heroic_ability.talig",
+            "id": "talig",
+            "name": "Robust",
+            "wpCost": 0,
+            "description": "Max HP permanently increased by 2. Can be taken multiple times.",
+            "source": "DoD_Regelboken_v2.pdf"
+          },
+          {
+            "ref": "core:rule.heroic_ability.ynkrygg",
+            "id": "ynkrygg",
+            "name": "Weasel",
+            "requirement": "Evade FV 12",
+            "wpCost": 3,
+            "description": "When attacked with another PC within 2m, redirect attack to that PC. No effect on area attacks. Must use before dodge/parry.",
+            "source": "DoD_Regelboken_v2.pdf"
+          },
+          {
+            "ref": "core:rule.heroic_ability.adaptive",
+            "id": "adaptive",
+            "name": "Adaptive",
+            "wpCost": 3,
+            "description": "When making a skill roll, you may choose to roll against a different skill instead. You must justify how the chosen skill applies. The GM has final say but should be permissive.",
+            "source": "DoD_Regelboken_v2.pdf"
+          },
+          {
+            "ref": "core:rule.heroic_ability.hard_to_catch",
+            "id": "hard_to_catch",
+            "name": "Hard to Catch",
+            "wpCost": 3,
+            "description": "When dodging an attack, you get an advantage on your DODGE roll.",
+            "source": "DoD_Regelboken_v2.pdf"
+          },
+          {
+            "ref": "core:rule.heroic_ability.unforgiving",
+            "id": "unforgiving",
+            "name": "Unforgiving",
+            "wpCost": 3,
+            "description": "When you attack someone who has previously damaged you (1+ HP), you get an advantage on the attack roll. Does not matter when the damage occurred.",
+            "source": "DoD_Regelboken_v2.pdf"
+          },
+          {
+            "ref": "core:rule.heroic_ability.inner_peace",
+            "id": "inner_peace",
+            "name": "Inner Peace",
+            "wpCost": 0,
+            "description": "During a short rest, you meditate deeply. You heal an extra 1d6 HP and 1d6 WP, and recover from one extra condition. However, you are completely unreachable during meditation and cannot be awakened.",
+            "source": "DoD_Regelboken_v2.pdf"
+          },
+          {
+            "ref": "core:rule.heroic_ability.ill-tempered",
+            "id": "ill-tempered",
+            "name": "Ill-tempered",
+            "wpCost": 3,
+            "description": "When making any roll, you get an advantage. You also become Angry (if not already). Cannot be used for INT or INT-based skill rolls.",
+            "source": "DoD_Regelboken_v2.pdf"
+          },
+          {
+            "ref": "core:rule.heroic_ability.webbed_feet",
+            "id": "webbed_feet",
+            "name": "Webbed Feet",
+            "wpCost": 0,
+            "description": "You get advantage on all SWIM rolls and always move at full speed in or under water.",
+            "source": "DoD_Regelboken_v2.pdf"
+          },
+          {
+            "ref": "core:rule.heroic_ability.hunting_instincts",
+            "id": "hunting_instincts",
+            "name": "Hunting instincts",
+            "wpCost": 3,
+            "description": "Designate a creature within line of sight, or whose scent trail you follow, as your quarry. This counts as an action in combat. You can follow the scent trail up to one day. You can spend 1 extra WP (not an action) to get advantage on an attack against the quarry.",
+            "source": "DoD_Regelboken_v2.pdf"
+          }
+        ],
+        "magic": {
+          "rules": {
+            "schools": [
+              {
+                "id": "animism",
+                "name": "Animism"
+              },
+              {
+                "id": "elementalism",
+                "name": "Elementalism"
+              },
+              {
+                "id": "mentalism",
+                "name": "Mentalism"
+              }
+            ],
+            "preparedSpellsRule": "INT base chance (from skill_base_chance brackets)",
+            "cantripsAlwaysPrepared": true,
+            "cantripCost": "1 WP, always succeeds",
+            "spellCost": "2 WP per power level (effektgrad 1-3)",
+            "powerLevels": [
+              1,
+              2,
+              3
+            ],
+            "metalRestriction": "Cannot cast while wearing metal armor or holding metal weapons",
+            "spellBookRule": "Required to prepare spells (formelbok). Losing it means you can only use currently prepared spells.",
+            "learningRules": {
+              "fromTeacher": "1 shift training, then use improvement mark for magic school. Roll INT with advantage.",
+              "fromSpellBook": "Same as teacher but roll Languages (Främmande språk) instead of INT, no advantage.",
+              "cantrips": "15 min from teacher or book, no roll needed.",
+              "newSchool": "Requires Magic School (Magisk talang) heroic ability + 1 week study with teacher. Roll INT at end."
+            }
+          },
+          "schools": [
+            {
+              "ref": "core:rule.magic_school.general",
+              "id": "general",
+              "name": "General Magic",
+              "cantrips": [
+                {
+                  "ref": "core:rule.cantrip.general.fetch",
+                  "id": "fetch",
+                  "name": "Fetch",
+                  "description": "A loose object (no heavier than weight 1) within 10 meters floats to you.",
+                  "source": "DoD_Regelboken_v2.pdf"
+                },
+                {
+                  "ref": "core:rule.cantrip.general.flick",
+                  "id": "flick",
+                  "name": "Flick",
+                  "description": "Magically flick an object or creature within 10 meters for 1 point of damage. Can shatter glass objects.",
+                  "source": "DoD_Regelboken_v2.pdf"
+                },
+                {
+                  "ref": "core:rule.cantrip.general.sense_magic",
+                  "id": "sense_magic",
+                  "name": "Sense Magic",
+                  "description": "Determine whether a place you are in or an object you hold is affected by magic, and if so, what kind.",
+                  "source": "DoD_Regelboken_v2.pdf"
+                },
+                {
+                  "ref": "core:rule.cantrip.general.mend_clothes",
+                  "id": "mend_clothes",
+                  "name": "Mend Clothes",
+                  "description": "Your or someone else's clothes (within 10 meters) become whole and clean.",
+                  "source": "DoD_Regelboken_v2.pdf"
+                },
+                {
+                  "ref": "core:rule.cantrip.general.light",
+                  "id": "light",
+                  "name": "Light",
+                  "description": "Create a shining bright light from a focus item. Illuminates a 10-meter radius and lasts one shift. Extinguishes if you reach 0 HP.",
+                  "source": "DoD_Regelboken_v2.pdf"
+                },
+                {
+                  "ref": "core:rule.cantrip.general.open_close",
+                  "id": "open_close",
+                  "name": "Open/Close",
+                  "description": "An unlocked door within 10 meters and line of sight opens or closes.",
+                  "source": "DoD_Regelboken_v2.pdf"
+                }
+              ],
+              "spells": [
+                {
+                  "ref": "core:rule.spell.general.protector",
+                  "id": "protector",
+                  "name": "Protector",
+                  "rank": 1,
+                  "requirement": "Any magic school",
+                  "description": "Protect a person or place (no larger than a person) against magic. You can cast this on yourself. The power level of all spells cast against the target is reduced by your power level of Protector. Can also reduce monster magical attack dice by one per power level.",
+                  "source": "DoD_Regelboken_v2.pdf"
+                },
+                {
+                  "ref": "core:rule.spell.general.dispel",
+                  "id": "dispel",
+                  "name": "Dispel",
+                  "rank": 1,
+                  "requirement": "Any magic school",
+                  "description": "Cancel an ongoing spell with the same or lower power level. Dispel can also be used to break other magical effects, if the adventure or GM allows it.",
+                  "source": "DoD_Regelboken_v2.pdf"
+                },
+                {
+                  "ref": "core:rule.spell.general.anti-magic",
+                  "id": "anti-magic",
+                  "name": "Anti-Magic",
+                  "rank": 2,
+                  "requirement": "Protector or Dispel",
+                  "description": "Disrupt another mage as they cast a spell. This spell is reactive and breaks normal turn order but does not replace your action. Activate after the opponent's roll to succeed but before damage or other effects. If you succeed, reduce the target's power level by your Anti-Magic power level. If the result is zero or less, the target's spell has no effect. Can also reduce monster magical attack dice by one per power level.",
+                  "source": "DoD_Regelboken_v2.pdf"
+                },
+                {
+                  "ref": "core:rule.spell.general.power_transfer",
+                  "id": "power_transfer",
+                  "name": "Power Transfer",
+                  "rank": 3,
+                  "requirement": "Anti-Magic",
+                  "description": "Drain WP from another humanoid creature, or transfer your WP to another. You can take or give up to twice the WP the spell cost (4 at power level 1, 8 at PL 2, 12 at PL 3). The WP spent casting are lost in the transfer. Cannot exceed your or target's max WP or go below zero. If the target resists, roll with bane.",
+                  "source": "DoD_Regelboken_v2.pdf"
+                },
+                {
+                  "ref": "core:rule.spell.general.seal",
+                  "id": "seal",
+                  "name": "Seal",
+                  "rank": 4,
+                  "requirement": "Power Transfer",
+                  "description": "Bind a spell to any inanimate object. Seal's power level determines the bound spell's power level. For cantrips, power level 1 suffices. You set the trigger condition. When triggered, the activating person's WP are used. If they cannot or will not spend WP, the spell doesn't activate. Can be combined with Charge or Permanence. Without Permanence, the seal is consumed on activation.",
+                  "source": "DoD_Regelboken_v2.pdf"
+                },
+                {
+                  "ref": "core:rule.spell.general.charge",
+                  "id": "charge",
+                  "name": "Charge",
+                  "rank": 4,
+                  "requirement": "Power Transfer",
+                  "description": "Transfer your WP to any inanimate object, which acts as a battery. Each power level lets you transfer up to 10 WP. Anyone in contact with the object can use its WP instead of their own. Charged WP dissipate after one shift unless combined with Permanence. Can be combined with Seal.",
+                  "source": "DoD_Regelboken_v2.pdf"
+                },
+                {
+                  "ref": "core:rule.spell.general.permanence",
+                  "id": "permanence",
+                  "name": "Permanence",
+                  "rank": 5,
+                  "requirement": "Seal",
+                  "description": "Cast together with another spell to make it permanent. Costs the mage 1 WIL permanently (reducing max WP by 1). Permanence's power level must match the target spell's. Cannot be used on spells with immediate duration. When combined with Seal, the seal becomes permanent and its bound spell can activate repeatedly.",
+                  "source": "DoD_Regelboken_v2.pdf"
+                }
+              ],
+              "source": "DoD_Regelboken_v2.pdf"
+            },
+            {
+              "ref": "core:rule.magic_school.animism",
+              "id": "animism",
+              "name": "Animism",
+              "linkedSkillRef": "core:skill.animism",
+              "cantrips": [
+                {
+                  "ref": "core:rule.cantrip.animism.flower_trail",
+                  "id": "flower_trail",
+                  "name": "Flower Trail",
+                  "description": "Beautiful flowers grow where you walk. They wither after one shift.",
+                  "source": "DoD_Regelboken_v2.pdf"
+                },
+                {
+                  "ref": "core:rule.cantrip.animism.hairstyle",
+                  "id": "hairstyle",
+                  "name": "Hairstyle",
+                  "description": "Change hair color, length, and style at will. In the right context, grants boon on Bluffing or Persuasion.",
+                  "source": "DoD_Regelboken_v2.pdf"
+                },
+                {
+                  "ref": "core:rule.cantrip.animism.birdsong",
+                  "id": "birdsong",
+                  "name": "Birdsong",
+                  "description": "Beautiful birdsong surrounds you for 15 minutes. Grants boon on Awareness. Only works outdoors.",
+                  "source": "DoD_Regelboken_v2.pdf"
+                },
+                {
+                  "ref": "core:rule.cantrip.animism.cook",
+                  "id": "cook",
+                  "name": "Cook",
+                  "description": "Automatically succeed at cooking (p.103) without rolling Bushcraft, and it happens immediately (one action).",
+                  "source": "DoD_Regelboken_v2.pdf"
+                },
+                {
+                  "ref": "core:rule.cantrip.animism.tidy",
+                  "id": "tidy",
+                  "name": "Tidy",
+                  "description": "The room you are in becomes tidy. Dust and dirt vanish and things are put in order.",
+                  "source": "DoD_Regelboken_v2.pdf"
+                }
+              ],
+              "spells": [
+                {
+                  "ref": "core:rule.spell.animism.banish",
+                  "id": "banish",
+                  "name": "Banish",
+                  "rank": 1,
+                  "requirement": "Animism",
+                  "description": "Deal 2d8 damage to demons and undead. Each additional power level increases damage by 1d8. Armor and natural protection have no effect; cannot be dodged or parried.",
+                  "source": "DoD_Regelboken_v2.pdf"
+                },
+                {
+                  "ref": "core:rule.spell.animism.lightning",
+                  "id": "lightning",
+                  "name": "Lightning",
+                  "rank": 1,
+                  "requirement": "Animism",
+                  "description": "Call down lightning from the sky, dealing 2d6 damage to the target. The lightning then chains to a random creature within 2 meters, dealing 2d4 damage. Each additional power level increases all damage dice by one. Metal armor provides no protection. Can be dodged/parried as a ranged attack; if successful, no further targets are hit. Costs double WP indoors.",
+                  "source": "DoD_Regelboken_v2.pdf"
+                },
+                {
+                  "ref": "core:rule.spell.animism.heal",
+                  "id": "heal",
+                  "name": "Heal",
+                  "rank": 1,
+                  "requirement": "Animism",
+                  "description": "Heal 2d6 HP on yourself or another living creature. Each additional power level heals an extra 1d6 HP.",
+                  "source": "DoD_Regelboken_v2.pdf"
+                },
+                {
+                  "ref": "core:rule.spell.animism.ensnare",
+                  "id": "ensnare",
+                  "name": "Ensnare",
+                  "rank": 1,
+                  "requirement": "Animism",
+                  "description": "The target is ensnared by roots and branches and cannot move. Breaking free requires an Evade roll: with boon at PL 1, normal at PL 2, with bane at PL 3. Each attempt is an action, one per round. Others can help. No effect on monsters.",
+                  "source": "DoD_Regelboken_v2.pdf"
+                },
+                {
+                  "ref": "core:rule.spell.animism.speak_with_animals",
+                  "id": "speak_with_animals",
+                  "name": "Speak with Animals",
+                  "rank": 1,
+                  "requirement": "Animism",
+                  "description": "Speak with a mammal or bird. You may ask a number of questions equal to the power level. The animal can tell what it has seen, heard, and smelled, but perceives the world differently — answers are often cryptic. Animals never lie.",
+                  "source": "DoD_Regelboken_v2.pdf"
+                },
+                {
+                  "ref": "core:rule.spell.animism.chain_lightning",
+                  "id": "chain_lightning",
+                  "name": "Chain Lightning",
+                  "rank": 2,
+                  "requirement": "Lightning",
+                  "description": "Call a powerful bolt of lightning dealing 2d8 damage. Chains to a second creature within 2m (2d6 damage) then a third (2d4 damage). Each additional power level increases all damage dice by one. Metal armor provides no protection. Can be dodged/parried as a ranged attack; if successful, no further targets are hit. Costs double WP indoors.",
+                  "source": "DoD_Regelboken_v2.pdf"
+                },
+                {
+                  "ref": "core:rule.spell.animism.purge",
+                  "id": "purge",
+                  "name": "Purge",
+                  "rank": 2,
+                  "requirement": "Banish",
+                  "description": "Exorcise a demon or undead, dealing 2d10 damage. Each additional power level increases damage by 1d10. Armor and natural protection have no effect; cannot be dodged or parried.",
+                  "source": "DoD_Regelboken_v2.pdf"
+                },
+                {
+                  "ref": "core:rule.spell.animism.heal_wound",
+                  "id": "heal_wound",
+                  "name": "Heal Wound",
+                  "rank": 2,
+                  "requirement": "Heal",
+                  "description": "Heal 2d8 HP and cure one non-permanent severe injury (optional rule, p.51) on yourself or another living creature. Each additional power level heals an extra 1d8 HP.",
+                  "source": "DoD_Regelboken_v2.pdf"
+                },
+                {
+                  "ref": "core:rule.spell.animism.engulfing_forest",
+                  "id": "engulfing_forest",
+                  "name": "Engulfing Forest",
+                  "rank": 2,
+                  "requirement": "Ensnare",
+                  "description": "Call upon forest spirits to grow thorny thickets and roots. The area counts as difficult terrain (p.44). All persons (not monsters) except you within the area when cast are ensnared. Breaking free requires Evade: with boon at PL 1, normal at PL 2, bane at PL 3. Each attempt is an action, one per round. Non-ensnared persons can help.",
+                  "source": "DoD_Regelboken_v2.pdf"
+                },
+                {
+                  "ref": "core:rule.spell.animism.sleep",
+                  "id": "sleep",
+                  "name": "Sleep",
+                  "rank": 2,
+                  "requirement": "Heal",
+                  "description": "Target must roll WIL to avoid falling into deep sleep for 15 minutes. GM rolls against max WP (if listed), reduced by 2 per level of Focused heroic ability; or against 10 if WP not listed. If WIL roll succeeds, target is still Dazed. At PL 1 target rolls with boon, PL 2 normal, PL 3 with bane. A sleeping person is very hard to wake but wakes if damaged. Only works on living persons, no effect on monsters.",
+                  "source": "DoD_Regelboken_v2.pdf"
+                },
+                {
+                  "ref": "core:rule.spell.animism.restoration",
+                  "id": "restoration",
+                  "name": "Restoration",
+                  "rank": 3,
+                  "requirement": "Heal Wound",
+                  "description": "Heal 2d10 HP and cure a severe injury (even a permanent one, optional rule p.51) on yourself or another living creature. Each additional power level heals an extra 1d10 HP.",
+                  "source": "DoD_Regelboken_v2.pdf"
+                },
+                {
+                  "ref": "core:rule.spell.animism.thunderbolt",
+                  "id": "thunderbolt",
+                  "name": "Thunderbolt",
+                  "rank": 3,
+                  "requirement": "Chain Lightning",
+                  "description": "Call a mighty thunderbolt dealing 2d10 damage. Chains to up to three random creatures within 2m of each other: second takes 2d8, third takes 2d6, fourth takes 2d4. Each additional power level increases all damage dice by one. Metal armor provides no protection. Can be dodged/parried as a ranged attack; if successful, no further targets are hit. Costs double WP indoors.",
+                  "source": "DoD_Regelboken_v2.pdf"
+                },
+                {
+                  "ref": "core:rule.spell.animism.resurrection",
+                  "id": "resurrection",
+                  "name": "Resurrection",
+                  "rank": 3,
+                  "requirement": "Heal Wound",
+                  "description": "Channel nature's forces to bring a dead person back to life — not as undead, but truly alive. Costs the mage 1 WIL permanently (reducing max WP by 1). Within the same shift: PL 1 suffices. Within one day: PL 2 required. Within one week: PL 3 required. Beyond one week, the body is too decayed. Only one attempt allowed — if it fails, the person is irrevocably dead. The resurrected person loses 1d3 levels in all CHA-based skills (minimum 3).",
+                  "source": "DoD_Regelboken_v2.pdf"
+                }
+              ],
+              "source": "DoD_Regelboken_v2.pdf"
+            },
+            {
+              "ref": "core:rule.magic_school.elementalism",
+              "id": "elementalism",
+              "name": "Elementalism",
+              "linkedSkillRef": "core:skill.elementalism",
+              "cantrips": [
+                {
+                  "ref": "core:rule.cantrip.elementalism.puff_of_smoke",
+                  "id": "puff_of_smoke",
+                  "name": "Puff of Smoke",
+                  "description": "A dramatic puff of smoke appears in front of you. Very popular for dramatic entrances. May grant boon on Sneaking (GM decides).",
+                  "source": "DoD_Regelboken_v2.pdf"
+                },
+                {
+                  "ref": "core:rule.cantrip.elementalism.ignite",
+                  "id": "ignite",
+                  "name": "Ignite",
+                  "description": "Light or extinguish a candle, torch, or lantern within 10 meters.",
+                  "source": "DoD_Regelboken_v2.pdf"
+                },
+                {
+                  "ref": "core:rule.cantrip.elementalism.heat_chill",
+                  "id": "heat_chill",
+                  "name": "Heat/Chill",
+                  "description": "Make the area within 10 meters comfortably warm or cool. Protects against cold (p.54) for one shift.",
+                  "source": "DoD_Regelboken_v2.pdf"
+                }
+              ],
+              "spells": [
+                {
+                  "ref": "core:rule.spell.elementalism.fireball",
+                  "id": "fireball",
+                  "name": "Fireball",
+                  "rank": 1,
+                  "requirement": "Elementalism",
+                  "description": "Send a flame from your hand or focus to the target. Can be dodged or parried as a ranged attack. Deals 2d6 fire damage and ignites flammable objects. Each additional power level adds 1d6 damage, or creates another flame at a different target within range.",
+                  "source": "DoD_Regelboken_v2.pdf"
+                },
+                {
+                  "ref": "core:rule.spell.elementalism.frost",
+                  "id": "frost",
+                  "name": "Frost",
+                  "rank": 1,
+                  "requirement": "Elementalism",
+                  "description": "Drastically lower the temperature around you. All natural fires in the area are extinguished. All living creatures take 1d6 HP and 1d6 WP damage and become chilled (p.54) — cannot heal HP or WP until warmed. Humanoids (not monsters) are frozen solid and cannot move or act (not even reactively); each turn they may roll STR (not an action) to break free. Each additional power level increases radius by 4 meters. Water in the area freezes instantly into ice.",
+                  "source": "DoD_Regelboken_v2.pdf"
+                },
+                {
+                  "ref": "core:rule.spell.elementalism.pillar",
+                  "id": "pillar",
+                  "name": "Pillar",
+                  "rank": 1,
+                  "requirement": "Elementalism",
+                  "description": "Raise a 3-meter-high, 1-meter-wide stone pillar from the ground or stone floor. Anyone on that spot must pass Climb & Jump (not an action) or fall off. Under a low ceiling, a failed roll deals 2d6 crush damage instead. Each additional power level adds 3 meters of height, increasing potential fall damage (p.53).",
+                  "source": "DoD_Regelboken_v2.pdf"
+                },
+                {
+                  "ref": "core:rule.spell.elementalism.shatter",
+                  "id": "shatter",
+                  "name": "Shatter",
+                  "rank": 1,
+                  "requirement": "Elementalism",
+                  "description": "Break the invisible bonds holding matter together. Deal 2d10 damage to a non-living, non-magical object. Protection values give no protection. Each additional power level adds 1d10 damage.",
+                  "source": "DoD_Regelboken_v2.pdf"
+                },
+                {
+                  "ref": "core:rule.spell.elementalism.gust_of_wind",
+                  "id": "gust_of_wind",
+                  "name": "Gust of Wind",
+                  "rank": 1,
+                  "requirement": "Elementalism",
+                  "description": "Conjure a powerful gust of wind. All loose objects and human-sized or smaller creatures in the area are pushed 2d4 meters away and take equal crush damage. Against a swarm (p.83), deals 2d6 damage instead. Each additional power level increases damage dice by one. No effect on Large or Enormous monsters (p.83).",
+                  "source": "DoD_Regelboken_v2.pdf"
+                },
+                {
+                  "ref": "core:rule.spell.elementalism.fire_blast",
+                  "id": "fire_blast",
+                  "name": "Fire Blast",
+                  "rank": 2,
+                  "requirement": "Fireball",
+                  "description": "Send a large ball of fire from your hand or focus to the target. Can be dodged or parried as a ranged attack. Deals 2d8 fire damage and ignites flammable objects. Each additional power level adds 1d8 damage, or creates another fire blast at a different target within range.",
+                  "source": "DoD_Regelboken_v2.pdf"
+                },
+                {
+                  "ref": "core:rule.spell.elementalism.tidal_wave",
+                  "id": "tidal_wave",
+                  "name": "Tidal Wave",
+                  "rank": 2,
+                  "requirement": "Frost",
+                  "description": "Conjure a powerful tidal wave from a water source within range. The area originates from the source, not from you. All loose objects and creatures in the area are pushed 2d6 meters from the source and take equal crush damage. Each additional power level increases damage dice by one.",
+                  "source": "DoD_Regelboken_v2.pdf"
+                },
+                {
+                  "ref": "core:rule.spell.elementalism.stone_shield",
+                  "id": "stone_shield",
+                  "name": "Stone Shield",
+                  "rank": 2,
+                  "requirement": "Pillar",
+                  "description": "Instantly conjure a shield of stone that reduces incoming attack damage by 2d6. Each additional power level reduces damage by an extra 1d6. You can cast this when you know the attack hits but before the damage roll. Stacks with armor.",
+                  "source": "DoD_Regelboken_v2.pdf"
+                },
+                {
+                  "ref": "core:rule.spell.elementalism.stonewall",
+                  "id": "stonewall",
+                  "name": "Stonewall",
+                  "rank": 2,
+                  "requirement": "Pillar",
+                  "description": "Raise a wall from the ground or stone floor. The wall is 1 meter thick, 2 meters high, and 3 meters wide. Each additional power level creates another section of the same size. Anyone on that spot must pass Climb & Jump (not an action) or fall off. Under a low ceiling, a failed roll deals 2d6 crush damage.",
+                  "source": "DoD_Regelboken_v2.pdf"
+                },
+                {
+                  "ref": "core:rule.spell.elementalism.whirlwind",
+                  "id": "whirlwind",
+                  "name": "Whirlwind",
+                  "rank": 2,
+                  "requirement": "Gust of Wind",
+                  "description": "Create an intense whirlwind around the mage. All loose objects and human-sized or smaller creatures are flung 2d4 meters away, take equal crush damage, and land prone. Each additional power level increases range by 4 meters and adds 1d4 damage. With bane on the roll, you can choose to fling a person to another spot within range, choosing whether they take damage and whether they land prone.",
+                  "source": "DoD_Regelboken_v2.pdf"
+                },
+                {
+                  "ref": "core:rule.spell.elementalism.firebird",
+                  "id": "firebird",
+                  "name": "Firebird",
+                  "rank": 3,
+                  "requirement": "Fire Blast",
+                  "description": "Send a terrifying bird of fire from your hand or focus to the target. Can be dodged or parried as a ranged attack. Deals 2d10 fire damage and ignites flammable objects. Each additional power level adds 1d10 damage, or creates another firebird at a different target within range.",
+                  "source": "DoD_Regelboken_v2.pdf"
+                },
+                {
+                  "ref": "core:rule.spell.elementalism.firestorm",
+                  "id": "firestorm",
+                  "name": "Firestorm",
+                  "rank": 3,
+                  "requirement": "Fire Blast and Whirlwind",
+                  "description": "Create a vortex of fire around you. All targets within range take 2d6 fire damage. Each additional power level increases range by 4 meters and adds 1d6 damage.",
+                  "source": "DoD_Regelboken_v2.pdf"
+                },
+                {
+                  "ref": "core:rule.spell.elementalism.gnome",
+                  "id": "gnome",
+                  "name": "Gnome",
+                  "rank": 3,
+                  "requirement": "Stonewall",
+                  "description": "Summon an earth elemental shaped like a humanoid figure of grey-brown sand or clay. Counts as a monster in combat (p.84). Follows creator's command (free action), acts independently with own initiative, must stay within line of sight of the mage.",
+                  "source": "DoD_Regelboken_v2.pdf"
+                },
+                {
+                  "ref": "core:rule.spell.elementalism.salamander",
+                  "id": "salamander",
+                  "name": "Salamander",
+                  "rank": 3,
+                  "requirement": "Fire Blast",
+                  "description": "Summon a fire elemental shaped like a flaming lizard-like figure of fire. Counts as a monster in combat (p.84). Follows creator's command (free action), acts independently with own initiative, must stay within line of sight of the mage.",
+                  "source": "DoD_Regelboken_v2.pdf"
+                },
+                {
+                  "ref": "core:rule.spell.elementalism.sylph",
+                  "id": "sylph",
+                  "name": "Sylph",
+                  "rank": 3,
+                  "requirement": "Whirlwind",
+                  "description": "Summon a wind elemental shaped like a bird-formed storm cloud. Counts as a monster in combat (p.84). Follows creator's command (free action), acts independently with own initiative, must stay within line of sight of the mage.",
+                  "source": "DoD_Regelboken_v2.pdf"
+                },
+                {
+                  "ref": "core:rule.spell.elementalism.undine",
+                  "id": "undine",
+                  "name": "Undine",
+                  "rank": 3,
+                  "requirement": "Tidal Wave",
+                  "description": "Summon a water elemental shaped like a tidal wave whose crest forms a woman of water. Counts as a monster in combat (p.84). Follows creator's command (free action), acts independently with own initiative, must stay within line of sight of the mage.",
+                  "source": "DoD_Regelboken_v2.pdf"
+                }
+              ],
+              "source": "DoD_Regelboken_v2.pdf"
+            },
+            {
+              "ref": "core:rule.magic_school.mentalism",
+              "id": "mentalism",
+              "name": "Mentalism",
+              "linkedSkillRef": "core:skill.mentalism",
+              "cantrips": [
+                {
+                  "ref": "core:rule.cantrip.mentalism.slow_fall",
+                  "id": "slow_fall",
+                  "name": "Slow Fall",
+                  "description": "Slow a fall and land softly as a feather, regardless of height.",
+                  "source": "DoD_Regelboken_v2.pdf"
+                },
+                {
+                  "ref": "core:rule.cantrip.mentalism.lock_unlock",
+                  "id": "lock_unlock",
+                  "name": "Lock/Unlock",
+                  "description": "Lock or unlock a non-magical lock you touch.",
+                  "source": "DoD_Regelboken_v2.pdf"
+                },
+                {
+                  "ref": "core:rule.cantrip.mentalism.magic_stool",
+                  "id": "magic_stool",
+                  "name": "Magic Stool",
+                  "description": "Create an invisible round surface, about half a meter in diameter, hovering at sitting height. You can sit on it or stack things. Lasts until you leave the area.",
+                  "source": "DoD_Regelboken_v2.pdf"
+                }
+              ],
+              "spells": [
+                {
+                  "ref": "core:rule.spell.mentalism.farsight",
+                  "id": "farsight",
+                  "name": "Farsight",
+                  "rank": 1,
+                  "requirement": "Mentalism",
+                  "description": "See and hear what happens at a location up to 1 kilometer away, as if you were there. You must either see the destination or have visited it before. Each additional power level multiplies range by 10 (10 km at PL 2, 100 km at PL 3). Cannot be used to see other dimensions.",
+                  "source": "DoD_Regelboken_v2.pdf"
+                },
+                {
+                  "ref": "core:rule.spell.mentalism.power_fist",
+                  "id": "power_fist",
+                  "name": "Power Fist",
+                  "rank": 1,
+                  "requirement": "Mentalism",
+                  "description": "Your unarmed attack damage increases by 1d6 per power level.",
+                  "source": "DoD_Regelboken_v2.pdf"
+                },
+                {
+                  "ref": "core:rule.spell.mentalism.levitate",
+                  "id": "levitate",
+                  "name": "Levitate",
+                  "rank": 1,
+                  "requirement": "Mentalism",
+                  "description": "Lift yourself, another person, or an object up to human size from the ground and let it float up to 6 meters in any direction, then land softly or fall (your choice). Each additional power level lets you lift it 2 more meters, or lift one additional person/object. Lifting an unwilling creature imposes bane on the roll.",
+                  "source": "DoD_Regelboken_v2.pdf"
+                },
+                {
+                  "ref": "core:rule.spell.mentalism.longstrider",
+                  "id": "longstrider",
+                  "name": "Longstrider",
+                  "rank": 1,
+                  "requirement": "Mentalism",
+                  "description": "Double the target's movement for the duration. You can cast this on yourself. Each additional power level lets you target one additional person.",
+                  "source": "DoD_Regelboken_v2.pdf"
+                },
+                {
+                  "ref": "core:rule.spell.mentalism.stone_skin",
+                  "id": "stone_skin",
+                  "name": "Stone Skin",
+                  "rank": 1,
+                  "requirement": "Mentalism",
+                  "description": "Target's skin becomes hard and grey, gaining armor value 4. Each additional power level increases armor by 2. If wearing armor, only the higher value counts.",
+                  "source": "DoD_Regelboken_v2.pdf"
+                },
+                {
+                  "ref": "core:rule.spell.mentalism.divination",
+                  "id": "divination",
+                  "name": "Divination",
+                  "rank": 2,
+                  "requirement": "Farsight",
+                  "description": "Gain knowledge of past events at your current location, even those no one remembers. PL 1: one day back. PL 2: one year back. PL 3: centuries. Visions are often fragmentary and cryptic — GM decides exactly what you see.",
+                  "source": "DoD_Regelboken_v2.pdf"
+                },
+                {
+                  "ref": "core:rule.spell.mentalism.enchant_weapon",
+                  "id": "enchant_weapon",
+                  "name": "Enchant Weapon",
+                  "rank": 2,
+                  "requirement": "Power Fist",
+                  "description": "Enchant a weapon so that results 1-2 count as dragon rolls on attacks and parries. The weapon also counts as magical. Each additional power level increases the dragon roll range by 1 (1-3 at PL 2, 1-4 at PL 3).",
+                  "source": "DoD_Regelboken_v2.pdf"
+                },
+                {
+                  "ref": "core:rule.spell.mentalism.mental_strike",
+                  "id": "mental_strike",
+                  "name": "Mental Strike",
+                  "rank": 2,
+                  "requirement": "Power Fist",
+                  "description": "Project your mental force as a powerful physical push. Hurl the target 2d6 meters away from you and deal equal damage. Each additional power level adds 1d6.",
+                  "source": "DoD_Regelboken_v2.pdf"
+                },
+                {
+                  "ref": "core:rule.spell.mentalism.telepathy",
+                  "id": "telepathy",
+                  "name": "Telepathy",
+                  "rank": 2,
+                  "requirement": "Farsight",
+                  "description": "Read another person's surface thoughts. Digging up deeper memories requires PL 2 or higher, depending on how recent the memory is. GM has final say. You can also send your own thoughts using this spell.",
+                  "source": "DoD_Regelboken_v2.pdf"
+                },
+                {
+                  "ref": "core:rule.spell.mentalism.scrying",
+                  "id": "scrying",
+                  "name": "Scrying",
+                  "rank": 2,
+                  "requirement": "Farsight",
+                  "description": "Specify an object ('weapon', 'sword'), substance ('gold', 'air', 'water'), creature or creature type ('the mage Zot', 'undead', 'orcs'), or phenomenon ('magic'). The spell shows you the direction to the nearest occurrence within range. Each additional power level doubles the range (200m at PL 2, 400m at PL 3).",
+                  "source": "DoD_Regelboken_v2.pdf"
+                },
+                {
+                  "ref": "core:rule.spell.mentalism.dominate",
+                  "id": "dominate",
+                  "name": "Dominate",
+                  "rank": 3,
+                  "requirement": "Telepathy",
+                  "description": "Take total control of another person's actions. Make an opposed WIL roll. GM rolls against max WP (if listed), reduced by 2 per level of Focused heroic ability; or against 10 if WP not listed. At PL 1 you roll with bane, PL 2 normal, PL 3 with boon. If you win, the target must immediately perform one movement and action of your choosing (except WP-costing actions). Target loses their next turn. Target can still speak normally. No effect on monsters.",
+                  "source": "DoD_Regelboken_v2.pdf"
+                },
+                {
+                  "ref": "core:rule.spell.mentalism.flight",
+                  "id": "flight",
+                  "name": "Flight",
+                  "rank": 3,
+                  "requirement": "Levitate",
+                  "description": "Grant yourself or another creature (up to human size) the ability to fly freely with movement value 6. At PL 2 movement doubles to 12, at PL 3 it doubles again to 24. The flyer ignores all obstacles and is not affected by terrain.",
+                  "source": "DoD_Regelboken_v2.pdf"
+                },
+                {
+                  "ref": "core:rule.spell.mentalism.teleport",
+                  "id": "teleport",
+                  "name": "Teleport",
+                  "rank": 3,
+                  "requirement": "Farsight",
+                  "description": "Teleport yourself up to 100 meters. You must either see the destination or have visited it before. Each additional power level lets you bring one additional human-sized creature in contact with you, or double the range. Cannot be used to travel between dimensions.",
+                  "source": "DoD_Regelboken_v2.pdf"
+                }
+              ],
+              "source": "DoD_Regelboken_v2.pdf"
+            }
+          ]
+        }
+      },
+      "equipment": {
+        "weapons": [
+          {
+            "ref": "core:weapon.unarmed",
+            "id": "unarmed",
+            "name": "Unarmed",
+            "damage": "1d6",
+            "features": [
+              "Crushing"
+            ],
+            "source": "DoD_Regelboken_v2.pdf"
+          },
+          {
+            "ref": "core:weapon.light_improvised",
+            "id": "light_improvised",
+            "name": "Light Improvised",
+            "grip": "1H",
+            "damage": "1d8",
+            "durability": 3,
+            "features": [
+              "Crushing",
+              "Throwable"
+            ],
+            "source": "DoD_Regelboken_v2.pdf"
+          },
+          {
+            "ref": "core:weapon.heavy_improvised",
+            "id": "heavy_improvised",
+            "name": "Heavy Improvised",
+            "grip": "2H",
+            "damage": "2d8",
+            "durability": 3,
+            "features": [
+              "Crushing"
+            ],
+            "source": "DoD_Regelboken_v2.pdf"
+          },
+          {
+            "ref": "core:weapon.knife",
+            "id": "knife",
+            "name": "Knife",
+            "grip": "1H",
+            "damage": "1d8",
+            "durability": 6,
+            "features": [
+              "Subtle",
+              "Piercing",
+              "Throwable"
+            ],
+            "source": "DoD_Regelboken_v2.pdf"
+          },
+          {
+            "ref": "core:weapon.dagger",
+            "id": "dagger",
+            "name": "Dagger",
+            "grip": "1H",
+            "damage": "1d8",
+            "durability": 9,
+            "features": [
+              "Subtle",
+              "Piercing",
+              "Slashing",
+              "Throwable"
+            ],
+            "source": "DoD_Regelboken_v2.pdf"
+          },
+          {
+            "ref": "core:weapon.parrying_dagger",
+            "id": "parrying_dagger",
+            "name": "Parrying Dagger",
+            "grip": "1H",
+            "damage": "1d6",
+            "durability": 15,
+            "features": [
+              "Subtle",
+              "Piercing",
+              "Slashing"
+            ],
+            "source": "DoD_Regelboken_v2.pdf"
+          },
+          {
+            "ref": "core:weapon.short_sword",
+            "id": "short_sword",
+            "name": "Short Sword",
+            "grip": "1H",
+            "damage": "1d10",
+            "durability": 12,
+            "features": [
+              "Piercing",
+              "Slashing"
+            ],
+            "source": "DoD_Regelboken_v2.pdf"
+          },
+          {
+            "ref": "core:weapon.broadsword",
+            "id": "broadsword",
+            "name": "Broadsword",
+            "grip": "1H",
+            "damage": "2d6",
+            "durability": 15,
+            "features": [
+              "Piercing",
+              "Slashing"
+            ],
+            "source": "DoD_Regelboken_v2.pdf"
+          },
+          {
+            "ref": "core:weapon.bastard_sword",
+            "id": "bastard_sword",
+            "name": "Bastard Sword",
+            "grip": "1H",
+            "damage": "2d8",
+            "durability": 15,
+            "features": [
+              "Piercing",
+              "Slashing"
+            ],
+            "source": "DoD_Regelboken_v2.pdf"
+          },
+          {
+            "ref": "core:weapon.two_handed_sword",
+            "id": "two_handed_sword",
+            "name": "Two-Handed Sword",
+            "grip": "2H",
+            "damage": "2d10",
+            "durability": 15,
+            "features": [
+              "Piercing",
+              "Slashing"
+            ],
+            "source": "DoD_Regelboken_v2.pdf"
+          },
+          {
+            "ref": "core:weapon.scimitar",
+            "id": "scimitar",
+            "name": "Scimitar",
+            "grip": "1H",
+            "damage": "2d6",
+            "durability": 12,
+            "features": [
+              "Toppling",
+              "Slashing"
+            ],
+            "source": "DoD_Regelboken_v2.pdf"
+          },
+          {
+            "ref": "core:weapon.hand_axe",
+            "id": "hand_axe",
+            "name": "Hand Axe",
+            "grip": "1H",
+            "damage": "2d6",
+            "durability": 9,
+            "features": [
+              "Toppling",
+              "Slashing",
+              "Throwable"
+            ],
+            "source": "DoD_Regelboken_v2.pdf"
+          },
+          {
+            "ref": "core:weapon.battle_axe",
+            "id": "battle_axe",
+            "name": "Battle Axe",
+            "grip": "1H",
+            "damage": "2d8",
+            "durability": 9,
+            "features": [
+              "Toppling",
+              "Slashing"
+            ],
+            "source": "DoD_Regelboken_v2.pdf"
+          },
+          {
+            "ref": "core:weapon.two_handed_axe",
+            "id": "two_handed_axe",
+            "name": "Two-Handed Axe",
+            "grip": "2H",
+            "damage": "2d10",
+            "durability": 9,
+            "features": [
+              "Toppling",
+              "Slashing"
+            ],
+            "source": "DoD_Regelboken_v2.pdf"
+          },
+          {
+            "ref": "core:weapon.mace",
+            "id": "mace",
+            "name": "Mace",
+            "grip": "1H",
+            "damage": "2d4",
+            "durability": 12,
+            "features": [
+              "Crushing"
+            ],
+            "source": "DoD_Regelboken_v2.pdf"
+          },
+          {
+            "ref": "core:weapon.morning_star",
+            "id": "morning_star",
+            "name": "Morning Star",
+            "grip": "1H",
+            "damage": "2d8",
+            "durability": 12,
+            "features": [
+              "Crushing"
+            ],
+            "source": "DoD_Regelboken_v2.pdf"
+          },
+          {
+            "ref": "core:weapon.flail",
+            "id": "flail",
+            "name": "Flail",
+            "grip": "1H",
+            "damage": "2d8",
+            "features": [
+              "Crushing",
+              "Toppling",
+              "Cannot parry"
+            ],
+            "source": "DoD_Regelboken_v2.pdf"
+          },
+          {
+            "ref": "core:weapon.light_warhammer",
+            "id": "light_warhammer",
+            "name": "Light Warhammer",
+            "grip": "1H",
+            "damage": "2d6",
+            "durability": 12,
+            "features": [
+              "Crushing",
+              "Toppling"
+            ],
+            "source": "DoD_Regelboken_v2.pdf"
+          },
+          {
+            "ref": "core:weapon.heavy_warhammer",
+            "id": "heavy_warhammer",
+            "name": "Heavy Warhammer",
+            "grip": "2H",
+            "damage": "2d10",
+            "durability": 12,
+            "features": [
+              "Crushing",
+              "Toppling"
+            ],
+            "source": "DoD_Regelboken_v2.pdf"
+          },
+          {
+            "ref": "core:weapon.small_wooden_club",
+            "id": "small_wooden_club",
+            "name": "Small Wooden Club",
+            "grip": "1H",
+            "damage": "1d8",
+            "durability": 9,
+            "features": [
+              "Crushing"
+            ],
+            "source": "DoD_Regelboken_v2.pdf"
+          },
+          {
+            "ref": "core:weapon.large_wooden_club",
+            "id": "large_wooden_club",
+            "name": "Large Wooden Club",
+            "grip": "2H",
+            "damage": "2d8",
+            "durability": 12,
+            "features": [
+              "Crushing"
+            ],
+            "source": "DoD_Regelboken_v2.pdf"
+          },
+          {
+            "ref": "core:weapon.staff",
+            "id": "staff",
+            "name": "Staff",
+            "grip": "2H",
+            "damage": "1d8",
+            "durability": 9,
+            "features": [
+              "Crushing",
+              "Toppling"
+            ],
+            "source": "DoD_Regelboken_v2.pdf"
+          },
+          {
+            "ref": "core:weapon.short_spear",
+            "id": "short_spear",
+            "name": "Short Spear",
+            "grip": "1H",
+            "damage": "1d10",
+            "durability": 9,
+            "features": [
+              "Piercing",
+              "Throwable"
+            ],
+            "source": "DoD_Regelboken_v2.pdf"
+          },
+          {
+            "ref": "core:weapon.long_spear",
+            "id": "long_spear",
+            "name": "Long Spear",
+            "grip": "2H",
+            "damage": "2d8",
+            "durability": 9,
+            "features": [
+              "Long",
+              "Piercing"
+            ],
+            "source": "DoD_Regelboken_v2.pdf"
+          },
+          {
+            "ref": "core:weapon.lance",
+            "id": "lance",
+            "name": "Lance",
+            "grip": "1H",
+            "damage": "2d10",
+            "durability": 12,
+            "features": [
+              "Long",
+              "Piercing",
+              "Requires war horse"
+            ],
+            "source": "DoD_Regelboken_v2.pdf"
+          },
+          {
+            "ref": "core:weapon.halberd",
+            "id": "halberd",
+            "name": "Halberd",
+            "grip": "2H",
+            "damage": "2d8",
+            "durability": 12,
+            "features": [
+              "Long",
+              "Toppling",
+              "Piercing",
+              "Slashing"
+            ],
+            "source": "DoD_Regelboken_v2.pdf"
+          },
+          {
+            "ref": "core:weapon.trident",
+            "id": "trident",
+            "name": "Trident",
+            "grip": "1H",
+            "damage": "2d6",
+            "durability": 9,
+            "features": [
+              "Toppling",
+              "Piercing",
+              "Throwable"
+            ],
+            "source": "DoD_Regelboken_v2.pdf"
+          },
+          {
+            "ref": "core:weapon.small_shield",
+            "id": "small_shield",
+            "name": "Small Shield",
+            "grip": "1H",
+            "damage": "1d8",
+            "durability": 15,
+            "features": [
+              "Crushing"
+            ],
+            "source": "DoD_Regelboken_v2.pdf"
+          },
+          {
+            "ref": "core:weapon.large_shield",
+            "id": "large_shield",
+            "name": "Large Shield",
+            "grip": "1H",
+            "damage": "1d8",
+            "durability": 18,
+            "features": [
+              "Crushing"
+            ],
+            "source": "DoD_Regelboken_v2.pdf"
+          },
+          {
+            "ref": "core:weapon.sling",
+            "id": "sling",
+            "name": "Sling",
+            "grip": "1H",
+            "damage": "1d8",
+            "features": [
+              "Crushing",
+              "Trinket"
+            ],
+            "source": "DoD_Regelboken_v2.pdf"
+          },
+          {
+            "ref": "core:weapon.short_bow",
+            "id": "short_bow",
+            "name": "Short Bow",
+            "grip": "2H",
+            "damage": "1d10",
+            "durability": 3,
+            "features": [
+              "Piercing",
+              "Requires quiver"
+            ],
+            "source": "DoD_Regelboken_v2.pdf"
+          },
+          {
+            "ref": "core:weapon.long_bow",
+            "id": "long_bow",
+            "name": "Long Bow",
+            "grip": "2H",
+            "damage": "1d12",
+            "durability": 6,
+            "features": [
+              "Piercing",
+              "Requires quiver"
+            ],
+            "source": "DoD_Regelboken_v2.pdf"
+          },
+          {
+            "ref": "core:weapon.light_crossbow",
+            "id": "light_crossbow",
+            "name": "Light Crossbow",
+            "grip": "2H",
+            "damage": "2d6",
+            "durability": 6,
+            "features": [
+              "Piercing",
+              "Requires quiver",
+              "No damage bonus"
+            ],
+            "source": "DoD_Regelboken_v2.pdf"
+          },
+          {
+            "ref": "core:weapon.heavy_crossbow",
+            "id": "heavy_crossbow",
+            "name": "Heavy Crossbow",
+            "grip": "2H",
+            "damage": "2d8",
+            "durability": 9,
+            "features": [
+              "Piercing",
+              "Requires quiver",
+              "No damage bonus"
+            ],
+            "source": "DoD_Regelboken_v2.pdf"
+          },
+          {
+            "ref": "core:weapon.hand_crossbow",
+            "id": "hand_crossbow",
+            "name": "Hand Crossbow",
+            "grip": "1H",
+            "damage": "2d6",
+            "durability": 6,
+            "features": [
+              "Piercing",
+              "Requires quiver",
+              "No damage bonus"
+            ],
+            "source": "DoD_Regelboken_v2.pdf"
+          }
+        ],
+        "armor": [
+          {
+            "ref": "core:armor.leather",
+            "id": "leather",
+            "name": "Leather",
+            "rating": 1,
+            "movementPenalty": 0,
+            "source": "DoD_Regelboken_v2.pdf"
+          },
+          {
+            "ref": "core:armor.studded",
+            "id": "studded",
+            "name": "Studded Leather",
+            "rating": 2,
+            "movementPenalty": 1,
+            "source": "DoD_Regelboken_v2.pdf"
+          },
+          {
+            "ref": "core:armor.chainmail",
+            "id": "chainmail",
+            "name": "Chainmail",
+            "rating": 4,
+            "movementPenalty": 1,
+            "source": "DoD_Regelboken_v2.pdf"
+          },
+          {
+            "ref": "core:armor.plate",
+            "id": "plate",
+            "name": "Plate Armor",
+            "rating": 6,
+            "movementPenalty": 1,
+            "source": "DoD_Regelboken_v2.pdf"
+          },
+          {
+            "ref": "core:armor.open_helmet",
+            "id": "open_helmet",
+            "name": "Open Helmet",
+            "rating": 1,
+            "movementPenalty": 1,
+            "source": "DoD_Regelboken_v2.pdf"
+          },
+          {
+            "ref": "core:armor.great_helmet",
+            "id": "great_helmet",
+            "name": "Great Helmet",
+            "rating": 2,
+            "movementPenalty": 1,
+            "source": "DoD_Regelboken_v2.pdf"
+          }
+        ]
+      }
+    }
+  },
+  "sourceProvenance": {
+    "sourceRepository": "https://example.com/dragonbane-unbound",
+    "sourcePath": "content-packs/core",
+    "sourceVersion": "d8e710c3f4aa02fd51f841e76d2f5d3b8963cf01",
+    "packVersion": "0.1.0",
+    "importedAt": "2026-05-16T08:29:39.192Z",
+    "importer": "dragonbane-unbound"
+  }
+}

@@ -1,0 +1,418 @@
+{
+  "packId": "monsterboken-kins",
+  "name": "Dragonbane Monsterboken Kins",
+  "system": "dragonbane",
+  "kind": "rules",
+  "version": "0.1.0",
+  "visibility": "private",
+  "description": "Additional Monsterboken kins for player characters, NPCs, and monsters.",
+  "isActive": true,
+  "alwaysActive": false,
+  "bundled": true,
+  "entries": [
+    {
+      "id": "monsterboken-kins:kin.orc",
+      "localId": "orc",
+      "name": "Orc",
+      "entryKind": "rules-data",
+      "category": "dragonbane.kin"
+    },
+    {
+      "id": "monsterboken-kins:kin.ogre",
+      "localId": "ogre",
+      "name": "Ogre",
+      "entryKind": "rules-data",
+      "category": "dragonbane.kin"
+    },
+    {
+      "id": "monsterboken-kins:kin.goblin",
+      "localId": "goblin",
+      "name": "Goblin",
+      "entryKind": "rules-data",
+      "category": "dragonbane.kin"
+    },
+    {
+      "id": "monsterboken-kins:kin.hobgoblin",
+      "localId": "hobgoblin",
+      "name": "Hobgoblin",
+      "entryKind": "rules-data",
+      "category": "dragonbane.kin"
+    },
+    {
+      "id": "monsterboken-kins:kin.frog_people",
+      "localId": "frog_people",
+      "name": "Frog People",
+      "entryKind": "rules-data",
+      "category": "dragonbane.kin"
+    },
+    {
+      "id": "monsterboken-kins:kin.karkion",
+      "localId": "karkion",
+      "name": "Karkion",
+      "entryKind": "rules-data",
+      "category": "dragonbane.kin"
+    },
+    {
+      "id": "monsterboken-kins:kin.cat_people",
+      "localId": "cat_people",
+      "name": "Cat People",
+      "entryKind": "rules-data",
+      "category": "dragonbane.kin"
+    },
+    {
+      "id": "monsterboken-kins:kin.lizard_people",
+      "localId": "lizard_people",
+      "name": "Lizard People",
+      "entryKind": "rules-data",
+      "category": "dragonbane.kin"
+    },
+    {
+      "id": "monsterboken-kins:kin.satyr",
+      "localId": "satyr",
+      "name": "Satyr",
+      "entryKind": "rules-data",
+      "category": "dragonbane.kin"
+    },
+    {
+      "id": "monsterboken-kins:rule.character-creation",
+      "localId": "character-creation",
+      "name": "Character Creation",
+      "entryKind": "rules-data",
+      "category": "dragonbane.rule"
+    },
+    {
+      "id": "monsterboken-kins:rule.heroic_ability.steadfast",
+      "localId": "heroic_ability.steadfast",
+      "name": "Steadfast",
+      "entryKind": "rules-data",
+      "category": "dragonbane.heroic-ability"
+    },
+    {
+      "id": "monsterboken-kins:rule.heroic_ability.tackle",
+      "localId": "heroic_ability.tackle",
+      "name": "Tackle",
+      "entryKind": "rules-data",
+      "category": "dragonbane.heroic-ability"
+    },
+    {
+      "id": "monsterboken-kins:rule.heroic_ability.resilient",
+      "localId": "heroic_ability.resilient",
+      "name": "Resilient",
+      "entryKind": "rules-data",
+      "category": "dragonbane.heroic-ability"
+    },
+    {
+      "id": "monsterboken-kins:rule.heroic_ability.fearless",
+      "localId": "heroic_ability.fearless",
+      "name": "Fearless",
+      "entryKind": "rules-data",
+      "category": "dragonbane.heroic-ability"
+    },
+    {
+      "id": "monsterboken-kins:rule.heroic_ability.leaper",
+      "localId": "heroic_ability.leaper",
+      "name": "Leaper",
+      "entryKind": "rules-data",
+      "category": "dragonbane.heroic-ability"
+    },
+    {
+      "id": "monsterboken-kins:rule.heroic_ability.wings",
+      "localId": "heroic_ability.wings",
+      "name": "Wings",
+      "entryKind": "rules-data",
+      "category": "dragonbane.heroic-ability"
+    },
+    {
+      "id": "monsterboken-kins:rule.heroic_ability.nine_lives",
+      "localId": "heroic_ability.nine_lives",
+      "name": "Nine Lives",
+      "entryKind": "rules-data",
+      "category": "dragonbane.heroic-ability"
+    },
+    {
+      "id": "monsterboken-kins:rule.heroic_ability.camouflage",
+      "localId": "heroic_ability.camouflage",
+      "name": "Camouflage",
+      "entryKind": "rules-data",
+      "category": "dragonbane.heroic-ability"
+    },
+    {
+      "id": "monsterboken-kins:rule.heroic_ability.encouragement",
+      "localId": "heroic_ability.encouragement",
+      "name": "Encouragement",
+      "entryKind": "rules-data",
+      "category": "dragonbane.heroic-ability"
+    }
+  ],
+  "domains": {
+    "dragonbane": {
+      "schemaVersion": 1,
+      "kins": [
+        {
+          "ref": "monsterboken-kins:kin.orc",
+          "id": "orc",
+          "name": "Orc",
+          "movement": 10,
+          "playableByPlayers": true,
+          "heroicAbilityRef": "monsterboken-kins:rule.heroic_ability.steadfast",
+          "source": "DoD_Monsterboken_v1.pdf#page=10"
+        },
+        {
+          "ref": "monsterboken-kins:kin.ogre",
+          "id": "ogre",
+          "name": "Ogre",
+          "movement": 10,
+          "playableByPlayers": true,
+          "heroicAbilityRef": "monsterboken-kins:rule.heroic_ability.tackle",
+          "source": "DoD_Monsterboken_v1.pdf#page=12"
+        },
+        {
+          "ref": "monsterboken-kins:kin.goblin",
+          "id": "goblin",
+          "name": "Goblin",
+          "movement": 10,
+          "playableByPlayers": true,
+          "heroicAbilityRef": "monsterboken-kins:rule.heroic_ability.resilient",
+          "source": "DoD_Monsterboken_v1.pdf#page=14"
+        },
+        {
+          "ref": "monsterboken-kins:kin.hobgoblin",
+          "id": "hobgoblin",
+          "name": "Hobgoblin",
+          "movement": 10,
+          "playableByPlayers": true,
+          "heroicAbilityRef": "monsterboken-kins:rule.heroic_ability.fearless",
+          "source": "DoD_Monsterboken_v1.pdf#page=16"
+        },
+        {
+          "ref": "monsterboken-kins:kin.frog_people",
+          "id": "frog_people",
+          "name": "Frog People",
+          "movement": 10,
+          "playableByPlayers": true,
+          "heroicAbilityRef": "monsterboken-kins:rule.heroic_ability.leaper",
+          "source": "DoD_Monsterboken_v1.pdf#page=20"
+        },
+        {
+          "ref": "monsterboken-kins:kin.karkion",
+          "id": "karkion",
+          "name": "Karkion",
+          "movement": 10,
+          "playableByPlayers": true,
+          "heroicAbilityRef": "monsterboken-kins:rule.heroic_ability.wings",
+          "source": "DoD_Monsterboken_v1.pdf#page=24"
+        },
+        {
+          "ref": "monsterboken-kins:kin.cat_people",
+          "id": "cat_people",
+          "name": "Cat People",
+          "movement": 10,
+          "playableByPlayers": true,
+          "heroicAbilityRef": "monsterboken-kins:rule.heroic_ability.nine_lives",
+          "source": "DoD_Monsterboken_v1.pdf#page=26"
+        },
+        {
+          "ref": "monsterboken-kins:kin.lizard_people",
+          "id": "lizard_people",
+          "name": "Lizard People",
+          "movement": 10,
+          "playableByPlayers": true,
+          "heroicAbilityRef": "monsterboken-kins:rule.heroic_ability.camouflage",
+          "source": "DoD_Monsterboken_v1.pdf#page=34"
+        },
+        {
+          "ref": "monsterboken-kins:kin.satyr",
+          "id": "satyr",
+          "name": "Satyr",
+          "movement": 10,
+          "playableByPlayers": true,
+          "heroicAbilityRef": "monsterboken-kins:rule.heroic_ability.encouragement",
+          "source": "DoD_Monsterboken_v1.pdf#page=36"
+        }
+      ],
+      "professions": [],
+      "skills": [],
+      "rules": {
+        "characterCreation": {
+          "ref": "monsterboken-kins:rule.character-creation",
+          "id": "character-creation",
+          "ageSkillSlots": {
+            "Young": {
+              "total": 8,
+              "fromProfession": 6,
+              "freeChoice": 2
+            },
+            "Middle-Aged": {
+              "total": 10,
+              "fromProfession": 6,
+              "freeChoice": 4
+            },
+            "Old": {
+              "total": 12,
+              "fromProfession": 6,
+              "freeChoice": 6
+            }
+          },
+          "damageBonusRanges": {
+            "STR": [
+              {
+                "min": 1,
+                "max": 12,
+                "bonus": "none"
+              },
+              {
+                "min": 13,
+                "max": 16,
+                "bonus": "1d4"
+              },
+              {
+                "min": 17,
+                "max": 18,
+                "bonus": "1d6"
+              }
+            ],
+            "AGL": [
+              {
+                "min": 1,
+                "max": 12,
+                "bonus": "none"
+              },
+              {
+                "min": 13,
+                "max": 16,
+                "bonus": "1d4"
+              },
+              {
+                "min": 17,
+                "max": 18,
+                "bonus": "1d6"
+              }
+            ]
+          },
+          "movementAgilityModifiers": [
+            {
+              "min": 1,
+              "max": 6,
+              "modifier": -4
+            },
+            {
+              "min": 7,
+              "max": 9,
+              "modifier": -2
+            },
+            {
+              "min": 10,
+              "max": 12,
+              "modifier": 0
+            },
+            {
+              "min": 13,
+              "max": 15,
+              "modifier": 2
+            },
+            {
+              "min": 16,
+              "max": 18,
+              "modifier": 4
+            }
+          ]
+        },
+        "appearanceOptions": [],
+        "mementoOptions": [],
+        "weaknesses": [],
+        "heroicAbilities": [
+          {
+            "ref": "monsterboken-kins:rule.heroic_ability.steadfast",
+            "id": "steadfast",
+            "name": "Steadfast",
+            "wpCost": 3,
+            "description": "Orcs are steadfast and stubborn, standing firm when others fall. An orc at 0 HP can activate this ability to automatically Rally (p.50 of the core rulebook), without needing to be persuaded by another character or rolling WIL. This ability is typically only used by player characters and important NPCs.",
+            "source": "DoD_Monsterboken_v1.pdf"
+          },
+          {
+            "ref": "monsterboken-kins:rule.heroic_ability.tackle",
+            "id": "tackle",
+            "name": "Tackle",
+            "wpCost": 3,
+            "description": "An ogre can use its massive body to tackle an opponent with violent force. This counts as an unarmed melee attack with a boon (advantage) that deals 2d6 bludgeoning damage (plus any damage bonus) and cannot be parried. The ogre may also sprint before the attack (but does not have to). Humanoid targets of Normal size or smaller that are hit are automatically knocked prone.",
+            "source": "DoD_Monsterboken_v1.pdf"
+          },
+          {
+            "ref": "monsterboken-kins:rule.heroic_ability.resilient",
+            "id": "resilient",
+            "name": "Resilient",
+            "wpCost": 1,
+            "description": "Goblins are hardy creatures that endure all manner of hardships. Activating this ability grants a boon (advantage) on a CON roll to resist poison or disease (p.52-53 of the core rulebook), or allows the goblin to skip the Bushcraft roll entirely when making camp (p.103 of the core rulebook). Additionally, goblins can always eat raw food without problems (no WP cost).",
+            "source": "DoD_Monsterboken_v1.pdf"
+          },
+          {
+            "ref": "monsterboken-kins:rule.heroic_ability.fearless",
+            "id": "fearless",
+            "name": "Fearless",
+            "wpCost": 2,
+            "description": "Hobgoblins are fearless and very few things scare them. A hobgoblin can activate this ability to automatically succeed on a WIL roll to resist fear (p.52 of the core rulebook). The ability must be activated before any dice are rolled.",
+            "source": "DoD_Monsterboken_v1.pdf"
+          },
+          {
+            "ref": "monsterboken-kins:rule.heroic_ability.leaper",
+            "id": "leaper",
+            "name": "Leaper",
+            "wpCost": 3,
+            "description": "Frog people can activate this ability to jump a horizontal distance equal to their movement value, or a vertical distance equal to half their movement value. No Acrobatics roll is needed. The jump can end with a melee attack, which then gets a boon (advantage).",
+            "source": "DoD_Monsterboken_v1.pdf"
+          },
+          {
+            "ref": "monsterboken-kins:rule.heroic_ability.wings",
+            "id": "wings",
+            "name": "Wings",
+            "wpCost": 1,
+            "description": "The karkion's bat-like wings allow it to fly through the air at the same speed as on foot, at a cost of 1 WP per round.",
+            "source": "DoD_Monsterboken_v1.pdf"
+          },
+          {
+            "ref": "monsterboken-kins:rule.heroic_ability.nine_lives",
+            "id": "nine_lives",
+            "name": "Nine Lives",
+            "wpCost": 2,
+            "description": "Cat people have an incredible ability to survive even the worst ordeals. Activating this ability grants a boon (advantage) on a Death Roll (p.50 of the core rulebook) at a cost of 2 WP. The ability can also be used to reduce the number of d6 rolled for fall damage by one per WP spent, up to a maximum of three (after the Acrobatics roll to reduce damage, p.53 of the core rulebook).",
+            "source": "DoD_Monsterboken_v1.pdf"
+          },
+          {
+            "ref": "monsterboken-kins:rule.heroic_ability.camouflage",
+            "id": "camouflage",
+            "name": "Camouflage",
+            "wpCost": 2,
+            "description": "Lizard people who hide are difficult to detect. Activating this ability grants a boon (advantage) on a Sneaking skill roll.",
+            "source": "DoD_Monsterboken_v1.pdf"
+          },
+          {
+            "ref": "monsterboken-kins:rule.heroic_ability.encouragement",
+            "id": "encouragement",
+            "name": "Encouragement",
+            "wpCost": 3,
+            "description": "Satyrs are happy and positive creatures who gladly encourage their friends with song or poetry. Activating this ability is an action and removes one condition of choice from a person within earshot and 10 meters. The ability cannot be used on the satyr itself.",
+            "source": "DoD_Monsterboken_v1.pdf"
+          }
+        ],
+        "magic": {
+          "rules": {
+            "schools": []
+          },
+          "schools": []
+        }
+      },
+      "equipment": {
+        "weapons": [],
+        "armor": []
+      }
+    }
+  },
+  "sourceProvenance": {
+    "sourceRepository": "https://example.com/dragonbane-unbound",
+    "sourcePath": "content-packs/core",
+    "sourceVersion": "d8e710c3f4aa02fd51f841e76d2f5d3b8963cf01",
+    "packVersion": "0.1.0",
+    "importedAt": "2026-05-16T08:29:39.192Z",
+    "importer": "dragonbane-unbound"
+  }
+}

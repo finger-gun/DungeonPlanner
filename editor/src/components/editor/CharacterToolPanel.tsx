@@ -10,6 +10,7 @@ import { useDungeonStore } from '../../store/useDungeonStore'
 import { AssetCatalog } from './AssetCatalog'
 
 const EMPTY_COMPONENT = () => null
+const GENERATED_DESCRIPTION_LIMIT = 120
 
 export function CharacterToolPanel() {
   const selectedAssetIds = useDungeonStore((state) => state.selectedAssetIds)
@@ -86,7 +87,7 @@ export function CharacterToolPanel() {
           if (!isGeneratedCharacterReady(record)) {
             return 'This actor is still preparing and is not ready for placement yet.'
           }
-          return record.prompt.trim() || 'Generated character'
+          return describeGeneratedCharacter(record)
         }}
       />
 
@@ -131,4 +132,16 @@ function CharacterRow({ label, value }: { label: string; value: string }) {
       <span className="break-all text-right text-stone-300">{value}</span>
     </div>
   )
+}
+
+function describeGeneratedCharacter(record: {
+  packDescription: string | null
+  prompt: string
+}) {
+  const baseDescription = record.packDescription?.trim() || record.prompt.trim() || 'Generated character'
+  if (baseDescription.length <= GENERATED_DESCRIPTION_LIMIT) {
+    return baseDescription
+  }
+
+  return `${baseDescription.slice(0, GENERATED_DESCRIPTION_LIMIT - 1).trimEnd()}…`
 }

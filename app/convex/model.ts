@@ -155,3 +155,12 @@ export const packDefaultAssetRefsValidator = v.object({
   prop: v.optional(v.string()),
   player: v.optional(v.string()),
 })
+
+export const packSourceProvenanceValidator = v.object({
+  sourceRepository: v.string(),
+  sourcePath: v.string(),
+  sourceVersion: v.optional(v.string()),
+  packVersion: v.string(),
+  importedAt: v.string(),
+  importer: v.literal('dragonbane-unbound'),
+})
