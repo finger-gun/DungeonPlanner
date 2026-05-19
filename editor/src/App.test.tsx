@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import userEvent from '@testing-library/user-event'
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
-import App from './App'
+import App, { runDebugSnapshotAction } from './App'
 import { useDungeonStore } from './store/useDungeonStore'
 
 const handoffMock = vi.hoisted(() => ({
@@ -90,6 +90,38 @@ vi.mock('./lib/editorDungeonHandoff', () => ({
   consumeEditorDungeonHandoff: handoffMock.consumeEditorDungeonHandoff,
   stripEditorDungeonHandoff: handoffMock.stripEditorDungeonHandoff,
 }))
+
+describe('runDebugSnapshotAction', () => {
+  it('refreshes synchronous actions immediately', () => {
+    const requestDebugSceneRefresh = vi.fn()
+
+    const result = runDebugSnapshotAction(
+      (value: number) => value * 2,
+      requestDebugSceneRefresh,
+      3,
+    )
+
+    expect(result).toBe(6)
+    expect(requestDebugSceneRefresh).toHaveBeenCalledTimes(1)
+  })
+
+  it('refreshes asynchronous actions after they settle', async () => {
+    const requestDebugSceneRefresh = vi.fn()
+
+    const result = runDebugSnapshotAction(
+      async (value: number) => {
+        await Promise.resolve()
+        return value * 2
+      },
+      requestDebugSceneRefresh,
+      3,
+    )
+
+    expect(requestDebugSceneRefresh).not.toHaveBeenCalled()
+    await expect(result).resolves.toBe(6)
+    expect(requestDebugSceneRefresh).toHaveBeenCalledTimes(1)
+  })
+})
 
 describe('App sidebar drawer', () => {
   beforeEach(() => {

@@ -74,6 +74,43 @@ const FpsOverlay = lazy(() =>
 
 const EDITOR_LIBRARY_SESSION_STORAGE_KEY = 'dungeonplanner.editor-library-access'
 
+function isPromiseLike<T>(value: T | PromiseLike<T> | undefined): value is PromiseLike<T> {
+  const isObjectLike = (typeof value === 'object' && value !== null) || typeof value === 'function'
+  return isObjectLike && 'then' in value && typeof value.then === 'function'
+}
+
+export function runDebugSnapshotAction<TArgs extends readonly unknown[], TResult>(
+  action: (...args: TArgs) => Promise<TResult>,
+  requestDebugSceneRefresh: () => void,
+  ...args: TArgs
+): Promise<TResult>
+export function runDebugSnapshotAction<TArgs extends readonly unknown[], TResult>(
+  action: (...args: TArgs) => TResult,
+  requestDebugSceneRefresh: () => void,
+  ...args: TArgs
+): TResult
+export function runDebugSnapshotAction<TArgs extends readonly unknown[], TResult>(
+  action: (...args: TArgs) => TResult | Promise<TResult>,
+  requestDebugSceneRefresh: () => void,
+  ...args: TArgs
+) {
+  let result: TResult | Promise<TResult> | undefined
+
+  try {
+    result = action(...args)
+  } finally {
+    if (!isPromiseLike(result)) {
+      requestDebugSceneRefresh()
+    }
+  }
+
+  if (isPromiseLike(result)) {
+    return Promise.resolve(result).finally(requestDebugSceneRefresh)
+  }
+
+  return result
+}
+
 function RightPanel({
   panelMode,
   onExitSettings,
@@ -652,11 +689,11 @@ function App() {
             return liveValue
           }
 
-          try {
-            return (liveValue as (...fnArgs: unknown[]) => unknown)(...args)
-          } finally {
-            requestDebugSceneRefresh()
-          }
+          return runDebugSnapshotAction(
+            (...fnArgs: unknown[]) => (liveValue as (...liveArgs: unknown[]) => unknown)(...fnArgs),
+            requestDebugSceneRefresh,
+            ...args,
+          )
         }]
       })
 
