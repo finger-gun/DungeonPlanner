@@ -2,16 +2,15 @@ import { cellToWorldPosition, getCellKey, type GridCell } from '../../hooks/useS
 import type { BakedFloorLightField } from '../../rendering/dungeonLightField'
 import { MAX_BUILD_STAGGER_MS } from '../../store/buildAnimations'
 import { buildWallOpeningDerivedState } from '../../store/derived/wallOpeningDerived'
+import type { SplineWallGraph } from '../../store/splineWallGraph'
 import type {
   InnerWallRecord,
   OpeningRecord,
   PaintedCellRecord,
   Room,
 } from '../../store/useDungeonStore'
-import { WALL_EXTRA_DELAY_MS } from './DungeonRoomShared'
 import { buildFloorRenderDerivedBundleFromInput } from './floorRenderDerived'
 import type { StaticTileEntry } from './tileEntries'
-import { getCornerInteriorLightDirections } from './wallLighting'
 
 export type RoomAnimationStateInput = {
   activeLayerId: string
@@ -23,6 +22,7 @@ export type RoomAnimationStateInput = {
   innerWalls: Record<string, InnerWallRecord>
   paintedCells: Record<string, PaintedCellRecord>
   rooms: Record<string, Room>
+  splineWallGraph?: SplineWallGraph
   wallOpenings: Record<string, OpeningRecord>
   wallSurfaceAssetIds: Record<string, string>
   wallSurfaceProps: Record<string, Record<string, unknown>>
@@ -41,6 +41,7 @@ export function buildSpeculativeRoomTileEntries({
   originCell,
   paintedCells,
   rooms,
+  splineWallGraph,
   wallOpenings,
   wallSurfaceAssetIds,
   wallSurfaceProps,
@@ -86,6 +87,7 @@ export function buildSpeculativeRoomTileEntries({
     wallSurfaceProps,
     wallOpeningDerivedState: buildWallOpeningDerivedState(wallOpenings),
     innerWalls,
+    splineWallGraph,
   }, {
     includeFloorReceivers: false,
   })
@@ -192,6 +194,7 @@ function buildAnimatedRoomTileEntriesForState({
   originCell,
   paintedCells,
   rooms,
+  splineWallGraph,
   wallOpenings,
   wallSurfaceAssetIds,
   wallSurfaceProps,
@@ -211,6 +214,7 @@ function buildAnimatedRoomTileEntriesForState({
     wallSurfaceProps,
     wallOpeningDerivedState: buildWallOpeningDerivedState(wallOpenings),
     innerWalls,
+    splineWallGraph,
   }, {
     includeFloorReceivers: false,
   })
@@ -280,54 +284,6 @@ function buildAnimatedRoomTileEntriesFromBundle({
         bakedLightField: bakedLightField ?? undefined,
         fogCell: placement.anchorCell,
       })),
-    ...bundle.walls
-      .filter((wall) => wall.segmentKeys.some((wallKey) => isWallKeyRelatedToCells(wallKey, relatedCellKeys)))
-      .map((wall) => {
-        const wallCell = getFirstWallCellForPreview(wall.segmentKeys, relatedCellKeys) ?? cells[0] ?? [0, 0]
-        return {
-          key: wall.key,
-          assetId: wall.assetId,
-          position: wall.position,
-          rotation: wall.rotation,
-          buildAnimationDelay: getSpeculativeBuildDelay(cells, originCell, wallCell, WALL_EXTRA_DELAY_MS),
-          buildAnimationDirection,
-          buildAnimationStart: buildStartedAt,
-          variant: 'wall' as const,
-          variantKey: wall.key,
-          visibility: 'visible' as const,
-          bakedLightField: bakedLightField ?? undefined,
-          bakedLightDirection: wall.bakedLightDirection,
-          bakedLightDirectionSecondary: wall.bakedLightDirectionSecondary,
-          objectProps: wall.objectProps,
-        }
-      }),
-    ...bundle.corners
-      .filter((corner) => corner.wallKeys.some((wallKey) => isWallKeyRelatedToCells(wallKey, relatedCellKeys)))
-      .map((corner) => {
-        const cornerCell = getFirstWallCellForPreview(corner.wallKeys, relatedCellKeys) ?? cells[0] ?? [0, 0]
-        const interiorDirections = getCornerInteriorLightDirections(corner.wallKeys)
-        return {
-          key: corner.key,
-          assetId: corner.assetId,
-          position: corner.position,
-          rotation: corner.rotation,
-          buildAnimationDelay: getSpeculativeBuildDelay(cells, originCell, cornerCell, WALL_EXTRA_DELAY_MS),
-          buildAnimationDirection,
-          buildAnimationStart: buildStartedAt,
-          variant: 'prop' as const,
-          variantKey: corner.key,
-          visibility: 'visible' as const,
-          bakedLightField: bakedLightField ?? undefined,
-          bakedLightDirection: interiorDirections.primary,
-          bakedLightDirectionSecondary: interiorDirections.secondary,
-          objectProps: corner.wallKeys.length > 0
-            ? {
-              ...(corner.objectProps ?? {}),
-              __transientCornerWallKeys: corner.wallKeys.join('|'),
-            }
-            : corner.objectProps,
-        }
-      }),
   ]
 }
 
@@ -359,20 +315,6 @@ export function buildTransientRoomEntrySignature(entry: StaticTileEntry) {
     entry.fogCell?.join(',') ?? '',
     JSON.stringify(entry.objectProps ?? null),
   ].join('|')
-}
-
-function isWallKeyRelatedToCells(wallKey: string, cellKeys: ReadonlySet<string>) {
-  return getWallPreviewCells(wallKey).some((cell) => cellKeys.has(getCellKey(cell)))
-}
-
-function getFirstWallCellForPreview(wallKeys: readonly string[], cellKeys: ReadonlySet<string>) {
-  for (const wallKey of wallKeys) {
-    const cell = getWallPreviewCells(wallKey).find((candidate) => cellKeys.has(getCellKey(candidate)))
-    if (cell) {
-      return cell
-    }
-  }
-  return null
 }
 
 function getWallPreviewCells(wallKey: string): GridCell[] {

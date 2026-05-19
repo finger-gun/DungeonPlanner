@@ -1,6 +1,8 @@
 import { SquareMousePointer, Brush, VectorSquare, BrickWall } from 'lucide-react'
 import { useDungeonStore, type RoomEditMode, type RoomPaintMode } from '../../store/useDungeonStore'
 
+const WALLS_MODE_LABEL = 'Spline walls'
+
 type RoomContextTool =
   | {
       id: RoomPaintMode
@@ -37,7 +39,7 @@ const ROOM_TOOLS: RoomContextTool[] = [
   {
     id: 'walls' as const,
     type: 'edit-mode',
-    label: 'Inner walls',
+    label: WALLS_MODE_LABEL,
     Icon: BrickWall,
   },
 ]

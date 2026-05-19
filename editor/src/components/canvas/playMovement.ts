@@ -1,6 +1,13 @@
 import { GRID_SIZE, getCellKey, type GridCell } from '../../hooks/useSnapToGrid'
 import { getCanonicalInnerWallKey, type InnerWallRecord } from '../../store/manualWalls'
 import { buildOpenWallSegmentSet } from '../../store/openWallSegments'
+import {
+  createActiveSplineWallQueryCache,
+  doesLineCrossBlockingSplineWall,
+  getSplineRoomCellCoverage,
+  type SplineWallQueryCache,
+} from '../../store/splineWallQueries'
+import type { SplineWallGraph } from '../../store/splineWallGraph'
 import { isWallBoundary, type WallDirection } from '../../store/wallSegments'
 import type {
   BlockedCells,
@@ -42,7 +49,10 @@ type BuildMovementRangeInput = {
   innerWalls: Record<string, InnerWallRecord>
   occupancy: Record<string, string>
   placedObjects: Record<string, DungeonObjectRecord>
+  splineWallGraph?: SplineWallGraph
 }
+
+const MIN_MOVEMENT_ROOM_COVERAGE = 0.75
 
 export function getObjectMovementMeters(object: Pick<DungeonObjectRecord, 'props'>) {
   const movementMeters = object.props.movementMeters
@@ -71,6 +81,7 @@ export function buildMovementRange({
   innerWalls,
   occupancy,
   placedObjects,
+  splineWallGraph,
 }: BuildMovementRangeInput): MovementRange {
   const meters = getObjectMovementMeters(object)
   const squares = metersToSquares(meters)
@@ -79,6 +90,9 @@ export function buildMovementRange({
   const reachableCells: GridCell[] = [[originCell[0], originCell[1]]]
   const queue: Array<{ cell: GridCell, steps: number }> = [{ cell: originCell, steps: 0 }]
   const suppressedBoundaryWalls = buildOpenWallSegmentSet(wallOpenings, wallSurfaceAssetIds, wallSurfaceProps)
+  const splineWallQueryCache = mapMode === 'outdoor'
+    ? null
+    : createIndoorMovementQueryCache(splineWallGraph, paintedCells, wallOpenings)
 
   for (let index = 0; index < queue.length; index += 1) {
     const current = queue[index]
@@ -102,6 +116,7 @@ export function buildMovementRange({
         mapMode,
         paintedCells,
         blockedCells,
+        splineWallQueryCache,
         occupancy,
         placedObjects,
       })) {
@@ -117,6 +132,7 @@ export function buildMovementRange({
           object,
           paintedCells,
           blockedCells,
+          splineWallQueryCache,
           suppressedBoundaryWalls,
           innerWalls,
           occupancy,
@@ -148,6 +164,7 @@ function canTraverseCell({
   mapMode,
   paintedCells,
   blockedCells,
+  splineWallQueryCache,
   occupancy,
   placedObjects,
 }: {
@@ -156,12 +173,23 @@ function canTraverseCell({
   mapMode: MapMode
   paintedCells: PaintedCells
   blockedCells: BlockedCells
+  splineWallQueryCache: SplineWallQueryCache | null
   occupancy: Record<string, string>
   placedObjects: Record<string, DungeonObjectRecord>
 }) {
   const cellKey = getCellKey(cell)
   if (mapMode !== 'outdoor' && !paintedCells[cellKey]) {
     return false
+  }
+
+  if (mapMode !== 'outdoor' && splineWallQueryCache) {
+    const roomId = paintedCells[cellKey]?.roomId
+    if (roomId) {
+      const coverage = getSplineRoomCellCoverage(splineWallQueryCache, roomId, cell)
+      if (coverage + 1e-5 < MIN_MOVEMENT_ROOM_COVERAGE) {
+        return false
+      }
+    }
   }
 
   if (mapMode === 'outdoor' && blockedCells[cellKey]) {
@@ -188,6 +216,7 @@ function canTraverseIndoorStep({
   object,
   paintedCells,
   blockedCells,
+  splineWallQueryCache,
   suppressedBoundaryWalls,
   innerWalls,
   occupancy,
@@ -200,6 +229,7 @@ function canTraverseIndoorStep({
   object: DungeonObjectRecord
   paintedCells: PaintedCells
   blockedCells: BlockedCells
+  splineWallQueryCache: SplineWallQueryCache | null
   suppressedBoundaryWalls: ReadonlySet<string>
   innerWalls: Record<string, InnerWallRecord>
   occupancy: Record<string, string>
@@ -210,7 +240,14 @@ function canTraverseIndoorStep({
   const deltaZ = to[1] - from[1]
 
   if (!diagonal) {
-    return isCardinalIndoorStepPassable(from, to, paintedCells, suppressedBoundaryWalls, innerWalls)
+    return isCardinalIndoorStepPassable(
+      from,
+      to,
+      paintedCells,
+      splineWallQueryCache,
+      suppressedBoundaryWalls,
+      innerWalls,
+    )
   }
 
   const intermediateA: GridCell = [from[0] + deltaX, from[1]]
@@ -222,6 +259,7 @@ function canTraverseIndoorStep({
     mapMode,
     paintedCells,
     blockedCells,
+    splineWallQueryCache,
     occupancy,
     placedObjects,
   })
@@ -231,17 +269,33 @@ function canTraverseIndoorStep({
       mapMode,
       paintedCells,
       blockedCells,
+      splineWallQueryCache,
       occupancy,
       placedObjects,
     })
-    && isCardinalIndoorStepPassable(from, intermediateA, paintedCells, suppressedBoundaryWalls, innerWalls)
-    && isCardinalIndoorStepPassable(from, intermediateB, paintedCells, suppressedBoundaryWalls, innerWalls)
+    && isCardinalIndoorStepPassable(
+      from,
+      intermediateA,
+      paintedCells,
+      splineWallQueryCache,
+      suppressedBoundaryWalls,
+      innerWalls,
+    )
+    && isCardinalIndoorStepPassable(
+      from,
+      intermediateB,
+      paintedCells,
+      splineWallQueryCache,
+      suppressedBoundaryWalls,
+      innerWalls,
+    )
 }
 
 function isCardinalIndoorStepPassable(
   from: GridCell,
   to: GridCell,
   paintedCells: PaintedCells,
+  splineWallQueryCache: SplineWallQueryCache | null,
   suppressedBoundaryWalls: ReadonlySet<string>,
   innerWalls: Record<string, InnerWallRecord>,
 ) {
@@ -251,12 +305,28 @@ function isCardinalIndoorStepPassable(
   }
 
   const wallKey = `${getCellKey(from)}:${direction}`
+  const canonicalInnerWallKey = getCanonicalInnerWallKey(wallKey, paintedCells)
+  if (canonicalInnerWallKey && innerWalls[canonicalInnerWallKey]) {
+    return false
+  }
+
+  if (suppressedBoundaryWalls.has(wallKey)) {
+    return true
+  }
+
+  if (splineWallQueryCache) {
+    return !doesLineCrossBlockingSplineWall(
+      splineWallQueryCache,
+      getCellCenterPoint(from),
+      getCellCenterPoint(to),
+    )
+  }
+
   if (isWallBoundary(from, to, paintedCells)) {
     return suppressedBoundaryWalls.has(wallKey)
   }
 
-  const canonicalInnerWallKey = getCanonicalInnerWallKey(wallKey, paintedCells)
-  return !(canonicalInnerWallKey && innerWalls[canonicalInnerWallKey])
+  return true
 }
 
 function getWallDirection(from: GridCell, to: GridCell): WallDirection | null {
@@ -268,4 +338,19 @@ function getWallDirection(from: GridCell, to: GridCell): WallDirection | null {
   if (deltaX === 0 && deltaZ === 1) return 'north'
   if (deltaX === 0 && deltaZ === -1) return 'south'
   return null
+}
+
+function createIndoorMovementQueryCache(
+  splineWallGraph: SplineWallGraph | undefined,
+  _paintedCells: PaintedCells,
+  _wallOpenings: Record<string, OpeningRecord>,
+) {
+  return createActiveSplineWallQueryCache(splineWallGraph)
+}
+
+function getCellCenterPoint(cell: GridCell): [number, number] {
+  return [
+    (cell[0] + 0.5) * GRID_SIZE,
+    (cell[1] + 0.5) * GRID_SIZE,
+  ]
 }

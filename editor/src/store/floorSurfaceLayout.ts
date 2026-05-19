@@ -11,6 +11,9 @@ import {
   type GridCell,
 } from '../hooks/useSnapToGrid'
 import type { PaintedCells, Room } from './useDungeonStore'
+import type { SplineWallGraph } from './splineWallGraph'
+import { createSplineWallQueryCache } from './splineWallQueries'
+import { buildCoveredCellsForPolygon } from './roomDraftClip'
 
 const SINGLE_TILE_SPAN = { gridWidth: 1, gridHeight: 1 } satisfies TileSpan
 const ZERO_ROTATION = [0, 0, 0] as const
@@ -32,6 +35,7 @@ export type FloorSurfacePlacement = {
   coveredCells: GridCell[]
   coveredCellKeys: string[]
   position: [number, number, number]
+  roomId?: string | null
 }
 
 export type FloorRenderGroup = {
@@ -39,6 +43,7 @@ export type FloorRenderGroup = {
   floorAssetId: string | null
   rotation: FloorRotation
   cells: GridCell[]
+  roomId?: string | null
 }
 
 export type FloorRenderPlan = {
@@ -102,6 +107,7 @@ export function createFloorSurfacePlacement(anchorCellKey: string, assetId: stri
     coveredCells: getFloorSurfaceCoveredCells(anchorCell, assetId),
     coveredCellKeys: getFloorSurfaceCoveredCells(anchorCell, assetId).map(getCellKey),
     position: getFloorSurfaceWorldPosition(anchorCell, assetId),
+    roomId: null,
   }
 }
 
@@ -126,7 +132,10 @@ export function buildFloorSurfacePlacements(
       }
 
       const placement = createFloorSurfacePlacement(anchorCellKey, assetId)
-      return placement ? [placement] : []
+      return placement ? [{
+        ...placement,
+        roomId: paintedCells[anchorCellKey]?.roomId ?? null,
+      }] : []
     })
 }
 
@@ -205,41 +214,93 @@ export function buildFloorRenderPlan(
   rooms: Record<string, Room>,
   globalFloorAssetId: string | null,
   floorTileAssetIds: Record<string, string>,
+  splineWallGraph?: SplineWallGraph | null,
 ): FloorRenderPlan {
   const surfacePlacements = buildFloorSurfacePlacements(paintedCells, floorTileAssetIds)
   const surfaceAnchorByCoveredCellKey = Object.fromEntries(
     surfacePlacements.flatMap((placement) =>
       placement.coveredCellKeys.map((cellKey) => [cellKey, placement.anchorCellKey])),
   ) as Record<string, string>
+  const surfaceAnchorByCoveredRoomCellKey = Object.fromEntries(
+    surfacePlacements.flatMap((placement) =>
+      placement.coveredCellKeys.map((cellKey) => [
+        getRoomScopedFloorCellKey(placement.roomId ?? null, cellKey),
+        placement.anchorCellKey,
+      ])),
+  ) as Record<string, string>
   const effectiveAssetIdsByCellKey: Record<string, string | null> = {}
   const effectiveRotationsByCellKey: Record<string, FloorRotation> = {}
   const baseGroups = new Map<string, FloorRenderGroup>()
+  const graphRoomCellsByRoomId = buildGraphRoomCellsByRoomId(paintedCells, splineWallGraph)
+  const graphRoomIds = new Set(Object.keys(graphRoomCellsByRoomId))
 
   surfacePlacements.forEach((placement) => {
     placement.coveredCellKeys.forEach((cellKey) => {
-      effectiveAssetIdsByCellKey[cellKey] = placement.assetId
-      effectiveRotationsByCellKey[cellKey] = ZERO_ROTATION
+      if (!(cellKey in effectiveAssetIdsByCellKey)) {
+        effectiveAssetIdsByCellKey[cellKey] = placement.assetId
+      }
+      if (!(cellKey in effectiveRotationsByCellKey)) {
+        effectiveRotationsByCellKey[cellKey] = ZERO_ROTATION
+      }
+    })
+  })
+
+  Object.entries(graphRoomCellsByRoomId).forEach(([roomId, cells]) => {
+    const room = rooms[roomId] ?? null
+    cells.forEach((cell) => {
+      const cellKey = getCellKey(cell)
+      if (surfaceAnchorByCoveredRoomCellKey[getRoomScopedFloorCellKey(roomId, cellKey)]) {
+        return
+      }
+
+      const resolvedFloor = resolveInheritedFloorRender(
+        room,
+        cell,
+        globalFloorAssetId,
+      )
+      const groupKey = `${roomId}:${resolvedFloor.groupKey}`
+      if (!baseGroups.has(groupKey)) {
+        baseGroups.set(groupKey, {
+          groupKey,
+          floorAssetId: resolvedFloor.assetId,
+          rotation: resolvedFloor.rotation,
+          cells: [],
+          roomId,
+        })
+      }
+      baseGroups.get(groupKey)!.cells.push(cell)
+      if (!(cellKey in effectiveAssetIdsByCellKey)) {
+        effectiveAssetIdsByCellKey[cellKey] = resolvedFloor.assetId
+      }
+      if (!(cellKey in effectiveRotationsByCellKey)) {
+        effectiveRotationsByCellKey[cellKey] = resolvedFloor.rotation
+      }
     })
   })
 
   Object.entries(paintedCells).forEach(([cellKey, record]) => {
-    if (surfaceAnchorByCoveredCellKey[cellKey]) {
+    if (record.roomId && graphRoomIds.has(record.roomId)) {
       return
     }
 
-    const resolvedFloor = resolveInheritedFloorRenderForCellKey(
-      cellKey,
-      paintedCells,
-      rooms,
+    if (surfaceAnchorByCoveredRoomCellKey[getRoomScopedFloorCellKey(record.roomId ?? null, cellKey)]) {
+      return
+    }
+
+    const resolvedFloor = resolveInheritedFloorRender(
+      record.roomId ? rooms[record.roomId] : null,
+      record.cell,
       globalFloorAssetId,
     )
-    const groupKey = resolvedFloor.groupKey
+    const roomId = record.roomId ?? null
+    const groupKey = `${roomId ?? 'legacy'}:${resolvedFloor.groupKey}`
     if (!baseGroups.has(groupKey)) {
       baseGroups.set(groupKey, {
         groupKey,
         floorAssetId: resolvedFloor.assetId,
         rotation: resolvedFloor.rotation,
         cells: [],
+        roomId,
       })
     }
     baseGroups.get(groupKey)!.cells.push(record.cell)
@@ -256,6 +317,74 @@ export function buildFloorRenderPlan(
   }
 }
 
+function buildGraphRoomCellsByRoomId(
+  paintedCells: PaintedCells,
+  splineWallGraph: SplineWallGraph | null | undefined,
+) {
+  if (!splineWallGraph) {
+    return {} as Record<string, GridCell[]>
+  }
+
+  const roomIds = new Set(
+    Object.values(paintedCells)
+      .map((record) => record.roomId)
+      .filter((roomId): roomId is string => typeof roomId === 'string' && roomId.length > 0),
+  )
+  if (roomIds.size === 0) {
+    return {} as Record<string, GridCell[]>
+  }
+
+  const queryCache = createSplineWallQueryCache(splineWallGraph, { roomIds })
+  return Object.fromEntries(
+    Object.entries(queryCache.rooms).flatMap(([roomId, room]) => {
+      const coveredCells: GridCell[] = []
+      const seenCellKeys = new Set<string>()
+
+      room.polygons.forEach((polygon) => {
+        buildCoveredCellsForPolygon(polygon, getPolygonGridBounds(polygon)).forEach((cell) => {
+          const cellKey = getCellKey(cell)
+          if (seenCellKeys.has(cellKey)) {
+            return
+          }
+          seenCellKeys.add(cellKey)
+          coveredCells.push(cell)
+        })
+      })
+
+      return coveredCells.length > 0
+        ? [[roomId, coveredCells] as const]
+        : []
+    }),
+  )
+}
+
+function getPolygonGridBounds(
+  polygon: readonly (readonly [number, number])[],
+) {
+  const worldBounds = polygon.reduce((bounds, point) => ({
+    minX: Math.min(bounds.minX, point[0]),
+    maxX: Math.max(bounds.maxX, point[0]),
+    minZ: Math.min(bounds.minZ, point[1]),
+    maxZ: Math.max(bounds.maxZ, point[1]),
+  }), {
+    minX: Number.POSITIVE_INFINITY,
+    maxX: Number.NEGATIVE_INFINITY,
+    minZ: Number.POSITIVE_INFINITY,
+    maxZ: Number.NEGATIVE_INFINITY,
+  })
+
+  return {
+    minX: Math.floor(worldBounds.minX / GRID_SIZE),
+    maxX: Math.ceil(worldBounds.maxX / GRID_SIZE) - 1,
+    minZ: Math.floor(worldBounds.minZ / GRID_SIZE),
+    maxZ: Math.ceil(worldBounds.maxZ / GRID_SIZE) - 1,
+  }
+}
+
+function getRoomScopedFloorCellKey(roomId: string | null, cellKey: string) {
+  return `${roomId ?? 'legacy'}:${cellKey}`
+}
+
 function resolveInheritedFloorRenderForCellKey(
   cellKey: string,
   paintedCells: PaintedCells,
@@ -263,9 +392,19 @@ function resolveInheritedFloorRenderForCellKey(
   globalFloorAssetId: string | null,
 ): ResolvedInheritedFloorRender {
   const record = paintedCells[cellKey]
-  const room = record?.roomId ? rooms[record.roomId] : null
   const cell = record?.cell ?? parseFloorCellKey(cellKey)
+  return resolveInheritedFloorRender(
+    record?.roomId ? rooms[record.roomId] : null,
+    cell,
+    globalFloorAssetId,
+  )
+}
 
+function resolveInheritedFloorRender(
+  room: Room | null | undefined,
+  cell: GridCell | null | undefined,
+  globalFloorAssetId: string | null,
+): ResolvedInheritedFloorRender {
   if (room?.floorAssetId) {
     return createResolvedInheritedFloorRender(room.floorAssetId, ZERO_ROTATION)
   }

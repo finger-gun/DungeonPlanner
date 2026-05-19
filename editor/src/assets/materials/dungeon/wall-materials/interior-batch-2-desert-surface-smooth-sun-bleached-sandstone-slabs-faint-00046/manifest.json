@@ -1,0 +1,13 @@
+{
+  "id": "interior-batch-2-desert-surface-smooth-sun-bleached-sandstone-slabs-faint-00046",
+  "name": "Desert Surface Smooth Sun Bleached Sandstone Slabs Faint 00046",
+  "sourceImage": "/Volumes/roblinas/sd/batch 2/wall_00046_.png",
+  "sourceDepth": "/Volumes/roblinas/sd/batch 2/wall_00046_.png_00001_.png",
+  "size": 1024,
+  "normalStrength": 4,
+  "parallaxScale": 0.12,
+  "parallaxSteps": 16,
+  "bumpScale": 0.16,
+  "parallaxInvert": true,
+  "heightMean": 0.3406
+}

@@ -1,0 +1,1990 @@
+[
+  {
+    "id": "dungeon-stone",
+    "name": "Dungeon Stone",
+    "previewImagePath": "../../assets/materials/dungeon/wall-materials/kaykit-stone/wall_albedo.png",
+    "structuralCore": {
+      "profile": "wainscot-core",
+      "material": "kaykit-stone-cap",
+      "render": {
+        "hiddenProfileSegmentIndices": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6
+        ]
+      }
+    },
+    "roomFace": {
+      "profile": "wainscot-room-face",
+      "material": "keep-room-stone"
+    },
+    "roomFaceDetails": [
+      {
+        "profile": "wainscot-room-base",
+        "material": "tavern-wood-base"
+      }
+    ],
+    "exteriorFace": {
+      "profile": "wainscot-exterior-face",
+      "material": "kaykit-stone-exterior-muted"
+    },
+    "joinMode": "cover-piece",
+    "curvatureLimits": {
+      "minInnerRadius": 1.2,
+      "maxTurnDegrees": 135
+    },
+    "openingRules": {
+      "defaultMode": "structural",
+      "supportedModes": [
+        "framed",
+        "structural"
+      ],
+      "supportedKinds": [
+        "door",
+        "window",
+        "passage"
+      ],
+      "compatibleAssetIds": [
+        "core.opening_door_custom",
+        "core.opening_door_wall_1",
+        "dungeon.wall_wall_opening"
+      ]
+    }
+  },
+  {
+    "id": "rocky-cave",
+    "name": "Rocky Cave",
+    "previewImagePath": "../../assets/materials/dungeon/wall-materials/rough-rockface-1-pbr-material/Rough-rockface1_Base_Color.png",
+    "structuralCore": {
+      "profile": "cave-rock-core",
+      "material": "rocky-cave-wall"
+    },
+    "roomFace": {
+      "profile": "cave-rock-room-face",
+      "material": "rocky-cave-wall"
+    },
+    "exteriorFace": {
+      "profile": "cave-rock-exterior-face",
+      "material": "rocky-cave-wall"
+    },
+    "joinMode": "bevel",
+    "inserts": [
+      {
+        "assetId": "dungeon.props_pillars_cave_pillar",
+        "anchors": [
+          "start",
+          "end",
+          "convex-corner",
+          "curvature-change"
+        ]
+      }
+    ],
+    "curvatureLimits": {
+      "minInnerRadius": 1,
+      "maxTurnDegrees": 145
+    },
+    "openingRules": {
+      "defaultMode": "structural",
+      "supportedModes": [
+        "framed",
+        "structural"
+      ],
+      "supportedKinds": [
+        "door",
+        "window",
+        "passage"
+      ],
+      "compatibleAssetIds": [
+        "core.opening_door_custom",
+        "core.opening_door_wall_1",
+        "dungeon.wall_wall_opening"
+      ]
+    }
+  },
+  {
+    "id": "art-deco-cobblestone",
+    "name": "Art Deco Cobblestone",
+    "previewImagePath": "../../assets/materials/dungeon/wall-materials/classy-art-deco-wallpaper/classy-art-deco-wallpaper_preview.png",
+    "structuralCore": {
+      "profile": "wainscot-core",
+      "material": "kaykit-stone-cap",
+      "render": {
+        "hiddenProfileSegmentIndices": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6
+        ]
+      }
+    },
+    "roomFace": {
+      "profile": "wainscot-room-face",
+      "material": "modern-brick-room"
+    },
+    "roomFaceDetails": [
+      {
+        "profile": "wainscot-room-base",
+        "material": "tavern-wood-base"
+      }
+    ],
+    "exteriorFace": {
+      "profile": "wainscot-exterior-face",
+      "material": "kaykit-stone-exterior-muted"
+    },
+    "joinMode": "cover-piece",
+    "curvatureLimits": {
+      "minInnerRadius": 1.5,
+      "maxTurnDegrees": 120
+    },
+    "openingRules": {
+      "defaultMode": "structural",
+      "supportedModes": [
+        "framed",
+        "structural"
+      ],
+      "supportedKinds": [
+        "door",
+        "window",
+        "passage"
+      ],
+      "compatibleAssetIds": [
+        "core.opening_door_custom",
+        "core.opening_door_wall_1",
+        "dungeon.wall_wall_opening"
+      ]
+    }
+  },
+  {
+    "id": "stone-keep",
+    "name": "Stone Keep",
+    "previewImagePath": "../../assets/materials/dungeon/wall-materials/kaykit-stone/wall_albedo.png",
+    "structuralCore": {
+      "profile": "thick-stone-core",
+      "material": "keep-core-blue"
+    },
+    "roomFace": {
+      "profile": "sloped-stone-room-face",
+      "material": "keep-room-stone"
+    },
+    "exteriorFace": {
+      "profile": "sloped-stone-exterior-face",
+      "material": "wedged-cobblestone-exterior"
+    },
+    "joinMode": "cover-piece",
+    "curvatureLimits": {
+      "minInnerRadius": 1.2,
+      "maxTurnDegrees": 135
+    },
+    "openingRules": {
+      "defaultMode": "structural",
+      "supportedModes": [
+        "framed",
+        "structural"
+      ],
+      "supportedKinds": [
+        "door",
+        "window",
+        "passage"
+      ],
+      "compatibleAssetIds": [
+        "core.opening_door_custom",
+        "core.opening_door_wall_1",
+        "dungeon.wall_wall_opening"
+      ]
+    }
+  },
+  {
+    "id": "manor-plaster",
+    "name": "Manor Plaster",
+    "previewImagePath": "../../assets/materials/dungeon/wall-materials/kaykit-stone/wall_albedo.png",
+    "structuralCore": {
+      "profile": "plaster-core",
+      "material": "manor-core"
+    },
+    "roomFace": {
+      "profile": "soft-plaster-room-face",
+      "material": "manor-room-plaster"
+    },
+    "exteriorFace": {
+      "profile": "soft-plaster-exterior-face",
+      "material": "manor-exterior-stone"
+    },
+    "joinMode": "bevel",
+    "curvatureLimits": {
+      "minInnerRadius": 1.5,
+      "maxTurnDegrees": 120
+    },
+    "openingRules": {
+      "defaultMode": "sleeve",
+      "supportedModes": [
+        "framed",
+        "sleeve"
+      ],
+      "supportedKinds": [
+        "door",
+        "window",
+        "passage"
+      ],
+      "compatibleAssetIds": [
+        "core.opening_door_custom",
+        "core.opening_door_wall_1",
+        "dungeon.wall_wall_opening"
+      ]
+    }
+  },
+  {
+    "id": "ai-gothic",
+    "name": "AI Gothic",
+    "previewImagePath": "../../assets/materials/dungeon/wall-materials/ai-gothic-depth-wall/wall_albedo.png",
+    "structuralCore": {
+      "profile": "thick-stone-core",
+      "material": "ai-gothic-depth-wall",
+      "render": {
+        "hiddenProfileSegmentIndices": [
+          0,
+          1,
+          2
+        ]
+      }
+    },
+    "roomFace": {
+      "profile": "ai-gothic-wall-face",
+      "material": "ai-gothic-depth-wall"
+    },
+    "exteriorFace": {
+      "profile": "ai-gothic-wall-face",
+      "material": "ai-gothic-depth-wall"
+    },
+    "joinMode": "cover-piece",
+    "curvatureLimits": {
+      "minInnerRadius": 1.2,
+      "maxTurnDegrees": 135
+    },
+    "openingRules": {
+      "defaultMode": "structural",
+      "supportedModes": [
+        "framed",
+        "structural"
+      ],
+      "supportedKinds": [
+        "door",
+        "window",
+        "passage"
+      ],
+      "compatibleAssetIds": [
+        "core.opening_door_custom",
+        "core.opening_door_wall_1",
+        "dungeon.wall_wall_opening"
+      ]
+    }
+  },
+  {
+    "id": "interior-medieval-tavern-white-plaster-wooden-beam-1009962922313807",
+    "name": "Medieval Tavern White Plaster Wooden Beam 1009962922313807",
+    "previewImagePath": "../../assets/materials/dungeon/wall-materials/interior-medieval-tavern-white-plaster-wooden-beam-1009962922313807/wall_albedo.png",
+    "structuralCore": {
+      "profile": "thick-stone-core",
+      "material": "interior-medieval-tavern-white-plaster-wooden-beam-1009962922313807",
+      "render": {
+        "hiddenProfileSegmentIndices": [
+          0,
+          1,
+          2
+        ]
+      }
+    },
+    "roomFace": {
+      "profile": "ai-gothic-wall-face",
+      "material": "interior-medieval-tavern-white-plaster-wooden-beam-1009962922313807"
+    },
+    "exteriorFace": {
+      "profile": "ai-gothic-wall-face",
+      "material": "interior-medieval-tavern-white-plaster-wooden-beam-1009962922313807"
+    },
+    "joinMode": "cover-piece",
+    "curvatureLimits": {
+      "minInnerRadius": 1.2,
+      "maxTurnDegrees": 135
+    },
+    "openingRules": {
+      "defaultMode": "structural",
+      "supportedModes": [
+        "framed",
+        "structural"
+      ],
+      "supportedKinds": [
+        "door",
+        "window",
+        "passage"
+      ],
+      "compatibleAssetIds": [
+        "core.opening_door_custom",
+        "core.opening_door_wall_1",
+        "dungeon.wall_wall_opening"
+      ]
+    }
+  },
+  {
+    "id": "interior-alchemist-lab-soot-stained-copper-plating-over-dark-1031203801395027",
+    "name": "Alchemist Lab Soot Stained Copper Plating Over Dark 1031203801395027",
+    "previewImagePath": "../../assets/materials/dungeon/wall-materials/interior-alchemist-lab-soot-stained-copper-plating-over-dark-1031203801395027/wall_albedo.png",
+    "structuralCore": {
+      "profile": "thick-stone-core",
+      "material": "interior-alchemist-lab-soot-stained-copper-plating-over-dark-1031203801395027",
+      "render": {
+        "hiddenProfileSegmentIndices": [
+          0,
+          1,
+          2
+        ]
+      }
+    },
+    "roomFace": {
+      "profile": "ai-gothic-wall-face",
+      "material": "interior-alchemist-lab-soot-stained-copper-plating-over-dark-1031203801395027"
+    },
+    "exteriorFace": {
+      "profile": "ai-gothic-wall-face",
+      "material": "interior-alchemist-lab-soot-stained-copper-plating-over-dark-1031203801395027"
+    },
+    "joinMode": "cover-piece",
+    "curvatureLimits": {
+      "minInnerRadius": 1.2,
+      "maxTurnDegrees": 135
+    },
+    "openingRules": {
+      "defaultMode": "structural",
+      "supportedModes": [
+        "framed",
+        "structural"
+      ],
+      "supportedKinds": [
+        "door",
+        "window",
+        "passage"
+      ],
+      "compatibleAssetIds": [
+        "core.opening_door_custom",
+        "core.opening_door_wall_1",
+        "dungeon.wall_wall_opening"
+      ]
+    }
+  },
+  {
+    "id": "interior-dark-fortress-cracked-obsidian-blocks-dried-dark-1117528295906863",
+    "name": "Dark Fortress Cracked Obsidian Blocks Dried Dark 1117528295906863",
+    "previewImagePath": "../../assets/materials/dungeon/wall-materials/interior-dark-fortress-cracked-obsidian-blocks-dried-dark-1117528295906863/wall_albedo.png",
+    "structuralCore": {
+      "profile": "thick-stone-core",
+      "material": "interior-dark-fortress-cracked-obsidian-blocks-dried-dark-1117528295906863",
+      "render": {
+        "hiddenProfileSegmentIndices": [
+          0,
+          1,
+          2
+        ]
+      }
+    },
+    "roomFace": {
+      "profile": "ai-gothic-wall-face",
+      "material": "interior-dark-fortress-cracked-obsidian-blocks-dried-dark-1117528295906863"
+    },
+    "exteriorFace": {
+      "profile": "ai-gothic-wall-face",
+      "material": "interior-dark-fortress-cracked-obsidian-blocks-dried-dark-1117528295906863"
+    },
+    "joinMode": "cover-piece",
+    "curvatureLimits": {
+      "minInnerRadius": 1.2,
+      "maxTurnDegrees": 135
+    },
+    "openingRules": {
+      "defaultMode": "structural",
+      "supportedModes": [
+        "framed",
+        "structural"
+      ],
+      "supportedKinds": [
+        "door",
+        "window",
+        "passage"
+      ],
+      "compatibleAssetIds": [
+        "core.opening_door_custom",
+        "core.opening_door_wall_1",
+        "dungeon.wall_wall_opening"
+      ]
+    }
+  },
+  {
+    "id": "interior-mage-tower-interior-deep-violet-stonework-floating-301922952923075",
+    "name": "Mage Tower Interior Deep Violet Stonework Floating 301922952923075",
+    "previewImagePath": "../../assets/materials/dungeon/wall-materials/interior-mage-tower-interior-deep-violet-stonework-floating-301922952923075/wall_albedo.png",
+    "structuralCore": {
+      "profile": "thick-stone-core",
+      "material": "interior-mage-tower-interior-deep-violet-stonework-floating-301922952923075",
+      "render": {
+        "hiddenProfileSegmentIndices": [
+          0,
+          1,
+          2
+        ]
+      }
+    },
+    "roomFace": {
+      "profile": "ai-gothic-wall-face",
+      "material": "interior-mage-tower-interior-deep-violet-stonework-floating-301922952923075"
+    },
+    "exteriorFace": {
+      "profile": "ai-gothic-wall-face",
+      "material": "interior-mage-tower-interior-deep-violet-stonework-floating-301922952923075"
+    },
+    "joinMode": "cover-piece",
+    "curvatureLimits": {
+      "minInnerRadius": 1.2,
+      "maxTurnDegrees": 135
+    },
+    "openingRules": {
+      "defaultMode": "structural",
+      "supportedModes": [
+        "framed",
+        "structural"
+      ],
+      "supportedKinds": [
+        "door",
+        "window",
+        "passage"
+      ],
+      "compatibleAssetIds": [
+        "core.opening_door_custom",
+        "core.opening_door_wall_1",
+        "dungeon.wall_wall_opening"
+      ]
+    }
+  },
+  {
+    "id": "interior-cave-rough-rocky-stone-algee-is-growing-351933038702829",
+    "name": "Cave Rough Rocky Stone Algee Is Growing 351933038702829",
+    "previewImagePath": "../../assets/materials/dungeon/wall-materials/interior-cave-rough-rocky-stone-algee-is-growing-351933038702829/wall_albedo.png",
+    "structuralCore": {
+      "profile": "thick-stone-core",
+      "material": "interior-cave-rough-rocky-stone-algee-is-growing-351933038702829",
+      "render": {
+        "hiddenProfileSegmentIndices": [
+          0,
+          1,
+          2
+        ]
+      }
+    },
+    "roomFace": {
+      "profile": "ai-gothic-wall-face",
+      "material": "interior-cave-rough-rocky-stone-algee-is-growing-351933038702829"
+    },
+    "exteriorFace": {
+      "profile": "ai-gothic-wall-face",
+      "material": "interior-cave-rough-rocky-stone-algee-is-growing-351933038702829"
+    },
+    "joinMode": "cover-piece",
+    "curvatureLimits": {
+      "minInnerRadius": 1.2,
+      "maxTurnDegrees": 135
+    },
+    "openingRules": {
+      "defaultMode": "structural",
+      "supportedModes": [
+        "framed",
+        "structural"
+      ],
+      "supportedKinds": [
+        "door",
+        "window",
+        "passage"
+      ],
+      "compatibleAssetIds": [
+        "core.opening_door_custom",
+        "core.opening_door_wall_1",
+        "dungeon.wall_wall_opening"
+      ]
+    }
+  },
+  {
+    "id": "interior-opulent-castle-interior-rich-black-wallpaper-subtle-368232333986979",
+    "name": "Opulent Castle Interior Rich Black Wallpaper Subtle 368232333986979",
+    "previewImagePath": "../../assets/materials/dungeon/wall-materials/interior-opulent-castle-interior-rich-black-wallpaper-subtle-368232333986979/wall_albedo.png",
+    "structuralCore": {
+      "profile": "thick-stone-core",
+      "material": "interior-opulent-castle-interior-rich-black-wallpaper-subtle-368232333986979",
+      "render": {
+        "hiddenProfileSegmentIndices": [
+          0,
+          1,
+          2
+        ]
+      }
+    },
+    "roomFace": {
+      "profile": "ai-gothic-wall-face",
+      "material": "interior-opulent-castle-interior-rich-black-wallpaper-subtle-368232333986979"
+    },
+    "exteriorFace": {
+      "profile": "ai-gothic-wall-face",
+      "material": "interior-opulent-castle-interior-rich-black-wallpaper-subtle-368232333986979"
+    },
+    "joinMode": "cover-piece",
+    "curvatureLimits": {
+      "minInnerRadius": 1.2,
+      "maxTurnDegrees": 135
+    },
+    "openingRules": {
+      "defaultMode": "structural",
+      "supportedModes": [
+        "framed",
+        "structural"
+      ],
+      "supportedKinds": [
+        "door",
+        "window",
+        "passage"
+      ],
+      "compatibleAssetIds": [
+        "core.opening_door_custom",
+        "core.opening_door_wall_1",
+        "dungeon.wall_wall_opening"
+      ]
+    }
+  },
+  {
+    "id": "interior-medieval-wizard-library-389444287740664",
+    "name": "Medieval Wizard Library 389444287740664",
+    "previewImagePath": "../../assets/materials/dungeon/wall-materials/interior-medieval-wizard-library-389444287740664/wall_albedo.png",
+    "structuralCore": {
+      "profile": "thick-stone-core",
+      "material": "interior-medieval-wizard-library-389444287740664",
+      "render": {
+        "hiddenProfileSegmentIndices": [
+          0,
+          1,
+          2
+        ]
+      }
+    },
+    "roomFace": {
+      "profile": "ai-gothic-wall-face",
+      "material": "interior-medieval-wizard-library-389444287740664"
+    },
+    "exteriorFace": {
+      "profile": "ai-gothic-wall-face",
+      "material": "interior-medieval-wizard-library-389444287740664"
+    },
+    "joinMode": "cover-piece",
+    "curvatureLimits": {
+      "minInnerRadius": 1.2,
+      "maxTurnDegrees": 135
+    },
+    "openingRules": {
+      "defaultMode": "structural",
+      "supportedModes": [
+        "framed",
+        "structural"
+      ],
+      "supportedKinds": [
+        "door",
+        "window",
+        "passage"
+      ],
+      "compatibleAssetIds": [
+        "core.opening_door_custom",
+        "core.opening_door_wall_1",
+        "dungeon.wall_wall_opening"
+      ]
+    }
+  },
+  {
+    "id": "interior-gothic-mausoleum-carved-black-marble-slabs-glowing-414262265974828",
+    "name": "Gothic Mausoleum Carved Black Marble Slabs Glowing 414262265974828",
+    "previewImagePath": "../../assets/materials/dungeon/wall-materials/interior-gothic-mausoleum-carved-black-marble-slabs-glowing-414262265974828/wall_albedo.png",
+    "structuralCore": {
+      "profile": "thick-stone-core",
+      "material": "interior-gothic-mausoleum-carved-black-marble-slabs-glowing-414262265974828",
+      "render": {
+        "hiddenProfileSegmentIndices": [
+          0,
+          1,
+          2
+        ]
+      }
+    },
+    "roomFace": {
+      "profile": "ai-gothic-wall-face",
+      "material": "interior-gothic-mausoleum-carved-black-marble-slabs-glowing-414262265974828"
+    },
+    "exteriorFace": {
+      "profile": "ai-gothic-wall-face",
+      "material": "interior-gothic-mausoleum-carved-black-marble-slabs-glowing-414262265974828"
+    },
+    "joinMode": "cover-piece",
+    "curvatureLimits": {
+      "minInnerRadius": 1.2,
+      "maxTurnDegrees": 135
+    },
+    "openingRules": {
+      "defaultMode": "structural",
+      "supportedModes": [
+        "framed",
+        "structural"
+      ],
+      "supportedKinds": [
+        "door",
+        "window",
+        "passage"
+      ],
+      "compatibleAssetIds": [
+        "core.opening_door_custom",
+        "core.opening_door_wall_1",
+        "dungeon.wall_wall_opening"
+      ]
+    }
+  },
+  {
+    "id": "interior-opulent-castle-interior-rich-crimson-wallpaper-subtle-449957065253690",
+    "name": "Opulent Castle Interior Rich Crimson Wallpaper Subtle 449957065253690",
+    "previewImagePath": "../../assets/materials/dungeon/wall-materials/interior-opulent-castle-interior-rich-crimson-wallpaper-subtle-449957065253690/wall_albedo.png",
+    "structuralCore": {
+      "profile": "thick-stone-core",
+      "material": "interior-opulent-castle-interior-rich-crimson-wallpaper-subtle-449957065253690",
+      "render": {
+        "hiddenProfileSegmentIndices": [
+          0,
+          1,
+          2
+        ]
+      }
+    },
+    "roomFace": {
+      "profile": "ai-gothic-wall-face",
+      "material": "interior-opulent-castle-interior-rich-crimson-wallpaper-subtle-449957065253690"
+    },
+    "exteriorFace": {
+      "profile": "ai-gothic-wall-face",
+      "material": "interior-opulent-castle-interior-rich-crimson-wallpaper-subtle-449957065253690"
+    },
+    "joinMode": "cover-piece",
+    "curvatureLimits": {
+      "minInnerRadius": 1.2,
+      "maxTurnDegrees": 135
+    },
+    "openingRules": {
+      "defaultMode": "structural",
+      "supportedModes": [
+        "framed",
+        "structural"
+      ],
+      "supportedKinds": [
+        "door",
+        "window",
+        "passage"
+      ],
+      "compatibleAssetIds": [
+        "core.opening_door_custom",
+        "core.opening_door_wall_1",
+        "dungeon.wall_wall_opening"
+      ]
+    }
+  },
+  {
+    "id": "interior-cave-rough-stone-algee-is-growing-on-552663252810451",
+    "name": "Cave Rough Stone Algee Is Growing On 552663252810451",
+    "previewImagePath": "../../assets/materials/dungeon/wall-materials/interior-cave-rough-stone-algee-is-growing-on-552663252810451/wall_albedo.png",
+    "structuralCore": {
+      "profile": "thick-stone-core",
+      "material": "interior-cave-rough-stone-algee-is-growing-on-552663252810451",
+      "render": {
+        "hiddenProfileSegmentIndices": [
+          0,
+          1,
+          2
+        ]
+      }
+    },
+    "roomFace": {
+      "profile": "ai-gothic-wall-face",
+      "material": "interior-cave-rough-stone-algee-is-growing-on-552663252810451"
+    },
+    "exteriorFace": {
+      "profile": "ai-gothic-wall-face",
+      "material": "interior-cave-rough-stone-algee-is-growing-on-552663252810451"
+    },
+    "joinMode": "cover-piece",
+    "curvatureLimits": {
+      "minInnerRadius": 1.2,
+      "maxTurnDegrees": 135
+    },
+    "openingRules": {
+      "defaultMode": "structural",
+      "supportedModes": [
+        "framed",
+        "structural"
+      ],
+      "supportedKinds": [
+        "door",
+        "window",
+        "passage"
+      ],
+      "compatibleAssetIds": [
+        "core.opening_door_custom",
+        "core.opening_door_wall_1",
+        "dungeon.wall_wall_opening"
+      ]
+    }
+  },
+  {
+    "id": "interior-high-elf-palace-smooth-white-marble-blocks-elegant-553013712475021",
+    "name": "High Elf Palace Smooth White Marble Blocks Elegant 553013712475021",
+    "previewImagePath": "../../assets/materials/dungeon/wall-materials/interior-high-elf-palace-smooth-white-marble-blocks-elegant-553013712475021/wall_albedo.png",
+    "structuralCore": {
+      "profile": "thick-stone-core",
+      "material": "interior-high-elf-palace-smooth-white-marble-blocks-elegant-553013712475021",
+      "render": {
+        "hiddenProfileSegmentIndices": [
+          0,
+          1,
+          2
+        ]
+      }
+    },
+    "roomFace": {
+      "profile": "ai-gothic-wall-face",
+      "material": "interior-high-elf-palace-smooth-white-marble-blocks-elegant-553013712475021"
+    },
+    "exteriorFace": {
+      "profile": "ai-gothic-wall-face",
+      "material": "interior-high-elf-palace-smooth-white-marble-blocks-elegant-553013712475021"
+    },
+    "joinMode": "cover-piece",
+    "curvatureLimits": {
+      "minInnerRadius": 1.2,
+      "maxTurnDegrees": 135
+    },
+    "openingRules": {
+      "defaultMode": "structural",
+      "supportedModes": [
+        "framed",
+        "structural"
+      ],
+      "supportedKinds": [
+        "door",
+        "window",
+        "passage"
+      ],
+      "compatibleAssetIds": [
+        "core.opening_door_custom",
+        "core.opening_door_wall_1",
+        "dungeon.wall_wall_opening"
+      ]
+    }
+  },
+  {
+    "id": "interior-medieval-tavern-interior-558434739074972",
+    "name": "Medieval Tavern Interior 558434739074972",
+    "previewImagePath": "../../assets/materials/dungeon/wall-materials/interior-medieval-tavern-interior-558434739074972/wall_albedo.png",
+    "structuralCore": {
+      "profile": "thick-stone-core",
+      "material": "interior-medieval-tavern-interior-558434739074972",
+      "render": {
+        "hiddenProfileSegmentIndices": [
+          0,
+          1,
+          2
+        ]
+      }
+    },
+    "roomFace": {
+      "profile": "ai-gothic-wall-face",
+      "material": "interior-medieval-tavern-interior-558434739074972"
+    },
+    "exteriorFace": {
+      "profile": "ai-gothic-wall-face",
+      "material": "interior-medieval-tavern-interior-558434739074972"
+    },
+    "joinMode": "cover-piece",
+    "curvatureLimits": {
+      "minInnerRadius": 1.2,
+      "maxTurnDegrees": 135
+    },
+    "openingRules": {
+      "defaultMode": "structural",
+      "supportedModes": [
+        "framed",
+        "structural"
+      ],
+      "supportedKinds": [
+        "door",
+        "window",
+        "passage"
+      ],
+      "compatibleAssetIds": [
+        "core.opening_door_custom",
+        "core.opening_door_wall_1",
+        "dungeon.wall_wall_opening"
+      ]
+    }
+  },
+  {
+    "id": "interior-rotting-wooden-shack-uneven-vertical-green-tinted-planks-578654907928922",
+    "name": "Rotting Wooden Shack Uneven Vertical Green Tinted Planks 578654907928922",
+    "previewImagePath": "../../assets/materials/dungeon/wall-materials/interior-rotting-wooden-shack-uneven-vertical-green-tinted-planks-578654907928922/wall_albedo.png",
+    "structuralCore": {
+      "profile": "thick-stone-core",
+      "material": "interior-rotting-wooden-shack-uneven-vertical-green-tinted-planks-578654907928922",
+      "render": {
+        "hiddenProfileSegmentIndices": [
+          0,
+          1,
+          2
+        ]
+      }
+    },
+    "roomFace": {
+      "profile": "ai-gothic-wall-face",
+      "material": "interior-rotting-wooden-shack-uneven-vertical-green-tinted-planks-578654907928922"
+    },
+    "exteriorFace": {
+      "profile": "ai-gothic-wall-face",
+      "material": "interior-rotting-wooden-shack-uneven-vertical-green-tinted-planks-578654907928922"
+    },
+    "joinMode": "cover-piece",
+    "curvatureLimits": {
+      "minInnerRadius": 1.2,
+      "maxTurnDegrees": 135
+    },
+    "openingRules": {
+      "defaultMode": "structural",
+      "supportedModes": [
+        "framed",
+        "structural"
+      ],
+      "supportedKinds": [
+        "door",
+        "window",
+        "passage"
+      ],
+      "compatibleAssetIds": [
+        "core.opening_door_custom",
+        "core.opening_door_wall_1",
+        "dungeon.wall_wall_opening"
+      ]
+    }
+  },
+  {
+    "id": "interior-massive-dwarf-hall-heavy-angular-granite-blocks-618259920884470",
+    "name": "Massive Dwarf Hall Heavy Angular Granite Blocks 618259920884470",
+    "previewImagePath": "../../assets/materials/dungeon/wall-materials/interior-massive-dwarf-hall-heavy-angular-granite-blocks-618259920884470/wall_albedo.png",
+    "structuralCore": {
+      "profile": "thick-stone-core",
+      "material": "interior-massive-dwarf-hall-heavy-angular-granite-blocks-618259920884470",
+      "render": {
+        "hiddenProfileSegmentIndices": [
+          0,
+          1,
+          2
+        ]
+      }
+    },
+    "roomFace": {
+      "profile": "ai-gothic-wall-face",
+      "material": "interior-massive-dwarf-hall-heavy-angular-granite-blocks-618259920884470"
+    },
+    "exteriorFace": {
+      "profile": "ai-gothic-wall-face",
+      "material": "interior-massive-dwarf-hall-heavy-angular-granite-blocks-618259920884470"
+    },
+    "joinMode": "cover-piece",
+    "curvatureLimits": {
+      "minInnerRadius": 1.2,
+      "maxTurnDegrees": 135
+    },
+    "openingRules": {
+      "defaultMode": "structural",
+      "supportedModes": [
+        "framed",
+        "structural"
+      ],
+      "supportedKinds": [
+        "door",
+        "window",
+        "passage"
+      ],
+      "compatibleAssetIds": [
+        "core.opening_door_custom",
+        "core.opening_door_wall_1",
+        "dungeon.wall_wall_opening"
+      ]
+    }
+  },
+  {
+    "id": "interior-rustic-cottage-packed-dried-mud-and-clay-627924782476288",
+    "name": "Rustic Cottage Packed Dried Mud And Clay 627924782476288",
+    "previewImagePath": "../../assets/materials/dungeon/wall-materials/interior-rustic-cottage-packed-dried-mud-and-clay-627924782476288/wall_albedo.png",
+    "structuralCore": {
+      "profile": "thick-stone-core",
+      "material": "interior-rustic-cottage-packed-dried-mud-and-clay-627924782476288",
+      "render": {
+        "hiddenProfileSegmentIndices": [
+          0,
+          1,
+          2
+        ]
+      }
+    },
+    "roomFace": {
+      "profile": "ai-gothic-wall-face",
+      "material": "interior-rustic-cottage-packed-dried-mud-and-clay-627924782476288"
+    },
+    "exteriorFace": {
+      "profile": "ai-gothic-wall-face",
+      "material": "interior-rustic-cottage-packed-dried-mud-and-clay-627924782476288"
+    },
+    "joinMode": "cover-piece",
+    "curvatureLimits": {
+      "minInnerRadius": 1.2,
+      "maxTurnDegrees": 135
+    },
+    "openingRules": {
+      "defaultMode": "structural",
+      "supportedModes": [
+        "framed",
+        "structural"
+      ],
+      "supportedKinds": [
+        "door",
+        "window",
+        "passage"
+      ],
+      "compatibleAssetIds": [
+        "core.opening_door_custom",
+        "core.opening_door_wall_1",
+        "dungeon.wall_wall_opening"
+      ]
+    }
+  },
+  {
+    "id": "interior-cozy-tavern-lower-half-rough-gray-stone-660876766689625",
+    "name": "Cozy Tavern Lower Half Rough Gray Stone 660876766689625",
+    "previewImagePath": "../../assets/materials/dungeon/wall-materials/interior-cozy-tavern-lower-half-rough-gray-stone-660876766689625/wall_albedo.png",
+    "structuralCore": {
+      "profile": "thick-stone-core",
+      "material": "interior-cozy-tavern-lower-half-rough-gray-stone-660876766689625",
+      "render": {
+        "hiddenProfileSegmentIndices": [
+          0,
+          1,
+          2
+        ]
+      }
+    },
+    "roomFace": {
+      "profile": "ai-gothic-wall-face",
+      "material": "interior-cozy-tavern-lower-half-rough-gray-stone-660876766689625"
+    },
+    "exteriorFace": {
+      "profile": "ai-gothic-wall-face",
+      "material": "interior-cozy-tavern-lower-half-rough-gray-stone-660876766689625"
+    },
+    "joinMode": "cover-piece",
+    "curvatureLimits": {
+      "minInnerRadius": 1.2,
+      "maxTurnDegrees": 135
+    },
+    "openingRules": {
+      "defaultMode": "structural",
+      "supportedModes": [
+        "framed",
+        "structural"
+      ],
+      "supportedKinds": [
+        "door",
+        "window",
+        "passage"
+      ],
+      "compatibleAssetIds": [
+        "core.opening_door_custom",
+        "core.opening_door_wall_1",
+        "dungeon.wall_wall_opening"
+      ]
+    }
+  },
+  {
+    "id": "interior-subterranean-city-rough-rough-hewn-stone-clusters-of-714349072336392",
+    "name": "Subterranean City Rough Rough Hewn Stone Clusters Of 714349072336392",
+    "previewImagePath": "../../assets/materials/dungeon/wall-materials/interior-subterranean-city-rough-rough-hewn-stone-clusters-of-714349072336392/wall_albedo.png",
+    "structuralCore": {
+      "profile": "thick-stone-core",
+      "material": "interior-subterranean-city-rough-rough-hewn-stone-clusters-of-714349072336392",
+      "render": {
+        "hiddenProfileSegmentIndices": [
+          0,
+          1,
+          2
+        ]
+      }
+    },
+    "roomFace": {
+      "profile": "ai-gothic-wall-face",
+      "material": "interior-subterranean-city-rough-rough-hewn-stone-clusters-of-714349072336392"
+    },
+    "exteriorFace": {
+      "profile": "ai-gothic-wall-face",
+      "material": "interior-subterranean-city-rough-rough-hewn-stone-clusters-of-714349072336392"
+    },
+    "joinMode": "cover-piece",
+    "curvatureLimits": {
+      "minInnerRadius": 1.2,
+      "maxTurnDegrees": 135
+    },
+    "openingRules": {
+      "defaultMode": "structural",
+      "supportedModes": [
+        "framed",
+        "structural"
+      ],
+      "supportedKinds": [
+        "door",
+        "window",
+        "passage"
+      ],
+      "compatibleAssetIds": [
+        "core.opening_door_custom",
+        "core.opening_door_wall_1",
+        "dungeon.wall_wall_opening"
+      ]
+    }
+  },
+  {
+    "id": "interior-medieval-castle-79993914091996",
+    "name": "Medieval Castle 79993914091996",
+    "previewImagePath": "../../assets/materials/dungeon/wall-materials/interior-medieval-castle-79993914091996/wall_albedo.png",
+    "structuralCore": {
+      "profile": "thick-stone-core",
+      "material": "interior-medieval-castle-79993914091996",
+      "render": {
+        "hiddenProfileSegmentIndices": [
+          0,
+          1,
+          2
+        ]
+      }
+    },
+    "roomFace": {
+      "profile": "ai-gothic-wall-face",
+      "material": "interior-medieval-castle-79993914091996"
+    },
+    "exteriorFace": {
+      "profile": "ai-gothic-wall-face",
+      "material": "interior-medieval-castle-79993914091996"
+    },
+    "joinMode": "cover-piece",
+    "curvatureLimits": {
+      "minInnerRadius": 1.2,
+      "maxTurnDegrees": 135
+    },
+    "openingRules": {
+      "defaultMode": "structural",
+      "supportedModes": [
+        "framed",
+        "structural"
+      ],
+      "supportedKinds": [
+        "door",
+        "window",
+        "passage"
+      ],
+      "compatibleAssetIds": [
+        "core.opening_door_custom",
+        "core.opening_door_wall_1",
+        "dungeon.wall_wall_opening"
+      ]
+    }
+  },
+  {
+    "id": "interior-massive-dwarf-hall-heavy-angular-granite-blocks-832173876125782",
+    "name": "Massive Dwarf Hall Heavy Angular Granite Blocks 832173876125782",
+    "previewImagePath": "../../assets/materials/dungeon/wall-materials/interior-massive-dwarf-hall-heavy-angular-granite-blocks-832173876125782/wall_albedo.png",
+    "structuralCore": {
+      "profile": "thick-stone-core",
+      "material": "interior-massive-dwarf-hall-heavy-angular-granite-blocks-832173876125782",
+      "render": {
+        "hiddenProfileSegmentIndices": [
+          0,
+          1,
+          2
+        ]
+      }
+    },
+    "roomFace": {
+      "profile": "ai-gothic-wall-face",
+      "material": "interior-massive-dwarf-hall-heavy-angular-granite-blocks-832173876125782"
+    },
+    "exteriorFace": {
+      "profile": "ai-gothic-wall-face",
+      "material": "interior-massive-dwarf-hall-heavy-angular-granite-blocks-832173876125782"
+    },
+    "joinMode": "cover-piece",
+    "curvatureLimits": {
+      "minInnerRadius": 1.2,
+      "maxTurnDegrees": 135
+    },
+    "openingRules": {
+      "defaultMode": "structural",
+      "supportedModes": [
+        "framed",
+        "structural"
+      ],
+      "supportedKinds": [
+        "door",
+        "window",
+        "passage"
+      ],
+      "compatibleAssetIds": [
+        "core.opening_door_custom",
+        "core.opening_door_wall_1",
+        "dungeon.wall_wall_opening"
+      ]
+    }
+  },
+  {
+    "id": "interior-damp-dungeon-large-dark-gray-stone-bricks-869309803189347",
+    "name": "Damp Dungeon Large Dark Gray Stone Bricks 869309803189347",
+    "previewImagePath": "../../assets/materials/dungeon/wall-materials/interior-damp-dungeon-large-dark-gray-stone-bricks-869309803189347/wall_albedo.png",
+    "structuralCore": {
+      "profile": "thick-stone-core",
+      "material": "interior-damp-dungeon-large-dark-gray-stone-bricks-869309803189347",
+      "render": {
+        "hiddenProfileSegmentIndices": [
+          0,
+          1,
+          2
+        ]
+      }
+    },
+    "roomFace": {
+      "profile": "ai-gothic-wall-face",
+      "material": "interior-damp-dungeon-large-dark-gray-stone-bricks-869309803189347"
+    },
+    "exteriorFace": {
+      "profile": "ai-gothic-wall-face",
+      "material": "interior-damp-dungeon-large-dark-gray-stone-bricks-869309803189347"
+    },
+    "joinMode": "cover-piece",
+    "curvatureLimits": {
+      "minInnerRadius": 1.2,
+      "maxTurnDegrees": 135
+    },
+    "openingRules": {
+      "defaultMode": "structural",
+      "supportedModes": [
+        "framed",
+        "structural"
+      ],
+      "supportedKinds": [
+        "door",
+        "window",
+        "passage"
+      ],
+      "compatibleAssetIds": [
+        "core.opening_door_custom",
+        "core.opening_door_wall_1",
+        "dungeon.wall_wall_opening"
+      ]
+    }
+  },
+  {
+    "id": "interior-massive-dwarf-hall-heavy-angular-granite-blocks-948423422942505",
+    "name": "Massive Dwarf Hall Heavy Angular Granite Blocks 948423422942505",
+    "previewImagePath": "../../assets/materials/dungeon/wall-materials/interior-massive-dwarf-hall-heavy-angular-granite-blocks-948423422942505/wall_albedo.png",
+    "structuralCore": {
+      "profile": "thick-stone-core",
+      "material": "interior-massive-dwarf-hall-heavy-angular-granite-blocks-948423422942505",
+      "render": {
+        "hiddenProfileSegmentIndices": [
+          0,
+          1,
+          2
+        ]
+      }
+    },
+    "roomFace": {
+      "profile": "ai-gothic-wall-face",
+      "material": "interior-massive-dwarf-hall-heavy-angular-granite-blocks-948423422942505"
+    },
+    "exteriorFace": {
+      "profile": "ai-gothic-wall-face",
+      "material": "interior-massive-dwarf-hall-heavy-angular-granite-blocks-948423422942505"
+    },
+    "joinMode": "cover-piece",
+    "curvatureLimits": {
+      "minInnerRadius": 1.2,
+      "maxTurnDegrees": 135
+    },
+    "openingRules": {
+      "defaultMode": "structural",
+      "supportedModes": [
+        "framed",
+        "structural"
+      ],
+      "supportedKinds": [
+        "door",
+        "window",
+        "passage"
+      ],
+      "compatibleAssetIds": [
+        "core.opening_door_custom",
+        "core.opening_door_wall_1",
+        "dungeon.wall_wall_opening"
+      ]
+    }
+  },
+  {
+    "id": "interior-crypt-catacomb-ancient-crumbling-gray-bricks-stylized-959348830417615",
+    "name": "Crypt Catacomb Ancient Crumbling Gray Bricks Stylized 959348830417615",
+    "previewImagePath": "../../assets/materials/dungeon/wall-materials/interior-crypt-catacomb-ancient-crumbling-gray-bricks-stylized-959348830417615/wall_albedo.png",
+    "structuralCore": {
+      "profile": "thick-stone-core",
+      "material": "interior-crypt-catacomb-ancient-crumbling-gray-bricks-stylized-959348830417615",
+      "render": {
+        "hiddenProfileSegmentIndices": [
+          0,
+          1,
+          2
+        ]
+      }
+    },
+    "roomFace": {
+      "profile": "ai-gothic-wall-face",
+      "material": "interior-crypt-catacomb-ancient-crumbling-gray-bricks-stylized-959348830417615"
+    },
+    "exteriorFace": {
+      "profile": "ai-gothic-wall-face",
+      "material": "interior-crypt-catacomb-ancient-crumbling-gray-bricks-stylized-959348830417615"
+    },
+    "joinMode": "cover-piece",
+    "curvatureLimits": {
+      "minInnerRadius": 1.2,
+      "maxTurnDegrees": 135
+    },
+    "openingRules": {
+      "defaultMode": "structural",
+      "supportedModes": [
+        "framed",
+        "structural"
+      ],
+      "supportedKinds": [
+        "door",
+        "window",
+        "passage"
+      ],
+      "compatibleAssetIds": [
+        "core.opening_door_custom",
+        "core.opening_door_wall_1",
+        "dungeon.wall_wall_opening"
+      ]
+    }
+  },
+  {
+    "id": "interior-opulent-castle-interior-rich-blue-wallpaper-subtle-98731515846635",
+    "name": "Opulent Castle Interior Rich Blue Wallpaper Subtle 98731515846635",
+    "previewImagePath": "../../assets/materials/dungeon/wall-materials/interior-opulent-castle-interior-rich-blue-wallpaper-subtle-98731515846635/wall_albedo.png",
+    "structuralCore": {
+      "profile": "thick-stone-core",
+      "material": "interior-opulent-castle-interior-rich-blue-wallpaper-subtle-98731515846635",
+      "render": {
+        "hiddenProfileSegmentIndices": [
+          0,
+          1,
+          2
+        ]
+      }
+    },
+    "roomFace": {
+      "profile": "ai-gothic-wall-face",
+      "material": "interior-opulent-castle-interior-rich-blue-wallpaper-subtle-98731515846635"
+    },
+    "exteriorFace": {
+      "profile": "ai-gothic-wall-face",
+      "material": "interior-opulent-castle-interior-rich-blue-wallpaper-subtle-98731515846635"
+    },
+    "joinMode": "cover-piece",
+    "curvatureLimits": {
+      "minInnerRadius": 1.2,
+      "maxTurnDegrees": 135
+    },
+    "openingRules": {
+      "defaultMode": "structural",
+      "supportedModes": [
+        "framed",
+        "structural"
+      ],
+      "supportedKinds": [
+        "door",
+        "window",
+        "passage"
+      ],
+      "compatibleAssetIds": [
+        "core.opening_door_custom",
+        "core.opening_door_wall_1",
+        "dungeon.wall_wall_opening"
+      ]
+    }
+  },
+  {
+    "id": "interior-batch-2-medieval-wattle-and-daub-surface-aged-white-00032",
+    "name": "Medieval Wattle And Daub Surface Aged White 00032",
+    "previewImagePath": "../../assets/materials/dungeon/wall-materials/interior-batch-2-medieval-wattle-and-daub-surface-aged-white-00032/wall_albedo.png",
+    "structuralCore": {
+      "profile": "thick-stone-core",
+      "material": "interior-batch-2-medieval-wattle-and-daub-surface-aged-white-00032",
+      "render": {
+        "hiddenProfileSegmentIndices": [
+          0,
+          1,
+          2
+        ]
+      }
+    },
+    "roomFace": {
+      "profile": "ai-gothic-wall-face",
+      "material": "interior-batch-2-medieval-wattle-and-daub-surface-aged-white-00032"
+    },
+    "exteriorFace": {
+      "profile": "ai-gothic-wall-face",
+      "material": "interior-batch-2-medieval-wattle-and-daub-surface-aged-white-00032"
+    },
+    "joinMode": "cover-piece",
+    "curvatureLimits": {
+      "minInnerRadius": 1.2,
+      "maxTurnDegrees": 135
+    },
+    "openingRules": {
+      "defaultMode": "structural",
+      "supportedModes": [
+        "framed",
+        "structural"
+      ],
+      "supportedKinds": [
+        "door",
+        "window",
+        "passage"
+      ],
+      "compatibleAssetIds": [
+        "core.opening_door_custom",
+        "core.opening_door_wall_1",
+        "dungeon.wall_wall_opening"
+      ]
+    }
+  },
+  {
+    "id": "interior-batch-2-surface-lower-half-dark-cobblestone-upper-half-00034",
+    "name": "Surface Lower Half Dark Cobblestone Upper Half 00034",
+    "previewImagePath": "../../assets/materials/dungeon/wall-materials/interior-batch-2-surface-lower-half-dark-cobblestone-upper-half-00034/wall_albedo.png",
+    "structuralCore": {
+      "profile": "thick-stone-core",
+      "material": "interior-batch-2-surface-lower-half-dark-cobblestone-upper-half-00034",
+      "render": {
+        "hiddenProfileSegmentIndices": [
+          0,
+          1,
+          2
+        ]
+      }
+    },
+    "roomFace": {
+      "profile": "ai-gothic-wall-face",
+      "material": "interior-batch-2-surface-lower-half-dark-cobblestone-upper-half-00034"
+    },
+    "exteriorFace": {
+      "profile": "ai-gothic-wall-face",
+      "material": "interior-batch-2-surface-lower-half-dark-cobblestone-upper-half-00034"
+    },
+    "joinMode": "cover-piece",
+    "curvatureLimits": {
+      "minInnerRadius": 1.2,
+      "maxTurnDegrees": 135
+    },
+    "openingRules": {
+      "defaultMode": "structural",
+      "supportedModes": [
+        "framed",
+        "structural"
+      ],
+      "supportedKinds": [
+        "door",
+        "window",
+        "passage"
+      ],
+      "compatibleAssetIds": [
+        "core.opening_door_custom",
+        "core.opening_door_wall_1",
+        "dungeon.wall_wall_opening"
+      ]
+    }
+  },
+  {
+    "id": "interior-batch-2-exterior-surface-weathered-painted-stucco-in-deep-00037",
+    "name": "Exterior Surface Weathered Painted Stucco In Deep 00037",
+    "previewImagePath": "../../assets/materials/dungeon/wall-materials/interior-batch-2-exterior-surface-weathered-painted-stucco-in-deep-00037/wall_albedo.png",
+    "structuralCore": {
+      "profile": "thick-stone-core",
+      "material": "interior-batch-2-exterior-surface-weathered-painted-stucco-in-deep-00037",
+      "render": {
+        "hiddenProfileSegmentIndices": [
+          0,
+          1,
+          2
+        ]
+      }
+    },
+    "roomFace": {
+      "profile": "ai-gothic-wall-face",
+      "material": "interior-batch-2-exterior-surface-weathered-painted-stucco-in-deep-00037"
+    },
+    "exteriorFace": {
+      "profile": "ai-gothic-wall-face",
+      "material": "interior-batch-2-exterior-surface-weathered-painted-stucco-in-deep-00037"
+    },
+    "joinMode": "cover-piece",
+    "curvatureLimits": {
+      "minInnerRadius": 1.2,
+      "maxTurnDegrees": 135
+    },
+    "openingRules": {
+      "defaultMode": "structural",
+      "supportedModes": [
+        "framed",
+        "structural"
+      ],
+      "supportedKinds": [
+        "door",
+        "window",
+        "passage"
+      ],
+      "compatibleAssetIds": [
+        "core.opening_door_custom",
+        "core.opening_door_wall_1",
+        "dungeon.wall_wall_opening"
+      ]
+    }
+  },
+  {
+    "id": "interior-batch-2-castle-surface-large-rectangular-light-grey-granite-00039",
+    "name": "Castle Surface Large Rectangular Light Grey Granite 00039",
+    "previewImagePath": "../../assets/materials/dungeon/wall-materials/interior-batch-2-castle-surface-large-rectangular-light-grey-granite-00039/wall_albedo.png",
+    "structuralCore": {
+      "profile": "thick-stone-core",
+      "material": "interior-batch-2-castle-surface-large-rectangular-light-grey-granite-00039",
+      "render": {
+        "hiddenProfileSegmentIndices": [
+          0,
+          1,
+          2
+        ]
+      }
+    },
+    "roomFace": {
+      "profile": "ai-gothic-wall-face",
+      "material": "interior-batch-2-castle-surface-large-rectangular-light-grey-granite-00039"
+    },
+    "exteriorFace": {
+      "profile": "ai-gothic-wall-face",
+      "material": "interior-batch-2-castle-surface-large-rectangular-light-grey-granite-00039"
+    },
+    "joinMode": "cover-piece",
+    "curvatureLimits": {
+      "minInnerRadius": 1.2,
+      "maxTurnDegrees": 135
+    },
+    "openingRules": {
+      "defaultMode": "structural",
+      "supportedModes": [
+        "framed",
+        "structural"
+      ],
+      "supportedKinds": [
+        "door",
+        "window",
+        "passage"
+      ],
+      "compatibleAssetIds": [
+        "core.opening_door_custom",
+        "core.opening_door_wall_1",
+        "dungeon.wall_wall_opening"
+      ]
+    }
+  },
+  {
+    "id": "interior-batch-2-surface-made-of-mixed-grey-and-brown-00040",
+    "name": "Surface Made Of Mixed Grey And Brown 00040",
+    "previewImagePath": "../../assets/materials/dungeon/wall-materials/interior-batch-2-surface-made-of-mixed-grey-and-brown-00040/wall_albedo.png",
+    "structuralCore": {
+      "profile": "thick-stone-core",
+      "material": "interior-batch-2-surface-made-of-mixed-grey-and-brown-00040",
+      "render": {
+        "hiddenProfileSegmentIndices": [
+          0,
+          1,
+          2
+        ]
+      }
+    },
+    "roomFace": {
+      "profile": "ai-gothic-wall-face",
+      "material": "interior-batch-2-surface-made-of-mixed-grey-and-brown-00040"
+    },
+    "exteriorFace": {
+      "profile": "ai-gothic-wall-face",
+      "material": "interior-batch-2-surface-made-of-mixed-grey-and-brown-00040"
+    },
+    "joinMode": "cover-piece",
+    "curvatureLimits": {
+      "minInnerRadius": 1.2,
+      "maxTurnDegrees": 135
+    },
+    "openingRules": {
+      "defaultMode": "structural",
+      "supportedModes": [
+        "framed",
+        "structural"
+      ],
+      "supportedKinds": [
+        "door",
+        "window",
+        "passage"
+      ],
+      "compatibleAssetIds": [
+        "core.opening_door_custom",
+        "core.opening_door_wall_1",
+        "dungeon.wall_wall_opening"
+      ]
+    }
+  },
+  {
+    "id": "interior-batch-2-rustic-surface-mixed-cobblestone-and-dried-mud-00041",
+    "name": "Rustic Surface Mixed Cobblestone And Dried Mud 00041",
+    "previewImagePath": "../../assets/materials/dungeon/wall-materials/interior-batch-2-rustic-surface-mixed-cobblestone-and-dried-mud-00041/wall_albedo.png",
+    "structuralCore": {
+      "profile": "thick-stone-core",
+      "material": "interior-batch-2-rustic-surface-mixed-cobblestone-and-dried-mud-00041",
+      "render": {
+        "hiddenProfileSegmentIndices": [
+          0,
+          1,
+          2
+        ]
+      }
+    },
+    "roomFace": {
+      "profile": "ai-gothic-wall-face",
+      "material": "interior-batch-2-rustic-surface-mixed-cobblestone-and-dried-mud-00041"
+    },
+    "exteriorFace": {
+      "profile": "ai-gothic-wall-face",
+      "material": "interior-batch-2-rustic-surface-mixed-cobblestone-and-dried-mud-00041"
+    },
+    "joinMode": "cover-piece",
+    "curvatureLimits": {
+      "minInnerRadius": 1.2,
+      "maxTurnDegrees": 135
+    },
+    "openingRules": {
+      "defaultMode": "structural",
+      "supportedModes": [
+        "framed",
+        "structural"
+      ],
+      "supportedKinds": [
+        "door",
+        "window",
+        "passage"
+      ],
+      "compatibleAssetIds": [
+        "core.opening_door_custom",
+        "core.opening_door_wall_1",
+        "dungeon.wall_wall_opening"
+      ]
+    }
+  },
+  {
+    "id": "interior-batch-2-surface-weathered-rotting-moss-covered-gray-wooden-planks-00042",
+    "name": "Surface Weathered Rotting Moss Covered Gray Wooden Planks 00042",
+    "previewImagePath": "../../assets/materials/dungeon/wall-materials/interior-batch-2-surface-weathered-rotting-moss-covered-gray-wooden-planks-00042/wall_albedo.png",
+    "structuralCore": {
+      "profile": "thick-stone-core",
+      "material": "interior-batch-2-surface-weathered-rotting-moss-covered-gray-wooden-planks-00042",
+      "render": {
+        "hiddenProfileSegmentIndices": [
+          0,
+          1,
+          2
+        ]
+      }
+    },
+    "roomFace": {
+      "profile": "ai-gothic-wall-face",
+      "material": "interior-batch-2-surface-weathered-rotting-moss-covered-gray-wooden-planks-00042"
+    },
+    "exteriorFace": {
+      "profile": "ai-gothic-wall-face",
+      "material": "interior-batch-2-surface-weathered-rotting-moss-covered-gray-wooden-planks-00042"
+    },
+    "joinMode": "cover-piece",
+    "curvatureLimits": {
+      "minInnerRadius": 1.2,
+      "maxTurnDegrees": 135
+    },
+    "openingRules": {
+      "defaultMode": "structural",
+      "supportedModes": [
+        "framed",
+        "structural"
+      ],
+      "supportedKinds": [
+        "door",
+        "window",
+        "passage"
+      ],
+      "compatibleAssetIds": [
+        "core.opening_door_custom",
+        "core.opening_door_wall_1",
+        "dungeon.wall_wall_opening"
+      ]
+    }
+  },
+  {
+    "id": "interior-batch-2-surface-made-of-thick-stacked-horizontal-pine-00043",
+    "name": "Surface Made Of Thick Stacked Horizontal Pine 00043",
+    "previewImagePath": "../../assets/materials/dungeon/wall-materials/interior-batch-2-surface-made-of-thick-stacked-horizontal-pine-00043/wall_albedo.png",
+    "structuralCore": {
+      "profile": "thick-stone-core",
+      "material": "interior-batch-2-surface-made-of-thick-stacked-horizontal-pine-00043",
+      "render": {
+        "hiddenProfileSegmentIndices": [
+          0,
+          1,
+          2
+        ]
+      }
+    },
+    "roomFace": {
+      "profile": "ai-gothic-wall-face",
+      "material": "interior-batch-2-surface-made-of-thick-stacked-horizontal-pine-00043"
+    },
+    "exteriorFace": {
+      "profile": "ai-gothic-wall-face",
+      "material": "interior-batch-2-surface-made-of-thick-stacked-horizontal-pine-00043"
+    },
+    "joinMode": "cover-piece",
+    "curvatureLimits": {
+      "minInnerRadius": 1.2,
+      "maxTurnDegrees": 135
+    },
+    "openingRules": {
+      "defaultMode": "structural",
+      "supportedModes": [
+        "framed",
+        "structural"
+      ],
+      "supportedKinds": [
+        "door",
+        "window",
+        "passage"
+      ],
+      "compatibleAssetIds": [
+        "core.opening_door_custom",
+        "core.opening_door_wall_1",
+        "dungeon.wall_wall_opening"
+      ]
+    }
+  },
+  {
+    "id": "interior-batch-2-ancient-ruin-sandstone-ruin-surface-cracked-colossal-00044",
+    "name": "Ancient Ruin Sandstone: Ruin Surface Cracked Colossal 00044",
+    "previewImagePath": "../../assets/materials/dungeon/wall-materials/interior-batch-2-ancient-ruin-sandstone-ruin-surface-cracked-colossal-00044/wall_albedo.png",
+    "structuralCore": {
+      "profile": "thick-stone-core",
+      "material": "interior-batch-2-ancient-ruin-sandstone-ruin-surface-cracked-colossal-00044",
+      "render": {
+        "hiddenProfileSegmentIndices": [
+          0,
+          1,
+          2
+        ]
+      }
+    },
+    "roomFace": {
+      "profile": "ai-gothic-wall-face",
+      "material": "interior-batch-2-ancient-ruin-sandstone-ruin-surface-cracked-colossal-00044"
+    },
+    "exteriorFace": {
+      "profile": "ai-gothic-wall-face",
+      "material": "interior-batch-2-ancient-ruin-sandstone-ruin-surface-cracked-colossal-00044"
+    },
+    "joinMode": "cover-piece",
+    "curvatureLimits": {
+      "minInnerRadius": 1.2,
+      "maxTurnDegrees": 135
+    },
+    "openingRules": {
+      "defaultMode": "structural",
+      "supportedModes": [
+        "framed",
+        "structural"
+      ],
+      "supportedKinds": [
+        "door",
+        "window",
+        "passage"
+      ],
+      "compatibleAssetIds": [
+        "core.opening_door_custom",
+        "core.opening_door_wall_1",
+        "dungeon.wall_wall_opening"
+      ]
+    }
+  },
+  {
+    "id": "interior-batch-2-volcanic-surface-dark-carved-obsidian-blocks-interwoven-00045",
+    "name": "Volcanic Surface Dark Carved Obsidian Blocks Interwoven 00045",
+    "previewImagePath": "../../assets/materials/dungeon/wall-materials/interior-batch-2-volcanic-surface-dark-carved-obsidian-blocks-interwoven-00045/wall_albedo.png",
+    "structuralCore": {
+      "profile": "thick-stone-core",
+      "material": "interior-batch-2-volcanic-surface-dark-carved-obsidian-blocks-interwoven-00045",
+      "render": {
+        "hiddenProfileSegmentIndices": [
+          0,
+          1,
+          2
+        ]
+      }
+    },
+    "roomFace": {
+      "profile": "ai-gothic-wall-face",
+      "material": "interior-batch-2-volcanic-surface-dark-carved-obsidian-blocks-interwoven-00045"
+    },
+    "exteriorFace": {
+      "profile": "ai-gothic-wall-face",
+      "material": "interior-batch-2-volcanic-surface-dark-carved-obsidian-blocks-interwoven-00045"
+    },
+    "joinMode": "cover-piece",
+    "curvatureLimits": {
+      "minInnerRadius": 1.2,
+      "maxTurnDegrees": 135
+    },
+    "openingRules": {
+      "defaultMode": "structural",
+      "supportedModes": [
+        "framed",
+        "structural"
+      ],
+      "supportedKinds": [
+        "door",
+        "window",
+        "passage"
+      ],
+      "compatibleAssetIds": [
+        "core.opening_door_custom",
+        "core.opening_door_wall_1",
+        "dungeon.wall_wall_opening"
+      ]
+    }
+  },
+  {
+    "id": "interior-batch-2-desert-surface-smooth-sun-bleached-sandstone-slabs-faint-00046",
+    "name": "Desert Surface Smooth Sun Bleached Sandstone Slabs Faint 00046",
+    "previewImagePath": "../../assets/materials/dungeon/wall-materials/interior-batch-2-desert-surface-smooth-sun-bleached-sandstone-slabs-faint-00046/wall_albedo.png",
+    "structuralCore": {
+      "profile": "thick-stone-core",
+      "material": "interior-batch-2-desert-surface-smooth-sun-bleached-sandstone-slabs-faint-00046",
+      "render": {
+        "hiddenProfileSegmentIndices": [
+          0,
+          1,
+          2
+        ]
+      }
+    },
+    "roomFace": {
+      "profile": "ai-gothic-wall-face",
+      "material": "interior-batch-2-desert-surface-smooth-sun-bleached-sandstone-slabs-faint-00046"
+    },
+    "exteriorFace": {
+      "profile": "ai-gothic-wall-face",
+      "material": "interior-batch-2-desert-surface-smooth-sun-bleached-sandstone-slabs-faint-00046"
+    },
+    "joinMode": "cover-piece",
+    "curvatureLimits": {
+      "minInnerRadius": 1.2,
+      "maxTurnDegrees": 135
+    },
+    "openingRules": {
+      "defaultMode": "structural",
+      "supportedModes": [
+        "framed",
+        "structural"
+      ],
+      "supportedKinds": [
+        "door",
+        "window",
+        "passage"
+      ],
+      "compatibleAssetIds": [
+        "core.opening_door_custom",
+        "core.opening_door_wall_1",
+        "dungeon.wall_wall_opening"
+      ]
+    }
+  },
+  {
+    "id": "interior-batch-2-surface-smooth-white-marble-blocks-inlaid-glowing-00047",
+    "name": "Surface Smooth White Marble Blocks Inlaid Glowing 00047",
+    "previewImagePath": "../../assets/materials/dungeon/wall-materials/interior-batch-2-surface-smooth-white-marble-blocks-inlaid-glowing-00047/wall_albedo.png",
+    "structuralCore": {
+      "profile": "thick-stone-core",
+      "material": "interior-batch-2-surface-smooth-white-marble-blocks-inlaid-glowing-00047",
+      "render": {
+        "hiddenProfileSegmentIndices": [
+          0,
+          1,
+          2
+        ]
+      }
+    },
+    "roomFace": {
+      "profile": "ai-gothic-wall-face",
+      "material": "interior-batch-2-surface-smooth-white-marble-blocks-inlaid-glowing-00047"
+    },
+    "exteriorFace": {
+      "profile": "ai-gothic-wall-face",
+      "material": "interior-batch-2-surface-smooth-white-marble-blocks-inlaid-glowing-00047"
+    },
+    "joinMode": "cover-piece",
+    "curvatureLimits": {
+      "minInnerRadius": 1.2,
+      "maxTurnDegrees": 135
+    },
+    "openingRules": {
+      "defaultMode": "structural",
+      "supportedModes": [
+        "framed",
+        "structural"
+      ],
+      "supportedKinds": [
+        "door",
+        "window",
+        "passage"
+      ],
+      "compatibleAssetIds": [
+        "core.opening_door_custom",
+        "core.opening_door_wall_1",
+        "dungeon.wall_wall_opening"
+      ]
+    }
+  },
+  {
+    "id": "interior-batch-2-fortress-surface-jagged-dark-obsidian-stone-blocks-00048",
+    "name": "Fortress Surface Jagged Dark Obsidian Stone Blocks 00048",
+    "previewImagePath": "../../assets/materials/dungeon/wall-materials/interior-batch-2-fortress-surface-jagged-dark-obsidian-stone-blocks-00048/wall_albedo.png",
+    "structuralCore": {
+      "profile": "thick-stone-core",
+      "material": "interior-batch-2-fortress-surface-jagged-dark-obsidian-stone-blocks-00048",
+      "render": {
+        "hiddenProfileSegmentIndices": [
+          0,
+          1,
+          2
+        ]
+      }
+    },
+    "roomFace": {
+      "profile": "ai-gothic-wall-face",
+      "material": "interior-batch-2-fortress-surface-jagged-dark-obsidian-stone-blocks-00048"
+    },
+    "exteriorFace": {
+      "profile": "ai-gothic-wall-face",
+      "material": "interior-batch-2-fortress-surface-jagged-dark-obsidian-stone-blocks-00048"
+    },
+    "joinMode": "cover-piece",
+    "curvatureLimits": {
+      "minInnerRadius": 1.2,
+      "maxTurnDegrees": 135
+    },
+    "openingRules": {
+      "defaultMode": "structural",
+      "supportedModes": [
+        "framed",
+        "structural"
+      ],
+      "supportedKinds": [
+        "door",
+        "window",
+        "passage"
+      ],
+      "compatibleAssetIds": [
+        "core.opening_door_custom",
+        "core.opening_door_wall_1",
+        "dungeon.wall_wall_opening"
+      ]
+    }
+  },
+  {
+    "id": "interior-batch-2-mountain-surface-heavy-angular-hewn-granite-rock-00050",
+    "name": "Mountain Surface Heavy Angular Hewn Granite Rock 00050",
+    "previewImagePath": "../../assets/materials/dungeon/wall-materials/interior-batch-2-mountain-surface-heavy-angular-hewn-granite-rock-00050/wall_albedo.png",
+    "structuralCore": {
+      "profile": "thick-stone-core",
+      "material": "interior-batch-2-mountain-surface-heavy-angular-hewn-granite-rock-00050",
+      "render": {
+        "hiddenProfileSegmentIndices": [
+          0,
+          1,
+          2
+        ]
+      }
+    },
+    "roomFace": {
+      "profile": "ai-gothic-wall-face",
+      "material": "interior-batch-2-mountain-surface-heavy-angular-hewn-granite-rock-00050"
+    },
+    "exteriorFace": {
+      "profile": "ai-gothic-wall-face",
+      "material": "interior-batch-2-mountain-surface-heavy-angular-hewn-granite-rock-00050"
+    },
+    "joinMode": "cover-piece",
+    "curvatureLimits": {
+      "minInnerRadius": 1.2,
+      "maxTurnDegrees": 135
+    },
+    "openingRules": {
+      "defaultMode": "structural",
+      "supportedModes": [
+        "framed",
+        "structural"
+      ],
+      "supportedKinds": [
+        "door",
+        "window",
+        "passage"
+      ],
+      "compatibleAssetIds": [
+        "core.opening_door_custom",
+        "core.opening_door_wall_1",
+        "dungeon.wall_wall_opening"
+      ]
+    }
+  }
+]

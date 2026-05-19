@@ -14,6 +14,7 @@ export function buildChunkEntrySignature(entries: readonly StaticTileEntry[]) {
     entry.buildAnimationDelay ?? '',
     entry.buildAnimationDirection ?? '',
     entry.fogCell?.join(',') ?? '',
+    entry.bakedLight?.join(',') ?? '',
     buildBakedLightFieldPipelineSignature(entry.bakedLightField),
     entry.bakedLightDirection?.join(',') ?? '',
     entry.bakedLightDirectionSecondary?.join(',') ?? '',

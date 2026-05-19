@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { upsertSplineWallGraphRoomPath } from '../../store/splineWallGraph'
 import {
   buildFogOfWarVisibilityMask,
   buildFogOfWarVisibilityMasks,
@@ -22,21 +23,21 @@ describe('buildFogOfWarLayout', () => {
       innerWalls: {},
     })
 
-    expect(layout).toEqual({
+    expect(layout).toMatchObject({
       minCellX: 2,
       minCellZ: 3,
       width: 2,
       height: 1,
       occupancyWidth: 9,
       occupancyHeight: 5,
-      occupancy: new Int32Array([
-        1, 1, 1, 1, 1, 1, 1, 1, 1,
-        1, 0, 0, 0, 1, 0, 0, 0, 1,
-        1, 0, 0, 0, 1, 0, 0, 0, 1,
-        1, 0, 0, 0, 1, 0, 0, 0, 1,
-        1, 1, 1, 1, 1, 1, 1, 1, 1,
-      ]),
     })
+    expect(layout?.occupancy).toEqual(new Int32Array([
+      1, 1, 1, 1, 1, 1, 1, 1, 1,
+      1, 0, 0, 0, 1, 0, 0, 0, 1,
+      1, 0, 0, 0, 1, 0, 0, 0, 1,
+      1, 0, 0, 0, 1, 0, 0, 0, 1,
+      1, 1, 1, 1, 1, 1, 1, 1, 1,
+    ]))
   })
 
   it('clears wall occupancy for authored openings between painted cells', () => {
@@ -57,30 +58,6 @@ describe('buildFogOfWarLayout', () => {
         },
       },
       innerWalls: {},
-    })
-
-    expect(layout?.occupancy).toEqual(new Int32Array([
-      1, 1, 1, 1, 1, 1, 1, 1, 1,
-      1, 0, 0, 0, 0, 0, 0, 0, 1,
-      1, 0, 0, 0, 0, 0, 0, 0, 1,
-      1, 0, 0, 0, 0, 0, 0, 0, 1,
-      1, 1, 1, 1, 1, 1, 1, 1, 1,
-    ]))
-  })
-
-  it('clears wall occupancy for legacy wall-surface passage openings', () => {
-    const layout = buildFogOfWarLayout({
-      active: true,
-      paintedCells: {
-        '0:0': { cell: [0, 0], layerId: 'layer', roomId: 'room-a' },
-        '1:0': { cell: [1, 0], layerId: 'layer', roomId: 'room-b' },
-      },
-      wallOpenings: {},
-      innerWalls: {},
-      wallSurfaceAssetIds: {
-        '0:0:east': 'dungeon.wall_wall_opening',
-      },
-      wallSurfaceProps: {},
     })
 
     expect(layout?.occupancy).toEqual(new Int32Array([
@@ -175,6 +152,83 @@ describe('buildFogOfWarVisibilityMask', () => {
 
     expect(mask).not.toBeNull()
     expect(sampleMask(mask!, playerOrigin, GRID_SIZE * 1.5, GRID_SIZE * 0.5)).toBe(0)
+  })
+
+  it('blocks visibility outside diagonal spline room boundaries', () => {
+    const splineWallGraph = upsertSplineWallGraphRoomPath({
+      nodes: {},
+      segments: {},
+      paths: {},
+    }, {
+      roomId: 'room-a',
+      layerId: 'layer',
+      nodes: [
+        { position: [0, 0], cornerMode: 'square', cornerAmount: 0 },
+        { position: [4, 4], cornerMode: 'square', cornerAmount: 0 },
+        { position: [0, 4], cornerMode: 'square', cornerAmount: 0 },
+      ],
+    })
+    const layout = buildFogOfWarLayout({
+      active: true,
+      paintedCells: {
+        '0:0': { cell: [0, 0], layerId: 'layer', roomId: 'room-a' },
+        '0:1': { cell: [0, 1], layerId: 'layer', roomId: 'room-a' },
+        '0:2': { cell: [0, 2], layerId: 'layer', roomId: 'room-a' },
+        '0:3': { cell: [0, 3], layerId: 'layer', roomId: 'room-a' },
+        '1:1': { cell: [1, 1], layerId: 'layer', roomId: 'room-a' },
+        '1:2': { cell: [1, 2], layerId: 'layer', roomId: 'room-a' },
+        '1:3': { cell: [1, 3], layerId: 'layer', roomId: 'room-a' },
+        '2:2': { cell: [2, 2], layerId: 'layer', roomId: 'room-a' },
+        '2:3': { cell: [2, 3], layerId: 'layer', roomId: 'room-a' },
+        '3:3': { cell: [3, 3], layerId: 'layer', roomId: 'room-a' },
+      },
+      splineWallGraph,
+      wallOpenings: {},
+      innerWalls: {},
+    })
+
+    const playerOrigin: readonly [number, number] = [GRID_SIZE * 0.5, GRID_SIZE * 2.5]
+    const mask = buildFogOfWarVisibilityMask(layout, playerOrigin)
+
+    expect(mask).not.toBeNull()
+    expect(sampleMask(mask!, playerOrigin, GRID_SIZE * 2.5, GRID_SIZE * 0.5)).toBe(0)
+    expect(sampleMask(mask!, playerOrigin, GRID_SIZE * 1.5, GRID_SIZE * 2.5)).toBe(255)
+  })
+
+  it('blocks visibility outside rounded spline room corners', () => {
+    const splineWallGraph = upsertSplineWallGraphRoomPath({
+      nodes: {},
+      segments: {},
+      paths: {},
+    }, {
+      roomId: 'room-a',
+      layerId: 'layer',
+      nodes: [
+        { position: [0, 0], cornerMode: 'rounded', cornerAmount: 2 },
+        { position: [4, 0], cornerMode: 'square', cornerAmount: 0 },
+        { position: [4, 4], cornerMode: 'square', cornerAmount: 0 },
+        { position: [0, 4], cornerMode: 'square', cornerAmount: 0 },
+      ],
+    })
+    const layout = buildFogOfWarLayout({
+      active: true,
+      paintedCells: Object.fromEntries(
+        Array.from({ length: 16 }, (_, index) => {
+          const cell: [number, number] = [index % 4, Math.floor(index / 4)]
+          return [`${cell[0]}:${cell[1]}`, { cell, layerId: 'layer', roomId: 'room-a' }]
+        }),
+      ),
+      splineWallGraph,
+      wallOpenings: {},
+      innerWalls: {},
+    })
+
+    const playerOrigin: readonly [number, number] = [GRID_SIZE * 1.5, GRID_SIZE * 1.5]
+    const mask = buildFogOfWarVisibilityMask(layout, playerOrigin)
+
+    expect(mask).not.toBeNull()
+    expect(sampleMask(mask!, playerOrigin, GRID_SIZE * 0.25, GRID_SIZE * 0.25)).toBe(0)
+    expect(sampleMask(mask!, playerOrigin, GRID_SIZE * 3, GRID_SIZE * 3)).toBe(255)
   })
 })
 

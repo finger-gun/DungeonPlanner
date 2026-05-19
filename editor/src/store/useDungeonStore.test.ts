@@ -1,10 +1,24 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import { getContentPackAssetById } from '../content-packs/registry'
+import { buildSplineWallOpeningPlacement } from './openingPlacement'
+import {
+  buildRoomDraftCells,
+  buildRoomDraftSplineNodes,
+  createRoomDraftFromStroke,
+  setRoomDraftCorner,
+} from './roomDraft'
+import { buildRoomDraftOccupancyPolygons, clipRoomDraft } from './roomDraftClip'
+import { createSplineWallQueryCache } from './splineWallQueries'
+import { upsertSplineWallGraphRoomPath } from './splineWallGraph'
+import { buildRoomSplineWallChainsFromGraph, buildSampledSplineWallFrames } from './splineWalls'
+import { analyzeSplineWallGraphBoundaries } from './splineWallStyleAnalysis'
 import { useDungeonStore } from './useDungeonStore'
 import { getOpeningSegments } from './openingSegments'
+import { createSplineWallSegmentSideKey } from './wallStyleAssignments'
 
 const TEST_IMAGE_DATA_URL =
   'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4////fwAJ+wP9KobjigAAAABJRU5ErkJggg=='
+const RENDERED_EDGE_KEY_SCALE = 100000
 
 function createTestGeneratedCharacter(name = 'Generated Test Player') {
   return useDungeonStore.getState().createGeneratedCharacter({
@@ -20,6 +34,76 @@ function createTestGeneratedCharacter(name = 'Generated Test Player') {
     width: 300,
     height: 600,
   })
+}
+
+function commitRoundedOverlapRoomPair() {
+  const existingDraft = setRoomDraftCorner(
+    setRoomDraftCorner(createRoomDraftFromStroke([0, 0], [2, 2]), 'ne', 'rounded', 1),
+    'se',
+    'rounded',
+    1,
+  )
+  const ownerRoomId = useDungeonStore.getState().commitDraftRoom({
+    cells: buildRoomDraftCells(existingDraft),
+    splineNodes: buildRoomDraftSplineNodes(existingDraft),
+  })
+  expect(ownerRoomId).toBeTruthy()
+
+  const state = useDungeonStore.getState()
+  const overlapDraft = createRoomDraftFromStroke([2, 0], [4, 2])
+  const clipped = clipRoomDraft(
+    overlapDraft,
+    buildRoomDraftOccupancyPolygons(state.paintedCells, state.splineWallGraph),
+    new Set(Object.keys(state.paintedCells)),
+  )
+  expect(clipped.valid).toBe(true)
+  expect(clipped.commitCells.length).toBeGreaterThan(0)
+
+  const overlappingRoomId = useDungeonStore.getState().commitDraftRoom({
+    cells: clipped.commitCells,
+    splineNodes: clipped.splineNodes,
+  })
+  expect(overlappingRoomId).toBeTruthy()
+
+  return {
+    ownerRoomId: ownerRoomId!,
+    overlappingRoomId: overlappingRoomId!,
+  }
+}
+
+function collectDuplicatedRenderedWallEdges() {
+  const roomsByEdgeKey = new Map<string, Set<string>>()
+  const chains = buildRoomSplineWallChainsFromGraph(useDungeonStore.getState().splineWallGraph)
+
+  chains.forEach((chain) => {
+    const frames = buildSampledSplineWallFrames(chain)
+    const edgeCount = chain.closed ? frames.length : frames.length - 1
+    for (let index = 0; index < edgeCount; index += 1) {
+      const start = frames[index]?.position
+      const end = frames[(index + 1) % frames.length]?.position
+      if (!start || !end) {
+        continue
+      }
+
+      const edgeKey = buildRenderedEdgeKey(start, end)
+      const rooms = roomsByEdgeKey.get(edgeKey) ?? new Set<string>()
+      rooms.add(chain.roomId)
+      roomsByEdgeKey.set(edgeKey, rooms)
+    }
+  })
+
+  return [...roomsByEdgeKey.entries()]
+    .filter(([, rooms]) => rooms.size > 1)
+    .map(([edgeKey]) => edgeKey)
+}
+
+function buildRenderedEdgeKey(
+  start: readonly [number, number],
+  end: readonly [number, number],
+) {
+  const startKey = `${Math.round(start[0] * RENDERED_EDGE_KEY_SCALE)}:${Math.round(start[1] * RENDERED_EDGE_KEY_SCALE)}`
+  const endKey = `${Math.round(end[0] * RENDERED_EDGE_KEY_SCALE)}:${Math.round(end[1] * RENDERED_EDGE_KEY_SCALE)}`
+  return startKey <= endKey ? `${startKey}|${endKey}` : `${endKey}|${startKey}`
 }
 
 describe('useDungeonStore history', () => {
@@ -51,6 +135,526 @@ describe('useDungeonStore history', () => {
     expect(Object.keys(state.paintedCells)).toHaveLength(2)
   })
 
+  it('seeds spline wall graphs from painted rooms and supports undoable node edits', () => {
+    const state = useDungeonStore.getState()
+    state.paintCells([
+      [0, 0],
+      [1, 0],
+    ])
+
+    expect(state.seedSplineWallGraphFromPaintedCells()).toBe(true)
+
+    let nextState = useDungeonStore.getState()
+    expect(Object.keys(nextState.splineWallGraph.paths).length).toBeGreaterThan(0)
+    const path = Object.values(nextState.splineWallGraph.paths)[0]
+    expect(path).toBeDefined()
+    const nodeId = path!.nodeIds[0]!
+    const originalPosition = [...nextState.splineWallGraph.nodes[nodeId]!.position] as [number, number]
+    const movedPosition: [number, number] = [originalPosition[0], originalPosition[1] - 0.5]
+
+    expect(nextState.moveSplineWallNode(nodeId, movedPosition)).toBe(true)
+    nextState = useDungeonStore.getState()
+    expect(nextState.splineWallGraph.nodes[nodeId]?.position).toEqual(movedPosition)
+
+    nextState.undo()
+    nextState = useDungeonStore.getState()
+    expect(nextState.splineWallGraph.nodes[nodeId]?.position).toEqual(originalPosition)
+
+    nextState.redo()
+    nextState = useDungeonStore.getState()
+    expect(nextState.splineWallGraph.nodes[nodeId]?.position).toEqual(movedPosition)
+  })
+
+  it('commits draft rooms atomically with spline corner metadata and undo support', () => {
+    const draft = setRoomDraftCorner(createRoomDraftFromStroke([0, 0], [1, 1]), 'nw', 'diagonal', 1)
+    const roomId = useDungeonStore.getState().commitDraftRoom({
+      cells: buildRoomDraftCells(draft),
+      splineNodes: buildRoomDraftSplineNodes(draft),
+    })
+
+    expect(roomId).toBeTruthy()
+
+    let state = useDungeonStore.getState()
+    expect(Object.keys(state.paintedCells)).toHaveLength(4)
+    expect(state.splineWallGraph.paths[`${roomId}:path:0`]).toBeDefined()
+    expect(state.splineWallGraph.nodes[`${roomId}:path:0:node:0`]).toMatchObject({
+      cornerMode: 'diagonal',
+      cornerAmount: 1,
+    })
+
+    state.undo()
+    state = useDungeonStore.getState()
+    expect(Object.keys(state.paintedCells)).toHaveLength(0)
+    expect(state.splineWallGraph.paths[`${roomId}:path:0`]).toBeUndefined()
+
+    state.redo()
+    state = useDungeonStore.getState()
+    expect(Object.keys(state.paintedCells)).toHaveLength(4)
+    expect(state.splineWallGraph.paths[`${roomId}:path:0`]).toBeDefined()
+  })
+
+  it('applies active interior and exterior wall styles to newly drawn spline rooms', () => {
+    const state = useDungeonStore.getState()
+    state.setActiveInteriorWallStyleId('rocky-cave')
+    state.setActiveExteriorWallStyleId('ai-gothic')
+
+    const draft = createRoomDraftFromStroke([0, 0], [1, 1])
+    const roomId = state.commitDraftRoom({
+      cells: buildRoomDraftCells(draft),
+      splineNodes: buildRoomDraftSplineNodes(draft),
+    })
+    expect(roomId).toBeTruthy()
+
+    const nextState = useDungeonStore.getState()
+    const sections = analyzeSplineWallGraphBoundaries(nextState.splineWallGraph).flatMap((path) => path.sections)
+    const roomFace = sections.find((section) => section.roomId === roomId && section.faceKind === 'room-face')!
+    const exteriorFace = sections.find((section) => section.roomId === roomId && section.faceKind === 'exterior-face')!
+
+    expect(nextState.wallStyleAssignments[createSplineWallSegmentSideKey(roomFace.segmentId, roomFace.side!)]).toBe('rocky-cave')
+    expect(nextState.wallStyleAssignments[createSplineWallSegmentSideKey(exteriorFace.segmentId, exteriorFace.side!)]).toBe('ai-gothic')
+  })
+
+  it('resizes spline-backed rooms by updating their spline wall path', () => {
+    const draft = setRoomDraftCorner(createRoomDraftFromStroke([0, 0], [1, 1]), 'nw', 'diagonal', 1)
+    const roomId = useDungeonStore.getState().commitDraftRoom({
+      cells: buildRoomDraftCells(draft),
+      splineNodes: buildRoomDraftSplineNodes(draft),
+    })
+
+    expect(roomId).toBeTruthy()
+
+    const resized = useDungeonStore.getState().resizeRoom(roomId!, {
+      minX: 0,
+      maxX: 2,
+      minZ: 0,
+      maxZ: 1,
+    })
+
+    const state = useDungeonStore.getState()
+    const path = state.splineWallGraph.paths[`${roomId}:path:0`]!
+    const positions = path.nodeIds.map((nodeId) => state.splineWallGraph.nodes[nodeId]!.position)
+
+    expect(resized).toBe(true)
+    expect(state.paintedCells['2:1']?.roomId).toBe(roomId)
+    expect(positions).toEqual([
+      [0, 2],
+      [3, 2],
+      [3, 0],
+      [0, 0],
+    ])
+    expect(state.splineWallGraph.nodes[path.nodeIds[0]!]!).toMatchObject({
+      cornerMode: 'diagonal',
+      cornerAmount: 1,
+    })
+  })
+
+  it('keeps paint-created rooms synchronized into spline graph paths', () => {
+    const paintedCount = useDungeonStore.getState().paintCells([
+      [0, 0],
+      [1, 0],
+    ])
+
+    const state = useDungeonStore.getState()
+    const roomId = state.paintedCells['0:0']?.roomId
+
+    expect(paintedCount).toBe(2)
+    expect(roomId).toBeTruthy()
+    expect(state.rooms[roomId!]).toMatchObject({
+      geometrySource: 'paint',
+    })
+    expect(Object.values(state.splineWallGraph.paths).some((path) => path.roomId === roomId)).toBe(true)
+  })
+
+  it('auto-generates spline connectors when graph-backed draft rooms share a wall', () => {
+    const firstRoomId = useDungeonStore.getState().commitDraftRoom({
+      cells: buildRoomDraftCells(createRoomDraftFromStroke([0, 0], [0, 0])),
+      splineNodes: buildRoomDraftSplineNodes(createRoomDraftFromStroke([0, 0], [0, 0])),
+    })
+    const secondRoomId = useDungeonStore.getState().commitDraftRoom({
+      cells: buildRoomDraftCells(createRoomDraftFromStroke([1, 0], [1, 0])),
+      splineNodes: buildRoomDraftSplineNodes(createRoomDraftFromStroke([1, 0], [1, 0])),
+    })
+
+    const state = useDungeonStore.getState()
+    expect(firstRoomId).toBeTruthy()
+    expect(secondRoomId).toBeTruthy()
+    expect(Object.keys(state.splineWallGraph.paths)).toHaveLength(2)
+    expect(Object.values(state.wallOpenings)).toHaveLength(1)
+    expect(Object.values(state.wallOpenings)[0]).toMatchObject({
+      assetId: null,
+      segmentId: expect.any(String),
+      segmentStartRatio: 0,
+      segmentEndRatio: 1,
+      source: 'generated',
+      width: 1,
+    })
+    expect(state.wallSurfaceAssetIds).toEqual({})
+    expect(state.wallSurfaceProps).toEqual({})
+  })
+
+  it('auto-generates an open passage when a paint room joins a graph-backed room by one wall unit', () => {
+    useDungeonStore.getState().paintCells([[0, 0]])
+    const draftedRoomId = useDungeonStore.getState().commitDraftRoom({
+      cells: buildRoomDraftCells(createRoomDraftFromStroke([1, 0], [1, 0])),
+      splineNodes: buildRoomDraftSplineNodes(createRoomDraftFromStroke([1, 0], [1, 0])),
+    })
+
+    const openings = Object.values(useDungeonStore.getState().wallOpenings)
+    expect(draftedRoomId).toBeTruthy()
+    expect(openings).toHaveLength(1)
+    expect(openings[0]).toMatchObject({
+      assetId: null,
+      wallKey: '0:0:east',
+      segmentId: expect.any(String),
+      segmentStartRatio: 0,
+      segmentEndRatio: 1,
+      source: 'generated',
+    })
+  })
+
+  it('rejects draft commits when any target cell became occupied before commit', () => {
+    useDungeonStore.getState().paintCells([[0, 0]])
+
+    const staleDraft = createRoomDraftFromStroke([0, 0], [1, 0])
+    const committedRoomId = useDungeonStore.getState().commitDraftRoom({
+      cells: buildRoomDraftCells(staleDraft),
+      splineNodes: buildRoomDraftSplineNodes(staleDraft),
+    })
+
+    expect(committedRoomId).toBeNull()
+    expect(Object.keys(useDungeonStore.getState().rooms)).toHaveLength(1)
+  })
+
+  it('commits clipped overlap drafts against graph-backed rounded rooms', () => {
+    const existing = setRoomDraftCorner(
+      setRoomDraftCorner(createRoomDraftFromStroke([0, 0], [2, 2]), 'ne', 'rounded', 1),
+      'se',
+      'rounded',
+      1,
+    )
+    const existingRoomId = useDungeonStore.getState().commitDraftRoom({
+      cells: buildRoomDraftCells(existing),
+      splineNodes: buildRoomDraftSplineNodes(existing),
+    })
+    expect(existingRoomId).toBeTruthy()
+
+    const state = useDungeonStore.getState()
+    const overlapDraft = createRoomDraftFromStroke([2, 0], [4, 2])
+    const clipped = clipRoomDraft(
+      overlapDraft,
+      buildRoomDraftOccupancyPolygons(state.paintedCells, state.splineWallGraph),
+      new Set(Object.keys(state.paintedCells)),
+    )
+
+    expect(clipped.valid).toBe(true)
+    expect(clipped.commitCells.length).toBeGreaterThan(0)
+
+    const committedRoomId = useDungeonStore.getState().commitDraftRoom({
+      cells: clipped.commitCells,
+      splineNodes: clipped.splineNodes,
+    })
+
+    expect(committedRoomId).toBeTruthy()
+    expect(Object.keys(useDungeonStore.getState().rooms)).toHaveLength(2)
+  })
+
+  it('does not render duplicate wall spans when clipped graph-backed rooms share a rounded boundary', () => {
+    commitRoundedOverlapRoomPair()
+
+    expect(collectDuplicatedRenderedWallEdges()).toEqual([])
+  })
+
+  it('does not render duplicate wall spans when a new draft room shares walls with multiple graph-backed rooms', () => {
+    const leftRoomId = useDungeonStore.getState().commitDraftRoom({
+      cells: buildRoomDraftCells(createRoomDraftFromStroke([0, 0], [0, 0])),
+      splineNodes: buildRoomDraftSplineNodes(createRoomDraftFromStroke([0, 0], [0, 0])),
+    })
+    const rightRoomId = useDungeonStore.getState().commitDraftRoom({
+      cells: buildRoomDraftCells(createRoomDraftFromStroke([2, 0], [2, 0])),
+      splineNodes: buildRoomDraftSplineNodes(createRoomDraftFromStroke([2, 0], [2, 0])),
+    })
+    const topRoomId = useDungeonStore.getState().commitDraftRoom({
+      cells: buildRoomDraftCells(createRoomDraftFromStroke([1, 1], [1, 1])),
+      splineNodes: buildRoomDraftSplineNodes(createRoomDraftFromStroke([1, 1], [1, 1])),
+    })
+    const centerRoomId = useDungeonStore.getState().commitDraftRoom({
+      cells: buildRoomDraftCells(createRoomDraftFromStroke([1, 0], [1, 0])),
+      splineNodes: buildRoomDraftSplineNodes(createRoomDraftFromStroke([1, 0], [1, 0])),
+    })
+
+    expect(leftRoomId).toBeTruthy()
+    expect(rightRoomId).toBeTruthy()
+    expect(topRoomId).toBeTruthy()
+    expect(centerRoomId).toBeTruthy()
+    expect(Object.keys(useDungeonStore.getState().rooms)).toHaveLength(4)
+    expect(collectDuplicatedRenderedWallEdges()).toEqual([])
+  })
+
+  it('removes deleted graph-backed room wall paths and restores the remaining shared boundary', () => {
+    const { ownerRoomId, overlappingRoomId } = commitRoundedOverlapRoomPair()
+
+    useDungeonStore.getState().removeRoom(ownerRoomId)
+
+    const state = useDungeonStore.getState()
+    expect(state.rooms[ownerRoomId]).toBeUndefined()
+    expect(Object.values(state.splineWallGraph.paths).every((path) => path.roomId !== ownerRoomId)).toBe(true)
+    expect(
+      Object.values(state.paintedCells)
+        .filter((record) => record.roomId === overlappingRoomId)
+        .map((record) => record.cell)
+        .sort(([leftX, leftZ], [rightX, rightZ]) => leftZ - rightZ || leftX - rightX),
+    ).toEqual([
+      [3, 0], [4, 0],
+      [3, 1], [4, 1],
+      [3, 2], [4, 2],
+    ])
+
+    const chains = buildRoomSplineWallChainsFromGraph(state.splineWallGraph)
+    expect(chains).toHaveLength(1)
+    expect(chains[0]).toMatchObject({
+      roomId: overlappingRoomId,
+      closed: true,
+    })
+    expect(collectDuplicatedRenderedWallEdges()).toEqual([])
+  })
+
+  it('removes non-occupying props supported by a room when that room is deleted', () => {
+    useDungeonStore.getState().paintCells([[0, 0]])
+    const roomId = useDungeonStore.getState().paintedCells['0:0']?.roomId
+    expect(roomId).toBeTruthy()
+
+    const propId = useDungeonStore.getState().placeObject({
+      type: 'prop',
+      assetId: 'dungeon.props_book_brown',
+      position: [1.1, 0, 0.9],
+      rotation: [0, 0, 0],
+      props: {
+        connector: 'FLOOR',
+        direction: null,
+      },
+      cell: [0, 0],
+      cellKey: '0:0:floor',
+      supportCellKey: '0:0',
+    })
+    expect(propId).toBeTruthy()
+
+    useDungeonStore.getState().removeRoom(roomId!)
+
+    const state = useDungeonStore.getState()
+    expect(state.rooms[roomId!]).toBeUndefined()
+    expect(state.placedObjects[propId!]).toBeUndefined()
+  })
+
+  it('splits spline wall segments into new nodes and supports undo/redo', () => {
+    const state = useDungeonStore.getState()
+    state.paintCells([
+      [0, 0],
+      [1, 0],
+    ])
+    expect(state.seedSplineWallGraphFromPaintedCells()).toBe(true)
+
+    let nextState = useDungeonStore.getState()
+    const path = Object.values(nextState.splineWallGraph.paths)[0]
+    const originalNodeCount = Object.keys(nextState.splineWallGraph.nodes).length
+    const originalSegmentCount = Object.keys(nextState.splineWallGraph.segments).length
+    const segmentId = path!.segmentIds[0]!
+
+    expect(nextState.splitSplineWallSegment(segmentId)).toBe(true)
+    nextState = useDungeonStore.getState()
+
+    expect(Object.keys(nextState.splineWallGraph.nodes)).toHaveLength(originalNodeCount + 1)
+    expect(Object.keys(nextState.splineWallGraph.segments)).toHaveLength(originalSegmentCount + 1)
+    expect(nextState.splineWallGraph.paths[path!.id]?.segmentIds).toHaveLength(path!.segmentIds.length + 1)
+
+    nextState.undo()
+    nextState = useDungeonStore.getState()
+    expect(Object.keys(nextState.splineWallGraph.nodes)).toHaveLength(originalNodeCount)
+    expect(Object.keys(nextState.splineWallGraph.segments)).toHaveLength(originalSegmentCount)
+
+    nextState.redo()
+    nextState = useDungeonStore.getState()
+    expect(Object.keys(nextState.splineWallGraph.nodes)).toHaveLength(originalNodeCount + 1)
+    expect(Object.keys(nextState.splineWallGraph.segments)).toHaveLength(originalSegmentCount + 1)
+  })
+
+  it('syncs wall openings into spline wall cutouts when seeding the graph', () => {
+    const state = useDungeonStore.getState()
+    state.paintCells([[0, 0]])
+    const openingId = state.placeOpening({
+      assetId: null,
+      wallKey: '0:0:north',
+      width: 1,
+      flipped: false,
+    })
+
+    expect(openingId).toBeTruthy()
+    expect(state.seedSplineWallGraphFromPaintedCells()).toBe(true)
+
+    const nextState = useDungeonStore.getState()
+    const northSegments = Object.values(nextState.splineWallGraph.segments)
+      .filter((segment) => segment.wallKey === '0:0:north')
+    expect(northSegments).toHaveLength(1)
+    expect(northSegments[0]?.cutouts).toMatchObject([{
+      openingId,
+      kind: 'passage',
+      startRatio: 0,
+      endRatio: 1,
+      bottomHeight: 0,
+      topHeight: null,
+    }])
+  })
+
+  it('auto-seeds the spline wall graph when placing a custom door opening on painted walls', () => {
+    const state = useDungeonStore.getState()
+    state.paintCells([[0, 0]])
+    const openingId = state.placeOpening({
+      assetId: 'core.opening_door_custom',
+      wallKey: '0:0:north',
+      width: 1,
+      flipped: false,
+    })
+
+    expect(openingId).toBeTruthy()
+
+    const nextState = useDungeonStore.getState()
+    expect(Object.keys(nextState.splineWallGraph.paths)).toHaveLength(1)
+    const northSegments = Object.values(nextState.splineWallGraph.segments)
+      .filter((segment) => segment.wallKey === '0:0:north')
+    expect(northSegments).toHaveLength(1)
+    expect(northSegments[0]?.cutouts).toMatchObject([{
+      openingId,
+      kind: 'door',
+      startRatio: 0.24,
+      endRatio: 0.76,
+      bottomHeight: 0,
+      topHeight: 1.42,
+    }])
+  })
+
+  it('syncs custom door cutouts onto graph-authored wall segments without wall keys', () => {
+    const state = useDungeonStore.getState()
+    state.paintCells([
+      [0, 0],
+      [1, 0],
+    ])
+
+    useDungeonStore.setState((current) => ({
+      ...current,
+        splineWallGraph: {
+          nodes: {
+            'node-a': { id: 'node-a', position: [0, 1], layerId: 'default', roomId: 'room-1' },
+            'node-b': { id: 'node-b', position: [2, 1], layerId: 'default', roomId: 'room-1' },
+          },
+        segments: {
+          'segment-a': {
+            id: 'segment-a',
+            pathId: 'path-a',
+            startNodeId: 'node-a',
+            endNodeId: 'node-b',
+            layerId: 'default',
+            roomId: 'room-1',
+            wallKey: null,
+            wallHeight: null,
+            wallThickness: null,
+            cutouts: [],
+          },
+        },
+        paths: {
+          'path-a': {
+            id: 'path-a',
+            layerId: 'default',
+            roomId: 'room-1',
+            closed: false,
+            nodeIds: ['node-a', 'node-b'],
+            segmentIds: ['segment-a'],
+          },
+        },
+      },
+    }))
+
+    const openingId = useDungeonStore.getState().placeOpening({
+      assetId: 'core.opening_door_custom',
+      wallKey: '0:0:north',
+      width: 1,
+      flipped: false,
+    })
+
+    expect(openingId).toBeTruthy()
+
+    const nextState = useDungeonStore.getState()
+    expect(nextState.splineWallGraph.segments['segment-a']?.cutouts).toMatchObject([{
+      openingId,
+      kind: 'door',
+      startRatio: 0.12,
+      endRatio: 0.38,
+      bottomHeight: 0,
+      topHeight: 1.42,
+    }])
+  })
+
+  it('preserves opening cutouts across spline segment splits', () => {
+    const state = useDungeonStore.getState()
+    state.paintCells([[0, 0]])
+    const openingId = state.placeOpening({
+      assetId: null,
+      wallKey: '0:0:north',
+      width: 1,
+      flipped: false,
+    })
+
+    expect(state.seedSplineWallGraphFromPaintedCells()).toBe(true)
+
+    let nextState = useDungeonStore.getState()
+    const northSegment = Object.values(nextState.splineWallGraph.segments)
+      .find((segment) => segment.wallKey === '0:0:north')
+    expect(northSegment).toBeDefined()
+
+    expect(nextState.splitSplineWallSegment(northSegment!.id)).toBe(true)
+    nextState = useDungeonStore.getState()
+
+    const splitNorthSegments = Object.values(nextState.splineWallGraph.segments)
+      .filter((segment) => segment.wallKey === '0:0:north')
+    expect(splitNorthSegments).toHaveLength(2)
+    expect(splitNorthSegments.every((segment) =>
+      segment.cutouts.some((cutout) => cutout.openingId === openingId && cutout.startRatio === 0 && cutout.endRatio === 1),
+    )).toBe(true)
+  })
+
+  it('removes spline wall nodes and supports undo/redo', () => {
+    const state = useDungeonStore.getState()
+    state.paintCells([
+      [0, 0],
+      [1, 0],
+    ])
+    expect(state.seedSplineWallGraphFromPaintedCells()).toBe(true)
+
+    let nextState = useDungeonStore.getState()
+    const path = Object.values(nextState.splineWallGraph.paths)[0]
+    const segmentId = path!.segmentIds[0]!
+    expect(nextState.splitSplineWallSegment(segmentId)).toBe(true)
+
+    nextState = useDungeonStore.getState()
+    const removableNodeId = Object.keys(nextState.splineWallGraph.nodes).find((nodeId) => nodeId.includes(':node:split:'))
+    expect(removableNodeId).toBeTruthy()
+    const splitNodeCount = Object.keys(nextState.splineWallGraph.nodes).length
+    const splitSegmentCount = Object.keys(nextState.splineWallGraph.segments).length
+
+    expect(nextState.removeSplineWallNode(removableNodeId!)).toBe(true)
+    nextState = useDungeonStore.getState()
+    expect(Object.keys(nextState.splineWallGraph.nodes)).toHaveLength(splitNodeCount - 1)
+    expect(Object.keys(nextState.splineWallGraph.segments)).toHaveLength(splitSegmentCount - 1)
+
+    nextState.undo()
+    nextState = useDungeonStore.getState()
+    expect(Object.keys(nextState.splineWallGraph.nodes)).toHaveLength(splitNodeCount)
+    expect(Object.keys(nextState.splineWallGraph.segments)).toHaveLength(splitSegmentCount)
+
+    nextState.redo()
+    nextState = useDungeonStore.getState()
+    expect(Object.keys(nextState.splineWallGraph.nodes)).toHaveLength(splitNodeCount - 1)
+    expect(Object.keys(nextState.splineWallGraph.segments)).toHaveLength(splitSegmentCount - 1)
+  })
+
   it('assigns the active room set to newly created rooms', () => {
     const state = useDungeonStore.getState()
     state.setActiveRoomSetId('cave')
@@ -59,9 +663,11 @@ describe('useDungeonStore history', () => {
     const roomId = useDungeonStore.getState().paintedCells['0:0']?.roomId
     expect(roomId).toBeTruthy()
     expect(useDungeonStore.getState().rooms[roomId!]?.roomSetId).toBe('cave')
+    expect(useDungeonStore.getState().rooms[roomId!]?.wallMaterialSetId).toBe('rough-rockface-1-pbr-material')
 
     const manualRoomId = useDungeonStore.getState().createRoom('Manual Room')
     expect(useDungeonStore.getState().rooms[manualRoomId]?.roomSetId).toBe('cave')
+    expect(useDungeonStore.getState().rooms[manualRoomId]?.wallMaterialSetId).toBe('rough-rockface-1-pbr-material')
   })
 
   it('keeps pixelation disabled by default and allows toggling it', () => {
@@ -995,6 +1601,26 @@ describe('useDungeonStore history', () => {
     expect(useDungeonStore.getState().showPropProbeDebug).toBe(false)
   })
 
+  it('toggles the surface probe debug visibility flag', () => {
+    expect(useDungeonStore.getState().showSurfaceProbeDebug).toBe(false)
+
+    useDungeonStore.getState().setShowSurfaceProbeDebug(true)
+    expect(useDungeonStore.getState().showSurfaceProbeDebug).toBe(true)
+
+    useDungeonStore.getState().setShowSurfaceProbeDebug(false)
+    expect(useDungeonStore.getState().showSurfaceProbeDebug).toBe(false)
+  })
+
+  it('toggles the spline wall cutout debug visibility flag', () => {
+    expect(useDungeonStore.getState().showSplineWallCutoutDebug).toBe(false)
+
+    useDungeonStore.getState().setShowSplineWallCutoutDebug(true)
+    expect(useDungeonStore.getState().showSplineWallCutoutDebug).toBe(true)
+
+    useDungeonStore.getState().setShowSplineWallCutoutDebug(false)
+    expect(useDungeonStore.getState().showSplineWallCutoutDebug).toBe(false)
+  })
+
   it('toggles the build performance tracing debug flag', () => {
     expect(useDungeonStore.getState().buildPerformanceTracingEnabled).toBe(false)
 
@@ -1281,6 +1907,32 @@ describe('useDungeonStore history', () => {
     expect(state.placedObjects[propId!]).toBeUndefined()
   })
 
+  it('removes a non-occupying floor prop when its support cell is erased', () => {
+    useDungeonStore.getState().paintCells([[0, 0]])
+
+    const propId = useDungeonStore.getState().placeObject({
+      type: 'prop',
+      assetId: 'dungeon.props_book_brown',
+      position: [1.1, 0, 0.9],
+      rotation: [0, 0, 0],
+      props: {
+        connector: 'FLOOR',
+        direction: null,
+      },
+      cell: [0, 0],
+      cellKey: '0:0:floor',
+      supportCellKey: '0:0',
+    })
+
+    expect(propId).toBeTruthy()
+    expect(useDungeonStore.getState().occupancy['0:0:floor']).toBeUndefined()
+
+    useDungeonStore.getState().eraseCells([[0, 0]])
+
+    const state = useDungeonStore.getState()
+    expect(state.placedObjects[propId!]).toBeUndefined()
+  })
+
   it('places a free prop on a painted floor cell without consuming occupancy', () => {
     useDungeonStore.getState().paintCells([[0, 0]])
 
@@ -1536,6 +2188,30 @@ describe('useDungeonStore history', () => {
 
     expect(useDungeonStore.getState().wallOpenings[openingId!]?.flipped).toBe(true)
   })
+
+  it('rotates a mirrored wall selection by updating canonical wall props', () => {
+    useDungeonStore.setState((state) => ({
+      ...state,
+      selection: '1:0:west',
+      paintedCells: {
+        ...state.paintedCells,
+        '0:0': { cell: [0, 0], layerId: state.activeLayerId, roomId: 'room-a' },
+        '1:0': { cell: [1, 0], layerId: state.activeLayerId, roomId: 'room-b' },
+      },
+      wallSurfaceAssetIds: {
+        ...state.wallSurfaceAssetIds,
+        '0:0:east': 'dungeon.wall_wall_doorway',
+      },
+      wallSurfaceProps: {
+        ...state.wallSurfaceProps,
+        '0:0:east': {},
+      },
+    }))
+
+    useDungeonStore.getState().rotateSelection()
+
+    expect(useDungeonStore.getState().wallSurfaceProps['0:0:east']).toMatchObject({ flipped: true })
+  })
 })
 
 // ── getOpeningSegments ────────────────────────────────────────────────────────
@@ -1585,6 +2261,97 @@ describe('useDungeonStore wall openings', () => {
       wallKey: '0:0:north',
       width: 1,
       flipped: false,
+    })
+  })
+
+  it('records spline segment ownership for procedural door placements and syncs cutouts', () => {
+    const graph = upsertSplineWallGraphRoomPath({
+      nodes: {},
+      segments: {},
+      paths: {},
+    }, {
+      roomId: 'room-a',
+      layerId: 'default',
+      nodes: [
+        { position: [0, 0], cornerMode: 'square', cornerAmount: 0 },
+        { position: [2, 2], cornerMode: 'square', cornerAmount: 0 },
+        { position: [0, 4], cornerMode: 'square', cornerAmount: 0 },
+      ],
+    })
+    const queryCache = createSplineWallQueryCache(graph)
+    const placement = buildSplineWallOpeningPlacement(
+      { x: 3, z: 1 },
+      graph,
+      queryCache,
+      {},
+      'core.opening_door_custom',
+    )
+
+    useDungeonStore.getState().setSplineWallGraph(graph)
+    const id = useDungeonStore.getState().placeOpening({
+      assetId: 'core.opening_door_custom',
+      wallKey: placement!.wallKey,
+      width: placement!.width,
+      segmentId: placement!.segmentId,
+      segmentStartRatio: placement!.segmentStartRatio,
+      segmentEndRatio: placement!.segmentEndRatio,
+      flipped: false,
+    })
+
+    const state = useDungeonStore.getState()
+    expect(state.wallOpenings[id!]).toMatchObject({
+      assetId: 'core.opening_door_custom',
+      segmentId: placement!.segmentId,
+      segmentStartRatio: placement!.segmentStartRatio,
+      segmentEndRatio: placement!.segmentEndRatio,
+    })
+    expect(state.splineWallGraph.segments[placement!.segmentId]?.cutouts[0]).toMatchObject({
+      openingId: id,
+      startRatio: placement!.segmentStartRatio,
+      endRatio: placement!.segmentEndRatio,
+    })
+  })
+
+  it('records spline segment ownership for graph-backed open passages', () => {
+    const graph = upsertSplineWallGraphRoomPath({
+      nodes: {},
+      segments: {},
+      paths: {},
+    }, {
+      roomId: 'room-a',
+      layerId: 'default',
+      nodes: [
+        { position: [0, 0], cornerMode: 'square', cornerAmount: 0 },
+        { position: [2, 2], cornerMode: 'square', cornerAmount: 0 },
+        { position: [0, 4], cornerMode: 'square', cornerAmount: 0 },
+      ],
+    })
+    const queryCache = createSplineWallQueryCache(graph)
+    const placement = buildSplineWallOpeningPlacement(
+      { x: 3, z: 1 },
+      graph,
+      queryCache,
+      {},
+      null,
+    )
+
+    useDungeonStore.getState().setSplineWallGraph(graph)
+    useDungeonStore.getState().placeOpenPassages([placement!.wallKey])
+
+    const state = useDungeonStore.getState()
+    const opening = Object.values(state.wallOpenings)[0]
+    expect(opening).toMatchObject({
+      assetId: null,
+      wallKey: placement!.wallKey,
+      source: 'manual',
+    })
+    expect(opening?.segmentId).toBe(placement!.segmentId)
+    expect(opening?.segmentStartRatio).not.toBeNull()
+    expect(opening?.segmentEndRatio).not.toBeNull()
+    expect(state.splineWallGraph.segments[opening!.segmentId!]?.cutouts[0]).toMatchObject({
+      openingId: opening!.id,
+      startRatio: opening!.segmentStartRatio,
+      endRatio: opening!.segmentEndRatio,
     })
   })
 
@@ -1719,13 +2486,15 @@ describe('useDungeonStore wall openings', () => {
     state.paintCells([[0, 0], [0, 1], [0, 2]])
     state.paintCells([[1, 0], [1, 1], [1, 2]])
 
-    expect(useDungeonStore.getState().wallOpenings).toEqual({})
-    expect(useDungeonStore.getState().wallSurfaceAssetIds).toMatchObject({
-      '0:1:east': 'dungeon.wall_wall_doorway',
+    const openings = Object.values(useDungeonStore.getState().wallOpenings)
+    expect(openings).toHaveLength(1)
+    expect(openings[0]).toMatchObject({
+      assetId: 'core.opening_door_custom',
+      width: 1,
+      source: 'generated',
     })
-    expect(useDungeonStore.getState().wallSurfaceProps['0:1:east']).toMatchObject({
-      generatedConnector: true,
-    })
+    expect(useDungeonStore.getState().wallSurfaceAssetIds).toEqual({})
+    expect(useDungeonStore.getState().wallSurfaceProps).toEqual({})
   })
 
   it('preserves manual openings instead of generating overlapping connectors', () => {
@@ -1755,9 +2524,13 @@ describe('useDungeonStore wall openings', () => {
 
     const rightRoomId = useDungeonStore.getState().paintedCells['1:0']?.roomId
     expect(rightRoomId).toBeTruthy()
-    expect(useDungeonStore.getState().wallSurfaceAssetIds).toMatchObject({
-      '0:0:east': 'dungeon.wall_wall_doorway',
-    })
+    expect(Object.values(useDungeonStore.getState().wallOpenings)).toEqual([
+      expect.objectContaining({
+        assetId: 'core.opening_door_custom',
+        source: 'generated',
+      }),
+    ])
+    expect(useDungeonStore.getState().wallSurfaceAssetIds).toEqual({})
 
     useDungeonStore.getState().resizeRoom(rightRoomId!, {
       minX: 1,
@@ -1773,7 +2546,7 @@ describe('useDungeonStore wall openings', () => {
       wallKey: '0:0:east',
       source: 'generated',
     })
-    expect(useDungeonStore.getState().wallSurfaceAssetIds['0:0:east']).toBeUndefined()
+    expect(useDungeonStore.getState().wallSurfaceAssetIds).toEqual({})
   })
 
   it('adds and removes inner wall segments in a single history step', () => {

@@ -215,7 +215,7 @@ export function PropToolPanel() {
             : assetBrowser.category === 'nature'
               ? 'Browse outdoor nature props by family. Only full placeable assets appear here; terrain cliff and top pieces stay out of the prop browser.'
             : assetBrowser.category === 'surfaces'
-              ? 'Browse floor and wall variants here. Selecting a surface asset keeps the faster brush workflow on the canvas.'
+              ? 'Browse floor surfaces here. Selecting a surface asset keeps the faster brush workflow on the canvas.'
               : 'Browse props by category and subcategory. Wall, floor, and surface-aware placement still comes from asset metadata.'}
         </p>
         <p>

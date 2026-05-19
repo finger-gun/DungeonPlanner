@@ -4,7 +4,7 @@ import { createDungeonFlameEffectGetter, createDungeonFlameLightGetter } from '.
 
 
 const transform: ContentPackModelTransform = {
-  position: [0, 0.9, -0.4],
+  position: [0, 0.9, -0.02],
   rotation: [0, 0, 0],
   scale: 1,
 } 
@@ -26,10 +26,18 @@ export const dungeonTorchMountedAsset = createDungeonAsset({
     ],
     blocksLineOfSight: false,
   },
-  getLight: createDungeonFlameLightGetter({ defaultLit: true }),
+  getLight: createDungeonFlameLightGetter({ 
+    defaultLit: true,
+    light: {
+      offset: [0, 1.2, 0.4] as [number, number, number],
+      intensity: 1.5,
+      distance: 8,
+      decay: 2,
+    },
+  }),
   getEffect: createDungeonFlameEffectGetter({
     defaultLit: true,
-    emitters: [{ offset: [-0.1, 1.2, 0], scale: 0.8, intensity: 1.1 }],
+    emitters: [{ offset: [0, 1.2, 0.4], scale: 0.8, intensity: 1.1 }],
   }),
   getPlayModeNextProps: (objectProps) => {
     const lit = objectProps.lit !== false

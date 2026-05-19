@@ -44,7 +44,7 @@ function createEntry(index: number, overrides: Partial<ResolvedStaticTileEntry> 
 function createGroup(entries: ResolvedStaticTileEntry[], overrides: Partial<ResolvedTileStreamGroup> = {}): ResolvedTileStreamGroup {
   return {
     floorId: 'floor-1',
-    bucketKey: 'floor-1|0:0|/assets/floor.glb|default|floor|visible|shadow|unlit|single-direction|steady',
+    bucketKey: 'floor-1|0:0|/assets/floor.glb|default|floor|visible|shadow|unlit|single-direction|steady|no-room-floor-mask',
     chunkKey: '0:0',
     entries,
     assetUrl: '/assets/floor.glb',
@@ -67,6 +67,9 @@ function createGroup(entries: ResolvedStaticTileEntry[], overrides: Partial<Reso
     useSecondaryDirectionAttribute: false,
     shouldRenderBase: true,
     useLineOfSightPostMask: false,
+    useRoomFloorMask: false,
+    roomFloorMaskRuntime: null,
+    dynamicPointLightsActive: false,
     sourceScene: createSourceScene(),
     fogRuntime: null,
     ...overrides,
@@ -275,7 +278,7 @@ describe('TileGpuStream', () => {
     const stream = new TileGpuStream({ invalidate: vi.fn() })
     const chunk0Group = createGroup([createEntry(0)])
     const chunk1Group = createGroup([createEntry(9)], {
-      bucketKey: 'floor-1|1:0|/assets/floor.glb|default|floor|visible|shadow|unlit|single-direction|steady',
+      bucketKey: 'floor-1|1:0|/assets/floor.glb|default|floor|visible|shadow|unlit|single-direction|steady|no-room-floor-mask',
       chunkKey: '1:0',
     })
 
@@ -300,7 +303,7 @@ describe('TileGpuStream', () => {
       groups: [
         createGroup([createEntry(0, { position: [4, 0, 0] })]),
         createGroup([createEntry(9)], {
-          bucketKey: 'floor-1|1:0|/assets/floor.glb|default|floor|visible|shadow|unlit|single-direction|steady',
+          bucketKey: 'floor-1|1:0|/assets/floor.glb|default|floor|visible|shadow|unlit|single-direction|steady|no-room-floor-mask',
           chunkKey: '1:0',
         }),
       ],
@@ -334,7 +337,7 @@ describe('TileGpuStream', () => {
           variantKey: '0:0:corner',
         }),
       ], {
-        bucketKey: 'floor-1|0:0|/assets/pillar.glb|default|wall|visible|shadow|unlit|single-direction|steady',
+        bucketKey: 'floor-1|0:0|/assets/pillar.glb|default|wall|visible|shadow|unlit|single-direction|steady|no-room-floor-mask',
         variant: 'wall',
         useBakedLight: false,
       })],

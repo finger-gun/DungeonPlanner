@@ -1,5 +1,8 @@
 import { GRID_SIZE, getCellKey, snapWorldPointToGrid } from '../../hooks/useSnapToGrid'
 import type { AssetBrowserCategory } from '../../content-packs/types'
+import { buildSplineWallOpeningPlacement } from '../../store/openingPlacement'
+import type { SplineWallGraph } from '../../store/splineWallGraph'
+import type { SplineWallQueryCache } from '../../store/splineWallQueries'
 import type { PaintedCellRecord, DungeonTool } from '../../store/useDungeonStore'
 import { isInterRoomBoundary, isWallBoundary, WALL_DIRECTIONS } from '../../store/wallSegments'
 
@@ -15,7 +18,22 @@ export function getEligibleOpenPassageWallKey(
   point: { x: number; y: number; z: number },
   paintedCells: Record<string, PaintedCellRecord>,
   eligibleWallKeys: Set<string>,
+  splineWallGraph?: SplineWallGraph | null,
+  openingQueryCache?: SplineWallQueryCache | null,
 ) {
+  if (splineWallGraph && openingQueryCache) {
+    const placement = buildSplineWallOpeningPlacement(
+      { x: point.x, z: point.z },
+      splineWallGraph,
+      openingQueryCache,
+      paintedCells,
+      null,
+    )
+    if (placement?.valid && eligibleWallKeys.has(placement.wallKey)) {
+      return placement.wallKey
+    }
+  }
+
   const snapped = snapWorldPointToGrid(point)
   if (!paintedCells[snapped.key]) {
     return null

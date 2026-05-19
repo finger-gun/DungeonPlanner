@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import type { ContentPackAsset } from '../../content-packs/types'
 import type { OutdoorTerrainHeightfield } from '../../store/outdoorTerrain'
+import { upsertSplineWallGraphRoomPath } from '../../store/splineWallGraph'
+import { createSplineWallQueryCache } from '../../store/splineWallQueries'
 import type { PaintedCellRecord } from '../../store/useDungeonStore'
 import { calculatePropSnapPosition } from './propPlacement'
 
@@ -55,12 +57,17 @@ function createTestAsset(metadata: ContentPackAsset['metadata']): ContentPackAss
   }
 }
 
+function normalizeAngle(angle: number) {
+  const wrapped = (angle + Math.PI) % (Math.PI * 2)
+  return wrapped < 0 ? wrapped + Math.PI : wrapped - Math.PI
+}
+
 describe('calculatePropSnapPosition', () => {
   it.each([
-    { name: 'north', cursor: { x: 1, y: 0, z: 1.9 }, expectedPosition: [1, 0, 1.5], expectedRotationY: Math.PI },
-    { name: 'south', cursor: { x: 1, y: 0, z: 0.1 }, expectedPosition: [1, 0, 0.5], expectedRotationY: 0 },
-    { name: 'east', cursor: { x: 1.9, y: 0, z: 1 }, expectedPosition: [1.5, 0, 1], expectedRotationY: -Math.PI / 2 },
-    { name: 'west', cursor: { x: 0.1, y: 0, z: 1 }, expectedPosition: [0.5, 0, 1], expectedRotationY: Math.PI / 2 },
+    { name: 'north', cursor: { x: 1, y: 0, z: 1.9 }, expectedPosition: [1, 0, 1.75], expectedRotationY: 0 },
+    { name: 'south', cursor: { x: 1, y: 0, z: 0.1 }, expectedPosition: [1, 0, 0.25], expectedRotationY: -Math.PI },
+    { name: 'east', cursor: { x: 1.9, y: 0, z: 1 }, expectedPosition: [1.75, 0, 1], expectedRotationY: Math.PI / 2 },
+    { name: 'west', cursor: { x: 0.1, y: 0, z: 1 }, expectedPosition: [0.25, 0, 1], expectedRotationY: -Math.PI / 2 },
   ])('snaps to the $name wall segment center and keeps the support cell', ({ cursor, expectedPosition, expectedRotationY }) => {
     const asset = createTestAsset({
       connectsTo: 'WALL',
@@ -76,7 +83,7 @@ describe('calculatePropSnapPosition', () => {
     expect(placement?.position[0]).toBeCloseTo(expectedPosition[0])
     expect(placement?.position[1]).toBeCloseTo(expectedPosition[1])
     expect(placement?.position[2]).toBeCloseTo(expectedPosition[2])
-    expect(placement?.rotation[1]).toBeCloseTo(expectedRotationY)
+    expect(normalizeAngle(placement?.rotation[1] ?? 0)).toBeCloseTo(expectedRotationY)
   })
 
   it('snaps to the closest side of a shared wall', () => {
@@ -90,26 +97,26 @@ describe('calculatePropSnapPosition', () => {
     const upperRoomPlacement = calculatePropSnapPosition(asset, { x: 1, y: 0, z: 2.2 }, SHARED_WALL_CELLS, null)
 
     expect(lowerRoomPlacement?.cellKey).toBe('0:0')
-    expect(lowerRoomPlacement?.position[2]).toBeCloseTo(1.5)
-    expect(lowerRoomPlacement?.rotation[1]).toBeCloseTo(Math.PI)
+    expect(lowerRoomPlacement?.position[2]).toBeCloseTo(1.75)
+    expect(normalizeAngle(lowerRoomPlacement?.rotation[1] ?? 0)).toBeCloseTo(0)
 
     expect(upperRoomPlacement?.cellKey).toBe('0:1')
-    expect(upperRoomPlacement?.position[2]).toBeCloseTo(2.5)
-    expect(upperRoomPlacement?.rotation[1]).toBeCloseTo(0)
+    expect(upperRoomPlacement?.position[2]).toBeCloseTo(2.25)
+    expect(normalizeAngle(upperRoomPlacement?.rotation[1] ?? 0)).toBeCloseTo(-Math.PI)
   })
 
   it('rotates the connector offset before anchoring wall props', () => {
     const asset = createTestAsset({
       connectsTo: ['WALL', 'FLOOR'],
       snapsTo: 'GRID',
-      connectors: [{ type: 'WALL', point: [0, 0, -0.5] }],
+      connectors: [{ type: 'WALL', point: [0, 0, 0.5] }],
     })
 
     const placement = calculatePropSnapPosition(asset, { x: 1.9, y: 0, z: 1 }, SINGLE_PAINTED_CELL, null)
 
     expect(placement).not.toBeNull()
     expect(placement?.cellKey).toBe('0:0')
-    expect(placement?.position[0]).toBeCloseTo(1)
+    expect(placement?.position[0]).toBeCloseTo(1.25)
     expect(placement?.position[2]).toBeCloseTo(1)
   })
 
@@ -148,7 +155,7 @@ describe('calculatePropSnapPosition', () => {
     expect(placement?.connector.type).toBe('WALL')
     expect(placement?.cellKey).toBe('0:0')
     expect(placement?.position[0]).toBeCloseTo(1)
-    expect(placement?.position[2]).toBeCloseTo(1.5)
+    expect(placement?.position[2]).toBeCloseTo(1.75)
   })
 
   it('chooses a prop surface over the floor when the surface candidate is closer', () => {
@@ -217,7 +224,7 @@ describe('calculatePropSnapPosition', () => {
     expect(placement).not.toBeNull()
     expect(placement?.connector.type).toBe('WALL')
     expect(placement?.position[0]).toBeCloseTo(0.35)
-    expect(placement?.position[2]).toBeCloseTo(1.5)
+    expect(placement?.position[2]).toBeCloseTo(1.75)
   })
 
   it('lets FREE wall snapping follow the cursor along an east/west wall', () => {
@@ -231,8 +238,125 @@ describe('calculatePropSnapPosition', () => {
 
     expect(placement).not.toBeNull()
     expect(placement?.connector.type).toBe('WALL')
-    expect(placement?.position[0]).toBeCloseTo(1.5)
+    expect(placement?.position[0]).toBeCloseTo(1.75)
     expect(placement?.position[2]).toBeCloseTo(0.35)
+  })
+
+  it('snaps wall props to diagonal spline walls using the nearest sampled surface', () => {
+    const asset = createTestAsset({
+      connectsTo: 'WALL',
+      snapsTo: 'GRID',
+      connectors: [{ type: 'WALL', point: [0, 0, 0] }],
+    })
+    const graph = upsertSplineWallGraphRoomPath({
+      nodes: {},
+      segments: {},
+      paths: {},
+    }, {
+      roomId: 'room-a',
+      layerId: 'default',
+      nodes: [
+        { position: [0, 0], cornerMode: 'square', cornerAmount: 0 },
+        { position: [2, 2], cornerMode: 'square', cornerAmount: 0 },
+        { position: [0, 4], cornerMode: 'square', cornerAmount: 0 },
+      ],
+    })
+    const queryCache = createSplineWallQueryCache(graph)
+
+    const placement = calculatePropSnapPosition(
+      asset,
+      { x: 3, y: 0, z: 1 },
+      {},
+      null,
+      undefined,
+      true,
+      undefined,
+      undefined,
+      queryCache,
+    )
+
+    expect(placement).not.toBeNull()
+    expect(normalizeAngle(placement?.rotation[1] ?? 0)).toBeCloseTo((3 * Math.PI) / 4, 4)
+    expect(placement?.position[0]).toBeCloseTo(2 + (Math.SQRT1_2 * 0.25), 3)
+    expect(placement?.position[2]).toBeCloseTo(2 - (Math.SQRT1_2 * 0.25), 3)
+  })
+
+  it('snaps graph-backed wall props to the room-facing side when the cursor lands on the wall centerline', () => {
+    const asset = createTestAsset({
+      connectsTo: 'WALL',
+      snapsTo: 'GRID',
+      connectors: [{ type: 'WALL', point: [0, 0, 0] }],
+    })
+    const graph = upsertSplineWallGraphRoomPath({
+      nodes: {},
+      segments: {},
+      paths: {},
+    }, {
+      roomId: 'room-a',
+      layerId: 'default',
+      nodes: [
+        { position: [0, 0], cornerMode: 'square', cornerAmount: 0 },
+        { position: [1, 0], cornerMode: 'square', cornerAmount: 0 },
+        { position: [1, 1], cornerMode: 'square', cornerAmount: 0 },
+        { position: [0, 1], cornerMode: 'square', cornerAmount: 0 },
+      ],
+    })
+    const queryCache = createSplineWallQueryCache(graph)
+
+    const placement = calculatePropSnapPosition(
+      asset,
+      { x: 1, y: 0, z: 2 },
+      SINGLE_PAINTED_CELL,
+      null,
+      undefined,
+      true,
+      undefined,
+      undefined,
+      queryCache,
+    )
+
+    expect(placement).not.toBeNull()
+    expect(placement?.position[0]).toBeCloseTo(1)
+    expect(placement?.position[2]).toBeCloseTo(1.75)
+  })
+
+  it('snaps wall props to rounded spline wall surfaces with non-cardinal rotation', () => {
+    const asset = createTestAsset({
+      connectsTo: 'WALL',
+      snapsTo: 'GRID',
+      connectors: [{ type: 'WALL', point: [0, 0, 0] }],
+    })
+    const graph = upsertSplineWallGraphRoomPath({
+      nodes: {},
+      segments: {},
+      paths: {},
+    }, {
+      roomId: 'room-a',
+      layerId: 'default',
+      nodes: [
+        { position: [0, 0], cornerMode: 'rounded', cornerAmount: 2 },
+        { position: [4, 0], cornerMode: 'square', cornerAmount: 0 },
+        { position: [4, 4], cornerMode: 'square', cornerAmount: 0 },
+        { position: [0, 4], cornerMode: 'square', cornerAmount: 0 },
+      ],
+    })
+    const queryCache = createSplineWallQueryCache(graph, { curveSubdivisions: 8 })
+
+    const placement = calculatePropSnapPosition(
+      asset,
+      { x: 2.4, y: 0, z: 0.6 },
+      {},
+      null,
+      undefined,
+      true,
+      undefined,
+      undefined,
+      queryCache,
+    )
+
+    expect(placement).not.toBeNull()
+    expect(normalizeAngle(placement!.rotation[1])).toBeGreaterThan(-Math.PI + 0.1)
+    expect(normalizeAngle(placement!.rotation[1])).toBeLessThan(-Math.PI / 2 - 0.1)
   })
 
   it('uses the cursor ray against the wall plane for FREE wall placement', () => {
@@ -254,7 +378,7 @@ describe('calculatePropSnapPosition', () => {
     )
 
     expect(placement).not.toBeNull()
-    expect(placement?.position[0]).toBeCloseTo(1.5)
+    expect(placement?.position[0]).toBeCloseTo(1.75)
     expect(placement?.position[1]).toBeCloseTo(1)
     expect(placement?.position[2]).toBeCloseTo(0.35)
   })

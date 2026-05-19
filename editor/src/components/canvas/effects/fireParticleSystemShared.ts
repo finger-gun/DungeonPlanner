@@ -2,6 +2,7 @@ import * as THREE from 'three'
 import type { PlayVisibility } from '../playVisibility'
 import { shouldRenderLineOfSightLight } from '../losRendering'
 import type { RegisteredEffectSource } from '../objectSourceRegistry'
+import { getObjectLocalOffsetWorldPosition } from '../../../rendering/dungeonLightField'
 
 export const MAX_FIRE_EMITTERS = 256
 
@@ -38,14 +39,13 @@ export function buildActiveFireEmitters({
       continue
     }
 
-    const [px, py, pz] = source.object.position
     const emitters = source.effect.emitters?.length ? source.effect.emitters : [{}]
     for (let emIdx = 0; emIdx < emitters.length && result.length < maxEmitters; emIdx += 1) {
       const em = emitters[emIdx]
-      const [ox, oy, oz] = (em.offset ?? [0, 0, 0]) as [number, number, number]
-      const worldX = px + ox
-      const worldY = py + oy
-      const worldZ = pz + oz
+      const [worldX, worldY, worldZ] = getObjectLocalOffsetWorldPosition(
+        source.object,
+        (em.offset ?? [0, 0, 0]) as [number, number, number],
+      )
       const scale = em.scale ?? 1
 
       if (cameraFrustum) {

@@ -4,6 +4,7 @@ import {
   type BakedFloorLightFieldBuildInput,
   type ResolvedDungeonLightSource,
 } from '../../rendering/dungeonLightField'
+import type { SplineWallGraph } from '../splineWallGraph'
 import type {
   DungeonObjectRecord,
   InnerWallRecord,
@@ -27,8 +28,11 @@ export type DungeonRoomData = {
   innerWalls: Record<string, InnerWallRecord>
   placedObjects: Record<string, DungeonObjectRecord>
   floorTileAssetIds: Record<string, string>
+  wallStyleAssignments: Record<string, string>
+  wallCoreAssignments: Record<string, string>
   wallSurfaceAssetIds: Record<string, string>
   wallSurfaceProps: Record<string, Record<string, unknown>>
+  splineWallGraph?: SplineWallGraph
   globalFloorAssetId: string | null
   globalWallAssetId: string | null
 }
@@ -48,7 +52,12 @@ export type FloorDerivedBundle = {
 
 export type FloorSceneDerivedBundle = Pick<
   FloorDerivedBundle,
-  'data' | 'topLevelObjects' | 'childrenByParent' | 'bakedLightBuildInput'
+  | 'data'
+  | 'visiblePaintedCellRecords'
+  | 'visibleOpenings'
+  | 'topLevelObjects'
+  | 'childrenByParent'
+  | 'bakedLightBuildInput'
 >
 
 export function buildVisiblePaintedCells({
@@ -103,7 +112,7 @@ export function buildObjectHierarchy(objects: DungeonObjectRecord[]) {
 }
 
 export function buildBakedLightBuildInput(
-  data: Pick<DungeonRoomData, 'floorId' | 'wallOpenings' | 'innerWalls' | 'wallSurfaceAssetIds' | 'wallSurfaceProps'>,
+  data: Pick<DungeonRoomData, 'floorId' | 'splineWallGraph' | 'wallOpenings' | 'innerWalls' | 'wallSurfaceAssetIds' | 'wallSurfaceProps'>,
   visiblePaintedCells: GridCell[],
   visiblePaintedCellRecords: PaintedCells,
   staticLightSources: ResolvedDungeonLightSource[],
@@ -126,6 +135,7 @@ export function buildBakedLightBuildInput(
     dirtyHint: dirtyHint ?? null,
     occlusionInput: {
       paintedCells: visiblePaintedCellRecords,
+      splineWallGraph: data.splineWallGraph,
       wallOpenings: data.wallOpenings,
       innerWalls: data.innerWalls,
       wallSurfaceAssetIds: data.wallSurfaceAssetIds,
@@ -169,12 +179,15 @@ export function buildFloorDerivedBundle(data: DungeonRoomData): FloorDerivedBund
 
 export function buildFloorSceneDerivedBundle(data: DungeonRoomData): FloorSceneDerivedBundle {
   const { visiblePaintedCells, visiblePaintedCellRecords } = buildVisiblePaintedCells(data)
+  const visibleOpenings = buildVisibleOpenings(data)
   const visibleObjects = buildVisibleObjects(data)
   const staticLightSources = buildStaticLightSources(visibleObjects)
   const { topLevelObjects, childrenByParent } = buildObjectHierarchy(visibleObjects)
 
   return {
     data,
+    visiblePaintedCellRecords,
+    visibleOpenings,
     topLevelObjects,
     childrenByParent,
     bakedLightBuildInput: buildBakedLightBuildInput(

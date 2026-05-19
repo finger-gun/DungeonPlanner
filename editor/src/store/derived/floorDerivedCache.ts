@@ -1,4 +1,5 @@
 import type { FloorDirtyInfo } from '../floorDirtyDomains'
+import { EMPTY_SPLINE_WALL_GRAPH } from '../splineWallGraph'
 import {
   buildBakedLightBuildInput,
   buildFloorDerivedBundle,
@@ -193,6 +194,15 @@ export function getOrBuildCachedFloorSceneDerivedBundle({
     ].join('|'),
     () => buildVisibleObjects(cachedData),
   )
+  const visibleOpenings = getOrBuildCachedValue(
+    cacheEntry,
+    'visibleOpenings',
+    [
+      buildVersionToken(dirtyInfo, 'openingsVersion', cachedData.wallOpenings),
+      buildVersionToken(dirtyInfo, 'layerVisibilityVersion', cachedData.layers),
+    ].join('|'),
+    () => buildVisibleOpenings(cachedData),
+  )
   const staticLightSources = getOrBuildCachedValue(
     cacheEntry,
     'staticLightSources',
@@ -231,12 +241,16 @@ export function getOrBuildCachedFloorSceneDerivedBundle({
     'sceneBundle',
     [
       `data:${getDerivedIdentity(cachedData)}`,
+      `painted-records:${getDerivedIdentity(visiblePainted.visiblePaintedCellRecords)}`,
+      `openings:${getDerivedIdentity(visibleOpenings)}`,
       `hierarchy:${getDerivedIdentity(objectHierarchy.childrenByParent)}`,
       `top-level:${getDerivedIdentity(objectHierarchy.topLevelObjects)}`,
       `light-input:${getDerivedIdentity(bakedLightBuildInput)}`,
     ].join('|'),
     () => ({
       data: cachedData,
+      visiblePaintedCellRecords: visiblePainted.visiblePaintedCellRecords,
+      visibleOpenings,
       ...objectHierarchy,
       bakedLightBuildInput,
     }),
@@ -282,6 +296,7 @@ function buildDataCacheKey(data: DungeonRoomData) {
     `floor-assets:${getDerivedIdentity(data.floorTileAssetIds)}`,
     `wall-assets:${getDerivedIdentity(data.wallSurfaceAssetIds)}`,
     `wall-props:${getDerivedIdentity(data.wallSurfaceProps)}`,
+    `spline-graph:${getDerivedIdentity(data.splineWallGraph ?? EMPTY_SPLINE_WALL_GRAPH)}`,
     `global-floor:${data.globalFloorAssetId ?? 'none'}`,
     `global-wall:${data.globalWallAssetId ?? 'none'}`,
   ].join('|')

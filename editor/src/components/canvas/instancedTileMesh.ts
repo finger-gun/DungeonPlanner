@@ -21,6 +21,8 @@ export type InstancedMeshEntry = {
   buildDelayAttr: THREE.InstancedBufferAttribute
   /** Per-instance float direction (0 = rise, 1 = fall). */
   buildDirectionAttr: THREE.InstancedBufferAttribute
+  /** Per-instance vec3 baked light colour. */
+  bakedLightAttr: THREE.InstancedBufferAttribute
   /** Per-instance vec3 baked light direction (zeros = no directional light). */
   bakedLightDirAttr: THREE.InstancedBufferAttribute
   /** Per-instance vec3 secondary baked light direction. */
@@ -126,12 +128,14 @@ export function makeInstancedMeshEntries(
     const buildStartAttr = new THREE.InstancedBufferAttribute(new Float32Array(capacity).fill(-1), 1)
     const buildDelayAttr = new THREE.InstancedBufferAttribute(new Float32Array(capacity).fill(0), 1)
     const buildDirectionAttr = new THREE.InstancedBufferAttribute(new Float32Array(capacity).fill(0), 1)
+    const bakedLightAttr = new THREE.InstancedBufferAttribute(new Float32Array(capacity * 3).fill(0), 3)
     const bakedLightDirAttr = new THREE.InstancedBufferAttribute(new Float32Array(capacity * 3).fill(0), 3)
     const bakedLightDirSecAttr = new THREE.InstancedBufferAttribute(new Float32Array(capacity * 3).fill(0), 3)
     const fogCellAttr = new THREE.InstancedBufferAttribute(new Float32Array(capacity * 2).fill(0), 2)
     buildStartAttr.setUsage(THREE.DynamicDrawUsage)
     buildDelayAttr.setUsage(THREE.DynamicDrawUsage)
     buildDirectionAttr.setUsage(THREE.DynamicDrawUsage)
+    bakedLightAttr.setUsage(THREE.DynamicDrawUsage)
     bakedLightDirAttr.setUsage(THREE.DynamicDrawUsage)
     bakedLightDirSecAttr.setUsage(THREE.DynamicDrawUsage)
     fogCellAttr.setUsage(THREE.DynamicDrawUsage)
@@ -139,6 +143,7 @@ export function makeInstancedMeshEntries(
     geometry.setAttribute('buildAnimationStart', buildStartAttr)
     geometry.setAttribute('buildAnimationDelay', buildDelayAttr)
     geometry.setAttribute('buildAnimationDirection', buildDirectionAttr)
+    geometry.setAttribute('bakedLight', bakedLightAttr)
     geometry.setAttribute('bakedLightDirection', bakedLightDirAttr)
     geometry.setAttribute('bakedLightDirectionSecondary', bakedLightDirSecAttr)
     geometry.setAttribute('fogCell', fogCellAttr)
@@ -180,6 +185,7 @@ export function makeInstancedMeshEntries(
       buildStartAttr,
       buildDelayAttr,
       buildDirectionAttr,
+      bakedLightAttr,
       bakedLightDirAttr,
       bakedLightDirSecAttr,
       fogCellAttr,
@@ -208,6 +214,7 @@ export function writeInstancedMeshSlot(
       buildStartAttr,
       buildDelayAttr,
       buildDirectionAttr,
+      bakedLightAttr,
       bakedLightDirAttr,
       bakedLightDirSecAttr,
       fogCellAttr,
@@ -227,6 +234,11 @@ export function writeInstancedMeshSlot(
       buildStartAttr.array[slotIndex] = placement.buildAnimationStart ?? -1
       buildDelayAttr.array[slotIndex] = placement.buildAnimationDelay ?? 0
       buildDirectionAttr.array[slotIndex] = placement.buildAnimationDirection === 'fall' ? 1 : 0
+
+      const bakedLight = placement.bakedLight
+      bakedLightAttr.array[slotIndex * 3] = bakedLight?.[0] ?? 0
+      bakedLightAttr.array[slotIndex * 3 + 1] = bakedLight?.[1] ?? 0
+      bakedLightAttr.array[slotIndex * 3 + 2] = bakedLight?.[2] ?? 0
 
       const lightDirection = placement.bakedLightDirection
       bakedLightDirAttr.array[slotIndex * 3] = lightDirection?.[0] ?? 0
@@ -254,6 +266,9 @@ export function writeInstancedMeshSlot(
     buildStartAttr.array[slotIndex] = -1
     buildDelayAttr.array[slotIndex] = 0
     buildDirectionAttr.array[slotIndex] = 0
+    bakedLightAttr.array[slotIndex * 3] = 0
+    bakedLightAttr.array[slotIndex * 3 + 1] = 0
+    bakedLightAttr.array[slotIndex * 3 + 2] = 0
     bakedLightDirAttr.array[slotIndex * 3] = 0
     bakedLightDirAttr.array[slotIndex * 3 + 1] = 0
     bakedLightDirAttr.array[slotIndex * 3 + 2] = 0
@@ -284,6 +299,7 @@ export function applyInstancedMeshUpdateRanges(
     resetUpdateRanges(entry.tintMesh.instanceMatrix)
     resetUpdateRanges(entry.buildStartAttr)
     resetUpdateRanges(entry.buildDelayAttr)
+    resetUpdateRanges(entry.bakedLightAttr)
     resetUpdateRanges(entry.bakedLightDirAttr)
     resetUpdateRanges(entry.bakedLightDirSecAttr)
     resetUpdateRanges(entry.fogCellAttr)
@@ -293,6 +309,7 @@ export function applyInstancedMeshUpdateRanges(
       addUpdateRange(entry.tintMesh.instanceMatrix, range.start * 16, range.count * 16)
       addUpdateRange(entry.buildStartAttr, range.start, range.count)
       addUpdateRange(entry.buildDelayAttr, range.start, range.count)
+      addUpdateRange(entry.bakedLightAttr, range.start * 3, range.count * 3)
       addUpdateRange(entry.bakedLightDirAttr, range.start * 3, range.count * 3)
       addUpdateRange(entry.bakedLightDirSecAttr, range.start * 3, range.count * 3)
       addUpdateRange(entry.fogCellAttr, range.start * 2, range.count * 2)
@@ -302,6 +319,7 @@ export function applyInstancedMeshUpdateRanges(
     entry.tintMesh.instanceMatrix.needsUpdate = true
     entry.buildStartAttr.needsUpdate = true
     entry.buildDelayAttr.needsUpdate = true
+    entry.bakedLightAttr.needsUpdate = true
     entry.bakedLightDirAttr.needsUpdate = true
     entry.bakedLightDirSecAttr.needsUpdate = true
     entry.fogCellAttr.needsUpdate = true

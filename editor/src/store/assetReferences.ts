@@ -3,6 +3,10 @@ import {
   getContentPackRoomSetById,
   getDefaultAssetIdByCategory,
   getDefaultContentPackRoomSetId,
+  getContentPackWallMaterialSetById,
+  getDefaultContentPackWallMaterialSetId,
+  getContentPackWallStyleById,
+  getDefaultContentPackWallStyleId,
 } from '../content-packs/registry'
 import type { ContentPackCategory } from '../content-packs/types'
 import type { DungeonObjectRecord, FloorRecord, OpeningRecord, Room, SelectedAssetIds } from './useDungeonStore'
@@ -10,10 +14,15 @@ import type { DungeonObjectRecord, FloorRecord, OpeningRecord, Room, SelectedAss
 type SnapshotAssetState = {
   selectedAssetIds?: SelectedAssetIds
   activeRoomSetId?: string
+  activeWallMaterialSetId?: string
+  activeInteriorWallStyleId?: string
+  activeExteriorWallStyleId?: string
   rooms: Record<string, Room>
   wallOpenings: Record<string, OpeningRecord>
   placedObjects: Record<string, DungeonObjectRecord>
   floorTileAssetIds?: Record<string, string>
+  wallStyleAssignments?: Record<string, string>
+  wallCoreAssignments?: Record<string, string>
   wallSurfaceAssetIds?: Record<string, string>
 }
 
@@ -44,12 +53,40 @@ export function sanitizeSnapshotAssetReferences<T extends SnapshotAssetState>(sn
           activeRoomSetId: sanitizeActiveRoomSetId(snapshot.activeRoomSetId),
         }
       : {}),
+    ...(typeof snapshot.activeWallMaterialSetId === 'string'
+      ? {
+          activeWallMaterialSetId: sanitizeActiveWallMaterialSetId(snapshot.activeWallMaterialSetId),
+        }
+      : {
+          activeWallMaterialSetId: sanitizeActiveWallMaterialSetId(
+            getDefaultContentPackWallMaterialSetId('dungeon') ?? 'kaykit-stone',
+          ),
+        }),
+    ...(typeof snapshot.activeInteriorWallStyleId === 'string'
+      ? {
+          activeInteriorWallStyleId: sanitizeActiveWallStyleId(snapshot.activeInteriorWallStyleId),
+        }
+      : {
+          activeInteriorWallStyleId: sanitizeActiveWallStyleId(
+            getDefaultContentPackWallStyleId('dungeon') ?? 'dungeon-stone',
+          ),
+        }),
+    ...(typeof snapshot.activeExteriorWallStyleId === 'string'
+      ? {
+          activeExteriorWallStyleId: sanitizeActiveWallStyleId(snapshot.activeExteriorWallStyleId),
+        }
+      : {
+          activeExteriorWallStyleId: sanitizeActiveWallStyleId(
+            getDefaultContentPackWallStyleId('dungeon') ?? 'dungeon-stone',
+          ),
+        }),
     rooms: Object.fromEntries(
       Object.entries(snapshot.rooms).map(([roomId, room]) => [
         roomId,
         {
           ...room,
           roomSetId: sanitizeRoomSetId(room.roomSetId),
+          wallMaterialSetId: sanitizeRoomWallMaterialSetId(room.wallMaterialSetId),
           floorAssetId: sanitizeRoomAssetId(room.floorAssetId, 'floor'),
           wallAssetId: sanitizeRoomAssetId(room.wallAssetId, 'wall'),
         },
@@ -63,6 +100,12 @@ export function sanitizeSnapshotAssetReferences<T extends SnapshotAssetState>(sn
     ),
     floorTileAssetIds: Object.fromEntries(
       Object.entries(snapshot.floorTileAssetIds ?? {}).filter(([, assetId]) => isValidAssetId(assetId, 'floor')),
+    ),
+    wallStyleAssignments: Object.fromEntries(
+      Object.entries(snapshot.wallStyleAssignments ?? {}).filter(([, wallStyleId]) => isValidWallStyleId(wallStyleId)),
+    ),
+    wallCoreAssignments: Object.fromEntries(
+      Object.entries(snapshot.wallCoreAssignments ?? {}).filter(([, wallStyleId]) => isValidWallStyleId(wallStyleId)),
     ),
     wallSurfaceAssetIds: Object.fromEntries(
       Object.entries(snapshot.wallSurfaceAssetIds ?? {}).filter(([, assetId]) => isValidAssetId(assetId, 'wall')),
@@ -130,6 +173,26 @@ function sanitizeRoomSetId(roomSetId: string | null | undefined) {
   return isValidRoomSetId(roomSetId) ? roomSetId : null
 }
 
+function sanitizeActiveWallMaterialSetId(wallMaterialSetId: string) {
+  return isValidWallMaterialSetId(wallMaterialSetId)
+    ? wallMaterialSetId
+    : (getDefaultContentPackWallMaterialSetId('dungeon') ?? 'kaykit-stone')
+}
+
+function sanitizeActiveWallStyleId(wallStyleId: string) {
+  return isValidWallStyleId(wallStyleId)
+    ? wallStyleId
+    : (getDefaultContentPackWallStyleId('dungeon') ?? 'dungeon-stone')
+}
+
+function sanitizeRoomWallMaterialSetId(wallMaterialSetId: string | null | undefined) {
+  if (!wallMaterialSetId) {
+    return null
+  }
+
+  return isValidWallMaterialSetId(wallMaterialSetId) ? wallMaterialSetId : null
+}
+
 function sanitizeOpeningRecord(opening: OpeningRecord): OpeningRecord {
   const assetId = sanitizeOpeningAssetId(opening.assetId)
   if (!assetId) {
@@ -162,6 +225,14 @@ function isValidAssetId(assetId: string | null, category: ContentPackCategory) {
 
 function isValidRoomSetId(roomSetId: string) {
   return Boolean(getContentPackRoomSetById('dungeon', roomSetId))
+}
+
+function isValidWallMaterialSetId(wallMaterialSetId: string) {
+  return Boolean(getContentPackWallMaterialSetById('dungeon', wallMaterialSetId))
+}
+
+function isValidWallStyleId(wallStyleId: string) {
+  return Boolean(getContentPackWallStyleById('dungeon', wallStyleId))
 }
 
 function mapLegacyAssetId(assetId: string | null, category: ContentPackCategory) {

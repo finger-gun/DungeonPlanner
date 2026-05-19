@@ -18,7 +18,10 @@ import type { DungeonObjectRecord, Layer } from '../../store/useDungeonStore'
 import { getRegisteredObject, useObjectRegistryVersion } from './objectRegistry'
 import { isGeneratedCharacterAssetId } from '../../content-packs/runtimeRegistry'
 import type { GeneratedCharacterRecord } from '../../generated-characters/types'
-import type { PlayVisibilityWorkerInput as CorePlayVisibilityWorkerInput } from './playVisibilityCore'
+import {
+  computeVisibleCellKeysFromInput as computeVisibleCellKeysFromCoreInput,
+  type PlayVisibilityWorkerInput as CorePlayVisibilityWorkerInput,
+} from './playVisibilityCore'
 import {
   ACTIVE_FLOOR_VISIBILITY_DOMAINS,
   useActiveFloorSnapshot,
@@ -150,6 +153,7 @@ export function usePlayVisibility(): PlayVisibility {
   const {
     activeFloorId,
     paintedCells,
+    splineWallGraph,
     wallOpenings,
     wallSurfaceAssetIds,
     innerWalls,
@@ -159,6 +163,7 @@ export function usePlayVisibility(): PlayVisibility {
   } = useActiveFloorSnapshot(ACTIVE_FLOOR_VISIBILITY_DOMAINS, (state) => ({
       activeFloorId: state.activeFloorId,
       paintedCells: state.paintedCells,
+      splineWallGraph: state.splineWallGraph,
       wallOpenings: state.wallOpenings,
       wallSurfaceAssetIds: state.wallSurfaceAssetIds,
       innerWalls: state.innerWalls,
@@ -175,6 +180,7 @@ export function usePlayVisibility(): PlayVisibility {
       tool,
       mapMode,
       paintedCells,
+      splineWallGraph,
       wallOpenings,
       wallSurfaceAssetIds,
       innerWalls,
@@ -193,6 +199,7 @@ export function usePlayVisibility(): PlayVisibility {
       objectRegistryVersion,
       paintedCells,
       placedObjects,
+      splineWallGraph,
       tool,
       wallOpenings,
       wallSurfaceAssetIds,
@@ -303,6 +310,7 @@ export function getOrBuildPlayVisibilityDerivedState({
   tool,
   mapMode,
   paintedCells,
+  splineWallGraph,
   wallOpenings,
   wallSurfaceAssetIds = EMPTY_WALL_SURFACE_ASSET_IDS,
   innerWalls,
@@ -316,6 +324,7 @@ export function getOrBuildPlayVisibilityDerivedState({
   tool: DungeonTool
   mapMode: MapMode
   paintedCells: PaintedCells
+  splineWallGraph?: CorePlayVisibilityWorkerInput['splineWallGraph']
   wallOpenings: Record<string, OpeningRecord>
   wallSurfaceAssetIds?: Record<string, string>
   innerWalls: Record<string, InnerWallRecord>
@@ -378,6 +387,7 @@ export function getOrBuildPlayVisibilityDerivedState({
     visibilityActive
       ? [
           `painted:${getPlayVisibilityIdentity(paintedCells)}`,
+          `spline:${getPlayVisibilityIdentity(splineWallGraph)}`,
           `openings:${getPlayVisibilityIdentity(wallOpenings)}`,
           `wall-assets:${getPlayVisibilityIdentity(wallSurfaceAssetIds)}`,
           `wall-props:${getPlayVisibilityIdentity(wallSurfaceProps)}`,
@@ -391,10 +401,11 @@ export function getOrBuildPlayVisibilityDerivedState({
         return null
       }
 
-      return {
-        paintedCells,
-        wallOpenings,
-        wallSurfaceAssetIds,
+        return {
+          paintedCells,
+          splineWallGraph,
+          wallOpenings,
+          wallSurfaceAssetIds,
         wallSurfaceProps,
         innerWalls,
         origins: playerOriginObjects.map((object) => object.cell),
@@ -440,7 +451,10 @@ function getOrBuildCachedPlayVisibilityValue<TKey extends keyof PlayVisibilityDe
   return value
 }
 
-function getPlayVisibilityIdentity(value: object) {
+function getPlayVisibilityIdentity(value: object | null | undefined) {
+  if (!value) {
+    return 0
+  }
   const cached = playVisibilityIdentityCache.get(value)
   if (cached) {
     return cached
@@ -487,6 +501,27 @@ export function getObjectVisibilityState(
   }
 
   return cellVisibility
+}
+
+export function getRoomVisibilityState(
+  roomId: string,
+  paintedCells: PaintedCells,
+  getCellVisibility: (cellKey: string) => PlayVisibilityState,
+): PlayVisibilityState {
+  let visibility: PlayVisibilityState = 'hidden'
+
+  for (const [cellKey, record] of Object.entries(paintedCells)) {
+    if (record.roomId !== roomId) {
+      continue
+    }
+
+    visibility = maxVisibility(visibility, getCellVisibility(cellKey))
+    if (visibility === 'visible') {
+      return visibility
+    }
+  }
+
+  return visibility
 }
 
 export function computeVisibleCellKeys(
@@ -1323,16 +1358,7 @@ function normalizeAngleDelta(angle: number) {
 }
 
 function computeVisibleCellKeysFromWorkerInput(input: PlayVisibilityWorkerInput) {
-  return computeVisibleCellKeys(
-    input.paintedCells,
-    input.wallOpenings,
-    input.origins,
-    input.range,
-    input.blockingCellKeys,
-    new Map(input.blockerLookupEntries),
-    input.wallSurfaceProps,
-    input.wallSurfaceAssetIds,
-  )
+  return computeVisibleCellKeysFromCoreInput(input)
 }
 
 function areCellKeyListsEqual(left: readonly string[], right: readonly string[]) {

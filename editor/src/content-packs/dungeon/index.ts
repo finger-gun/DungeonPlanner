@@ -5,10 +5,13 @@ import { dungeonFloorTileSmallAsset } from './tiles/floors/floor_tile_small'
 import { dungeonWallAsset } from './tiles/walls/wall'
 import { dungeonFloorAssets } from './tiles/floors'
 import { dungeonDoorWall1Asset } from './openings/door_wall_1'
+import { dungeonDoorCustomAsset } from './openings/door_custom'
 import { dungeonWallAssets } from './tiles/walls'
 import { dungeonStairAssets } from './openings/stairs'
 import { dungeonPropAssets } from './props'
 import { dungeonRoomSets } from './roomSets'
+import { dungeonWallMaterialSets } from './wallMaterialSets'
+import { dungeonWallStyles } from './wallStyles'
 
 export const dungeonContentPack: ContentPack = {
   id: 'dungeon',
@@ -17,10 +20,13 @@ export const dungeonContentPack: ContentPack = {
     ...dungeonFloorAssets,
     ...dungeonWallAssets,
     dungeonDoorWall1Asset,
+    dungeonDoorCustomAsset,
     ...dungeonStairAssets,
     ...dungeonPropAssets,
   ],
   roomSets: dungeonRoomSets,
+  wallMaterialSets: dungeonWallMaterialSets,
+  wallStyles: dungeonWallStyles,
   defaultAssets: {
     floor: defaultAssetForCategory('floor', dungeonFloorTileSmallAsset),
     wall: defaultAssetForCategory('wall', dungeonWallAsset),
