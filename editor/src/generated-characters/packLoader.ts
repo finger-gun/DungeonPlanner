@@ -6,7 +6,10 @@ import {
 } from '@dungeonplanner/shared/generated-characters/types'
 
 export const GENERATED_CHARACTER_PACK_INDEX_URL = '/generated-character-packs/index.json'
-const GENERATED_CHARACTER_ASSET_PREFIX = 'generated.player.'
+const GENERATED_CHARACTER_ASSET_PREFIX_BY_KIND = {
+  player: 'generated.player.',
+  npc: 'generated.npc.',
+} as const
 
 export async function loadGeneratedCharacterPackRecords({
   fetchImpl = fetch,
@@ -85,7 +88,7 @@ async function loadGeneratedCharacterPackManifestRecords({
 
   return manifest.characters.map<GeneratedCharacterRecord>((character) => {
     const manifestBaseUrl = new URL('.', manifestUrl).toString()
-    const assetId = createGeneratedCharacterAssetId(`${manifest.packId}.${character.id}`)
+    const assetId = createGeneratedCharacterAssetId(character.kind, `${manifest.packId}.${character.id}`)
 
     return normalizeGeneratedCharacterRecord(assetId, {
       assetId,
@@ -121,8 +124,8 @@ function toAbsoluteUrl(url: string) {
   return new URL(url, window.location.origin).toString()
 }
 
-function createGeneratedCharacterAssetId(id: string) {
-  return `${GENERATED_CHARACTER_ASSET_PREFIX}${id}`
+function createGeneratedCharacterAssetId(kind: GeneratedCharacterRecord['kind'], id: string) {
+  return `${GENERATED_CHARACTER_ASSET_PREFIX_BY_KIND[kind]}${id}`
 }
 
 function getUniqueIndexUrls(indexUrls: string[]) {

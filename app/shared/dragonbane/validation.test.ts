@@ -99,7 +99,7 @@ describe('Dragonbane rules-pack validation', () => {
   it('normalizes structured domain payloads and source provenance', () => {
     const domains = validateDragonbaneRulesPackDomains('core', createMinimalDomains())
     const provenance = validateDragonbaneSourceProvenance({
-      sourceRepository: '/Users/lejahmie/projects/dragonbane-unbound',
+      sourceRepository: 'https://example.com/org/dragonbane-unbound',
       sourcePath: 'content-packs/core',
       sourceVersion: 'abc123',
       packVersion: '0.1.0',

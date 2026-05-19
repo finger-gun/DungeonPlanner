@@ -54,7 +54,7 @@ describe('loadGeneratedCharacterPackRecords', () => {
 
     expect(records).toEqual([
       expect.objectContaining({
-        assetId: 'generated.player.zombie-monsters.fresh-grave-riser',
+        assetId: 'generated.npc.zombie-monsters.fresh-grave-riser',
         name: 'Fresh Grave Riser',
         kind: 'npc',
         packId: 'zombie-monsters',
@@ -166,7 +166,7 @@ describe('loadGeneratedCharacterPackRecords', () => {
 
     expect(records).toHaveLength(1)
     expect(records[0]).toEqual(expect.objectContaining({
-      assetId: 'generated.player.zombie-monsters.fresh-grave-riser',
+      assetId: 'generated.npc.zombie-monsters.fresh-grave-riser',
       prompt: 'remote prompt',
       packDescription: 'Backend-served pack copy.',
       processedImageUrl: 'http://backend.example.test/generated-character-packs/zombie-monsters/assets/remote.png',

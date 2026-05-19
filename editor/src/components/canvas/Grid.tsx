@@ -1648,7 +1648,9 @@ export function Grid({ size = 120, playMode = false, bakedLightField = null }: G
         props: {
           connector: propPlacement.connector,
           direction: propPlacement.direction,
-          movementMeters: selectedCharacterRecord?.dragonbaneSummary?.movement,
+          ...(normalizedObjectType === 'player'
+            ? { movementMeters: selectedCharacterRecord?.dragonbaneSummary?.movement }
+            : {}),
         },
         cell: propPlacement.cell,
         cellKey: propPlacement.anchorKey ?? propPlacement.supportCellKey,

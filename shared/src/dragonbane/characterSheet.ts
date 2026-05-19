@@ -8,6 +8,16 @@ import type {
 import type { DragonbaneContentRef } from './contentRefs'
 
 export const DRAGONBANE_CHARACTER_SHEET_VERSION = 1
+const AGE_CATEGORY_IDS: readonly DragonbaneAgeCategoryId[] = ['Young', 'Middle-Aged', 'Old']
+const ATTRIBUTE_IDS: readonly DragonbaneAttributeId[] = ['STR', 'CON', 'AGL', 'INT', 'WIL', 'CHA']
+const CONDITION_IDS: readonly DragonbaneConditionState['id'][] = [
+  'exhausted',
+  'sickly',
+  'dazed',
+  'angry',
+  'scared',
+  'disheartened',
+]
 
 export type DragonbaneAttributes = Record<DragonbaneAttributeId, number>
 
@@ -80,7 +90,17 @@ export type DragonbaneCharacterSummary = {
 }
 
 export function isDragonbaneCharacterSheet(input: unknown): input is DragonbaneCharacterSheet {
-  return isRecord(input) && input.system === 'dragonbane' && input.version === DRAGONBANE_CHARACTER_SHEET_VERSION
+  return (
+    isRecord(input)
+    && input.system === 'dragonbane'
+    && input.version === DRAGONBANE_CHARACTER_SHEET_VERSION
+    && isRecord(input.identity)
+    && isRecord(input.attributes)
+    && isRecord(input.derived)
+    && Array.isArray(input.skills)
+    && Array.isArray(input.conditions)
+    && isRecord(input.inventory)
+  )
 }
 
 export function normalizeDragonbaneCharacterSheet(input: unknown): DragonbaneCharacterSheet | null {
@@ -96,7 +116,7 @@ export function normalizeDragonbaneCharacterSheet(input: unknown): DragonbaneCha
       playerName: optionalString(input.identity?.playerName),
       kinRef: requiredString(input.identity?.kinRef, 'identity.kinRef') as DragonbaneContentRef,
       professionRef: requiredString(input.identity?.professionRef, 'identity.professionRef') as DragonbaneContentRef,
-      age: input.identity?.age as DragonbaneAgeCategoryId,
+      age: requireDragonbaneAgeCategoryId(input.identity?.age, 'identity.age'),
       weakness: optionalString(input.identity?.weakness),
       appearance: optionalString(input.identity?.appearance),
     },
@@ -115,14 +135,14 @@ export function normalizeDragonbaneCharacterSheet(input: unknown): DragonbaneCha
       ? input.skills.map((skill) => ({
           skillRef: requiredString(skill.skillRef, 'skill.skillRef') as DragonbaneContentRef,
           name: requiredString(skill.name, 'skill.name'),
-          attributeId: skill.attributeId as DragonbaneAttributeId,
+          attributeId: requireDragonbaneAttributeId(skill.attributeId, 'skill.attributeId'),
           value: requiredNumber(skill.value, 'skill.value'),
           trained: Boolean(skill.trained),
         }))
       : [],
     conditions: Array.isArray(input.conditions)
       ? input.conditions.map((condition) => ({
-          id: condition.id,
+          id: requireDragonbaneConditionId(condition.id, 'condition.id'),
           checked: Boolean(condition.checked),
         }))
       : createEmptyConditions(),
@@ -134,6 +154,27 @@ export function normalizeDragonbaneCharacterSheet(input: unknown): DragonbaneCha
       copper: typeof input.inventory?.copper === 'number' ? input.inventory.copper : 0,
     },
   }
+}
+
+function requireDragonbaneAgeCategoryId(input: unknown, field: string): DragonbaneAgeCategoryId {
+  if (typeof input === 'string' && AGE_CATEGORY_IDS.includes(input as DragonbaneAgeCategoryId)) {
+    return input as DragonbaneAgeCategoryId
+  }
+  throw new Error(`${field} must be a valid Dragonbane age category.`)
+}
+
+function requireDragonbaneAttributeId(input: unknown, field: string): DragonbaneAttributeId {
+  if (typeof input === 'string' && ATTRIBUTE_IDS.includes(input as DragonbaneAttributeId)) {
+    return input as DragonbaneAttributeId
+  }
+  throw new Error(`${field} must be a valid Dragonbane attribute id.`)
+}
+
+function requireDragonbaneConditionId(input: unknown, field: string): DragonbaneConditionState['id'] {
+  if (typeof input === 'string' && CONDITION_IDS.includes(input as DragonbaneConditionState['id'])) {
+    return input as DragonbaneConditionState['id']
+  }
+  throw new Error(`${field} must be a valid Dragonbane condition id.`)
 }
 
 export function createDragonbaneCharacterSummary(

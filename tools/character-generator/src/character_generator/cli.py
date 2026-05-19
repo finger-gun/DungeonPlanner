@@ -50,6 +50,43 @@ def _resolve_path_config_value(config_data: Mapping[str, object], key: str, cli_
     return cli_value
 
 
+def _parse_bool_config(value: object, key: str) -> bool:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if normalized == "true":
+            return True
+        if normalized == "false":
+            return False
+    raise ValueError(f"Config field '{key}' must be a boolean.")
+
+
+def _parse_int_config(value: object, key: str) -> int:
+    if isinstance(value, int) and not isinstance(value, bool):
+        return value
+    if isinstance(value, str) and value.strip().lstrip("-").isdigit():
+        return int(value)
+    raise ValueError(f"Config field '{key}' must be an integer.")
+
+
+def _parse_optional_int_config(value: object, key: str) -> int | None:
+    if value is None:
+        return None
+    return _parse_int_config(value, key)
+
+
+def _parse_float_config(value: object, key: str) -> float:
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        return float(value)
+    if isinstance(value, str):
+        try:
+            return float(value.strip())
+        except ValueError:
+            pass
+    raise ValueError(f"Config field '{key}' must be a number.")
+
+
 def _load_pack_config(config_data: Mapping[str, object]) -> PackConfig | None:
     raw_pack_config = config_data.get("pack")
     if raw_pack_config is None:
@@ -248,19 +285,19 @@ def build_runtime_config(args: argparse.Namespace) -> RuntimeConfig:
         )) if any(
             value is not None for value in [config_data.get("genders"), args.genders_file, args.genders_json, args.gender]
         ) else DEFAULT_RUNTIME_CONFIG.genders,
-        width=int(width_value),
-        height=int(height_value),
-        guidance_scale=float(guidance_scale_value),
-        num_inference_steps=int(num_inference_steps_value),
-        preview_kitten=bool(preview_kitten_value),
-        seed=int(seed_value) if isinstance(seed_value, int) else None,
+        width=_parse_int_config(width_value, "width"),
+        height=_parse_int_config(height_value, "height"),
+        guidance_scale=_parse_float_config(guidance_scale_value, "guidance_scale"),
+        num_inference_steps=_parse_int_config(num_inference_steps_value, "num_inference_steps"),
+        preview_kitten=_parse_bool_config(preview_kitten_value, "preview_kitten"),
+        seed=_parse_optional_int_config(seed_value, "seed"),
         device=str(device_value),
-        portrait_padding=float(portrait_padding_value),
-        face_confidence=float(face_confidence_value),
-        serial_width=int(serial_width_value),
-        fail_fast=bool(fail_fast_value),
-        max_combinations=int(max_combinations_value) if isinstance(max_combinations_value, int) else None,
-        randomize_order=bool(randomize_order_value),
+        portrait_padding=_parse_float_config(portrait_padding_value, "portrait_padding"),
+        face_confidence=_parse_float_config(face_confidence_value, "face_confidence"),
+        serial_width=_parse_int_config(serial_width_value, "serial_width"),
+        fail_fast=_parse_bool_config(fail_fast_value, "fail_fast"),
+        max_combinations=_parse_optional_int_config(max_combinations_value, "max_combinations"),
+        randomize_order=_parse_bool_config(randomize_order_value, "randomize_order"),
         pack=_load_pack_config(config_data),
     )
 

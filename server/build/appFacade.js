@@ -3,6 +3,7 @@ import { ConvexHttpClient } from 'convex/browser';
 import { resolveRequestAccessToken } from './authFacade.js';
 const DEFAULT_CONVEX_URL = 'http://127.0.0.1:3210';
 const DEFAULT_CONVEX_SITE_URL = 'http://127.0.0.1:3211';
+const STORAGE_UPLOAD_TIMEOUT_MS = Number(process.env.STORAGE_UPLOAD_TIMEOUT_MS ?? 30_000);
 function getConvexDeploymentUrl() {
     return (process.env.CONVEX_SELF_HOSTED_URL ??
         process.env.NEXT_PUBLIC_CONVEX_URL ??
@@ -203,13 +204,16 @@ async function handleStorageUpload(request, response, uploadUrlFunction) {
     }
     try {
         const uploadUrl = await client.mutation(uploadUrlFunction, {});
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), STORAGE_UPLOAD_TIMEOUT_MS);
         const uploadResponse = await fetch(uploadUrl, {
             method: 'POST',
             headers: {
                 'Content-Type': request.header('content-type') ?? 'application/octet-stream',
             },
             body,
-        });
+            signal: controller.signal,
+        }).finally(() => clearTimeout(timeout));
         if (!uploadResponse.ok) {
             throw new Error('File upload failed.');
         }
@@ -217,6 +221,6 @@ async function handleStorageUpload(request, response, uploadUrlFunction) {
         response.json(payload);
     }
     catch (error) {
-        sendApiError(response, error, 502);
+        sendApiError(response, error instanceof Error && error.name === 'AbortError' ? 'File upload timed out.' : error, error instanceof Error && error.name === 'AbortError' ? 504 : 502);
     }
 }

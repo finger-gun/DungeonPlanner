@@ -97,7 +97,7 @@ function resolveBootstrapPython() {
 }
 
 function ensureVirtualEnv() {
-  if (existsSync(paths.venvPythonPath) && virtualEnvHasPip()) {
+  if (existsSync(paths.venvPythonPath) && virtualEnvHasPip() && commandMeetsVersion(paths.venvPythonPath, [])) {
     return
   }
 

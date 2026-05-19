@@ -19,6 +19,7 @@ function buildEditorActorAssetId(actorId: string) {
 type ActorRecord = Doc<'characters'>
 type ActorPackRecord = Doc<'actorPacks'>
 const DEFAULT_ACTOR_PACK_NAME = 'Misc'
+const DEFAULT_ACTOR_PACK_SYSTEM_KEY = 'default'
 
 function normalizeActorName(name: string) {
   return name.trim()
@@ -151,12 +152,11 @@ async function ensureViewerDefaultActorPack(
   viewerId: Id<'users'>,
   workspaceId: Id<'workspaces'>,
 ) {
-  const actorPacks = await ctx.db
+  const existing = await ctx.db
     .query('actorPacks')
-    .withIndex('by_ownerUserId', (q) => q.eq('ownerUserId', viewerId))
-    .collect()
-  const existing = actorPacks.find((actorPack) =>
-    actorPack.workspaceId === workspaceId && actorPack.name.trim().toLowerCase() === DEFAULT_ACTOR_PACK_NAME.toLowerCase())
+    .withIndex('by_ownerUserId_and_workspaceId_and_systemKey', (q) =>
+      q.eq('ownerUserId', viewerId).eq('workspaceId', workspaceId).eq('systemKey', DEFAULT_ACTOR_PACK_SYSTEM_KEY))
+    .first()
 
   if (existing) {
     if (!existing.isActive) {
@@ -169,6 +169,7 @@ async function ensureViewerDefaultActorPack(
   return ctx.db.insert('actorPacks', {
     workspaceId,
     ownerUserId: viewerId,
+    systemKey: DEFAULT_ACTOR_PACK_SYSTEM_KEY,
     name: DEFAULT_ACTOR_PACK_NAME,
     description: 'Default character group',
     isActive: true,
@@ -249,7 +250,10 @@ export const saveActorPack = mutation({
     const now = Date.now()
 
     if (args.actorPackId) {
-      await getViewerActorPack(ctx, args.actorPackId, viewer._id, workspaceId)
+      const existingActorPack = await getViewerActorPack(ctx, args.actorPackId, viewer._id, workspaceId)
+      if (existingActorPack.systemKey === DEFAULT_ACTOR_PACK_SYSTEM_KEY && name.trim().toLowerCase() !== DEFAULT_ACTOR_PACK_NAME.toLowerCase()) {
+        throw new ConvexError('The default actor pack cannot be renamed.')
+      }
       await ctx.db.patch(args.actorPackId, {
         name,
         description,
@@ -301,7 +305,7 @@ export const deleteActorPack = mutation({
     const actorsInPack = actors.filter((actor) => actor.workspaceId === workspaceId && actor.actorPackId === args.actorPackId)
 
     if (actorsInPack.length > 0) {
-      if (actorPack.name.trim().toLowerCase() === DEFAULT_ACTOR_PACK_NAME.toLowerCase()) {
+      if (actorPack.systemKey === DEFAULT_ACTOR_PACK_SYSTEM_KEY) {
         throw new ConvexError('Cannot delete the default Misc group while it contains characters.')
       }
 
@@ -387,7 +391,7 @@ export const saveActor = mutation({
   },
   handler: async (ctx, args) => {
     const { viewer, workspaceId } = await requireRoleInActiveWorkspace(ctx, 'player')
-    if (args.actorPackId) {
+    if (args.actorPackId !== undefined) {
       await getViewerActorPack(ctx, args.actorPackId, viewer._id, workspaceId)
     }
     const name = normalizeActorName(args.name)
@@ -403,6 +407,7 @@ export const saveActor = mutation({
 
     if (args.actorId) {
       const actor = await getViewerOwnedActor(ctx, args.actorId, viewer._id, workspaceId)
+      const actorPackPatch = args.actorPackId !== undefined ? { actorPackId: args.actorPackId } : {}
       const nextOriginalImageStorageId = args.originalImageStorageId ?? actor.originalImageStorageId
       const nextProcessedImageStorageId = args.processedImageStorageId ?? actor.processedImageStorageId
       const nextAlphaMaskStorageId = args.alphaMaskStorageId ?? actor.alphaMaskStorageId
@@ -416,7 +421,7 @@ export const saveActor = mutation({
         ].filter((storageId): storageId is Id<'_storage'> => Boolean(storageId)),
       )
       await ctx.db.patch(args.actorId, {
-        actorPackId: args.actorPackId,
+        ...actorPackPatch,
         name,
         kind: args.kind,
         prompt,

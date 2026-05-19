@@ -373,6 +373,7 @@
             "ref": "monsterboken-kins:rule.heroic_ability.nine_lives",
             "id": "nine_lives",
             "name": "Nine Lives",
+            "wpCost": 2,
             "description": "Cat people have an incredible ability to survive even the worst ordeals. Activating this ability grants a boon (advantage) on a Death Roll (p.50 of the core rulebook) at a cost of 2 WP. The ability can also be used to reduce the number of d6 rolled for fall damage by one per WP spent, up to a maximum of three (after the Acrobatics roll to reduce damage, p.53 of the core rulebook).",
             "source": "DoD_Monsterboken_v1.pdf"
           },
@@ -407,7 +408,7 @@
     }
   },
   "sourceProvenance": {
-    "sourceRepository": "/Users/lejahmie/projects/dragonbane-unbound",
+    "sourceRepository": "https://example.com/dragonbane-unbound",
     "sourcePath": "content-packs/core",
     "sourceVersion": "d8e710c3f4aa02fd51f841e76d2f5d3b8963cf01",
     "packVersion": "0.1.0",

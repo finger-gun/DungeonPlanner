@@ -37,7 +37,7 @@ PDFs and Dragonbane Unbound reference data remain source/provenance artifacts. D
 
 ### Decision: Import from Dragonbane Unbound into private workspace packs
 
-The first implementation should generate a private DungeonPlanner workspace add-on from `/Users/lejahmie/projects/dragonbane-unbound/`.
+The first implementation should generate a private DungeonPlanner workspace add-on from a configured Dragonbane Unbound checkout such as `$DRAGONBANE_UNBOUND_PATH` or `<repo-root>/dragonbane-unbound/`.
 
 **Rationale:** This uses the existing local structured data and avoids manually duplicating rules. Keeping it private/workspace-scoped preserves the current licensing boundary and leaves room for later user-owned imports.
 

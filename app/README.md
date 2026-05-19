@@ -56,7 +56,7 @@ pnpm run app:seed
 
 This provisions three password accounts in the local Convex backend and imports the
 local Dragonbane Unbound rules pack into each dev workspace when
-`/Users/lejahmie/projects/dragonbane-unbound` is available:
+`$DRAGONBANE_UNBOUND_PATH` is set, or when `./dragonbane-unbound` exists:
 
 ```text
 admin@dungeonplanner.com  / password

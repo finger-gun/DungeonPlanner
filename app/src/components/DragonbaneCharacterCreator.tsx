@@ -410,6 +410,11 @@ export function DragonbaneCharacterCreator({ packs }: { packs: RuntimeRulesPackR
       return
     }
 
+    if (availableKins.length === 0 || domains.dragonbane.professions.length === 0) {
+      setError('Random generation needs at least one available kin and profession.')
+      return
+    }
+
     const nextKin = kinRef
       ? availableKins.find((kin) => kin.ref === kinRef) ?? pickRandom(availableKins)
       : pickRandom(availableKins)

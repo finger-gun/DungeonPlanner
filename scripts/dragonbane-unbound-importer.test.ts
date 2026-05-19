@@ -72,11 +72,13 @@ describe('dragonbane-unbound importer', () => {
     expect(monsterPack?.domains.dragonbane.professions).toEqual([])
   })
 
-  it.skipIf(!fs.existsSync('/Users/lejahmie/projects/dragonbane-unbound'))(
+  const localDragonbaneUnboundPath = process.env.DRAGONBANE_UNBOUND_PATH ?? path.resolve(process.cwd(), 'dragonbane-unbound')
+
+  it.skipIf(!fs.existsSync(localDragonbaneUnboundPath))(
     'imports the local Dragonbane Unbound core pack',
     () => {
       const pack = importDragonbaneUnboundPack({
-        sourceDir: '/Users/lejahmie/projects/dragonbane-unbound',
+        sourceDir: localDragonbaneUnboundPath,
         importedAt: '2026-05-15T00:00:00.000Z',
       })
 
@@ -86,7 +88,7 @@ describe('dragonbane-unbound importer', () => {
       expect(domains.dragonbane.professions.length).toBeGreaterThan(0)
       expect(domains.dragonbane.skills.length).toBeGreaterThan(0)
       expect(domains.dragonbane.professions.find((profession) => profession.name === 'Mage')?.trainedSkillRefs).toContain('core:skill.frammande_sprak')
-      expect(pack.sourceProvenance.sourceRepository).toBe('/Users/lejahmie/projects/dragonbane-unbound')
+      expect(pack.sourceProvenance.sourceRepository).toBe(localDragonbaneUnboundPath)
     },
   )
 })

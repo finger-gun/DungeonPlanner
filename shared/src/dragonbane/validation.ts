@@ -215,12 +215,20 @@ function normalizeCreationRules(packId: string, record: Record<string, unknown>)
     ageSkillSlots: Object.fromEntries(
       AGE_CATEGORY_IDS.map((age) => {
         const ageRecord = requireRecord(ageSkillSlots[age], `characterCreation.ageSkillSlots.${age}`)
+        const total = requireNonNegativeInteger(ageRecord.total, `${age}.total`)
+        const fromProfession = requireNonNegativeInteger(ageRecord.fromProfession, `${age}.fromProfession`)
+        const freeChoice = requireNonNegativeInteger(ageRecord.freeChoice, `${age}.freeChoice`)
+
+        if (total !== fromProfession + freeChoice) {
+          throw new Error(`${age}.total must equal ${age}.fromProfession + ${age}.freeChoice.`)
+        }
+
         return [
           age,
           {
-            total: requireNonNegativeInteger(ageRecord.total, `${age}.total`),
-            fromProfession: requireNonNegativeInteger(ageRecord.fromProfession, `${age}.fromProfession`),
-            freeChoice: requireNonNegativeInteger(ageRecord.freeChoice, `${age}.freeChoice`),
+            total,
+            fromProfession,
+            freeChoice,
           },
         ]
       }),

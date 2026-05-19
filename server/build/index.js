@@ -79,7 +79,25 @@ app.use(GENERATED_CHARACTER_ASSET_PUBLIC_PATH, express.static(GENERATED_CHARACTE
 const generatedCharacterPackDir = path.resolve(__dirname, '..', '..', 'editor', 'public', 'generated-character-packs');
 app.use(GENERATED_CHARACTER_PACK_PUBLIC_PATH, express.static(generatedCharacterPackDir));
 const bundledContentPackDir = path.resolve(__dirname, '..', 'content-packs');
-app.use(BUNDLED_CONTENT_PACK_PUBLIC_PATH, express.static(bundledContentPackDir));
+app.get(`${BUNDLED_CONTENT_PACK_PUBLIC_PATH}/:fileName`, (req, res) => {
+    const fileName = path.basename(req.params.fileName);
+    const filePath = path.join(bundledContentPackDir, fileName);
+    if (!fileName.endsWith('.json') || !filePath.startsWith(bundledContentPackDir) || !existsSync(filePath)) {
+        res.status(404).json({ error: 'Content pack not found.' });
+        return;
+    }
+    try {
+        const manifest = JSON.parse(readFileSync(filePath, 'utf8'));
+        if (fileName !== 'registry.json' && manifest.visibility !== 'global' && manifest.visibility !== 'public') {
+            res.status(403).json({ error: 'Content pack is not public.' });
+            return;
+        }
+        res.sendFile(filePath);
+    }
+    catch {
+        res.status(500).json({ error: 'Content pack manifest could not be read.' });
+    }
+});
 // Serve the built editor frontend from ../../editor/dist in both source and
 // compiled server layouts.
 const distPath = path.resolve(__dirname, '..', '..', 'editor', 'dist');

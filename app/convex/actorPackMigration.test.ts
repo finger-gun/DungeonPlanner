@@ -7,6 +7,7 @@ import {
   needsSavedCharacterWorkspaceBackfill,
   SAVED_CHARACTER_ACTOR_PACK_DESCRIPTION,
   SAVED_CHARACTER_ACTOR_PACK_NAME,
+  SAVED_CHARACTER_ACTOR_PACK_SYSTEM_KEY,
 } from './actorPackMigration'
 
 describe('actor pack migration helpers', () => {
@@ -47,6 +48,7 @@ describe('actor pack migration helpers', () => {
         _id: 'actor-pack-1' as never,
         workspaceId: 'workspace-1' as never,
         description: SAVED_CHARACTER_ACTOR_PACK_DESCRIPTION,
+        systemKey: SAVED_CHARACTER_ACTOR_PACK_SYSTEM_KEY,
       },
       'workspace-1' as never,
     )).toBe(true)
@@ -61,6 +63,7 @@ describe('actor pack migration helpers', () => {
         _id: 'actor-pack-1' as never,
         workspaceId: 'workspace-1' as never,
         description: SAVED_CHARACTER_ACTOR_PACK_DESCRIPTION,
+        systemKey: SAVED_CHARACTER_ACTOR_PACK_SYSTEM_KEY,
       },
       'workspace-1' as never,
     )).toBe(false)
@@ -72,11 +75,13 @@ describe('actor pack migration helpers', () => {
         _id: 'actor-pack-1' as never,
         workspaceId: 'workspace-1' as never,
         description: 'Custom pack',
+        systemKey: undefined,
       },
       {
         _id: 'actor-pack-2' as never,
         workspaceId: 'workspace-1' as never,
-        description: SAVED_CHARACTER_ACTOR_PACK_DESCRIPTION,
+        description: 'Renamed by user',
+        systemKey: SAVED_CHARACTER_ACTOR_PACK_SYSTEM_KEY,
       },
     ], 'workspace-1' as never)?._id).toBe('actor-pack-2')
   })
@@ -89,6 +94,7 @@ describe('actor pack migration helpers', () => {
     )).toEqual({
       workspaceId: 'workspace-1',
       ownerUserId: 'user-1',
+      systemKey: SAVED_CHARACTER_ACTOR_PACK_SYSTEM_KEY,
       name: SAVED_CHARACTER_ACTOR_PACK_NAME,
       description: SAVED_CHARACTER_ACTOR_PACK_DESCRIPTION,
       isActive: true,

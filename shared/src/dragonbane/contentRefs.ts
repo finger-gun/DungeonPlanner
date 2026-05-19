@@ -41,11 +41,15 @@ export function parseDragonbaneContentRef(ref: string): ParsedDragonbaneContentR
     return null
   }
 
+  const packId = match[1].toLowerCase()
+  const domain = match[2].toLowerCase() as DragonbaneContentRefDomain
+  const localId = match[3].toLowerCase()
+
   return {
-    ref: `${match[1]}:${match[2]}.${match[3]}` as DragonbaneContentRef,
-    packId: match[1],
-    domain: match[2] as DragonbaneContentRefDomain,
-    localId: match[3],
+    ref: `${packId}:${domain}.${localId}` as DragonbaneContentRef,
+    packId,
+    domain,
+    localId,
   }
 }
 

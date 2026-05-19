@@ -10,7 +10,7 @@ const AGE_NAME_BY_ID = new Map([
 ])
 
 export function importDragonbaneUnboundPacks(options = {}) {
-  const sourceDir = options.sourceDir ?? '/Users/lejahmie/projects/dragonbane-unbound'
+  const sourceDir = options.sourceDir ?? path.resolve(process.cwd(), 'dragonbane-unbound')
   const packDir = options.packDir ?? path.join(sourceDir, 'content-packs/core')
   const importedAt = options.importedAt ?? new Date().toISOString()
   const packManifest = readJson(path.join(packDir, 'pack.json'))

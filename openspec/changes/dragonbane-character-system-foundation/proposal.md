@@ -30,7 +30,7 @@ DungeonPlanner can already create and place generated standee actors, but those 
 - **App UI:** new or revised character creation/editing surfaces in `app/src`.
 - **Convex schema and functions:** character records and pack records may need additional typed fields or validation around rule-pack refs and sheet payloads.
 - **Shared types:** new shared Dragonbane-ready character sheet, content ref, rules-pack, and derived-stat types.
-- **Rules/import tooling:** new importer or generator that reads `/Users/lejahmie/projects/dragonbane-unbound/` and emits DungeonPlanner-compatible private workspace rules packs.
+- **Rules/import tooling:** new importer or generator that reads `$DRAGONBANE_UNBOUND_PATH` or `<repo-root>/dragonbane-unbound/` and emits DungeonPlanner-compatible private workspace rules packs.
 - **Editor integration:** existing actor-pack loading remains, but editor character panels and movement overlays can consume computed character summaries.
 - **Serialization compatibility:** dungeon files should continue storing placed object refs only; full character sheets remain in app/Convex to avoid broad dungeon serialization migrations.
 - **UX:** character creation should stay guided and rules-aware; map editing, camera behavior, and placement speed should remain unchanged.

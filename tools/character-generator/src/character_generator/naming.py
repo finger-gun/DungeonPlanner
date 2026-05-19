@@ -21,7 +21,7 @@ def trait_index_token(index: int, total_traits: int) -> str:
 
 
 def next_serial(output_dir: Path, stem: str) -> int:
-    pattern = re.compile(rf"^{re.escape(stem)}-(main|portrait)-(?P<serial>\d+)\.png$")
+    pattern = re.compile(rf"^{re.escape(stem)}-(main|portrait|processed|alpha-mask|thumbnail)-(?P<serial>\d+)\.png$")
     latest = 0
 
     if not output_dir.exists():

@@ -4718,7 +4718,7 @@
     }
   },
   "sourceProvenance": {
-    "sourceRepository": "/Users/lejahmie/projects/dragonbane-unbound",
+    "sourceRepository": "https://example.com/dragonbane-unbound",
     "sourcePath": "content-packs/core",
     "sourceVersion": "d8e710c3f4aa02fd51f841e76d2f5d3b8963cf01",
     "packVersion": "0.1.0",

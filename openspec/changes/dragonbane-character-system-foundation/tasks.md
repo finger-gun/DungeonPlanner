@@ -7,7 +7,7 @@
 
 ## 2. Dragonbane Unbound Import Pipeline
 
-- [x] 2.1 Create an importer script that reads Dragonbane Unbound content from `/Users/lejahmie/projects/dragonbane-unbound/`.
+- [x] 2.1 Create an importer script that reads Dragonbane Unbound content from `$DRAGONBANE_UNBOUND_PATH` or `<repo-root>/dragonbane-unbound/`.
 - [x] 2.2 Normalize imported Dragonbane content into DungeonPlanner private workspace rules-pack payloads.
 - [x] 2.3 Include source/provenance metadata for source repo, source paths, generation time, and pack version.
 - [x] 2.4 Add importer tests with fixture data covering kins, professions, skills, rules, weapons, and armor.

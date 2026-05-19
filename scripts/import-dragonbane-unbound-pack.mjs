@@ -14,7 +14,7 @@ import { fileURLToPath } from 'node:url'
 import { importDragonbaneUnboundPacks } from './dragonbane-unbound-importer.mjs'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
-const sourceDir = process.argv[2] ?? '/Users/lejahmie/projects/dragonbane-unbound'
+const sourceDir = process.argv[2] ?? process.env.DRAGONBANE_UNBOUND_PATH ?? path.resolve(process.cwd(), 'dragonbane-unbound')
 const outDir = path.resolve(__dirname, '../server/content-packs')
 
 const packs = importDragonbaneUnboundPacks({ sourceDir })

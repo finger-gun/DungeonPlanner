@@ -117,6 +117,7 @@ export default defineSchema({
   actorPacks: defineTable({
     workspaceId: v.id('workspaces'),
     ownerUserId: v.id('users'),
+    systemKey: v.optional(v.string()),
     name: v.string(),
     description: v.optional(v.string()),
     isActive: v.boolean(),
@@ -124,7 +125,8 @@ export default defineSchema({
     updatedAt: v.number(),
   })
     .index('by_ownerUserId', ['ownerUserId'])
-    .index('by_workspaceId', ['workspaceId']),
+    .index('by_workspaceId', ['workspaceId'])
+    .index('by_ownerUserId_and_workspaceId_and_systemKey', ['ownerUserId', 'workspaceId', 'systemKey']),
   packs: defineTable({
     workspaceId: v.id('workspaces'),
     uploaderUserId: v.id('users'),

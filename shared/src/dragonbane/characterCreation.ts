@@ -41,6 +41,13 @@ export function validateDragonbaneTrainedSkillChoices(
   }
 
   const slots = getDragonbaneTrainedSkillSlots(domains, input.age)
+  const skillRefs = new Set(domains.dragonbane.skills.map((skill) => skill.ref))
+  const unknownSkillRefs = input.trainedSkillRefs.filter((ref) => !skillRefs.has(ref))
+
+  if (unknownSkillRefs.length > 0) {
+    throw new Error(`Unknown Dragonbane trained skill refs: ${unknownSkillRefs.join(', ')}`)
+  }
+
   const uniqueRefs = new Set(input.trainedSkillRefs)
 
   if (uniqueRefs.size !== input.trainedSkillRefs.length) {
