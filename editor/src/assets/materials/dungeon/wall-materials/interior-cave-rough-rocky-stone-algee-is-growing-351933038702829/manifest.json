@@ -1,8 +1,8 @@
 {
   "id": "interior-cave-rough-rocky-stone-algee-is-growing-351933038702829",
-  "name": "Cave Rough Rocky Stone Algee Is Growing 351933038702829",
-  "sourceImage": "/Volumes/roblinas/sd/wall-texture-351933038702829.png",
-  "sourceDepth": "/Volumes/roblinas/sd/wall-depth-351933038702829.png",
+  "name": "Cave Rough Rocky Stone Algae Is Growing 351933038702829",
+  "sourceImage": "./wall-texture-351933038702829.png",
+  "sourceDepth": "./wall-depth-351933038702829.png",
   "size": 1024,
   "normalStrength": 4,
   "parallaxScale": 0.12,

@@ -1,8 +1,8 @@
 {
   "id": "interior-alchemist-lab-soot-stained-copper-plating-over-dark-1031203801395027",
   "name": "Alchemist Lab Soot Stained Copper Plating Over Dark 1031203801395027",
-  "sourceImage": "/Volumes/roblinas/sd/wall-texture-1031203801395027.png",
-  "sourceDepth": "/Volumes/roblinas/sd/wall-depth-1031203801395027.png",
+  "sourceImage": "./wall-texture-1031203801395027.png",
+  "sourceDepth": "./wall-depth-1031203801395027.png",
   "size": 1024,
   "normalStrength": 4,
   "parallaxScale": 0.12,
