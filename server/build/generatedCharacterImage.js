@@ -38,8 +38,8 @@ export async function listGeneratedCharacterModels(config = {}) {
     if (!response.ok) {
         throw new Error(await readOllamaError(response));
     }
-    const payload = await response.json();
-    const installedModels = Array.isArray(payload.models)
+    const payload = (await readOllamaPayloads(response)).payloads.at(-1);
+    const installedModels = Array.isArray(payload?.models)
         ? payload.models
             .map((model) => normalizeModelName(model?.name))
             .filter((model) => Boolean(model))
@@ -68,14 +68,23 @@ async function generateCharacterImage(body, ollamaBaseUrl) {
         throw new Error(`Could not reach Ollama at ${ollamaBaseUrl}. Make sure Ollama is running and the ${body.model} model is available.`);
     }
     if (!imageResponse.ok) {
-        throw new Error(await readOllamaError(imageResponse));
+        throw new Error(await readOllamaError(imageResponse, body.model));
     }
-    const payload = await imageResponse.json();
-    const imageDataUrl = extractGeneratedImage(payload);
+    const { payloads, rawText } = await readOllamaPayloads(imageResponse);
+    const imageDataUrl = extractGeneratedImageFromPayloads(payloads);
     if (!imageDataUrl) {
-        throw new Error('Ollama returned a response without image data.');
+        throw new Error(buildMissingImagePayloadMessage(body.model, payloads, rawText));
     }
     return imageDataUrl;
+}
+function extractGeneratedImageFromPayloads(payloads) {
+    for (let index = payloads.length - 1; index >= 0; index -= 1) {
+        const image = extractGeneratedImage(payloads[index]);
+        if (image) {
+            return image;
+        }
+    }
+    return null;
 }
 function extractGeneratedImage(payload) {
     if (typeof payload.image === 'string' && payload.image.length > 0) {
@@ -95,17 +104,95 @@ function normalizeImageDataUrl(value) {
         ? trimmed
         : `data:image/png;base64,${trimmed}`;
 }
-async function readOllamaError(response) {
+async function readOllamaError(response, model = DEFAULT_OLLAMA_IMAGE_MODEL) {
+    const { payloads, rawText } = await readOllamaPayloads(response);
+    const errorMessage = payloads
+        .map((payload) => (typeof payload.error === 'string' ? payload.error.trim() : ''))
+        .find(Boolean);
+    if (errorMessage) {
+        return normalizeOllamaErrorMessage(errorMessage, model);
+    }
+    const plainTextError = sanitizePlainText(rawText);
+    if (plainTextError) {
+        return normalizeOllamaErrorMessage(plainTextError, model);
+    }
+    return `Ollama request failed with ${response.status} ${response.statusText}.`;
+}
+async function readOllamaPayloads(response) {
+    const rawText = await response.text();
+    return {
+        payloads: parseOllamaPayloads(rawText),
+        rawText,
+    };
+}
+function parseOllamaPayloads(rawText) {
+    const trimmedText = rawText.trim();
+    if (!trimmedText) {
+        return [];
+    }
     try {
-        const payload = await response.json();
-        if (payload.error) {
-            return payload.error;
+        const payload = JSON.parse(trimmedText);
+        if (isOllamaPayload(payload)) {
+            return [payload];
         }
     }
     catch {
-        // Ignore JSON parse failures and fall back to status text.
+        // Fall through and try newline-delimited JSON payloads.
     }
-    return `Ollama request failed with ${response.status} ${response.statusText}.`;
+    const lines = trimmedText
+        .split(/\r?\n/)
+        .map((line) => line.trim())
+        .filter(Boolean);
+    if (lines.length === 0) {
+        return [];
+    }
+    const payloads = [];
+    for (const line of lines) {
+        try {
+            const payload = JSON.parse(line);
+            if (!isOllamaPayload(payload)) {
+                return [];
+            }
+            payloads.push(payload);
+        }
+        catch {
+            return [];
+        }
+    }
+    return payloads;
+}
+function buildMissingImagePayloadMessage(model, payloads, rawText) {
+    const compatibilityMessage = buildOllamaCompatibilityMessage(model);
+    if (payloads.some((payload) => payload.done === false && (typeof payload.total === 'number' || typeof payload.completed === 'number'))) {
+        return compatibilityMessage;
+    }
+    const plainTextError = sanitizePlainText(rawText);
+    if (plainTextError) {
+        return normalizeOllamaErrorMessage(plainTextError, model);
+    }
+    return compatibilityMessage;
+}
+function normalizeOllamaErrorMessage(message, model = DEFAULT_OLLAMA_IMAGE_MODEL) {
+    const trimmedMessage = message.trim();
+    if (/unexpected end of json input/i.test(trimmedMessage)
+        || /\/completion\b.*\beof\b/i.test(trimmedMessage)
+        || /\beof\b/i.test(trimmedMessage)) {
+        return buildOllamaCompatibilityMessage(model);
+    }
+    return trimmedMessage;
+}
+function buildOllamaCompatibilityMessage(model) {
+    return `Reached Ollama, but it did not return a usable image payload for ${model}. Try updating Ollama or choosing another installed image model.`;
+}
+function isOllamaPayload(value) {
+    return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+function sanitizePlainText(value) {
+    const trimmed = value.trim();
+    if (!trimmed || /<\/?[a-z][\s\S]*>/i.test(trimmed)) {
+        return null;
+    }
+    return trimmed;
 }
 function normalizeModelName(value) {
     if (typeof value !== 'string') {

@@ -42,7 +42,7 @@ After setup, start the authenticated app stack with:
 pnpm run app:start
 ```
 
-That boots the local Convex watcher and the authenticated Vite app together.
+That boots the local Convex watcher, the backend facade on `http://localhost:2567`, and the authenticated Vite app together.
 The app prefers `http://localhost:4173` and will automatically move to the next free port if that one is already in use.
 
 ## Seed development accounts
@@ -93,13 +93,15 @@ pnpm exec convex env set --from-file /tmp/dungeonplanner-convex-self-hosted.env 
 pnpm exec convex dev --once --typecheck disable
 ```
 
-Start the authenticated app:
+Start the authenticated app client and backend facade:
 
 ```bash
+pnpm run server
 pnpm --filter dungeonplanner-app dev
 ```
 
 The app prefers `http://localhost:4173` and falls forward to the next free port when needed.
+If you also need Convex function watch mode, run `pnpm run app:convex` in a third terminal.
 
 ## Useful commands
 
@@ -107,6 +109,7 @@ The app prefers `http://localhost:4173` and falls forward to the next free port 
 pnpm run app:setup
 pnpm run app:start
 pnpm run app:seed
+pnpm run server
 pnpm --filter dungeonplanner-app dev
 pnpm --filter dungeonplanner-app build
 pnpm --filter dungeonplanner-app lint

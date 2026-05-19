@@ -118,7 +118,7 @@ async function main() {
   process.stdout.write('\nSetup complete.\n')
   process.stdout.write('Next steps:\n')
   process.stdout.write('  pnpm run app:start\n')
-  process.stdout.write('  # or run pnpm run app and pnpm run app:convex separately\n')
+  process.stdout.write('  # or run pnpm run app, pnpm run app:convex, and pnpm run server separately\n')
 }
 
 main().catch((error) => {
