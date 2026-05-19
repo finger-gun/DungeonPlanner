@@ -33,21 +33,15 @@ export async function dispatchSplineWallComputePrototype(
     return extractSplineWallComputePrototypeGeometry(prototype.packed)
   }
 
-  const { computeNode, collapseComputeNode } = prototype.dispatch
+  const { computeNode } = prototype.dispatch
   if (!computeNode) {
     return extractSplineWallComputePrototypeGeometry(prototype.packed)
   }
 
   if (typeof renderer.computeAsync === 'function') {
     await renderer.computeAsync(computeNode as never)
-    if (collapseComputeNode && prototype.packed.cutoutCount > 0) {
-      await renderer.computeAsync(collapseComputeNode as never)
-    }
   } else if (typeof renderer.compute === 'function') {
     renderer.compute(computeNode as never)
-    if (collapseComputeNode && prototype.packed.cutoutCount > 0) {
-      renderer.compute(collapseComputeNode as never)
-    }
   }
 
   const [positionsBuffer, normalsBuffer, uvsBuffer] = await Promise.all([

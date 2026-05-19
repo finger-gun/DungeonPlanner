@@ -9,6 +9,7 @@ import type {
   ContentPackWallStyleMaterial,
   ContentPackWallStyleProfile,
 } from '../content-packs/types'
+import type { SplineWallGraph } from './splineWallGraph'
 import type { SplineWallSegmentSide } from './wallStyleAssignments'
 import {
   createSplineWallSegmentSideKey,
@@ -18,6 +19,7 @@ import type {
   AnalyzedSplineWallBoundaryPath,
   AnalyzedSplineWallBoundarySection,
 } from './splineWallStyleAnalysis'
+import { analyzeSplineWallGraphBoundaries } from './splineWallStyleAnalysis'
 import type { Room } from './useDungeonStore'
 
 export type SplineWallAssemblyLayerKind = 'structural-core' | 'room-face' | 'room-face-detail' | 'exterior-face'
@@ -41,6 +43,39 @@ export type SplineWallAssemblySection = {
   profile: ContentPackWallStyleProfile
   material: ContentPackWallStyleMaterial
   render?: ContentPackWallStyleLayerRender
+}
+
+export type DerivedSplineWallAssemblyData = {
+  analyzedBoundaries: readonly AnalyzedSplineWallBoundaryPath[]
+  assemblySections: SplineWallAssemblySection[]
+}
+
+export function deriveSplineWallAssemblyData({
+  splineWallGraph,
+  visibleLayerIds = null,
+  wallStyleAssignments,
+  wallCoreAssignments = {},
+  rooms = {},
+  contentPackId = 'dungeon',
+}: {
+  splineWallGraph: SplineWallGraph
+  visibleLayerIds?: ReadonlySet<string> | null
+  wallStyleAssignments: Readonly<Record<string, string>>
+  wallCoreAssignments?: Readonly<Record<string, string>>
+  rooms?: Readonly<Record<string, Room>>
+  contentPackId?: string
+}): DerivedSplineWallAssemblyData {
+  const analyzedBoundaries = analyzeSplineWallGraphBoundaries(splineWallGraph, visibleLayerIds)
+  return {
+    analyzedBoundaries,
+    assemblySections: buildSplineWallAssemblySections({
+      analyzedBoundaries,
+      wallStyleAssignments,
+      wallCoreAssignments,
+      rooms,
+      contentPackId,
+    }),
+  }
 }
 
 export function buildSplineWallAssemblySections({

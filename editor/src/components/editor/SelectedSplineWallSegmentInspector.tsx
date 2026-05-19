@@ -1,7 +1,6 @@
 import { useMemo } from 'react'
 import { getContentPackWallStyles } from '../../content-packs/registry'
-import { buildSplineWallAssemblySections } from '../../store/splineWallAssembly'
-import { analyzeSplineWallGraphBoundaries } from '../../store/splineWallStyleAnalysis'
+import { deriveSplineWallAssemblyData } from '../../store/splineWallAssembly'
 import type { SplineWallSegmentSide } from '../../store/wallStyleAssignments'
 import { useDungeonStore } from '../../store/useDungeonStore'
 import { CompactPillButton } from './CompactPillButton'
@@ -22,13 +21,12 @@ export function SelectedSplineWallSegmentInspector({
   const wallStyles = useMemo(() => getContentPackWallStyles('dungeon'), [])
 
   const selectedSection = useMemo(() => {
-    const analysis = analyzeSplineWallGraphBoundaries(splineWallGraph)
-    return buildSplineWallAssemblySections({
-      analyzedBoundaries: analysis,
+    return deriveSplineWallAssemblyData({
+      splineWallGraph,
       wallStyleAssignments,
       wallCoreAssignments,
       rooms,
-    }).find((section) =>
+    }).assemblySections.find((section) =>
       section.segmentId === segmentId
       && section.side === side
       && section.layerKind !== 'structural-core')

@@ -34,8 +34,10 @@ import {
   sampleSplineWallSegment,
   type SplineWallQueryCache,
 } from '../../store/splineWallQueries'
-import { analyzeSplineWallGraphBoundaries } from '../../store/splineWallStyleAnalysis'
-import { buildSplineWallAssemblySections, type SplineWallAssemblySection } from '../../store/splineWallAssembly'
+import {
+  deriveSplineWallAssemblyData,
+  type SplineWallAssemblySection,
+} from '../../store/splineWallAssembly'
 import {
   buildSplineWallInsertDescriptors,
   getSplineWallInsertPlacement,
@@ -293,20 +295,17 @@ export function SplineWallLayer({
     () => createSplineWallQueryCache(effectiveSplineWallGraph, { visibleLayerIds }),
     [effectiveSplineWallGraph, visibleLayerIds],
   )
-  const analyzedBoundaries = useMemo(
-    () => hasGraphWalls ? analyzeSplineWallGraphBoundaries(effectiveSplineWallGraph, visibleLayerIds) : [],
-    [effectiveSplineWallGraph, hasGraphWalls, visibleLayerIds],
-  )
-  const assemblySections = useMemo(
+  const { analyzedBoundaries, assemblySections } = useMemo(
     () => hasGraphWalls
-      ? buildSplineWallAssemblySections({
-          analyzedBoundaries,
+      ? deriveSplineWallAssemblyData({
+          splineWallGraph: effectiveSplineWallGraph,
+          visibleLayerIds,
           wallStyleAssignments,
           wallCoreAssignments,
           rooms,
         })
-      : [],
-    [analyzedBoundaries, hasGraphWalls, rooms, wallCoreAssignments, wallStyleAssignments],
+      : { analyzedBoundaries: [], assemblySections: [] },
+    [effectiveSplineWallGraph, hasGraphWalls, rooms, visibleLayerIds, wallCoreAssignments, wallStyleAssignments],
   )
   const renderSectionGroups = useMemo(
     () => buildSplineWallRenderSectionGroups(assemblySections),
@@ -703,19 +702,20 @@ function SplineWallStyleSectionGroupMesh({
     const polygonOffset = getSplineWallSectionPolygonOffset(section)
     return createSplineWallStyleMaterial(section, textures, polygonOffset)
   }, [section, textures])
+  const allowOppositeFallback = section.layerKind !== 'exterior-face'
 
   useEffect(() => () => geometryCacheRef.current?.geometry.dispose(), [])
   useEffect(() => () => material.dispose(), [material])
   useEffect(() => {
     syncSplineWallGeometryBakedLight(geometry, bakedLightField, {
-      allowOppositeFallback: section.layerKind !== 'exterior-face',
+      allowOppositeFallback,
     })
     applyBakedLightToSplineWallStyleMaterial(material, null, {
       useDirectionAttribute: true,
       useDirectionalFaceMask: true,
       useDirectionalSampleOffset: false,
     })
-  }, [bakedLightField, geometry, material])
+  }, [allowOppositeFallback, bakedLightField, geometry, material])
 
   if ((geometry.getAttribute('position')?.count ?? 0) === 0) {
     return null
@@ -772,19 +772,20 @@ function SplineWallOpeningRevealMesh({
     polygonOffsetFactor: -2,
     polygonOffsetUnits: -2,
   }), [section, textures])
+  const allowOppositeFallback = section.layerKind !== 'exterior-face'
 
   useEffect(() => () => geometryCacheRef.current?.geometry.dispose(), [])
   useEffect(() => () => material.dispose(), [material])
   useEffect(() => {
     syncSplineWallGeometryBakedLight(geometry, bakedLightField, {
-      allowOppositeFallback: section.layerKind !== 'exterior-face',
+      allowOppositeFallback,
     })
     applyBakedLightToSplineWallStyleMaterial(material, null, {
       useDirectionAttribute: true,
       useDirectionalFaceMask: true,
       useDirectionalSampleOffset: false,
     })
-  }, [bakedLightField, geometry, material])
+  }, [allowOppositeFallback, bakedLightField, geometry, material])
 
   if ((geometry.getAttribute('position')?.count ?? 0) === 0) {
     return null

@@ -8,7 +8,11 @@ import {
 import { buildRoomDraftOccupancyPolygons, clipRoomDraft } from './roomDraftClip'
 import { createEmptySplineWallGraph, upsertSplineWallGraphRoomPath } from './splineWallGraph'
 import { buildSplineWallGraphFromPaintedCells } from './splineWalls'
-import { buildSplineWallAssemblySections, getStructuralSegmentId } from './splineWallAssembly'
+import {
+  buildSplineWallAssemblySections,
+  deriveSplineWallAssemblyData,
+  getStructuralSegmentId,
+} from './splineWallAssembly'
 import { analyzeSplineWallGraphBoundaries } from './splineWallStyleAnalysis'
 import { createSplineWallSegmentSideKey } from './wallStyleAssignments'
 
@@ -221,6 +225,67 @@ describe('buildSplineWallAssemblySections', () => {
       section.faceKind === 'exterior-face'
       && partlySharedSegmentIds.has(section.segmentId),
     )).toBe(true)
+  })
+
+  it('derives boundary analysis and assembly sections together', () => {
+    const graph = buildSplineWallGraphFromPaintedCells({
+      '0:0': { cell: [0, 0], layerId: 'default', roomId: 'room-a' },
+      '1:0': { cell: [1, 0], layerId: 'default', roomId: 'room-b' },
+    })
+
+    const separateAnalysis = analyzeSplineWallGraphBoundaries(graph)
+    const separateSections = buildSplineWallAssemblySections({
+      analyzedBoundaries: separateAnalysis,
+      wallStyleAssignments: {},
+      rooms: {
+        'room-a': {
+          id: 'room-a',
+          name: 'Room A',
+          layerId: 'default',
+          roomSetId: 'dungeon',
+          wallMaterialSetId: 'kaykit-stone',
+          floorAssetId: null,
+          wallAssetId: null,
+        },
+        'room-b': {
+          id: 'room-b',
+          name: 'Room B',
+          layerId: 'default',
+          roomSetId: 'cave',
+          wallMaterialSetId: 'rough-rockface-1-pbr-material',
+          floorAssetId: null,
+          wallAssetId: null,
+        },
+      },
+    })
+
+    const derived = deriveSplineWallAssemblyData({
+      splineWallGraph: graph,
+      wallStyleAssignments: {},
+      rooms: {
+        'room-a': {
+          id: 'room-a',
+          name: 'Room A',
+          layerId: 'default',
+          roomSetId: 'dungeon',
+          wallMaterialSetId: 'kaykit-stone',
+          floorAssetId: null,
+          wallAssetId: null,
+        },
+        'room-b': {
+          id: 'room-b',
+          name: 'Room B',
+          layerId: 'default',
+          roomSetId: 'cave',
+          wallMaterialSetId: 'rough-rockface-1-pbr-material',
+          floorAssetId: null,
+          wallAssetId: null,
+        },
+      },
+    })
+
+    expect(derived.analyzedBoundaries).toEqual(separateAnalysis)
+    expect(derived.assemblySections).toEqual(separateSections)
   })
 })
 
