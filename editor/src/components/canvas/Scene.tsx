@@ -47,7 +47,6 @@ import { getObjectInstanceScale, getObjectTintColor } from '../../store/objectAp
 import { SelectionContextualUi } from './SelectionContextualUi'
 import { WorldRaycastAcceleration } from './WorldRaycastAcceleration'
 import { TileGpuStreamProvider } from './TileGpuStreamContext'
-import { BUILD_ANIMATIONS_ENABLED } from '../../store/buildAnimations'
 import {
   ACTIVE_FLOOR_RENDER_DOMAINS,
   useActiveFloorSnapshot,
@@ -456,7 +455,6 @@ function SceneOverviewContent() {
             derived={entry.derived}
             bakedLightField={entry.bakedLightField}
             visibility={ALWAYS_VISIBLE}
-            enableBuildAnimation={false}
             enableFloorReceiver={false}
             streamScopeKey="overview"
           />
@@ -902,7 +900,6 @@ function FloorContent({ startY = 0 }: { startY?: number }) {
             derived={floorDerived}
             visibility={visibility}
             bakedLightField={bakedFloorLightField}
-            enableBuildAnimation={BUILD_ANIMATIONS_ENABLED}
             streamScopeKey="active"
             dirtyInfo={floorDirtyInfo}
           />

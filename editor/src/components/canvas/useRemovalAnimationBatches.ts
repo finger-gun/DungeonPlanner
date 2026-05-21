@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { getBuildAnimationPlaybackDurationMs } from '../../store/buildAnimations'
 import { WALL_EXTRA_DELAY_MS } from './DungeonRoomShared'
 import type { StaticTileEntry } from './tileEntries'
+import { getTileEntryAnimationPlaybackDurationMs } from './tileEntryAnimation'
 
 export const REMOVAL_ANIMATION_CLEANUP_BUFFER_MS = 32
 
@@ -53,5 +53,5 @@ export function useRemovalAnimationBatches() {
 }
 
 export function getRemovalAnimationDurationMs(maxExtraDelay = WALL_EXTRA_DELAY_MS) {
-  return getBuildAnimationPlaybackDurationMs(maxExtraDelay) + REMOVAL_ANIMATION_CLEANUP_BUFFER_MS
+  return getTileEntryAnimationPlaybackDurationMs(maxExtraDelay) + REMOVAL_ANIMATION_CLEANUP_BUFFER_MS
 }

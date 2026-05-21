@@ -1,6 +1,5 @@
 import { cellToWorldPosition, getCellKey, type GridCell } from '../../hooks/useSnapToGrid'
 import type { BakedFloorLightField } from '../../rendering/dungeonLightField'
-import { MAX_BUILD_STAGGER_MS } from '../../store/buildAnimations'
 import { buildWallOpeningDerivedState } from '../../store/derived/wallOpeningDerived'
 import type { SplineWallGraph } from '../../store/splineWallGraph'
 import type {
@@ -11,6 +10,7 @@ import type {
 } from '../../store/useDungeonStore'
 import { buildFloorRenderDerivedBundleFromInput } from './floorRenderDerived'
 import type { StaticTileEntry } from './tileEntries'
+import { MAX_TILE_ENTRY_STAGGER_MS, type TileEntryAnimationDirection } from './tileEntryAnimation'
 
 export type RoomAnimationStateInput = {
   activeLayerId: string
@@ -26,80 +26,6 @@ export type RoomAnimationStateInput = {
   wallOpenings: Record<string, OpeningRecord>
   wallSurfaceAssetIds: Record<string, string>
   wallSurfaceProps: Record<string, Record<string, unknown>>
-}
-
-export function buildSpeculativeRoomTileEntries({
-  activeLayerId,
-  activeRoomSetId,
-  bakedLightField,
-  buildStartedAt,
-  cells,
-  floorTileAssetIds,
-  globalFloorAssetId,
-  globalWallAssetId,
-  innerWalls,
-  originCell,
-  paintedCells,
-  rooms,
-  splineWallGraph,
-  wallOpenings,
-  wallSurfaceAssetIds,
-  wallSurfaceProps,
-}: RoomAnimationStateInput & {
-  buildStartedAt: number
-  cells: GridCell[]
-  originCell: GridCell
-}): StaticTileEntry[] {
-  const previewCellKeys = new Set(cells.map(getCellKey))
-  const previewRoomId = `preview-room:${activeLayerId}`
-  const previewPaintedCells = { ...paintedCells }
-
-  cells.forEach((cell) => {
-    const cellKey = getCellKey(cell)
-    if (previewPaintedCells[cellKey]) {
-      return
-    }
-
-    previewPaintedCells[cellKey] = {
-      cell: [...cell] as GridCell,
-      layerId: activeLayerId,
-      roomId: previewRoomId,
-    }
-  })
-
-  const bundle = buildFloorRenderDerivedBundleFromInput({
-    visiblePaintedCellRecords: previewPaintedCells,
-    rooms: {
-      ...rooms,
-        [previewRoomId]: {
-          id: previewRoomId,
-          name: 'Preview Room',
-          layerId: activeLayerId,
-          roomSetId: activeRoomSetId,
-          floorAssetId: null,
-          wallAssetId: null,
-        },
-    },
-    globalFloorAssetId,
-    floorTileAssetIds,
-    globalWallAssetId,
-    wallSurfaceAssetIds,
-    wallSurfaceProps,
-    wallOpeningDerivedState: buildWallOpeningDerivedState(wallOpenings),
-    innerWalls,
-    splineWallGraph,
-  }, {
-    includeFloorReceivers: false,
-  })
-
-  return buildAnimatedRoomTileEntriesFromBundle({
-    bakedLightField,
-    buildStartedAt,
-    bundle,
-    cells,
-    originCell,
-    relatedCellKeys: previewCellKeys,
-  })
 }
 
 export function buildRemovedRoomTileEntries({
@@ -134,21 +60,6 @@ export function buildRemovedRoomTileEntries({
   })
   const nextSignatures = new Set(nextEntries.map(buildTransientRoomEntrySignature))
   return previousEntries.filter((entry) => !nextSignatures.has(buildTransientRoomEntrySignature(entry)))
-}
-
-export function getBuildAnimationTargetsForWallKeys(wallKeys: readonly string[]) {
-  const targets = new Map<string, { key: string; cell: GridCell }>()
-  wallKeys.forEach((wallKey) => {
-    const cell = getWallPreviewCells(wallKey)[0]
-    if (!cell) {
-      return
-    }
-    targets.set(wallKey, {
-      key: wallKey,
-      cell,
-    })
-  })
-  return [...targets.values()]
 }
 
 export function expandRoomMutationCells(cells: readonly GridCell[]) {
@@ -199,7 +110,7 @@ function buildAnimatedRoomTileEntriesForState({
   wallSurfaceAssetIds,
   wallSurfaceProps,
 }: RoomAnimationStateInput & {
-  buildAnimationDirection?: 'rise' | 'fall'
+  buildAnimationDirection?: TileEntryAnimationDirection
   buildStartedAt: number
   cells: readonly GridCell[]
   originCell: GridCell
@@ -240,7 +151,7 @@ function buildAnimatedRoomTileEntriesFromBundle({
   relatedCellKeys,
 }: {
   bakedLightField: BakedFloorLightField | null
-  buildAnimationDirection?: 'rise' | 'fall'
+  buildAnimationDirection?: TileEntryAnimationDirection
   buildStartedAt: number
   bundle: ReturnType<typeof buildFloorRenderDerivedBundleFromInput>
   cells: readonly GridCell[]
@@ -298,7 +209,7 @@ function getSpeculativeBuildDelay(
     return Math.max(max, distance)
   }, 1)
   const distance = Math.abs(cell[0] - originCell[0]) + Math.abs(cell[1] - originCell[1])
-  return (distance / maxDist) * MAX_BUILD_STAGGER_MS + extraDelay
+  return (distance / maxDist) * MAX_TILE_ENTRY_STAGGER_MS + extraDelay
 }
 
 export function buildTransientRoomEntrySignature(entry: StaticTileEntry) {

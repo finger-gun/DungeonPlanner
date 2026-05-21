@@ -11,10 +11,10 @@ import {
   vec3,
 } from 'three/tsl'
 import {
-  BUILD_ANIMATION_DEPTH,
-  BUILD_ANIMATION_RISE_DURATION_MS,
-  BUILD_ANIMATION_WARMUP_MS,
-} from '../../store/buildAnimations'
+  TILE_ENTRY_ANIMATION_DEPTH,
+  TILE_ENTRY_ANIMATION_DURATION_MS,
+  TILE_ENTRY_ANIMATION_WARMUP_MS,
+} from './tileEntryAnimation'
 
 // TSL node wrappers expose a wider fluent API at runtime than the current TypeScript surface.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -36,28 +36,19 @@ type BuildAnimationAwareMaterial = THREE.Material & {
 export type BelowGroundClipVariant = 'floor' | 'wall' | 'prop'
 
 const buildAnimationTimeUniform = uniform(0)
-const buildAnimationTimeScaleUniform = uniform(1)
-const buildAnimationHoldBatchStartUniform = uniform(Number.MAX_SAFE_INTEGER)
-const buildAnimationHoldReleaseUniform = uniform(0)
 const BUILD_ANIMATION_SIGNATURE = [
   'batched-rise-v1',
-  BUILD_ANIMATION_DEPTH,
-  BUILD_ANIMATION_RISE_DURATION_MS,
-  BUILD_ANIMATION_WARMUP_MS,
+  TILE_ENTRY_ANIMATION_DEPTH,
+  TILE_ENTRY_ANIMATION_DURATION_MS,
+  TILE_ENTRY_ANIMATION_WARMUP_MS,
 ].join(':')
 const BELOW_GROUND_CLIP_SIGNATURE = 'clip-below-ground-v1'
 const DEFAULT_BELOW_GROUND_CLIP_MIN_Y = 0
 const FLOOR_BELOW_GROUND_CLIP_MIN_Y = -1;
 export function setBuildAnimationTime(
   elapsedMs: number,
-  timeScale = 1,
-  holdBatchStartMs = Number.MAX_SAFE_INTEGER,
-  holdReleaseMs = elapsedMs,
 ) {
   buildAnimationTimeUniform.value = elapsedMs
-  buildAnimationTimeScaleUniform.value = timeScale
-  buildAnimationHoldBatchStartUniform.value = holdBatchStartMs
-  buildAnimationHoldReleaseUniform.value = holdReleaseMs
 }
 
 export function getBelowGroundClipMinY(variant: BelowGroundClipVariant) {
@@ -165,29 +156,22 @@ export function applyBuildAnimationToMaterial(
     const buildDelay = attribute('buildAnimationDelay', 'float') as ShaderNodeLike
     const buildDirection = attribute('buildAnimationDirection', 'float') as ShaderNodeLike
     const hasBuildAnimation = buildStart.greaterThanEqual(float(0))
-    const holdApplies = buildStart.greaterThanEqual(buildAnimationHoldBatchStartUniform)
-    const holdDuration = holdApplies.select(
-      max(buildAnimationHoldReleaseUniform.sub(buildStart), float(0)),
-      float(0),
-    )
     const elapsed = max(
       buildAnimationTimeUniform
         .sub(buildStart)
-        .sub(float(BUILD_ANIMATION_WARMUP_MS))
-        .sub(holdDuration)
-        .div(buildAnimationTimeScaleUniform)
+        .sub(float(TILE_ENTRY_ANIMATION_WARMUP_MS))
         .sub(buildDelay),
       float(0),
     )
     const progress = min(
-      elapsed.div(float(BUILD_ANIMATION_RISE_DURATION_MS)),
+      elapsed.div(float(TILE_ENTRY_ANIMATION_DURATION_MS)),
       float(1),
     )
     const remaining = float(1).sub(progress)
-    const riseOffset = float(-BUILD_ANIMATION_DEPTH).mul(
+    const riseOffset = float(-TILE_ENTRY_ANIMATION_DEPTH).mul(
       remaining.mul(remaining).mul(remaining),
     )
-    const fallOffset = float(-BUILD_ANIMATION_DEPTH).mul(
+    const fallOffset = float(-TILE_ENTRY_ANIMATION_DEPTH).mul(
       progress.mul(progress).mul(progress),
     )
     const isFalling = buildDirection.greaterThan(float(0.5))

@@ -38,11 +38,6 @@ vi.mock('../../store/useDungeonStore', () => ({
   useDungeonStore: useDungeonStoreMock,
 }))
 
-vi.mock('../../store/buildAnimations', () => ({
-  hasActiveBuildAnimations: () => false,
-  useBuildAnimationVersion: () => 0,
-}))
-
 vi.mock('../../rendering/renderActivity', () => ({
   requestContinuousRender: requestContinuousRenderMock,
   releaseContinuousRender: releaseContinuousRenderMock,

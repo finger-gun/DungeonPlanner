@@ -32,7 +32,7 @@ import {
   buildRemovedRoomTileEntries,
   expandRoomMutationCells,
   type RoomAnimationStateInput,
-} from './roomMutationAnimations'
+} from './roomMutationTileEntries'
 import {
   shouldUpdateRoomResizeDragState,
   type RoomResizeDragState,
