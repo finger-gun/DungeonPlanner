@@ -5,8 +5,11 @@ import {
   buildSplineWallSectionGeometry,
   buildSplineWallSectionGroupGeometry,
   buildSplineWallSectionHeightBands,
+  buildSplineWallTopCapGroupGeometry,
+  buildSplineWallOpeningRevealGeometry,
   resolveSplineWallBakedLightSample,
   resolveSplineWallBakedLightSamplePosition,
+  shouldRenderSplineWallOpeningReveal,
 } from './SplineWallLayer'
 import { buildSplineWallAssemblySections } from '../../store/splineWallAssembly'
 import { buildSplineWallOpeningDescriptors, type SplineWallOpeningDescriptor } from '../../store/splineWallOpenings'
@@ -459,7 +462,7 @@ describe('buildSplineWallSectionHeightBands', () => {
     expect(getMaxUvU(groupedGeometry)).toBeGreaterThan(getMaxUvU(firstGeometry) + 0.5)
   })
 
-  it('stitches shallow clipped-curve section joins into one offset wall row', () => {
+  it('keeps shallow clipped-curve section joins as one continuous textured run', () => {
     const graph = upsertSplineWallGraphRoomPath(createEmptySplineWallGraph(), {
       roomId: 'room-a',
       layerId: 'default',
@@ -489,8 +492,8 @@ describe('buildSplineWallSectionHeightBands', () => {
     const secondGeometry = buildSplineWallSectionGeometry(sections[1]!, queryCache, [])
     const geometry = buildSplineWallSectionGroupGeometry(sections, queryCache, new Map())
 
-    expect(geometry.getAttribute('position').count).toBe(
-      firstGeometry.getAttribute('position').count + secondGeometry.getAttribute('position').count - 2,
+    expect(geometry.getAttribute('position').count).toBeLessThan(
+      firstGeometry.getAttribute('position').count + secondGeometry.getAttribute('position').count,
     )
   })
 
@@ -566,6 +569,186 @@ describe('buildSplineWallSectionHeightBands', () => {
     expect(hasVertexNearXZ(geometry, [0.181, 0.181])).toBe(true)
   })
 
+  it('closes the grouped room-face loop seam at a diagonal corner', () => {
+    const nodes: { position: [number, number]; cornerMode: 'square'; cornerAmount: number }[] = [
+      { position: [0, 0], cornerMode: 'square', cornerAmount: 0 },
+      { position: [2, 1], cornerMode: 'square', cornerAmount: 0 },
+      { position: [3, 3], cornerMode: 'square', cornerAmount: 0 },
+      { position: [0, 3], cornerMode: 'square', cornerAmount: 0 },
+    ]
+    const graph = upsertSplineWallGraphRoomPath(createEmptySplineWallGraph(), {
+      roomId: 'room-a',
+      layerId: 'default',
+      nodes,
+      closed: true,
+    })
+    const analysis = analyzeSplineWallGraphBoundaries(graph)
+    const roomFaceSections = analysis
+      .flatMap((boundaryPath) => boundaryPath.sections)
+      .filter((section) => section.faceKind === 'room-face')
+    const assemblySections = buildSplineWallAssemblySections({
+      analyzedBoundaries: analysis,
+      wallStyleAssignments: Object.fromEntries(
+        roomFaceSections.map((section) => [
+          createSplineWallSegmentSideKey(section.segmentId, section.side),
+          'art-deco-cobblestone',
+        ]),
+      ),
+    }).filter((section) => section.layerKind === 'room-face')
+
+    const geometry = buildSplineWallSectionGroupGeometry(
+      assemblySections,
+      createSplineWallQueryCache(graph),
+      new Map(),
+    )
+    const seamSection = assemblySections[0]!
+    const previousCorner = nodes.at(-1)!.position as readonly [number, number]
+    const corner = nodes[0]!.position as readonly [number, number]
+    const nextCorner = nodes[1]!.position as readonly [number, number]
+
+    expect(hasVertexNearXZ(
+      geometry,
+      getExpectedCornerMiterPoint(
+        previousCorner,
+        corner,
+        nextCorner,
+        getMaxProfileLateralOffset(seamSection.profile.points),
+        seamSection.side,
+      ),
+      1e-2,
+    )).toBe(true)
+  })
+
+  it('uses one continuous structural-core top owner for square-room corners', () => {
+    const graph = upsertSplineWallGraphRoomPath(createEmptySplineWallGraph(), {
+      roomId: 'room-a',
+      layerId: 'default',
+      nodes: [
+        { position: [0, 0], cornerMode: 'square', cornerAmount: 0 },
+        { position: [2, 0], cornerMode: 'square', cornerAmount: 0 },
+        { position: [2, 2], cornerMode: 'square', cornerAmount: 0 },
+        { position: [0, 2], cornerMode: 'square', cornerAmount: 0 },
+      ],
+      closed: true,
+    })
+    const analysis = analyzeSplineWallGraphBoundaries(graph)
+    const roomFace = analysis[0]!.sections.find((section) => section.faceKind === 'room-face')!
+    const structuralSections = buildSplineWallAssemblySections({
+      analyzedBoundaries: analysis,
+      wallStyleAssignments: {
+        [createSplineWallSegmentSideKey(roomFace.segmentId, roomFace.side)]: 'stone-keep',
+      },
+    }).filter((section) => section.layerKind === 'structural-core')
+
+    const queryCache = createSplineWallQueryCache(graph)
+
+    const geometry = buildSplineWallTopCapGroupGeometry(
+      structuralSections,
+      queryCache,
+      new Map(),
+    )
+
+    geometry.computeBoundingBox()
+    expect(geometry.boundingBox?.min.x ?? 0).toBeLessThan(0)
+    expect(geometry.boundingBox?.min.z ?? 0).toBeLessThan(0)
+    expect(geometry.boundingBox?.max.x ?? 0).toBeGreaterThan(4)
+    expect(geometry.boundingBox?.max.z ?? 0).toBeGreaterThan(4)
+    expect(getMaxTopHitsInRegion(geometry, [3.6, 4.15], [3.6, 4.15], 0.05)).toBe(1)
+  })
+
+  it('keeps non-structural wall faces slightly below the structural top cap owner', () => {
+    const graph = upsertSplineWallGraphRoomPath(createEmptySplineWallGraph(), {
+      roomId: 'room-a',
+      layerId: 'default',
+      nodes: [
+        { position: [0, 0], cornerMode: 'square', cornerAmount: 0 },
+        { position: [2, 0], cornerMode: 'square', cornerAmount: 0 },
+        { position: [2, 2], cornerMode: 'square', cornerAmount: 0 },
+        { position: [0, 2], cornerMode: 'square', cornerAmount: 0 },
+      ],
+      closed: true,
+    })
+    const analysis = analyzeSplineWallGraphBoundaries(graph)
+    const roomFace = analysis[0]!.sections.find((section) => section.faceKind === 'room-face')!
+    const assemblySections = buildSplineWallAssemblySections({
+      analyzedBoundaries: analysis,
+      wallStyleAssignments: {
+        [createSplineWallSegmentSideKey(roomFace.segmentId, roomFace.side)]: 'stone-keep',
+      },
+    })
+    const structuralSections = assemblySections.filter((section) => section.layerKind === 'structural-core')
+    const roomFaceSections = assemblySections.filter((section) => section.layerKind === 'room-face')
+    const exteriorFaceSections = assemblySections.filter((section) => section.layerKind === 'exterior-face')
+    const topCapOwnerStructuralSegmentIds = new Set(
+      structuralSections.map((section) => section.structuralSegmentId),
+    )
+    const queryCache = createSplineWallQueryCache(graph)
+
+    const roomFaceGeometry = buildSplineWallSectionGroupGeometry(
+      roomFaceSections,
+      queryCache,
+      new Map(),
+      topCapOwnerStructuralSegmentIds,
+    )
+    const exteriorFaceGeometry = buildSplineWallSectionGroupGeometry(
+      exteriorFaceSections,
+      queryCache,
+      new Map(),
+      topCapOwnerStructuralSegmentIds,
+    )
+    const topCapGeometry = buildSplineWallTopCapGroupGeometry(
+      structuralSections,
+      queryCache,
+      new Map(),
+    )
+
+    expect(getMaxPositionY(roomFaceGeometry)).toBeLessThan(DEFAULT_SPLINE_WALL_HEIGHT)
+    expect(getMaxPositionY(roomFaceGeometry)).toBeGreaterThan(DEFAULT_SPLINE_WALL_HEIGHT - 0.01)
+    expect(getMaxPositionY(exteriorFaceGeometry)).toBeLessThan(DEFAULT_SPLINE_WALL_HEIGHT)
+    expect(getMaxPositionY(exteriorFaceGeometry)).toBeGreaterThan(DEFAULT_SPLINE_WALL_HEIGHT - 0.01)
+    expect(getMinPositionY(topCapGeometry)).toBeCloseTo(DEFAULT_SPLINE_WALL_HEIGHT, 5)
+  })
+
+  it('closes the structural-core top-cap loop seam at a diagonal corner', () => {
+    const nodes: { position: [number, number]; cornerMode: 'square'; cornerAmount: number }[] = [
+      { position: [0, 0], cornerMode: 'square', cornerAmount: 0 },
+      { position: [2, 1], cornerMode: 'square', cornerAmount: 0 },
+      { position: [3, 3], cornerMode: 'square', cornerAmount: 0 },
+      { position: [0, 3], cornerMode: 'square', cornerAmount: 0 },
+    ]
+    const graph = upsertSplineWallGraphRoomPath(createEmptySplineWallGraph(), {
+      roomId: 'room-a',
+      layerId: 'default',
+      nodes: [...nodes],
+      closed: true,
+    })
+    const analysis = analyzeSplineWallGraphBoundaries(graph)
+    const roomFace = analysis[0]!.sections.find((section) => section.faceKind === 'room-face')!
+    const structuralSections = buildSplineWallAssemblySections({
+      analyzedBoundaries: analysis,
+      wallStyleAssignments: {
+        [createSplineWallSegmentSideKey(roomFace.segmentId, roomFace.side)]: 'stone-keep',
+      },
+    }).filter((section) => section.layerKind === 'structural-core')
+
+    const geometry = buildSplineWallTopCapGroupGeometry(
+      structuralSections,
+      createSplineWallQueryCache(graph),
+      new Map(),
+    )
+    const topOffsets = getStructuralTopCapOffsets(structuralSections[0]!)
+    const previousCorner = nodes.at(-1)!.position as readonly [number, number]
+    const corner = nodes[0]!.position as readonly [number, number]
+    const nextCorner = nodes[1]!.position as readonly [number, number]
+
+    topOffsets.forEach((offset) => {
+      expect(countTopHitsAtPoint(
+        geometry,
+        getCornerSeamProbePoint(previousCorner, corner, nextCorner, offset),
+      )).toBe(1)
+    })
+  })
+
   it('keeps exterior wall UVs anchored when an opening cuts the mesh into bands', () => {
     const graph = upsertSplineWallGraphRoomPath(createEmptySplineWallGraph(), {
       roomId: 'room-a',
@@ -601,6 +784,49 @@ describe('buildSplineWallSectionHeightBands', () => {
     expect(getMaxUvV(after)).toBeCloseTo(getMaxUvV(before), 5)
     expect(getMaxUvV(after)).toBeCloseTo(1, 5)
     expect(getMaxUvUAtHeight(after, 0)).toBeCloseTo(getMaxUvUAtHeight(before, 0), 5)
+  })
+
+  it('builds reveal span geometry that closes a full-height shared corridor opening', () => {
+    let graph = upsertSplineWallGraphRoomPath(createEmptySplineWallGraph(), {
+      roomId: 'left',
+      layerId: 'default',
+      nodes: buildRoomDraftSplineNodes(createRoomDraftFromStroke([0, 0], [0, 0])),
+      closed: true,
+    })
+    graph = upsertSplineWallGraphRoomPath(graph, {
+      roomId: 'right',
+      layerId: 'default',
+      nodes: buildRoomDraftSplineNodes(createRoomDraftFromStroke([1, 0], [1, 0])),
+      closed: true,
+    })
+
+    const analysis = analyzeSplineWallGraphBoundaries(graph)
+    const sharedSections = analysis
+      .flatMap((entry) => entry.sections)
+      .filter((section) => section.faceKind === 'room-face' && section.oppositeRoomId !== null)
+    const assemblySections = buildSplineWallAssemblySections({
+      analyzedBoundaries: analysis,
+      wallStyleAssignments: Object.fromEntries(
+        sharedSections.map((section) => [createSplineWallSegmentSideKey(section.segmentId, section.side), 'stone-keep']),
+      ),
+    })
+    const roomFaceSection = assemblySections.find((section) =>
+      section.layerKind === 'room-face'
+      && section.roomId === 'left'
+      && section.oppositeRoomId === 'right',
+    )!
+
+    const geometry = buildSplineWallOpeningRevealGeometry(
+      roomFaceSection,
+      createTestOpeningDescriptor(roomFaceSection, {
+        startRatio: 0,
+        endRatio: 1,
+        topHeight: DEFAULT_SPLINE_WALL_HEIGHT,
+      }),
+      createSplineWallQueryCache(graph),
+    )
+
+    expect(geometry.getAttribute('position').count).toBeGreaterThan(20)
   })
 
   it('uses the measured KayKit dungeon wall silhouette for the art deco exterior face', () => {
@@ -665,13 +891,17 @@ describe('buildSplineWallSectionHeightBands', () => {
       candidate.segmentId === roomFace.segmentId && candidate.layerKind === 'structural-core',
     )!
 
-    const geometry = buildSplineWallSectionGeometry(structuralCore, createSplineWallQueryCache(graph), [])
+    const geometry = buildSplineWallTopCapGroupGeometry(
+      [structuralCore],
+      createSplineWallQueryCache(graph),
+      new Map(),
+    )
     expect(geometry.getAttribute('position').count).toBeGreaterThan(0)
     expect(getMinPositionY(geometry)).toBeCloseTo(DEFAULT_SPLINE_WALL_HEIGHT, 5)
     expect(getMaxPositionY(geometry)).toBeCloseTo(DEFAULT_SPLINE_WALL_HEIGHT, 5)
   })
 
-  it('aligns structural-core baked light directions with the generated wall normals', () => {
+  it('keeps structural-core top cap normals pointed upward', () => {
     const graph = upsertSplineWallGraphRoomPath(createEmptySplineWallGraph(), {
       roomId: 'room-a',
       layerId: 'default',
@@ -695,9 +925,13 @@ describe('buildSplineWallSectionHeightBands', () => {
       candidate.segmentId === roomFace.segmentId && candidate.layerKind === 'structural-core',
     )!
 
-    const geometry = buildSplineWallSectionGeometry(structuralCore, createSplineWallQueryCache(graph), [])
+    const geometry = buildSplineWallTopCapGroupGeometry(
+      [structuralCore],
+      createSplineWallQueryCache(graph),
+      new Map(),
+    )
 
-    expect(getAverageHorizontalDirectionAlignment(geometry)).toBeGreaterThan(0.85)
+    expect(getAverageVerticalNormal(geometry)).toBeGreaterThan(0.95)
   })
 
   it('orients right-side room-face normals toward the room', () => {
@@ -970,6 +1204,30 @@ describe('resolveSplineWallBakedLightSamplePosition', () => {
     ])
   })
 
+  describe('shouldRenderSplineWallOpeningReveal', () => {
+    it('renders room-face fallback reveals for structural shared openings without a structural core section', () => {
+      expect(shouldRenderSplineWallOpeningReveal(
+        createTestOpeningDescriptor(
+          {
+            id: 'shared-room-face',
+            segmentId: 'segment-a',
+            structuralSegmentId: 'shared-structural',
+            layerKind: 'room-face',
+            roomId: 'room-a',
+            side: 'left',
+            wallStyleId: 'stone-keep',
+          },
+          {
+            startRatio: 0,
+            endRatio: 1,
+            topHeight: DEFAULT_SPLINE_WALL_HEIGHT,
+          },
+        ),
+        new Set(),
+      )).toBe(true)
+    })
+  })
+
   it('falls back to the opposite side when a perimeter-wall normal points outside the floor', () => {
     const field = createSampledFloorLightField(['0:0'])
     const resolved = resolveSplineWallBakedLightSample(
@@ -1118,6 +1376,116 @@ function hasVertexNearXZ(
     ) <= tolerance).some(Boolean)
 }
 
+function countTopHitsAtPoint(
+  geometry: THREE.BufferGeometry,
+  target: readonly [number, number],
+) {
+  const mesh = new THREE.Mesh(geometry, new THREE.MeshBasicMaterial({ side: THREE.DoubleSide }))
+  const raycaster = new THREE.Raycaster(
+    new THREE.Vector3(target[0], DEFAULT_SPLINE_WALL_HEIGHT + 1, target[1]),
+    new THREE.Vector3(0, -1, 0),
+  )
+  const hitDistances = raycaster
+    .intersectObject(mesh, false)
+    .filter((hit) => Math.abs(hit.face?.normal.y ?? 0) >= 0.5)
+    .map((hit) => hit.distance)
+    .sort((left, right) => left - right)
+
+  return hitDistances.reduce<number[]>((uniqueDistances, distance) => {
+    const previous = uniqueDistances.at(-1)
+    if (previous === undefined || Math.abs(previous - distance) > 1e-4) {
+      uniqueDistances.push(distance)
+    }
+    return uniqueDistances
+  }, []).length
+}
+
+function getMaxTopHitsInRegion(
+  geometry: THREE.BufferGeometry,
+  xRange: readonly [number, number],
+  zRange: readonly [number, number],
+  step: number,
+) {
+  let maxHits = 0
+  for (let x = xRange[0]; x <= xRange[1] + 1e-5; x += step) {
+    for (let z = zRange[0]; z <= zRange[1] + 1e-5; z += step) {
+      maxHits = Math.max(maxHits, countTopHitsAtPoint(geometry, [x, z]))
+    }
+  }
+  return maxHits
+}
+
+function getStructuralTopCapOffsets(section: { profile: { points: readonly (readonly [number, number])[] } }) {
+  const maxHeight = Math.max(...section.profile.points.map((point) => point[1]))
+  const offsets = section.profile.points
+    .filter((point) => Math.abs(point[1] - maxHeight) <= 1e-5)
+    .map((point) => point[0])
+  return [Math.min(...offsets), Math.max(...offsets)] as const
+}
+
+function getMaxProfileLateralOffset(profilePoints: readonly (readonly [number, number])[]) {
+  return Math.max(...profilePoints.map((point) => Math.abs(point[0])))
+}
+
+function getCornerSeamProbePoint(
+  previous: readonly [number, number],
+  corner: readonly [number, number],
+  next: readonly [number, number],
+  lateralOffset: number,
+) {
+  const probeOffset = lateralOffset * 0.7
+  const incomingDirection = normalizeTestVector2([
+    corner[0] - previous[0],
+    corner[1] - previous[1],
+  ])
+  const outgoingDirection = normalizeTestVector2([
+    next[0] - corner[0],
+    next[1] - corner[1],
+  ])
+  const incomingPoint = [
+    corner[0] + (-incomingDirection[1] * probeOffset),
+    corner[1] + (incomingDirection[0] * probeOffset),
+  ] as const
+  const outgoingPoint = [
+    corner[0] + (-outgoingDirection[1] * probeOffset),
+    corner[1] + (outgoingDirection[0] * probeOffset),
+  ] as const
+
+  return [
+    (corner[0] + incomingPoint[0] + outgoingPoint[0]) / 3,
+    (corner[1] + incomingPoint[1] + outgoingPoint[1]) / 3,
+  ] as const
+}
+
+function getExpectedCornerMiterPoint(
+  previous: readonly [number, number],
+  corner: readonly [number, number],
+  next: readonly [number, number],
+  lateralOffset: number,
+  side: 'left' | 'right' | null,
+) {
+  const incomingDirection = normalizeTestVector2([
+    corner[0] - previous[0],
+    corner[1] - previous[1],
+  ])
+  const outgoingDirection = normalizeTestVector2([
+    next[0] - corner[0],
+    next[1] - corner[1],
+  ])
+  const incomingPoint = offsetCornerPoint(corner, incomingDirection, lateralOffset, side)
+  const outgoingPoint = offsetCornerPoint(corner, outgoingDirection, lateralOffset, side)
+  const intersection = intersectTestLines(
+    incomingPoint,
+    incomingDirection,
+    outgoingPoint,
+    outgoingDirection,
+  )
+
+  return intersection
+    ? clampTestMiterPoint(corner, intersection, lateralOffset)
+    : incomingPoint
+}
+
 function getMinPositionY(geometry: THREE.BufferGeometry) {
   const positions = geometry.getAttribute('position')
   return Math.min(...Array.from({ length: positions.count }, (_, index) => positions.getY(index)))
@@ -1179,32 +1547,93 @@ function getAverageBakedLightDirectionDotForSectionSide(
   return sum / directions.count
 }
 
-function getAverageHorizontalDirectionAlignment(geometry: THREE.BufferGeometry) {
+function getAverageVerticalNormal(geometry: THREE.BufferGeometry) {
   const normals = geometry.getAttribute('normal')
-  const directions = geometry.getAttribute('bakedLightDirection')
   expect(normals?.count).toBeGreaterThan(0)
-  expect(directions?.count).toBe(normals?.count)
 
   let sum = 0
-  let samples = 0
   for (let index = 0; index < normals.count; index += 1) {
-    const normalX = normals.getX(index)
-    const normalZ = normals.getZ(index)
-    const directionX = directions.getX(index)
-    const directionZ = directions.getZ(index)
-    const normalLength = Math.hypot(normalX, normalZ)
-    const directionLength = Math.hypot(directionX, directionZ)
-    if (normalLength <= 1e-5 || directionLength <= 1e-5) {
-      continue
-    }
-
-    sum += ((normalX / normalLength) * (directionX / directionLength))
-      + ((normalZ / normalLength) * (directionZ / directionLength))
-    samples += 1
+    sum += Math.abs(normals.getY(index))
   }
 
-  expect(samples).toBeGreaterThan(0)
-  return sum / samples
+  return sum / normals.count
+}
+
+function normalizeTestVector2(point: readonly [number, number]) {
+  const length = Math.hypot(point[0], point[1])
+  expect(length).toBeGreaterThan(1e-5)
+  return [point[0] / length, point[1] / length] as const
+}
+
+function offsetCornerPoint(
+  point: readonly [number, number],
+  tangent: readonly [number, number],
+  lateralOffset: number,
+  side: 'left' | 'right' | null,
+) {
+  const normal = getTestOffsetNormal(tangent, side)
+  return [
+    point[0] + (normal[0] * lateralOffset),
+    point[1] + (normal[1] * lateralOffset),
+  ] as const
+}
+
+function getTestOffsetNormal(
+  tangent: readonly [number, number],
+  side: 'left' | 'right' | null,
+) {
+  const leftNormal = [-tangent[1], tangent[0]] as const
+  return side === 'right'
+    ? ([-leftNormal[0], -leftNormal[1]] as const)
+    : leftNormal
+}
+
+function intersectTestLines(
+  leftPoint: readonly [number, number],
+  leftDirection: readonly [number, number],
+  rightPoint: readonly [number, number],
+  rightDirection: readonly [number, number],
+) {
+  const denominator = crossTest2(leftDirection, rightDirection)
+  if (Math.abs(denominator) <= 1e-5) {
+    return null
+  }
+
+  const delta = [
+    rightPoint[0] - leftPoint[0],
+    rightPoint[1] - leftPoint[1],
+  ] as const
+  const leftScale = crossTest2(delta, rightDirection) / denominator
+  return [
+    leftPoint[0] + (leftDirection[0] * leftScale),
+    leftPoint[1] + (leftDirection[1] * leftScale),
+  ] as const
+}
+
+function clampTestMiterPoint(
+  origin: readonly [number, number],
+  point: readonly [number, number],
+  lateralOffset: number,
+) {
+  const delta = [
+    point[0] - origin[0],
+    point[1] - origin[1],
+  ] as const
+  const distance = Math.hypot(delta[0], delta[1])
+  const maxDistance = Math.abs(lateralOffset) * 2
+  if (distance <= maxDistance + 1e-5 || distance <= 1e-5) {
+    return point
+  }
+
+  const scale = maxDistance / distance
+  return [
+    origin[0] + (delta[0] * scale),
+    origin[1] + (delta[1] * scale),
+  ] as const
+}
+
+function crossTest2(left: readonly [number, number], right: readonly [number, number]) {
+  return (left[0] * right[1]) - (left[1] * right[0])
 }
 
 function getSectionSideNormal2D(
