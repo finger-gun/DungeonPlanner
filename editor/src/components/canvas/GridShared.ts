@@ -17,3 +17,11 @@ export function shouldClearRoomDraftForFloorChange({
 }) {
   return roomDraftActive && previousActiveFloorId !== activeFloorId
 }
+
+export function shouldAnimateRoomMutation({
+  mutationKind,
+}: {
+  mutationKind: 'erase-stroke' | 'draft-commit' | 'room-delete'
+}) {
+  return mutationKind !== 'room-delete'
+}
