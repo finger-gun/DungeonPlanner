@@ -30,4 +30,13 @@ describe('RoomPaintModePanel', () => {
     expect(useDungeonStore.getState().roomEditMode).toBe('rooms')
     expect(useDungeonStore.getState().roomPaintMode).toBe('paint')
   })
+
+  it('only shows area, paint, and spline wall tools', () => {
+    render(<RoomPaintModePanel sidebarVisible={false} />)
+
+    expect(screen.getByRole('button', { name: 'Area' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Paint' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Spline walls' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Resize' })).not.toBeInTheDocument()
+  })
 })

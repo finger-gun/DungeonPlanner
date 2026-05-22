@@ -1822,19 +1822,6 @@ export function Grid({ size = 120, playMode = false, bakedLightField = null }: G
       if (mapMode !== 'outdoor') {
         const hoveredRoomId = paintedCells[getCellKey(snapped.cell)]?.roomId ?? null
 
-        // In resize mode, clicking on a room selects it for resizing
-        if (roomPaintMode === 'resize') {
-          if (event.button === 0 && hoveredRoomId) {
-            selectRoom(hoveredRoomId)
-            return
-          }
-
-          if (event.button === 0 && !hoveredRoomId) {
-            selectRoom(null)
-          }
-          return
-        }
-
         if (roomPaintMode === 'area' && event.button === 0 && hoveredRoomId) {
           if (startExistingRoomDraft(hoveredRoomId)) {
             return
@@ -1863,11 +1850,6 @@ export function Grid({ size = 120, playMode = false, bakedLightField = null }: G
       const cellKey = getCellKey(snapped.cell)
       strokePaintedCellsRef.current.add(cellKey)
       setStrokePaintedCells([[...snapped.cell] as GridCell])
-    }
-
-    // Don't start a stroke in resize mode
-    if (tool === 'room' && roomEditMode === 'rooms' && roomPaintMode === 'resize') {
-      return
     }
 
     updateStrokeState(

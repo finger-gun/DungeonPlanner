@@ -73,11 +73,7 @@ export function RoomToolPanel() {
     () => getContentPackWallStyles(ROOM_SET_CONTENT_PACK_ID).map(buildWallStylePreview),
     [],
   )
-  const showWallStylePicker = mapMode !== 'outdoor'
-    && (
-      (roomEditMode === 'rooms' && (roomPaintMode === 'area' || roomPaintMode === 'paint'))
-      || roomEditMode === 'walls'
-    )
+  const showWallStylePicker = mapMode !== 'outdoor' && (roomEditMode === 'rooms' || roomEditMode === 'walls')
 
   useEffect(() => {
     if (roomEditMode === 'floor-variants') {
@@ -104,9 +100,7 @@ export function RoomToolPanel() {
                   : 'Nature Brush'
               : roomPaintMode === 'paint'
                 ? 'Paint Tool'
-                : roomPaintMode === 'resize'
-                  ? 'Resize Tool'
-                  : 'Area Tool'}
+                : 'Area Tool'}
           </p>
           <p className="mt-1 text-xs">
             {mapMode === 'outdoor'
@@ -117,9 +111,7 @@ export function RoomToolPanel() {
                   : 'Left-drag to paint nature. Right-drag to erase. Painted areas auto-place nature props and remain inaccessible.'
               : roomPaintMode === 'paint'
                 ? 'Click and hold to paint rooms cell-by-cell. Release to commit the stroke. Right-drag erases.'
-                : roomPaintMode === 'resize'
-                  ? 'Click a room to show resize handles. Drag edges or corners to reshape it, or press Delete to remove the selected room.'
-                  : 'Click and drag to draft a room footprint. Release to keep the blue edit anchors in-scene, drag corners to round them, hold Ctrl for diagonals, then Commit or Cancel.'}
+                : 'Click and drag to draft a room footprint. Release to keep the blue edit anchors in-scene, drag corners to round them, hold Ctrl for diagonals, then Commit or Cancel.'}
           </p>
           {mapMode === 'outdoor' ? (
             <div className="mt-4 space-y-3 text-xs">
@@ -294,9 +286,7 @@ export function RoomToolPanel() {
               <p className="text-xs">
                 {roomPaintMode === 'paint'
                   ? 'Best for freeform room shapes and corridors.'
-                  : roomPaintMode === 'resize'
-                    ? 'Best for adjusting existing rooms after they are placed.'
-                    : 'Best for drafting a room footprint before committing it.'}
+                  : 'Best for drafting a room footprint before committing it.'}
               </p>
               {showWallStylePicker ? (
                 <WallStyleControls

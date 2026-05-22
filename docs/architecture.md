@@ -399,7 +399,6 @@ These systems should survive floor changes without remounting.
 Remounted on active floor changes. It owns:
 
 - `DungeonRoom`
-- `RoomResizeOverlay`
 - `DungeonObject` instances
 - post-processing attachment for the active floor view
 - fire particle systems

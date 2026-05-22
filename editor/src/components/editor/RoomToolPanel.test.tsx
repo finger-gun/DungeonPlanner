@@ -44,17 +44,9 @@ describe('RoomToolPanel', () => {
 
     expect(screen.getByText('Paint Tool')).toBeInTheDocument()
     expect(screen.getByText(/paint rooms cell-by-cell/i)).toBeInTheDocument()
-
-    cleanup()
-    useDungeonStore.getState().reset()
-    useDungeonStore.getState().setRoomPaintMode('resize')
-    render(<RoomToolPanel />)
-
-    expect(screen.getByText('Resize Tool')).toBeInTheDocument()
-    expect(screen.getByText(/show resize handles/i)).toBeInTheDocument()
   })
 
-  it('shows wall style choices for area, paint, and walls but hides them in resize mode', () => {
+  it('shows wall style choices for area, paint, and walls', () => {
     render(<RoomToolPanel />)
     expect(screen.queryByText('Room Style')).not.toBeInTheDocument()
     expect(screen.getByText('Interior Wall')).toBeInTheDocument()
@@ -66,9 +58,9 @@ describe('RoomToolPanel', () => {
 
     cleanup()
     useDungeonStore.getState().reset()
-    useDungeonStore.getState().setRoomPaintMode('resize')
+    useDungeonStore.getState().setRoomPaintMode('paint')
     render(<RoomToolPanel />)
-    expect(screen.queryByText('Interior Wall')).not.toBeInTheDocument()
+    expect(screen.getByText('Interior Wall')).toBeInTheDocument()
 
     cleanup()
     useDungeonStore.getState().reset()

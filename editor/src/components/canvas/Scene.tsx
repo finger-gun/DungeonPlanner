@@ -20,7 +20,6 @@ import { getCellKey, snapWorldPointToGrid } from '../../hooks/useSnapToGrid'
 import { createPlayDragState, updatePlayDragState, type PlayDragState } from './playDrag'
 import { MovementRangeOverlay } from './MovementRangeOverlay'
 import { buildMovementRange, type MovementRange } from './playMovement'
-import { RoomResizeOverlay } from './RoomResizeOverlay'
 import { getEffectiveFloorViewMode } from './floorViewMode'
 import { isDownStairAssetId } from '../../store/stairAssets'
 import { OutdoorGround } from './OutdoorGround'
@@ -918,7 +917,6 @@ function FloorContent({ startY = 0 }: { startY?: number }) {
             )
           ))}
         </WorldRaycastAcceleration>
-        <RoomResizeOverlay bakedLightField={bakedFloorLightField} />
         {showPropProbeDebug && (
           <PropProbeDebugOverlay floorId={activeFloorId} />
         )}
