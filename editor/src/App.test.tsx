@@ -310,6 +310,19 @@ describe('App sidebar drawer', () => {
     expect(removeSelectedRoom).not.toHaveBeenCalled()
   })
 
+  it('clears the selected room when Escape is pressed', () => {
+    render(<App />)
+
+    useDungeonStore.setState({
+      selectedRoomId: 'room-1',
+      selection: null,
+    })
+
+    fireEvent.keyDown(window, { key: 'Escape' })
+
+    expect(useDungeonStore.getState().selectedRoomId).toBeNull()
+  })
+
   it('updates the room hint text to match the active context tool', () => {
     useDungeonStore.setState({
       tool: 'room',

@@ -4,8 +4,10 @@ import {
   buildRoomDraftCells,
   buildRoomDraftSplineNodes,
   buildRoomDraftWorldPoints,
+  createRoomDraftFromSplineNodes,
   createRoomDraftFromStroke,
   getRoomDraftCornerAmountFromWorldPoint,
+  getRoomDraftEdgeWorldPosition,
   setRoomDraftCorner,
 } from './roomDraft'
 
@@ -83,5 +85,42 @@ describe('roomDraft', () => {
     )
 
     expect(amount).toBe(0.5)
+  })
+
+  it('centers edge handles on the visible straight edge span', () => {
+    const rounded = setRoomDraftCorner(createRoomDraftFromStroke([0, 0], [3, 2]), 'se', 'rounded', 1)
+
+    expect(getRoomDraftEdgeWorldPosition(rounded, 'south')).toEqual([1.5 * GRID_SIZE, 0, 0])
+    expect(getRoomDraftEdgeWorldPosition(rounded, 'east')).toEqual([4 * GRID_SIZE, 0, 2 * GRID_SIZE])
+  })
+
+  it('recreates a draft from stored spline node corner metadata', () => {
+    const original = setRoomDraftCorner(
+      setRoomDraftCorner(createRoomDraftFromStroke([0, 0], [2, 2]), 'nw', 'diagonal', 1),
+      'se',
+      'rounded',
+      0.5,
+    )
+
+    const recreated = createRoomDraftFromSplineNodes(buildRoomDraftSplineNodes(original))
+
+    expect(recreated).toEqual(original)
+  })
+
+  it('recreates a draft even when stored spline nodes start at a different corner', () => {
+    const original = setRoomDraftCorner(
+      setRoomDraftCorner(createRoomDraftFromStroke([0, 0], [2, 2]), 'nw', 'diagonal', 1),
+      'se',
+      'rounded',
+      0.5,
+    )
+    const rotatedNodes = [
+      ...buildRoomDraftSplineNodes(original).slice(2),
+      ...buildRoomDraftSplineNodes(original).slice(0, 2),
+    ]
+
+    const recreated = createRoomDraftFromSplineNodes(rotatedNodes)
+
+    expect(recreated).toEqual(original)
   })
 })

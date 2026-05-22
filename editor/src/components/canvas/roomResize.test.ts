@@ -12,6 +12,7 @@ import {
   resizeBoundsFromEdge,
 } from '../../store/roomResize'
 import type { PaintedCells } from '../../store/useDungeonStore'
+import { shouldShowRoomResizeOverlay } from './RoomResizeOverlayShared'
 
 function makePaintedCells(entries: Array<{ cell: [number, number]; roomId: string | null }>): PaintedCells {
   return Object.fromEntries(entries.map(({ cell, roomId }) => [
@@ -172,5 +173,25 @@ describe('roomResize', () => {
 
     expect(corner.hitScale[0]).toBeGreaterThan(corner.visibleScale[0])
     expect(corner.hitScale[2]).toBeGreaterThan(corner.visibleScale[2])
+  })
+
+  it('only shows the live resize overlay in resize mode', () => {
+    expect(shouldShowRoomResizeOverlay({
+      tool: 'room',
+      roomPaintMode: 'area',
+      selectedRoomId: 'room-a',
+    })).toBe(false)
+
+    expect(shouldShowRoomResizeOverlay({
+      tool: 'room',
+      roomPaintMode: 'resize',
+      selectedRoomId: 'room-a',
+    })).toBe(true)
+
+    expect(shouldShowRoomResizeOverlay({
+      tool: 'move',
+      roomPaintMode: 'resize',
+      selectedRoomId: 'room-a',
+    })).toBe(false)
   })
 })

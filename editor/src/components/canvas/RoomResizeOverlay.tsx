@@ -37,6 +37,7 @@ import {
   shouldUpdateRoomResizeDragState,
   type RoomResizeDragState,
 } from './roomResizeDragState'
+import { shouldShowRoomResizeOverlay } from './RoomResizeOverlayShared'
 import { useRemovalAnimationBatches } from './useRemovalAnimationBatches'
 
 const OVERLAY_Y = 0.3
@@ -226,7 +227,11 @@ export function RoomResizeOverlay({ bakedLightField = null }: RoomResizeOverlayP
     }
   }, [gl, setRoomResizeHandleActive, controls])
 
-  const showOverlay = tool === 'room' && roomPaintMode === 'resize' && Boolean(selectedRoomId)
+  const showOverlay = shouldShowRoomResizeOverlay({
+    tool,
+    roomPaintMode,
+    selectedRoomId,
+  })
 
   useEffect(() => {
     if (showOverlay) {
@@ -434,7 +439,7 @@ export function RoomResizeOverlay({ bakedLightField = null }: RoomResizeOverlayP
     }
     }, [activeFloorId, activeLayerId, bakedLightField, baseBounds, camera, floorTileAssetIds, gl, globalFloorAssetId, globalWallAssetId, innerWalls, invalidate, isDragging, paintedCells, queueRemovalAnimationBatch, resizeRoom, resizeRoomByBoundaryRun, roomCells, rooms, selectedRoomId, stopDrag, wallOpenings, wallSurfaceAssetIds, wallSurfaceProps])
 
-  if (tool !== 'room' || !selectedRoomId || !baseBounds) {
+  if (!showOverlay || !baseBounds) {
     return null
   }
 

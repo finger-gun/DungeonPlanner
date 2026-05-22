@@ -40,15 +40,17 @@ import {
   findNearestSplineWallSegment,
   type SplineWallQueryCache,
 } from '../../store/splineWallQueries'
-import { hasSplineWallGraphPaths, type SplineWallGraph } from '../../store/splineWallGraph'
+import { hasSplineWallGraphPaths, removeSplineWallGraphRooms, type SplineWallGraph } from '../../store/splineWallGraph'
 import { buildSplineWallGraphFromPaintedCells } from '../../store/splineWalls'
 import { buildPaintedAreaRoomPreview, type FreehandPaintPoint } from '../../store/freehandRoomPaint'
+import { analyzeSplineWallGraphBoundaries } from '../../store/splineWallStyleAnalysis'
 import {
   getInheritedWallAssetIdForWallKey,
   isInterRoomBoundary,
   isWallBoundary,
   wallKeyToWorldPosition,
 } from '../../store/wallSegments'
+import { createSplineWallSegmentSideKey } from '../../store/wallStyleAssignments'
 import {
   buildEligibleOpenPassageWalls,
   buildWallOpeningDerivedState,
@@ -89,8 +91,10 @@ import {
 import { useRemovalAnimationBatches } from './useRemovalAnimationBatches'
 import { RoomDraftOverlay } from './RoomDraftOverlay'
 import {
+  createRoomDraftFromSplineNodes,
   createRoomDraftFromStroke,
   type RoomDraftState,
+  type RoomDraftSplineNodeInput,
 } from '../../store/roomDraft'
 import {
   buildRoomDraftOccupancyPolygons,
@@ -122,6 +126,7 @@ export function Grid({ size = 120, playMode = false, bakedLightField = null }: G
         splineWallGraph,
         innerWalls,
         rooms,
+        wallStyleAssignments,
         floorTileAssetIds,
     wallSurfaceAssetIds,
     wallSurfaceProps,
@@ -138,6 +143,7 @@ export function Grid({ size = 120, playMode = false, bakedLightField = null }: G
       splineWallGraph: state.splineWallGraph,
       innerWalls: state.innerWalls,
       rooms: state.rooms,
+      wallStyleAssignments: state.wallStyleAssignments,
     floorTileAssetIds: state.floorTileAssetIds,
     wallSurfaceAssetIds: state.wallSurfaceAssetIds,
     wallSurfaceProps: state.wallSurfaceProps,
@@ -149,6 +155,8 @@ export function Grid({ size = 120, playMode = false, bakedLightField = null }: G
   const mapMode = useDungeonStore((state) => state.mapMode)
   const paintCells = useDungeonStore((state) => state.paintCells)
   const commitDraftRoom = useDungeonStore((state) => state.commitDraftRoom)
+  const commitEditedRoomDraft = useDungeonStore((state) => state.commitEditedRoomDraft)
+  const removeRoom = useDungeonStore((state) => state.removeRoom)
   const eraseCells = useDungeonStore((state) => state.eraseCells)
   const paintBlockedCells = useDungeonStore((state) => state.paintBlockedCells)
   const eraseBlockedCells = useDungeonStore((state) => state.eraseBlockedCells)
@@ -167,6 +175,8 @@ export function Grid({ size = 120, playMode = false, bakedLightField = null }: G
   const roomEditMode = useDungeonStore((state) => state.roomEditMode)
   const roomPaintMode = useDungeonStore((state) => state.roomPaintMode)
   const activeRoomSetId = useDungeonStore((state) => state.activeRoomSetId)
+  const activeInteriorWallStyleId = useDungeonStore((state) => state.activeInteriorWallStyleId)
+  const activeExteriorWallStyleId = useDungeonStore((state) => state.activeExteriorWallStyleId)
   const assetBrowser = useDungeonStore((state) => state.assetBrowser)
   const outdoorOverpaintRegenerate = useDungeonStore((state) => state.outdoorOverpaintRegenerate)
   const activeLayerId = useDungeonStore((state) => state.activeLayerId)
@@ -178,6 +188,9 @@ export function Grid({ size = 120, playMode = false, bakedLightField = null }: G
   const setObjectMoveDragPointer = useDungeonStore((state) => state.setObjectMoveDragPointer)
   const isRoomResizeHandleActive = useDungeonStore((state) => state.isRoomResizeHandleActive)
   const selectRoom = useDungeonStore((state) => state.selectRoom)
+  const selectedRoomId = useDungeonStore((state) => state.selectedRoomId)
+  const setActiveInteriorWallStyleId = useDungeonStore((state) => state.setActiveInteriorWallStyleId)
+  const setActiveExteriorWallStyleId = useDungeonStore((state) => state.setActiveExteriorWallStyleId)
   const tool = useDungeonStore((state) => state.tool)
   const showGrid = useDungeonStore((state) => state.showGrid)
   const showChunkDebugOverlay = useDungeonStore((state) => state.showChunkDebugOverlay)
@@ -241,6 +254,7 @@ export function Grid({ size = 120, playMode = false, bakedLightField = null }: G
   const [strokeStartCell, setStrokeStartCell] = useState<GridCell | null>(null)
   const [strokeCurrentCell, setStrokeCurrentCell] = useState<GridCell | null>(null)
   const [roomDraft, setRoomDraft] = useState<RoomDraftState | null>(null)
+  const [roomDraftSourceRoomId, setRoomDraftSourceRoomId] = useState<string | null>(null)
   const [hoveredOpenWallKey, setHoveredOpenWallKey] = useState<string | null>(null)
   const [openPassageBrushWallKeys, setOpenPassageBrushWallKeys] = useState<string[]>([])
   const [strokePaintedCells, setStrokePaintedCells] = useState<GridCell[]>([])
@@ -575,10 +589,99 @@ export function Grid({ size = 120, playMode = false, bakedLightField = null }: G
     invalidate()
   }, [invalidate, updateStrokeState])
 
+  const roomDraftOccupancyState = useMemo(() => {
+    if (!roomDraftSourceRoomId) {
+      return {
+        occupancyPaintedCells: paintedCells,
+        occupancySplineWallGraph: splineWallGraph,
+      }
+    }
+
+    return {
+      occupancyPaintedCells: Object.fromEntries(
+        Object.entries(paintedCells).filter(([, record]) => record.roomId !== roomDraftSourceRoomId),
+      ),
+      occupancySplineWallGraph: removeSplineWallGraphRooms(
+        splineWallGraph,
+        new Set([roomDraftSourceRoomId]),
+      ),
+    }
+  }, [paintedCells, roomDraftSourceRoomId, splineWallGraph])
+
   const cancelRoomDraft = useCallback(() => {
     setRoomDraft(null)
+    setRoomDraftSourceRoomId(null)
+    selectRoom(null)
     invalidate()
-  }, [invalidate, setRoomDraft])
+  }, [invalidate, selectRoom, setRoomDraft])
+
+  const startExistingRoomDraft = useCallback((roomId: string) => {
+    const room = rooms[roomId]
+    if (!room || room.geometrySource !== 'spline') {
+      return false
+    }
+
+    const path = Object.values(splineWallGraph.paths).find((candidate) =>
+      candidate.roomId === roomId
+      && candidate.closed
+      && candidate.nodeIds.length === 4,
+    )
+    if (!path) {
+      return false
+    }
+
+    const splineNodes: RoomDraftSplineNodeInput[] = []
+    for (const nodeId of path.nodeIds) {
+      const node = splineWallGraph.nodes[nodeId]
+      if (!node) {
+        return false
+      }
+
+      splineNodes.push({
+        position: [...node.position] as [number, number],
+        cornerMode: node.cornerMode ?? 'square',
+        cornerAmount: node.cornerAmount ?? 0,
+      })
+    }
+    const draft = createRoomDraftFromSplineNodes(splineNodes)
+    if (!draft) {
+      return false
+    }
+
+    const boundarySections = analyzeSplineWallGraphBoundaries(splineWallGraph)
+      .flatMap((boundaryPath) => boundaryPath.sections)
+      .filter((section) => section.roomId === roomId && section.side)
+    const interiorStyleId = boundarySections.find((section) => section.faceKind === 'room-face')
+    const exteriorStyleId = boundarySections.find((section) => section.faceKind === 'exterior-face')
+
+    setRoomDraft(draft)
+    setRoomDraftSourceRoomId(roomId)
+    selectRoom(roomId)
+    setActiveInteriorWallStyleId(
+      interiorStyleId
+        ? (wallStyleAssignments[createSplineWallSegmentSideKey(interiorStyleId.segmentId, interiorStyleId.side!)] ?? activeInteriorWallStyleId)
+        : activeInteriorWallStyleId,
+    )
+    setActiveExteriorWallStyleId(
+      exteriorStyleId
+        ? (wallStyleAssignments[createSplineWallSegmentSideKey(exteriorStyleId.segmentId, exteriorStyleId.side!)] ?? activeExteriorWallStyleId)
+        : activeExteriorWallStyleId,
+    )
+    invalidate()
+    return true
+  }, [
+    activeExteriorWallStyleId,
+    activeInteriorWallStyleId,
+    invalidate,
+    rooms,
+    selectRoom,
+    setActiveExteriorWallStyleId,
+    setActiveInteriorWallStyleId,
+    setRoomDraft,
+    setRoomDraftSourceRoomId,
+    splineWallGraph,
+    wallStyleAssignments,
+  ])
 
   const roomBrushCells = useMemo<Record<string, PaintedCellRecord>>(() => {
     if (mapMode !== 'outdoor') {
@@ -599,12 +702,15 @@ export function Grid({ size = 120, playMode = false, bakedLightField = null }: G
     return blockedCells
   }, [blockedCells, mapMode, outdoorBrushMode, outdoorTerrainStyleCells, paintedCells])
   const roomDraftOccupancyPolygons = useMemo(
-    () => buildRoomDraftOccupancyPolygons(paintedCells, splineWallGraph),
-    [paintedCells, splineWallGraph],
+    () => buildRoomDraftOccupancyPolygons(
+      roomDraftOccupancyState.occupancyPaintedCells,
+      roomDraftOccupancyState.occupancySplineWallGraph,
+    ),
+    [roomDraftOccupancyState],
   )
   const occupiedRoomDraftCellKeys = useMemo(
-    () => new Set(Object.keys(paintedCells)),
-    [paintedCells],
+    () => new Set(Object.keys(roomDraftOccupancyState.occupancyPaintedCells)),
+    [roomDraftOccupancyState],
   )
   const clippedRoomDraft = useMemo(
     () => roomDraft
@@ -1068,14 +1174,22 @@ export function Grid({ size = 120, playMode = false, bakedLightField = null }: G
       wallSurfaceProps,
     } satisfies RoomAnimationStateInput
 
-    if (!commitDraftRoom({
-      cells: roomDraftCells,
-      splineNodes: clippedRoomDraft.splineNodes,
-    })) {
+    const committed = roomDraftSourceRoomId
+      ? commitEditedRoomDraft({
+          roomId: roomDraftSourceRoomId,
+          cells: roomDraftCells,
+          splineNodes: clippedRoomDraft.splineNodes,
+        })
+      : Boolean(commitDraftRoom({
+          cells: roomDraftCells,
+          splineNodes: clippedRoomDraft.splineNodes,
+        }))
+    if (!committed) {
       return
     }
 
     setRoomDraft(null)
+    setRoomDraftSourceRoomId(null)
 
     const nextState = useDungeonStore.getState()
     if (nextState.activeFloorId !== activeFloorId) {
@@ -1083,7 +1197,15 @@ export function Grid({ size = 120, playMode = false, bakedLightField = null }: G
       return
     }
 
-    const affectedCells = expandRoomMutationCells(roomDraftCells)
+    const previousRoomCells = roomDraftSourceRoomId
+      ? Object.values(paintedCells)
+        .filter((record) => record.roomId === roomDraftSourceRoomId)
+        .map((record) => record.cell)
+      : []
+    const affectedCells = expandRoomMutationCells([
+      ...previousRoomCells,
+      ...roomDraftCells,
+    ])
     const removalStartedAt = performance.now()
     const removalEntries = buildRemovedRoomTileEntries({
       before: previousRoomAnimationState,
@@ -1116,6 +1238,7 @@ export function Grid({ size = 120, playMode = false, bakedLightField = null }: G
     bakedLightField,
     clippedRoomDraft,
     commitDraftRoom,
+    commitEditedRoomDraft,
     floorTileAssetIds,
     globalFloorAssetId,
     globalWallAssetId,
@@ -1125,7 +1248,95 @@ export function Grid({ size = 120, playMode = false, bakedLightField = null }: G
     queueRemovalAnimationBatch,
     roomDraft,
     roomDraftCells,
+    roomDraftSourceRoomId,
     roomDraftValid,
+    rooms,
+    setRoomDraft,
+    splineWallGraph,
+    wallOpenings,
+    wallSurfaceAssetIds,
+    wallSurfaceProps,
+  ])
+
+  const deleteRoomDraftOverlay = useCallback(() => {
+    if (!roomDraftSourceRoomId) {
+      cancelRoomDraft()
+      return
+    }
+
+    const previousRoomCells = Object.values(paintedCells)
+      .filter((record) => record.roomId === roomDraftSourceRoomId)
+      .map((record) => record.cell)
+    const previousRoomAnimationState = {
+      activeLayerId,
+      activeRoomSetId,
+      bakedLightField,
+      floorTileAssetIds,
+      globalFloorAssetId,
+      globalWallAssetId,
+      innerWalls,
+      paintedCells,
+      rooms,
+      splineWallGraph,
+      wallOpenings,
+      wallSurfaceAssetIds,
+      wallSurfaceProps,
+    } satisfies RoomAnimationStateInput
+
+    removeRoom(roomDraftSourceRoomId)
+    setRoomDraft(null)
+    setRoomDraftSourceRoomId(null)
+
+    const nextState = useDungeonStore.getState()
+    if (nextState.activeFloorId !== activeFloorId) {
+      invalidate()
+      return
+    }
+
+    if (previousRoomCells.length > 0) {
+      const affectedCells = expandRoomMutationCells(previousRoomCells)
+      const removalStartedAt = performance.now()
+      const removalEntries = buildRemovedRoomTileEntries({
+        before: previousRoomAnimationState,
+        after: {
+          activeLayerId,
+          activeRoomSetId: nextState.activeRoomSetId,
+          bakedLightField,
+          floorTileAssetIds: nextState.floorTileAssetIds,
+          globalFloorAssetId: nextState.selectedAssetIds.floor,
+          globalWallAssetId: nextState.selectedAssetIds.wall,
+          innerWalls: nextState.innerWalls,
+          paintedCells: nextState.paintedCells,
+          rooms: nextState.rooms,
+          splineWallGraph: nextState.splineWallGraph,
+          wallOpenings: nextState.wallOpenings,
+          wallSurfaceAssetIds: nextState.wallSurfaceAssetIds,
+          wallSurfaceProps: nextState.wallSurfaceProps,
+        },
+        buildStartedAt: removalStartedAt,
+        cells: affectedCells,
+        originCell: roomDraft?.originCell ?? previousRoomCells[0] ?? [0, 0],
+      })
+      queueRemovalAnimationBatch(removalEntries, activeFloorId)
+    }
+
+    invalidate()
+  }, [
+    activeFloorId,
+    activeLayerId,
+    activeRoomSetId,
+    bakedLightField,
+    cancelRoomDraft,
+    floorTileAssetIds,
+    globalFloorAssetId,
+    globalWallAssetId,
+    innerWalls,
+    invalidate,
+    paintedCells,
+    queueRemovalAnimationBatch,
+    removeRoom,
+    roomDraft,
+    roomDraftSourceRoomId,
     rooms,
     setRoomDraft,
     splineWallGraph,
@@ -1166,6 +1377,20 @@ export function Grid({ size = 120, playMode = false, bakedLightField = null }: G
 
     cancelRoomDraft()
   }, [cancelRoomDraft, mapMode, roomDraft, roomEditMode, roomPaintMode, tool])
+
+  useEffect(() => {
+    if (
+      !roomDraft
+      || !roomDraftSourceRoomId
+      || (selectedRoomId === roomDraftSourceRoomId && rooms[roomDraftSourceRoomId])
+    ) {
+      return
+    }
+
+    setRoomDraft(null)
+    setRoomDraftSourceRoomId(null)
+    invalidate()
+  }, [invalidate, roomDraft, roomDraftSourceRoomId, rooms, selectedRoomId])
 
   useEffect(() => {
     const previousActiveFloorId = previousActiveFloorIdRef.current
@@ -1610,6 +1835,15 @@ export function Grid({ size = 120, playMode = false, bakedLightField = null }: G
           return
         }
 
+        if (roomPaintMode === 'area' && event.button === 0 && hoveredRoomId) {
+          if (startExistingRoomDraft(hoveredRoomId)) {
+            return
+          }
+
+          selectRoom(hoveredRoomId)
+          return
+        }
+
         // In area and paint modes, clicking deselects any selected room
         if (event.button === 0) {
           selectRoom(null)
@@ -1805,6 +2039,7 @@ export function Grid({ size = 120, playMode = false, bakedLightField = null }: G
           }
           onChange={setRoomDraft}
           onCommit={commitRoomDraftOverlay}
+          onDelete={roomDraftSourceRoomId ? deleteRoomDraftOverlay : undefined}
           onCancel={cancelRoomDraft}
         />
       )}

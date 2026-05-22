@@ -227,6 +227,10 @@ type CommitDraftRoomInput = {
   splinePaths?: RoomDraftSplineNodeInput[][]
 }
 
+type CommitEditedRoomDraftInput = CommitDraftRoomInput & {
+  roomId: string
+}
+
 export type DungeonObjectType = 'prop' | 'player'
 
 export type DungeonObjectRecord = {
@@ -402,6 +406,7 @@ export type DungeonState = DungeonSnapshot & {
   floorDirtyDomains: FloorDirtyState
   paintCells: (cells: GridCell[]) => number
   commitDraftRoom: (input: CommitDraftRoomInput) => string | null
+  commitEditedRoomDraft: (input: CommitEditedRoomDraftInput) => boolean
   eraseCells: (cells: GridCell[]) => number
   paintBlockedCells: (cells: GridCell[]) => number
   eraseBlockedCells: (cells: GridCell[]) => number
@@ -2676,6 +2681,128 @@ export const useDungeonStore = create<DungeonState>()(
     })
 
     return roomId
+  },
+  commitEditedRoomDraft: ({ roomId, cells, splineNodes, splinePaths }) => {
+    const state = get()
+    const room = state.rooms[roomId]
+    if (!room || room.geometrySource !== 'spline' || splineNodes.length < 3) {
+      return false
+    }
+
+    const targetKeys = new Set(cells.map((cell) => getCellKey(cell)))
+    for (const key of targetKeys) {
+      const record = state.paintedCells[key]
+      if (record && record.roomId !== roomId) {
+        return false
+      }
+    }
+
+    const previousSnapshot = cloneSnapshot(state)
+    queueFloorDirtyHint({
+      domains: ['tiles', 'walls', 'openings', 'props', 'lighting', 'renderPlan', 'occupancy'],
+      fullRefresh: true,
+    })
+
+    set((current) => {
+      const currentRoom = current.rooms[roomId]
+      if (!currentRoom || currentRoom.geometrySource !== 'spline') {
+        return current
+      }
+
+      const paintedCells = { ...current.paintedCells }
+      const changedCells: GridCell[] = []
+
+      Object.entries(current.paintedCells).forEach(([key, record]) => {
+        if (record.roomId === roomId && !targetKeys.has(key)) {
+          changedCells.push(record.cell)
+          delete paintedCells[key]
+        }
+      })
+
+      targetKeys.forEach((key) => {
+        if (paintedCells[key]) {
+          return
+        }
+
+        const [x, z] = key.split(':').map((value) => parseInt(value, 10))
+        const cell: GridCell = [x, z]
+        changedCells.push(cell)
+        paintedCells[key] = {
+          cell,
+          layerId: currentRoom.layerId,
+          roomId,
+        }
+      })
+
+      const graphWithEditedRoom = splinePaths && splinePaths.length > 0
+        ? upsertSplineWallGraphRoomPaths(current.splineWallGraph, {
+            roomId,
+            layerId: currentRoom.layerId,
+            paths: splinePaths,
+            closed: true,
+          })
+        : upsertSplineWallGraphRoomPath(current.splineWallGraph, {
+            roomId,
+            layerId: currentRoom.layerId,
+            nodes: splineNodes,
+            closed: true,
+          })
+
+      const {
+        placedObjects,
+        occupancy,
+        selection,
+        wallOpenings,
+        innerWalls,
+        floorTileAssetIds,
+        wallStyleAssignments,
+        wallCoreAssignments,
+        wallSurfaceAssetIds,
+        wallSurfaceProps,
+        splineWallGraph,
+      } = reconcileRoomLayoutMutation(
+        {
+          ...current,
+          splineWallGraph: graphWithEditedRoom,
+        },
+        paintedCells,
+        changedCells,
+      )
+
+      const activeWallStyleAssignments = applyActiveWallStylesForRoom({
+        splineWallGraph,
+        roomId,
+        wallStyleAssignments,
+        interiorWallStyleId: current.activeInteriorWallStyleId,
+        exteriorWallStyleId: current.activeExteriorWallStyleId,
+      })
+      const nextAssignmentState = sanitizeWallStyleStateForGraph(
+        splineWallGraph,
+        activeWallStyleAssignments,
+        wallCoreAssignments,
+      )
+
+      return {
+        ...current,
+        paintedCells,
+        floorTileAssetIds,
+        wallStyleAssignments: nextAssignmentState.wallStyleAssignments,
+        wallCoreAssignments: nextAssignmentState.wallCoreAssignments,
+        wallSurfaceAssetIds,
+        wallSurfaceProps,
+        placedObjects,
+        wallOpenings,
+        innerWalls,
+        occupancy,
+        selection,
+        selectedRoomId: roomId,
+        splineWallGraph,
+        history: [...current.history, previousSnapshot],
+        future: [],
+      }
+    })
+
+    return true
   },
   paintBlockedCells: (cells) => {
     const state = get()
