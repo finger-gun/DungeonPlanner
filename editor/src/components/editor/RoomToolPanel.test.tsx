@@ -2,6 +2,9 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { RoomToolPanel } from './RoomToolPanel'
 import { useDungeonStore } from '../../store/useDungeonStore'
+import { buildRoomDraftCells, buildRoomDraftSplineNodes, createRoomDraftFromStroke } from '../../store/roomDraft'
+import { analyzeSplineWallGraphBoundaries } from '../../store/splineWallStyleAnalysis'
+import { createSplineWallSegmentSideKey } from '../../store/wallStyleAssignments'
 
 describe('RoomToolPanel', () => {
   beforeEach(() => {
@@ -77,6 +80,38 @@ describe('RoomToolPanel', () => {
 
     expect(useDungeonStore.getState().activeInteriorWallStyleId).toBe('rocky-cave')
     expect(useDungeonStore.getState().activeExteriorWallStyleId).toBe('ai-gothic')
+  })
+
+  it('applies interior and exterior wall styles to the selected room', () => {
+    const state = useDungeonStore.getState()
+    state.setActiveInteriorWallStyleId('rocky-cave')
+    state.setActiveExteriorWallStyleId('ai-gothic')
+
+    const draft = createRoomDraftFromStroke([0, 0], [1, 1])
+    const roomId = state.commitDraftRoom({
+      cells: buildRoomDraftCells(draft),
+      splineNodes: buildRoomDraftSplineNodes(draft),
+    })
+
+    expect(roomId).toBeTruthy()
+
+    state.selectRoom(roomId)
+    render(<RoomToolPanel />)
+
+    expect(screen.getByText('Changes apply to the selected room and stay active for new rooms.')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Interior Wall: AI Gothic' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Exterior Wall: Rocky Cave' }))
+
+    const nextState = useDungeonStore.getState()
+    const sections = analyzeSplineWallGraphBoundaries(nextState.splineWallGraph).flatMap((path) => path.sections)
+    const roomFace = sections.find((section) => section.roomId === roomId && section.faceKind === 'room-face')!
+    const exteriorFace = sections.find((section) => section.roomId === roomId && section.faceKind === 'exterior-face')!
+
+    expect(nextState.activeInteriorWallStyleId).toBe('ai-gothic')
+    expect(nextState.activeExteriorWallStyleId).toBe('rocky-cave')
+    expect(nextState.wallStyleAssignments[createSplineWallSegmentSideKey(roomFace.segmentId, roomFace.side!)]).toBe('ai-gothic')
+    expect(nextState.wallStyleAssignments[createSplineWallSegmentSideKey(exteriorFace.segmentId, exteriorFace.side!)]).toBe('rocky-cave')
   })
 
   it('does not show spline wall graph conversion controls in the sidebar', () => {

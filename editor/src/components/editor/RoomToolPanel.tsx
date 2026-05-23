@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from 'react'
+import { useCallback, useEffect, useMemo } from 'react'
 import { Check } from 'lucide-react'
 import { getContentPackWallStyles } from '../../content-packs/registry'
 import {
@@ -50,6 +50,7 @@ export function RoomToolPanel() {
   const mapMode = useDungeonStore((state) => state.mapMode)
   const roomEditMode = useDungeonStore((state) => state.roomEditMode)
   const roomPaintMode = useDungeonStore((state) => state.roomPaintMode)
+  const selectedRoomId = useDungeonStore((state) => state.selectedRoomId)
   const activeInteriorWallStyleId = useDungeonStore((state) => state.activeInteriorWallStyleId)
   const activeExteriorWallStyleId = useDungeonStore((state) => state.activeExteriorWallStyleId)
   const outdoorTerrainDensity = useDungeonStore((state) => state.outdoorTerrainDensity)
@@ -62,6 +63,7 @@ export function RoomToolPanel() {
   const setRoomEditMode = useDungeonStore((state) => state.setRoomEditMode)
   const setActiveInteriorWallStyleId = useDungeonStore((state) => state.setActiveInteriorWallStyleId)
   const setActiveExteriorWallStyleId = useDungeonStore((state) => state.setActiveExteriorWallStyleId)
+  const setRoomBoundaryWallStyle = useDungeonStore((state) => state.setRoomBoundaryWallStyle)
   const setOutdoorTerrainDensity = useDungeonStore((state) => state.setOutdoorTerrainDensity)
   const setOutdoorTerrainType = useDungeonStore((state) => state.setOutdoorTerrainType)
   const setOutdoorOverpaintRegenerate = useDungeonStore((state) => state.setOutdoorOverpaintRegenerate)
@@ -74,6 +76,18 @@ export function RoomToolPanel() {
     [],
   )
   const showWallStylePicker = mapMode !== 'outdoor' && (roomEditMode === 'rooms' || roomEditMode === 'walls')
+  const handleSelectInteriorWallStyle = useCallback((wallStyleId: string) => {
+    setActiveInteriorWallStyleId(wallStyleId)
+    if (selectedRoomId) {
+      setRoomBoundaryWallStyle(selectedRoomId, 'room-face', wallStyleId)
+    }
+  }, [selectedRoomId, setActiveInteriorWallStyleId, setRoomBoundaryWallStyle])
+  const handleSelectExteriorWallStyle = useCallback((wallStyleId: string) => {
+    setActiveExteriorWallStyleId(wallStyleId)
+    if (selectedRoomId) {
+      setRoomBoundaryWallStyle(selectedRoomId, 'exterior-face', wallStyleId)
+    }
+  }, [selectedRoomId, setActiveExteriorWallStyleId, setRoomBoundaryWallStyle])
 
   useEffect(() => {
     if (roomEditMode === 'floor-variants') {
@@ -293,8 +307,9 @@ export function RoomToolPanel() {
                   wallStyles={wallStyles}
                   activeInteriorWallStyleId={activeInteriorWallStyleId}
                   activeExteriorWallStyleId={activeExteriorWallStyleId}
-                  onSelectInteriorWallStyle={setActiveInteriorWallStyleId}
-                  onSelectExteriorWallStyle={setActiveExteriorWallStyleId}
+                  onSelectInteriorWallStyle={handleSelectInteriorWallStyle}
+                  onSelectExteriorWallStyle={handleSelectExteriorWallStyle}
+                  selectedRoomActive={Boolean(selectedRoomId)}
                 />
               ) : null}
             </>
@@ -311,8 +326,9 @@ export function RoomToolPanel() {
               wallStyles={wallStyles}
               activeInteriorWallStyleId={activeInteriorWallStyleId}
               activeExteriorWallStyleId={activeExteriorWallStyleId}
-              onSelectInteriorWallStyle={setActiveInteriorWallStyleId}
-              onSelectExteriorWallStyle={setActiveExteriorWallStyleId}
+              onSelectInteriorWallStyle={handleSelectInteriorWallStyle}
+              onSelectExteriorWallStyle={handleSelectExteriorWallStyle}
+              selectedRoomActive={Boolean(selectedRoomId)}
             />
           ) : null}
         </section>
@@ -334,15 +350,20 @@ function WallStyleControls({
   activeExteriorWallStyleId,
   onSelectInteriorWallStyle,
   onSelectExteriorWallStyle,
+  selectedRoomActive,
 }: {
   wallStyles: Array<ReturnType<typeof buildWallStylePreview>>
   activeInteriorWallStyleId: string
   activeExteriorWallStyleId: string
   onSelectInteriorWallStyle: (wallStyleId: string) => void
   onSelectExteriorWallStyle: (wallStyleId: string) => void
+  selectedRoomActive: boolean
 }) {
   return (
     <div className="mt-4 space-y-4">
+      {selectedRoomActive ? (
+        <p className="text-xs text-stone-500">Changes apply to the selected room and stay active for new rooms.</p>
+      ) : null}
       <WallStylePicker
         label="Interior Wall"
         wallStyles={wallStyles}

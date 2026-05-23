@@ -24,6 +24,7 @@ import { getOpeningSegments } from './openingSegments'
 import { buildSplineWallOpeningPlacement, doOpeningsOverlap } from './openingPlacement'
 import { buildSplineWallGraphFromPaintedCells } from './splineWalls'
 import { analyzeSplineWallGraphBoundaries } from './splineWallStyleAnalysis'
+import type { SplineWallBoundaryFaceKind } from './splineWallStyleAnalysis'
 import { createSplineWallQueryCache } from './splineWallQueries'
 import {
   cloneSplineWallGraph,
@@ -436,6 +437,7 @@ export type DungeonState = DungeonSnapshot & {
   setInnerWallSegments: (wallKeys: string[], present: boolean) => number
   setSplineWallGraph: (graph: SplineWallGraph) => void
   seedSplineWallGraphFromPaintedCells: () => boolean
+  setRoomBoundaryWallStyle: (roomId: string, faceKind: SplineWallBoundaryFaceKind, wallStyleId: string) => boolean
   setSplineWallSegmentStyle: (segmentId: string, side: SplineWallSegmentSide, wallStyleId: string | null) => boolean
   setSplineWallStructuralStyle: (segmentId: string, wallStyleId: string | null) => boolean
   moveSplineWallNode: (nodeId: string, position: [number, number]) => boolean
@@ -1521,6 +1523,17 @@ function applyActiveWallStylesForRoom({
     })
   })
   return nextAssignments
+}
+
+function getRoomBoundaryAssignmentKeys(
+  splineWallGraph: SplineWallGraph,
+  roomId: string,
+  faceKind: SplineWallBoundaryFaceKind,
+) {
+  return analyzeSplineWallGraphBoundaries(splineWallGraph)
+    .flatMap((boundaryPath) => boundaryPath.sections)
+    .filter((section) => section.roomId === roomId && section.faceKind === faceKind && section.side)
+    .map((section) => createSplineWallSegmentSideKey(section.segmentId, section.side!))
 }
 
 function getAddedSplineWallSegmentIds(previousGraph: SplineWallGraph, nextGraph: SplineWallGraph) {
@@ -3906,6 +3919,45 @@ export const useDungeonStore = create<DungeonState>()(
       history: [...current.history, previousSnapshot],
       future: [],
     }))
+
+    return true
+  },
+  setRoomBoundaryWallStyle: (roomId, faceKind, wallStyleId) => {
+    const state = get()
+    if (!state.rooms[roomId]) {
+      return false
+    }
+    if (!getContentPackWallStyleById('dungeon', wallStyleId)) {
+      return false
+    }
+
+    const assignmentKeys = getRoomBoundaryAssignmentKeys(state.splineWallGraph, roomId, faceKind)
+    if (assignmentKeys.length === 0) {
+      return false
+    }
+    if (assignmentKeys.every((assignmentKey) => state.wallStyleAssignments[assignmentKey] === wallStyleId)) {
+      return false
+    }
+
+    const previousSnapshot = cloneSnapshot(state)
+    queueFloorDirtyHint({
+      domains: ['walls', 'lighting', 'renderPlan'],
+      fullRefresh: true,
+    })
+
+    set((current) => {
+      const wallStyleAssignments = { ...current.wallStyleAssignments }
+      assignmentKeys.forEach((assignmentKey) => {
+        wallStyleAssignments[assignmentKey] = wallStyleId
+      })
+
+      return {
+        ...current,
+        wallStyleAssignments,
+        history: [...current.history, previousSnapshot],
+        future: [],
+      }
+    })
 
     return true
   },
