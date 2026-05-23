@@ -2633,7 +2633,7 @@ export const useDungeonStore = create<DungeonState>()(
   commitEditedRoomDraft: ({ roomId, cells, splineNodes, splinePaths }) => {
     const state = get()
     const room = state.rooms[roomId]
-    if (!room || room.geometrySource !== 'spline' || splineNodes.length < 3) {
+    if (!room || room.geometrySource !== 'spline' || cells.length === 0 || splineNodes.length < 3) {
       return false
     }
 
@@ -2717,16 +2717,9 @@ export const useDungeonStore = create<DungeonState>()(
         changedCells,
       )
 
-      const activeWallStyleAssignments = applyActiveWallStylesForRoom({
-        splineWallGraph,
-        roomId,
-        wallStyleAssignments,
-        interiorWallStyleId: current.activeInteriorWallStyleId,
-        exteriorWallStyleId: current.activeExteriorWallStyleId,
-      })
       const nextAssignmentState = sanitizeWallStyleStateForGraph(
         splineWallGraph,
-        activeWallStyleAssignments,
+        wallStyleAssignments,
         wallCoreAssignments,
       )
 

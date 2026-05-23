@@ -74,6 +74,7 @@ import {
 } from '../../rendering/dungeonLightField'
 import {
   applyBakedLightToSplineWallMaterialLibrary,
+  applyBakedLightToSplineWallTopCapMaterial,
   applyBakedLightToSplineWallStyleMaterial,
 } from './splineWallBakedLight'
 import { ContentPackInstance } from './ContentPackInstance'
@@ -833,7 +834,8 @@ function SplineWallTopCapGroupMesh({
     syncSplineWallGeometryBakedLight(geometry, bakedLightField, {
       allowOppositeFallback: false,
     })
-  }, [bakedLightField, geometry])
+    applyBakedLightToSplineWallTopCapMaterial(material, bakedLightField)
+  }, [bakedLightField, geometry, material])
 
   if ((geometry.getAttribute('position')?.count ?? 0) === 0) {
     return null

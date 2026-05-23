@@ -80,7 +80,6 @@ import {
 } from '../../store/useActiveFloorSnapshot'
 import { getTileGpuStreamMountId } from './TileGpuStreamContextShared'
 import {
-  shouldAnimateRoomMutation,
   shouldBlockRoomStrokeStart,
   shouldClearRoomDraftForFloorChange,
 } from './GridShared'
@@ -622,10 +621,9 @@ export function Grid({ size = 120, playMode = false, bakedLightField = null }: G
       return false
     }
 
-    const path = Object.values(splineWallGraph.paths).find((candidate) =>
+    const path = Object.values(openingPlacementGraph.paths).find((candidate) =>
       candidate.roomId === roomId
       && candidate.closed
-      && candidate.nodeIds.length === 4,
     )
     if (!path) {
       return false
@@ -633,7 +631,7 @@ export function Grid({ size = 120, playMode = false, bakedLightField = null }: G
 
     const splineNodes: RoomDraftSplineNodeInput[] = []
     for (const nodeId of path.nodeIds) {
-      const node = splineWallGraph.nodes[nodeId]
+      const node = openingPlacementGraph.nodes[nodeId]
       if (!node) {
         return false
       }
@@ -649,7 +647,7 @@ export function Grid({ size = 120, playMode = false, bakedLightField = null }: G
       return false
     }
 
-    const boundarySections = analyzeSplineWallGraphBoundaries(splineWallGraph)
+    const boundarySections = analyzeSplineWallGraphBoundaries(openingPlacementGraph)
       .flatMap((boundaryPath) => boundaryPath.sections)
       .filter((section) => section.roomId === roomId && section.side)
     const interiorStyleId = boundarySections.find((section) => section.faceKind === 'room-face')
@@ -680,7 +678,7 @@ export function Grid({ size = 120, playMode = false, bakedLightField = null }: G
     setActiveInteriorWallStyleId,
     setRoomDraft,
     setRoomDraftSourceRoomId,
-    splineWallGraph,
+    openingPlacementGraph,
     wallStyleAssignments,
   ])
 
@@ -1113,7 +1111,7 @@ export function Grid({ size = 120, playMode = false, bakedLightField = null }: G
           }
         }
 
-        if (previousRoomAnimationState && shouldAnimateRoomMutation({ mutationKind: 'erase-stroke' })) {
+        if (previousRoomAnimationState) {
           const nextState = useDungeonStore.getState()
           if (nextState.activeFloorId === activeFloorId) {
             const affectedCells = expandRoomMutationCells(cells)
@@ -1207,31 +1205,29 @@ export function Grid({ size = 120, playMode = false, bakedLightField = null }: G
       ...previousRoomCells,
       ...roomDraftCells,
     ])
-    if (shouldAnimateRoomMutation({ mutationKind: 'draft-commit' })) {
-      const removalStartedAt = performance.now()
-      const removalEntries = buildRemovedRoomTileEntries({
-        before: previousRoomAnimationState,
-        after: {
-          activeLayerId,
-          activeRoomSetId: nextState.activeRoomSetId,
-          bakedLightField,
-          floorTileAssetIds: nextState.floorTileAssetIds,
-          globalFloorAssetId: nextState.selectedAssetIds.floor,
-          globalWallAssetId: nextState.selectedAssetIds.wall,
-          innerWalls: nextState.innerWalls,
-          paintedCells: nextState.paintedCells,
-          rooms: nextState.rooms,
-          splineWallGraph: nextState.splineWallGraph,
-          wallOpenings: nextState.wallOpenings,
-          wallSurfaceAssetIds: nextState.wallSurfaceAssetIds,
-          wallSurfaceProps: nextState.wallSurfaceProps,
-        },
-        buildStartedAt: removalStartedAt,
-        cells: affectedCells,
-        originCell: roomDraft.originCell,
-      })
-      queueRemovalAnimationBatch(removalEntries, activeFloorId)
-    }
+    const removalStartedAt = performance.now()
+    const removalEntries = buildRemovedRoomTileEntries({
+      before: previousRoomAnimationState,
+      after: {
+        activeLayerId,
+        activeRoomSetId: nextState.activeRoomSetId,
+        bakedLightField,
+        floorTileAssetIds: nextState.floorTileAssetIds,
+        globalFloorAssetId: nextState.selectedAssetIds.floor,
+        globalWallAssetId: nextState.selectedAssetIds.wall,
+        innerWalls: nextState.innerWalls,
+        paintedCells: nextState.paintedCells,
+        rooms: nextState.rooms,
+        splineWallGraph: nextState.splineWallGraph,
+        wallOpenings: nextState.wallOpenings,
+        wallSurfaceAssetIds: nextState.wallSurfaceAssetIds,
+        wallSurfaceProps: nextState.wallSurfaceProps,
+      },
+      buildStartedAt: removalStartedAt,
+      cells: affectedCells,
+      originCell: roomDraft.originCell,
+    })
+    queueRemovalAnimationBatch(removalEntries, activeFloorId)
 
     invalidate()
   }, [
@@ -1267,15 +1263,9 @@ export function Grid({ size = 120, playMode = false, bakedLightField = null }: G
       return
     }
 
-    const shouldAnimateDeletion = shouldAnimateRoomMutation({ mutationKind: 'room-delete' })
     removeRoom(roomDraftSourceRoomId)
     setRoomDraft(null)
     setRoomDraftSourceRoomId(null)
-
-    if (!shouldAnimateDeletion) {
-      invalidate()
-      return
-    }
 
     invalidate()
   }, [

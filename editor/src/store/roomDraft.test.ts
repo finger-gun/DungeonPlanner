@@ -9,6 +9,7 @@ import {
   getRoomDraftCornerAmountFromWorldPoint,
   getRoomDraftEdgeWorldPosition,
   setRoomDraftCorner,
+  type RoomDraftSplineNodeInput,
 } from './roomDraft'
 
 describe('roomDraft', () => {
@@ -120,6 +121,29 @@ describe('roomDraft', () => {
     ]
 
     const recreated = createRoomDraftFromSplineNodes(rotatedNodes)
+
+    expect(recreated).toEqual(original)
+  })
+
+  it('recreates a draft from spline paths that include extra edge nodes', () => {
+    const original = setRoomDraftCorner(
+      setRoomDraftCorner(createRoomDraftFromStroke([0, 0], [2, 2]), 'nw', 'diagonal', 1),
+      'se',
+      'rounded',
+      0.5,
+    )
+    const withEdgeNodes: RoomDraftSplineNodeInput[] = [
+      buildRoomDraftSplineNodes(original)[0]!,
+      { position: [1, 3], cornerMode: 'square', cornerAmount: 0 },
+      buildRoomDraftSplineNodes(original)[1]!,
+      { position: [3, 1], cornerMode: 'square', cornerAmount: 0 },
+      buildRoomDraftSplineNodes(original)[2]!,
+      { position: [1, 0], cornerMode: 'square', cornerAmount: 0 },
+      buildRoomDraftSplineNodes(original)[3]!,
+      { position: [0, 1], cornerMode: 'square', cornerAmount: 0 },
+    ]
+
+    const recreated = createRoomDraftFromSplineNodes(withEdgeNodes)
 
     expect(recreated).toEqual(original)
   })

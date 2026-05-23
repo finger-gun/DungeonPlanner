@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest'
 import {
-  shouldAnimateRoomMutation,
   shouldBlockRoomStrokeStart,
   shouldClearRoomDraftForFloorChange,
 } from './GridShared'
@@ -32,13 +31,5 @@ describe('shouldClearRoomDraftForFloorChange', () => {
       activeFloorId: 'floor-2',
       roomDraftActive: true,
     })).toBe(true)
-  })
-})
-
-describe('shouldAnimateRoomMutation', () => {
-  it('skips removal animation batches when deleting a room', () => {
-    expect(shouldAnimateRoomMutation({ mutationKind: 'erase-stroke' })).toBe(true)
-    expect(shouldAnimateRoomMutation({ mutationKind: 'draft-commit' })).toBe(true)
-    expect(shouldAnimateRoomMutation({ mutationKind: 'room-delete' })).toBe(false)
   })
 })

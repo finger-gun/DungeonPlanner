@@ -214,13 +214,28 @@ describe('useDungeonStore history', () => {
     expect(nextState.wallStyleAssignments[createSplineWallSegmentSideKey(exteriorFace.segmentId, exteriorFace.side!)]).toBe('ai-gothic')
   })
 
-  it('commits edits back into an existing spline room without creating a new room id', () => {
+  it('commits edits back into an existing spline room without clobbering custom wall styles', () => {
     const state = useDungeonStore.getState()
     const roomId = state.commitDraftRoom({
       cells: buildRoomDraftCells(createRoomDraftFromStroke([0, 0], [1, 1])),
       splineNodes: buildRoomDraftSplineNodes(createRoomDraftFromStroke([0, 0], [1, 1])),
     })
     expect(roomId).toBeTruthy()
+
+    const initialState = useDungeonStore.getState()
+    const initialSections = analyzeSplineWallGraphBoundaries(initialState.splineWallGraph).flatMap((path) => path.sections)
+    const initialRoomFace = initialSections.find((section) => section.roomId === roomId && section.faceKind === 'room-face')!
+    const initialExteriorFace = initialSections.find((section) => section.roomId === roomId && section.faceKind === 'exterior-face')!
+    const customInteriorStyleId = 'custom-interior-style'
+    const customExteriorStyleId = 'custom-exterior-style'
+
+    useDungeonStore.setState({
+      wallStyleAssignments: {
+        ...initialState.wallStyleAssignments,
+        [createSplineWallSegmentSideKey(initialRoomFace.segmentId, initialRoomFace.side!)]: customInteriorStyleId,
+        [createSplineWallSegmentSideKey(initialExteriorFace.segmentId, initialExteriorFace.side!)]: customExteriorStyleId,
+      },
+    })
 
     state.selectRoom(roomId)
     state.setActiveInteriorWallStyleId('rocky-cave')
@@ -252,8 +267,8 @@ describe('useDungeonStore history', () => {
     const sections = analyzeSplineWallGraphBoundaries(nextState.splineWallGraph).flatMap((path) => path.sections)
     const roomFace = sections.find((section) => section.roomId === roomId && section.faceKind === 'room-face')!
     const exteriorFace = sections.find((section) => section.roomId === roomId && section.faceKind === 'exterior-face')!
-    expect(nextState.wallStyleAssignments[createSplineWallSegmentSideKey(roomFace.segmentId, roomFace.side!)]).toBe('rocky-cave')
-    expect(nextState.wallStyleAssignments[createSplineWallSegmentSideKey(exteriorFace.segmentId, exteriorFace.side!)]).toBe('ai-gothic')
+    expect(nextState.wallStyleAssignments[createSplineWallSegmentSideKey(roomFace.segmentId, roomFace.side!)]).toBe(customInteriorStyleId)
+    expect(nextState.wallStyleAssignments[createSplineWallSegmentSideKey(exteriorFace.segmentId, exteriorFace.side!)]).toBe(customExteriorStyleId)
   })
 
   it('edits spline-backed rooms by updating their spline wall path', () => {
@@ -289,6 +304,27 @@ describe('useDungeonStore history', () => {
       cornerMode: 'diagonal',
       cornerAmount: 1,
     })
+  })
+
+  it('rejects edited spline room commits when the replacement cell set is empty', () => {
+    const state = useDungeonStore.getState()
+    const roomId = state.commitDraftRoom({
+      cells: buildRoomDraftCells(createRoomDraftFromStroke([0, 0], [1, 1])),
+      splineNodes: buildRoomDraftSplineNodes(createRoomDraftFromStroke([0, 0], [1, 1])),
+    })
+
+    expect(roomId).toBeTruthy()
+
+    const committed = state.commitEditedRoomDraft({
+      roomId: roomId!,
+      cells: [],
+      splineNodes: buildRoomDraftSplineNodes(createRoomDraftFromStroke([0, 0], [1, 1])),
+    })
+
+    const nextState = useDungeonStore.getState()
+    expect(committed).toBe(false)
+    expect(nextState.rooms[roomId!]).toBeDefined()
+    expect(Object.values(nextState.paintedCells).filter((record) => record.roomId === roomId)).toHaveLength(4)
   })
 
   it('keeps paint-created rooms synchronized into spline graph paths', () => {
@@ -1041,7 +1077,10 @@ describe('useDungeonStore history', () => {
       assetId: 'core.props_wall_torch',
       position: [1, 0.45, 1],
       rotation: [0, 0, 0],
-      props: {},
+      props: {
+        connector: 'WALL',
+        direction: 'north',
+      },
       cell: [0, 0],
       cellKey: '0:0:north',
     })
@@ -2515,7 +2554,7 @@ describe('useDungeonStore wall openings', () => {
     expect(openings).toHaveLength(1)
     expect(openings[0]).toMatchObject({
       assetId: null,
-      wallKey: '0:0:west',
+      wallKey: '0:0:east',
       source: 'generated',
     })
     expect(useDungeonStore.getState().wallSurfaceAssetIds).toEqual({})

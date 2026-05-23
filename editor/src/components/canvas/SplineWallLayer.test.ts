@@ -1553,7 +1553,7 @@ function getAverageVerticalNormal(geometry: THREE.BufferGeometry) {
 
   let sum = 0
   for (let index = 0; index < normals.count; index += 1) {
-    sum += Math.abs(normals.getY(index))
+    sum += normals.getY(index)
   }
 
   return sum / normals.count

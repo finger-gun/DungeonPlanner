@@ -58,7 +58,7 @@ export function createRoomDraftFromStroke(startCell: GridCell, endCell: GridCell
 export function createRoomDraftFromSplineNodes(
   nodes: readonly RoomDraftSplineNodeInput[],
 ): RoomDraftState | null {
-  if (nodes.length !== ROOM_DRAFT_CORNER_ORDER.length) {
+  if (nodes.length < ROOM_DRAFT_CORNER_ORDER.length) {
     return null
   }
 
@@ -69,32 +69,18 @@ export function createRoomDraftFromSplineNodes(
   }))
 
   const assignments = new Map<RoomResizeCorner, RoomDraftSplineNodeInput>()
-  for (const node of nodes) {
-    let bestCorner: RoomResizeCorner | null = null
-    let bestDistance = Number.POSITIVE_INFINITY
-
-    boundaryEntries.forEach(({ corner, position }) => {
-      if (assignments.has(corner)) {
-        return
-      }
-
-      const distance = Math.hypot(
-        node.position[0] - position[0],
-        node.position[1] - position[1],
-      )
-      if (distance < bestDistance) {
-        bestCorner = corner
-        bestDistance = distance
-      }
-    })
-
-    if (!bestCorner || bestDistance > ROOM_DRAFT_EPSILON) {
+  for (const { corner, position } of boundaryEntries) {
+    const node = nodes.find((candidate) =>
+      Math.hypot(
+        candidate.position[0] - position[0],
+        candidate.position[1] - position[1],
+      ) <= ROOM_DRAFT_EPSILON,
+    )
+    if (!node) {
       return null
     }
-    assignments.set(bestCorner, node)
-  }
-  if (assignments.size !== ROOM_DRAFT_CORNER_ORDER.length) {
-    return null
+
+    assignments.set(corner, node)
   }
 
   const originCell: GridCell = [bounds.minX, bounds.minZ]

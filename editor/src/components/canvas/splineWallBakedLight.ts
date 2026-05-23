@@ -77,3 +77,14 @@ export function applyBakedLightToSplineWallStyleMaterial(
       }
     : null)
 }
+
+export function applyBakedLightToSplineWallTopCapMaterial(
+  material: THREE.Material,
+  bakedLightField: BakedFloorLightField | null,
+) {
+  applyBakedLightToSplineWallStyleMaterial(material, bakedLightField, {
+    useDirectionAttribute: true,
+    useDirectionalFaceMask: true,
+    useDirectionalSampleOffset: false,
+  })
+}
