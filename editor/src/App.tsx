@@ -383,8 +383,7 @@ function App() {
 
     if (
       (event.key === 'Delete' || event.key === 'Backspace') &&
-      state.selectedRoomId &&
-      !(state.tool === 'room' && state.roomPaintMode === 'resize')
+      state.selectedRoomId
     ) {
       event.preventDefault()
       state.removeSelectedRoom()
@@ -820,9 +819,7 @@ function App() {
                   : 'Left-drag to paint nature with the selected style · right-drag to erase nature areas'
               : roomPaintMode === 'paint'
                 ? 'Paint rooms cell-by-cell · release to commit the stroke · right-drag to erase · use Props for floor surfaces and openings'
-                : roomPaintMode === 'resize'
-                  ? 'Click a room to show resize handles · drag edges or corners to reshape it · press Delete to remove the selected room'
-                  : 'Drag to draft a room footprint · release to place blue edit anchors · drag corners to round them, hold Ctrl for diagonals, then commit in-scene'
+                : 'Drag to draft a room footprint · release to place blue edit anchors · drag corners to round them, hold Ctrl for diagonals, then commit in-scene'
             : roomEditMode === 'walls'
               ? 'Spline wall editing · drag amber nodes to reshape walls · click blue handles to split segments · Delete removes the selected node'
               : 'Drag to draft a room footprint · release to place blue edit anchors · drag corners to round them, hold Ctrl for diagonals, then commit in-scene'

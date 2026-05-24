@@ -1,10 +1,12 @@
 import { describe, expect, it } from 'vitest'
 import { buildSplineWallAssemblySections } from './splineWallAssembly'
+import { upsertSplineWallGraphRoomPath } from './splineWallGraph'
 import { buildSplineWallGraphFromPaintedCells } from './splineWalls'
 import {
   buildSplineWallOpeningDescriptors,
 } from './splineWallOpenings'
 import { analyzeSplineWallGraphBoundaries } from './splineWallStyleAnalysis'
+import type { OpeningRecord } from './useDungeonStore'
 import { createSplineWallSegmentSideKey } from './wallStyleAssignments'
 
 describe('buildSplineWallOpeningDescriptors', () => {
@@ -149,5 +151,70 @@ describe('buildSplineWallOpeningDescriptors', () => {
     expect(roomAFace?.endRatio).toBeCloseTo(0.4)
     expect(roomBFace?.startRatio).toBeCloseTo(0.6)
     expect(roomBFace?.endRatio).toBeCloseTo(0.8)
+  })
+
+  it('builds visual cutout descriptors for both faces of a segment-owned shared-wall opening', () => {
+    let graph = upsertSplineWallGraphRoomPath({
+      nodes: {},
+      segments: {},
+      paths: {},
+    }, {
+      roomId: 'room-a',
+      layerId: 'default',
+      nodes: [
+        { position: [0, 0], cornerMode: 'square', cornerAmount: 0 },
+        { position: [1, 0], cornerMode: 'square', cornerAmount: 0 },
+        { position: [1, 1], cornerMode: 'square', cornerAmount: 0 },
+        { position: [0, 1], cornerMode: 'square', cornerAmount: 0 },
+      ],
+    })
+    graph = upsertSplineWallGraphRoomPath(graph, {
+      roomId: 'room-b',
+      layerId: 'default',
+      nodes: [
+        { position: [1, 0], cornerMode: 'square', cornerAmount: 0 },
+        { position: [2, 0], cornerMode: 'square', cornerAmount: 0 },
+        { position: [2, 1], cornerMode: 'square', cornerAmount: 0 },
+        { position: [1, 1], cornerMode: 'square', cornerAmount: 0 },
+      ],
+    })
+
+    const sharedSegments = Object.values(graph.segments).filter((segment) => {
+      const start = graph.nodes[segment.startNodeId]?.position
+      const end = graph.nodes[segment.endNodeId]?.position
+      return start && end && start[0] === 1 && end[0] === 1
+    })
+    const roomASegment = sharedSegments.find((segment) => segment.roomId === 'room-a')
+    expect(roomASegment).toBeDefined()
+
+    const opening: OpeningRecord = {
+      id: 'opening-shared',
+      assetId: 'core.opening_door_wall_1',
+      wallKey: '0:0:east',
+      width: 1,
+      segmentId: roomASegment!.id,
+      segmentStartRatio: 0.2,
+      segmentEndRatio: 0.8,
+      flipped: false,
+      layerId: 'default',
+      source: 'manual',
+    }
+
+    const assemblySections = buildSplineWallAssemblySections({
+      analyzedBoundaries: analyzeSplineWallGraphBoundaries(graph),
+      wallStyleAssignments: {},
+    })
+    const descriptors = buildSplineWallOpeningDescriptors({
+      splineWallGraph: graph,
+      wallOpenings: { [opening.id]: opening },
+      assemblySections,
+    })
+    const roomFaceDescriptors = descriptors.filter((descriptor) => descriptor.layerKind === 'room-face')
+
+    expect(roomFaceDescriptors).toHaveLength(2)
+    expect(roomFaceDescriptors.map((descriptor) => descriptor.roomId).sort()).toEqual(['room-a', 'room-b'])
+    expect(roomFaceDescriptors.every((descriptor) =>
+      descriptor.startRatio < 0.81 && descriptor.endRatio > 0.19,
+    )).toBe(true)
   })
 })

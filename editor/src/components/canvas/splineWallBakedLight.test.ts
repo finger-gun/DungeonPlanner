@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { BakedFloorLightField } from '../../rendering/dungeonLightField'
 import {
   applyBakedLightToSplineWallMaterialLibrary,
+  applyBakedLightToSplineWallTopCapMaterial,
   applyBakedLightToSplineWallStyleMaterial,
 } from './splineWallBakedLight'
 import { applyBakedLightToMaterial } from './bakedLightMaterial'
@@ -150,6 +151,29 @@ describe('splineWallBakedLight', () => {
       useDirectionAttribute: true,
       useDirectionalFaceMask: true,
       useDirectionalSampleOffset: false,
+    })
+  })
+
+  it('applies directional baked light to spline wall top-cap materials', () => {
+    const material = new THREE.MeshStandardMaterial()
+    const bakedLightField = {
+      lightFieldTexture: null,
+      flickerLightFieldTextures: [],
+      lightFieldTextureSize: { width: 1, height: 1 },
+      lightFieldGridSize: { widthCells: 1, heightCells: 1 },
+      chunkSize: 1,
+      bounds: null,
+      gpuChunks: null,
+    } as unknown as BakedFloorLightField
+
+    applyBakedLightToSplineWallTopCapMaterial(material, bakedLightField)
+
+    expect(applyBakedLightToMaterial).toHaveBeenCalledWith(material, {
+      useLightAttribute: true,
+      useDirectionAttribute: true,
+      useDirectionalFaceMask: true,
+      useDirectionalSampleOffset: false,
+      lightField: bakedLightField,
     })
   })
 })

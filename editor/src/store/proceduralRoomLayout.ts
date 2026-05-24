@@ -7,7 +7,7 @@ import { getOpeningSegments } from './openingSegments'
 import { buildSplineWallOpeningPlacement } from './openingPlacement'
 import { createSplineWallQueryCache } from './splineWallQueries'
 import type { SplineWallGraph } from './splineWallGraph'
-import { WALL_DIRECTIONS, wallKeyToWorldPosition } from './wallSegments'
+import { getCanonicalWallKey, WALL_DIRECTIONS, wallKeyToWorldPosition } from './wallSegments'
 import type { OpeningRecord, OpeningSource, PaintedCellRecord } from './useDungeonStore'
 
 const GENERATED_SURFACE_DOOR_ASSET_ID = 'dungeon.wall_wall_doorway'
@@ -482,7 +482,7 @@ function buildGeneratedGraphConnectorOpening(
       )
     : null
 
-  return buildGeneratedSplineOpeningRecord(assetId, wallKey, run.layerId, placement)
+  return buildGeneratedSplineOpeningRecord(assetId, wallKey, run.layerId, placement, paintedCells)
 }
 
 function buildGeneratedSplineOpeningRecord(
@@ -490,10 +490,13 @@ function buildGeneratedSplineOpeningRecord(
   wallKey: string,
   layerId: string,
   placement: ReturnType<typeof buildSplineWallOpeningPlacement> | null,
+  paintedCells: Record<string, PaintedCellRecord>,
 ) {
+  const canonicalWallKey = getCanonicalWallKey(wallKey, paintedCells) ?? wallKey
+
   return {
     assetId,
-    wallKey: placement?.wallKey ?? wallKey,
+    wallKey: canonicalWallKey,
     width: 1,
     segmentId: placement?.segmentId ?? null,
     segmentStartRatio: placement?.segmentStartRatio ?? null,

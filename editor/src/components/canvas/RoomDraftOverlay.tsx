@@ -21,6 +21,10 @@ import {
   type RoomResizeEdge,
 } from '../../store/roomResize'
 import { useDungeonStore } from '../../store/useDungeonStore'
+import {
+  getRoomDraftOverlayMaterialProps,
+  ROOM_DRAFT_OVERLAY_RENDER_ORDER,
+} from './RoomDraftOverlayShared'
 
 const OVERLAY_Y = 0.04
 const HANDLE_Y = 0.08
@@ -38,6 +42,7 @@ type RoomDraftOverlayProps = {
   invalidTitle?: string
   onChange: (draft: RoomDraftState) => void
   onCommit: () => void
+  onDelete?: () => void
   onCancel: () => void
 }
 
@@ -54,6 +59,7 @@ export function RoomDraftOverlay({
   invalidTitle,
   onChange,
   onCommit,
+  onDelete,
   onCancel,
 }: RoomDraftOverlayProps) {
   const setRoomResizeHandleActive = useDungeonStore((state) => state.setRoomResizeHandleActive)
@@ -202,17 +208,17 @@ export function RoomDraftOverlay({
     gl.domElement.style.cursor = 'grabbing'
     invalidate()
   }, [gl, invalidate, setRoomResizeHandleActive])
+  const deleteActionLabel = onDelete ? 'Delete room' : 'Cancel draft room'
+  const deleteActionTitle = onDelete ? 'Delete room and contents' : 'Cancel draft room'
 
   return (
     <group>
       {fillGeometry ? (
-        <mesh geometry={fillGeometry}>
+        <mesh geometry={fillGeometry} renderOrder={ROOM_DRAFT_OVERLAY_RENDER_ORDER.fill}>
           <meshBasicMaterial
             color={valid ? '#4dabff' : '#ef4444'}
-            transparent
-            opacity={0.22}
-            depthWrite={false}
             side={THREE.DoubleSide}
+            {...getRoomDraftOverlayMaterialProps(0.22)}
           />
         </mesh>
       ) : null}
@@ -224,7 +230,10 @@ export function RoomDraftOverlay({
               args={[outlinePositions, 3]}
             />
           </bufferGeometry>
-          <lineBasicMaterial color={valid ? '#93c5fd' : '#fca5a5'} transparent opacity={0.95} />
+          <lineBasicMaterial
+            color={valid ? '#93c5fd' : '#fca5a5'}
+            {...getRoomDraftOverlayMaterialProps(0.95)}
+          />
         </line>
       ) : null}
       {EDGE_ORDER.map((edge) => {
@@ -236,6 +245,7 @@ export function RoomDraftOverlay({
           <mesh
             key={edge}
             position={[position[0], HANDLE_Y, position[2]]}
+            renderOrder={ROOM_DRAFT_OVERLAY_RENDER_ORDER.handles}
             onPointerDown={(event) => startDrag({ kind: 'edge', edge }, event)}
             onPointerEnter={() => {
               if (!dragStateRef.current) {
@@ -249,7 +259,10 @@ export function RoomDraftOverlay({
             }}
           >
             <boxGeometry args={EDGE_HANDLE_SIZE} />
-            <meshBasicMaterial color={valid ? '#38bdf8' : '#f87171'} transparent opacity={0.95} />
+            <meshBasicMaterial
+              color={valid ? '#38bdf8' : '#f87171'}
+              {...getRoomDraftOverlayMaterialProps(0.95)}
+            />
           </mesh>
         )
       })}
@@ -262,6 +275,7 @@ export function RoomDraftOverlay({
           <mesh
             key={corner}
             position={[position[0], HANDLE_Y, position[2]]}
+            renderOrder={ROOM_DRAFT_OVERLAY_RENDER_ORDER.handles}
             onPointerDown={(event) => startDrag({ kind: 'corner', corner }, event)}
             onPointerEnter={() => {
               if (!dragStateRef.current) {
@@ -275,7 +289,10 @@ export function RoomDraftOverlay({
             }}
           >
             <sphereGeometry args={[CORNER_HANDLE_RADIUS, 16, 16]} />
-            <meshBasicMaterial color={valid ? '#60a5fa' : '#f87171'} transparent opacity={0.98} />
+            <meshBasicMaterial
+              color={valid ? '#60a5fa' : '#f87171'}
+              {...getRoomDraftOverlayMaterialProps(0.98)}
+            />
           </mesh>
         )
       })}
@@ -305,12 +322,16 @@ export function RoomDraftOverlay({
             </button>
             <button
               type="button"
-              aria-label="Cancel draft room"
-              title="Cancel draft room"
+              aria-label={deleteActionLabel}
+              title={deleteActionTitle}
               className="flex h-10 w-10 items-center justify-center rounded-full border border-rose-400/70 bg-slate-950/90 text-rose-100 shadow-lg shadow-slate-950/35 transition hover:border-rose-300"
               onPointerDown={(event) => {
                 event.preventDefault()
                 event.stopPropagation()
+                if (onDelete) {
+                  onDelete()
+                  return
+                }
                 onCancel()
               }}
             >

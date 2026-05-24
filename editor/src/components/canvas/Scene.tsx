@@ -20,7 +20,6 @@ import { getCellKey, snapWorldPointToGrid } from '../../hooks/useSnapToGrid'
 import { createPlayDragState, updatePlayDragState, type PlayDragState } from './playDrag'
 import { MovementRangeOverlay } from './MovementRangeOverlay'
 import { buildMovementRange, type MovementRange } from './playMovement'
-import { RoomResizeOverlay } from './RoomResizeOverlay'
 import { getEffectiveFloorViewMode } from './floorViewMode'
 import { isDownStairAssetId } from '../../store/stairAssets'
 import { OutdoorGround } from './OutdoorGround'
@@ -47,7 +46,6 @@ import { getObjectInstanceScale, getObjectTintColor } from '../../store/objectAp
 import { SelectionContextualUi } from './SelectionContextualUi'
 import { WorldRaycastAcceleration } from './WorldRaycastAcceleration'
 import { TileGpuStreamProvider } from './TileGpuStreamContext'
-import { BUILD_ANIMATIONS_ENABLED } from '../../store/buildAnimations'
 import {
   ACTIVE_FLOOR_RENDER_DOMAINS,
   useActiveFloorSnapshot,
@@ -456,7 +454,6 @@ function SceneOverviewContent() {
             derived={entry.derived}
             bakedLightField={entry.bakedLightField}
             visibility={ALWAYS_VISIBLE}
-            enableBuildAnimation={false}
             enableFloorReceiver={false}
             streamScopeKey="overview"
           />
@@ -902,7 +899,6 @@ function FloorContent({ startY = 0 }: { startY?: number }) {
             derived={floorDerived}
             visibility={visibility}
             bakedLightField={bakedFloorLightField}
-            enableBuildAnimation={BUILD_ANIMATIONS_ENABLED}
             streamScopeKey="active"
             dirtyInfo={floorDirtyInfo}
           />
@@ -921,7 +917,6 @@ function FloorContent({ startY = 0 }: { startY?: number }) {
             )
           ))}
         </WorldRaycastAcceleration>
-        <RoomResizeOverlay bakedLightField={bakedFloorLightField} />
         {showPropProbeDebug && (
           <PropProbeDebugOverlay floorId={activeFloorId} />
         )}

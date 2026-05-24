@@ -122,6 +122,31 @@ describe('RoomDraftOverlay', () => {
     )
   })
 
+  it('uses the delete action for existing room drafts', () => {
+    const draft = createRoomDraftFromStroke([1, 2], [3, 4])
+    const onDelete = vi.fn()
+    const onCancel = vi.fn()
+
+    render(
+      <RoomDraftOverlay
+        draft={draft}
+        valid
+        onChange={vi.fn()}
+        onCommit={vi.fn()}
+        onDelete={onDelete}
+        onCancel={onCancel}
+      />,
+    )
+
+    const deleteButton = screen.getByLabelText('Delete room')
+    expect(deleteButton).toHaveAttribute('title', 'Delete room and contents')
+
+    fireEvent.pointerDown(deleteButton)
+
+    expect(onDelete).toHaveBeenCalledTimes(1)
+    expect(onCancel).not.toHaveBeenCalled()
+  })
+
   it('starts 3d handle drags without calling native preventDefault', () => {
     const draft = createRoomDraftFromStroke([1, 2], [3, 4])
 

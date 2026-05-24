@@ -1,5 +1,5 @@
 import {
-  getOpeningSpanPlacements,
+  getOpeningOccupiedSpanPlacements,
   getOpeningVerticalCutoutSpec,
 } from './openingPlacement'
 import { getOpeningKind } from './openingState'
@@ -534,7 +534,7 @@ export function syncSplineWallGraphCutoutsFromOpenings(
     const kind = getOpeningKind(opening) satisfies SplineWallCutoutKind
     const { bottomHeight, topHeight } = getOpeningVerticalCutoutSpec(opening)
 
-    getOpeningSpanPlacements(nextGraph, opening).forEach((placement) => {
+    getOpeningOccupiedSpanPlacements(nextGraph, opening).forEach((placement) => {
       const nextCutout = {
         id: `${opening.id}:${placement.segmentId}`,
         kind,

@@ -16,7 +16,6 @@ import type { AtlasColorVariantDefinition } from '../../content-packs/types'
 import { getDungeonAtlasSwatchColor } from '../../content-packs/dungeon/shared/dungeonColorAtlas'
 import { hasAtlasColorVariants } from '../../rendering/atlasColorVariants'
 import type { BakedFloorLightField } from '../../rendering/dungeonLightField'
-import { BUILD_ANIMATIONS_ENABLED, getBuildAnimationPlaybackDurationMs, triggerBuildTargets } from '../../store/buildAnimations'
 import { getOpeningSegments } from '../../store/openingSegments'
 import { getOpeningObjectProps, getOpeningPlayModeNextProps } from '../../store/openingState'
 import { getOpeningWorldTransform } from '../../store/openingPlacement'
@@ -31,17 +30,15 @@ import { useDungeonStore } from '../../store/useDungeonStore'
 import { wallKeyToWorldPosition } from '../../store/wallSegments'
 import { AtlasColorVariantPicker } from '../editor/AtlasColorVariantPicker'
 import { BatchedTileEntries } from './BatchedTileEntries'
-import { WALL_EXTRA_DELAY_MS } from './DungeonRoomShared'
 import { getRegisteredObject, useObjectRegistryVersion } from './objectRegistry'
 import { getTileGpuStreamMountId } from './TileGpuStreamContextShared'
 import {
   buildRemovedRoomTileEntries,
   expandRoomMutationCells,
-  getBuildAnimationTargetsForWallKeys,
   getCellsForWallKeys,
   getOriginCellForCells,
   type RoomAnimationStateInput,
-} from './roomMutationAnimations'
+} from './roomMutationTileEntries'
 import { useRemovalAnimationBatches } from './useRemovalAnimationBatches'
 
 const UNDER_MODEL_OFFSET = 0.28
@@ -484,10 +481,8 @@ export function SelectionContextualUi({ bakedLightField = null }: SelectionConte
       invalidate()
       return
     }
-
     const affectedCells = expandRoomMutationCells(getCellsForWallKeys(wallKeys))
     const originCell = getOriginCellForCells(affectedCells)
-    const buildTargets = getBuildAnimationTargetsForWallKeys(wallKeys)
     const mutationStartedAt = performance.now()
     const removalEntries = buildRemovedRoomTileEntries({
       before: beforeState.state,
@@ -497,15 +492,6 @@ export function SelectionContextualUi({ bakedLightField = null }: SelectionConte
       originCell,
     })
     queueRemovalAnimationBatch(removalEntries, beforeState.floorId)
-
-    if (BUILD_ANIMATIONS_ENABLED && buildTargets.length > 0) {
-      const scheduledBuildStartedAt = removalEntries.length > 0
-        ? mutationStartedAt + getBuildAnimationPlaybackDurationMs(WALL_EXTRA_DELAY_MS)
-        : mutationStartedAt
-      triggerBuildTargets(buildTargets, originCell, {
-        startedAt: scheduledBuildStartedAt,
-      })
-    }
 
     invalidate()
   }, [bakedLightField, invalidate, queueRemovalAnimationBatch])

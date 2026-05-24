@@ -21,6 +21,12 @@ export type RoomDraftSplineNodeInput = {
 }
 
 type Point2 = readonly [number, number]
+type RoomDraftCornerEntry = {
+  kind: RoomDraftCornerMode
+  start: Point2
+  control: Point2
+  end: Point2
+}
 type Rect2 = {
   minX: number
   maxX: number
@@ -47,6 +53,54 @@ export function createRoomDraft(bounds: RoomBounds, originCell: GridCell): RoomD
 
 export function createRoomDraftFromStroke(startCell: GridCell, endCell: GridCell): RoomDraftState {
   return createRoomDraft(normalizeRoomDraftBounds(startCell, endCell), startCell)
+}
+
+export function createRoomDraftFromSplineNodes(
+  nodes: readonly RoomDraftSplineNodeInput[],
+): RoomDraftState | null {
+  if (nodes.length < ROOM_DRAFT_CORNER_ORDER.length) {
+    return null
+  }
+
+  const bounds = getRoomDraftBoundsFromSplineNodes(nodes)
+  const boundaryEntries = ROOM_DRAFT_CORNER_ORDER.map((corner) => ({
+    corner,
+    position: getRoomDraftCornerBoundary(bounds, corner),
+  }))
+
+  const assignments = new Map<RoomResizeCorner, RoomDraftSplineNodeInput>()
+  for (const { corner, position } of boundaryEntries) {
+    const node = nodes.find((candidate) =>
+      Math.hypot(
+        candidate.position[0] - position[0],
+        candidate.position[1] - position[1],
+      ) <= ROOM_DRAFT_EPSILON,
+    )
+    if (!node) {
+      return null
+    }
+
+    assignments.set(corner, node)
+  }
+
+  const originCell: GridCell = [bounds.minX, bounds.minZ]
+  let draft = createRoomDraft(bounds, originCell)
+  ROOM_DRAFT_CORNER_ORDER.forEach((corner) => {
+    const node = assignments.get(corner)!
+    draft = setRoomDraftCorner(draft, corner, node.cornerMode, node.cornerAmount)
+  })
+  return draft
+}
+
+function getRoomDraftBoundsFromSplineNodes(nodes: readonly RoomDraftSplineNodeInput[]): RoomBounds {
+  const xs = nodes.map((node) => node.position[0])
+  const zs = nodes.map((node) => node.position[1])
+  return {
+    minX: Math.round(Math.min(...xs)),
+    maxX: Math.round(Math.max(...xs) - 1),
+    minZ: Math.round(Math.min(...zs)),
+    maxZ: Math.round(Math.max(...zs) - 1),
+  }
 }
 
 export function normalizeRoomDraftBounds(startCell: GridCell, endCell: GridCell): RoomBounds {
@@ -117,16 +171,16 @@ export function getRoomDraftEdgeWorldPosition(
   draft: RoomDraftState,
   edge: RoomResizeEdge,
 ): [number, number, number] {
-  const { bounds } = draft
+  const entries = getRoomDraftCornerEntries(draft)
   switch (edge) {
     case 'north':
-      return [((bounds.minX + bounds.maxX + 1) * GRID_SIZE) / 2, 0, (bounds.maxZ + 1) * GRID_SIZE]
+      return getRoomDraftWorldMidpoint(entries.nw.end, entries.ne.start)
     case 'south':
-      return [((bounds.minX + bounds.maxX + 1) * GRID_SIZE) / 2, 0, bounds.minZ * GRID_SIZE]
+      return getRoomDraftWorldMidpoint(entries.se.end, entries.sw.start)
     case 'east':
-      return [(bounds.maxX + 1) * GRID_SIZE, 0, ((bounds.minZ + bounds.maxZ + 1) * GRID_SIZE) / 2]
+      return getRoomDraftWorldMidpoint(entries.ne.end, entries.se.start)
     case 'west':
-      return [bounds.minX * GRID_SIZE, 0, ((bounds.minZ + bounds.maxZ + 1) * GRID_SIZE) / 2]
+      return getRoomDraftWorldMidpoint(entries.sw.end, entries.nw.start)
   }
 }
 
@@ -229,7 +283,8 @@ function buildRoomDraftPoints(
   curveSubdivisions: number,
 ): Point2[] {
   const sampled: Point2[] = []
-  const entries = ROOM_DRAFT_CORNER_ORDER.map((corner) => buildCornerEntry(draft, corner))
+  const cornerEntries = getRoomDraftCornerEntries(draft)
+  const entries = ROOM_DRAFT_CORNER_ORDER.map((corner) => cornerEntries[corner])
 
   entries.forEach((entry) => {
     appendUniquePoint(sampled, entry.start)
@@ -254,7 +309,16 @@ function buildRoomDraftPoints(
   return sampled
 }
 
-function buildCornerEntry(draft: RoomDraftState, corner: RoomResizeCorner) {
+function getRoomDraftCornerEntries(draft: RoomDraftState): Record<RoomResizeCorner, RoomDraftCornerEntry> {
+  return {
+    nw: buildCornerEntry(draft, 'nw'),
+    ne: buildCornerEntry(draft, 'ne'),
+    se: buildCornerEntry(draft, 'se'),
+    sw: buildCornerEntry(draft, 'sw'),
+  }
+}
+
+function buildCornerEntry(draft: RoomDraftState, corner: RoomResizeCorner): RoomDraftCornerEntry {
   const control = getRoomDraftCornerBoundary(draft.bounds, corner)
   const state = draft.corners[corner]
   const amount = clampRoomDraftCornerAmount(draft.bounds, state.amount)
@@ -298,6 +362,14 @@ function buildCornerEntry(draft: RoomDraftState, corner: RoomResizeCorner) {
         end: [control[0], control[1] + amount] as Point2,
       }
   }
+}
+
+function getRoomDraftWorldMidpoint(start: Point2, end: Point2): [number, number, number] {
+  return [
+    ((start[0] + end[0]) * GRID_SIZE) / 2,
+    0,
+    ((start[1] + end[1]) * GRID_SIZE) / 2,
+  ]
 }
 
 function appendQuadraticCurvePoints(

@@ -293,12 +293,10 @@ describe('App sidebar drawer', () => {
     expect(screen.queryByText('Layers')).not.toBeInTheDocument()
   })
 
-  it('does not use the raw room delete shortcut while resize mode is active', () => {
+  it('uses the room delete shortcut whenever a room is selected', () => {
     render(<App />)
 
     useDungeonStore.setState({
-      tool: 'room',
-      roomPaintMode: 'resize',
       selectedRoomId: 'room-1',
     })
 
@@ -307,7 +305,20 @@ describe('App sidebar drawer', () => {
 
     fireEvent.keyDown(window, { key: 'Delete' })
 
-    expect(removeSelectedRoom).not.toHaveBeenCalled()
+    expect(removeSelectedRoom).toHaveBeenCalledTimes(1)
+  })
+
+  it('clears the selected room when Escape is pressed', () => {
+    render(<App />)
+
+    useDungeonStore.setState({
+      selectedRoomId: 'room-1',
+      selection: null,
+    })
+
+    fireEvent.keyDown(window, { key: 'Escape' })
+
+    expect(useDungeonStore.getState().selectedRoomId).toBeNull()
   })
 
   it('updates the room hint text to match the active context tool', () => {
@@ -320,9 +331,6 @@ describe('App sidebar drawer', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Paint' }))
     expect(screen.getByText(/paint rooms cell-by-cell/i)).toBeInTheDocument()
-
-    fireEvent.click(screen.getByRole('button', { name: 'Resize' }))
-    expect(screen.getByText(/show resize handles/i)).toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: 'Spline walls' }))
     expect(screen.getByText(/spline wall editing/i)).toBeInTheDocument()

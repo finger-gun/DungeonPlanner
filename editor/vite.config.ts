@@ -137,7 +137,16 @@ export default defineConfig({
     __PROJECT_ROOT__: JSON.stringify(editorDir),
   },
   assetsInclude: ['**/*.glb', '**/*.gltf', '**/*.bin'],
-  plugins: [generatedCharacterDevFallback(), react(), tailwindcss(), stripThreeDebugImport()],
+  plugins: [
+    generatedCharacterDevFallback(),
+    react({
+      // SplineWallLayer intentionally exports testable geometry helpers alongside
+      // the React component, so it is not a valid Fast Refresh boundary.
+      exclude: [/\/src\/components\/canvas\/SplineWallLayer\.tsx$/],
+    }),
+    tailwindcss(),
+    stripThreeDebugImport(),
+  ],
   resolve: {
     alias: {
       // three.webgpu.js and three.tsl.js pre-built files contain a debug

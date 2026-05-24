@@ -8,7 +8,6 @@ import {
 } from '../../rendering/dungeonLightField'
 import { useDungeonStore } from '../../store/useDungeonStore'
 import { releaseContinuousRender, requestContinuousRender } from '../../rendering/renderActivity'
-import { hasActiveBuildAnimations, useBuildAnimationVersion } from '../../store/buildAnimations'
 import type { PlayVisibility } from './playVisibility'
 import { shouldRunContinuousSceneEffects } from './effectAnimationMode'
 import { shouldRenderLineOfSightLight } from './losRendering'
@@ -38,8 +37,7 @@ export function PropLightPool({
   const tool = useDungeonStore((state) => state.tool)
   const objectLightPreviewOverrides = useDungeonStore((state) => state.objectLightPreviewOverrides)
   const registeredLightSources = useRegisteredLightSources(scopeKey)
-  const buildAnimationVersion = useBuildAnimationVersion()
-  const runContinuousEffects = shouldRunContinuousSceneEffects(tool, hasActiveBuildAnimations())
+  const runContinuousEffects = shouldRunContinuousSceneEffects(tool)
   const lightSources = useMemo(
     () => resolveRegisteredLightSources(registeredLightSources, objectLightPreviewOverrides),
     [objectLightPreviewOverrides, registeredLightSources],
@@ -127,8 +125,6 @@ export function PropLightPool({
   }, [invalidate, publishAssignments])
 
   useLayoutEffect(() => {
-    void buildAnimationVersion
-
     if (hasFlicker && runContinuousEffects) {
       requestContinuousRender('prop-light-flicker')
       return () => releaseContinuousRender('prop-light-flicker')
@@ -136,7 +132,7 @@ export function PropLightPool({
 
     releaseContinuousRender('prop-light-flicker')
     return undefined
-  }, [buildAnimationVersion, hasFlicker, runContinuousEffects])
+  }, [hasFlicker, runContinuousEffects])
 
   useFrame(({ clock }) => {
     const cameraChanged = hasCameraChanged(

@@ -1,5 +1,4 @@
-import { Suspense, useCallback, useEffect, useMemo, useLayoutEffect, useRef } from 'react'
-import type { ReactNode } from 'react'
+import { Suspense, useEffect, useMemo, useLayoutEffect, useRef } from 'react'
 import { useFrame } from '@react-three/fiber'
 import type { ThreeEvent } from '@react-three/fiber'
 import * as THREE from 'three'
@@ -24,15 +23,6 @@ import {
   type SplineWallOpeningDescriptor,
 } from '../../store/splineWallOpenings'
 import { analyzeSplineWallGraphBoundaries } from '../../store/splineWallStyleAnalysis'
-import {
-  advanceBuildAnimations,
-  getBuildAnimationTimeScale,
-  getHeldBuildBatchUniformState,
-  getBuildAnimationState,
-  getBuildYOffset,
-  isAnimationActive,
-  useBuildAnimationVersion,
-} from '../../store/buildAnimations'
 import { getFloorTileSpan, type FloorRenderGroup, type FloorSurfacePlacement } from '../../store/floorSurfaceLayout'
 import {
   type FloorSceneDerivedBundle,
@@ -68,10 +58,7 @@ import {
 } from '../../rendering/surfaceLightingCache'
 import { setBuildAnimationTime } from './buildAnimationMaterial'
 import { TileGpuStreamMount } from './TileGpuStreamContext'
-import {
-  getBuildAnimationKeyFromWallKeys,
-  getOpeningHitboxSize,
-} from './DungeonRoomShared'
+import { getOpeningHitboxSize } from './DungeonRoomShared'
 import { getOpeningObjectProps, getOpeningPlayModeNextProps } from '../../store/openingState'
 import { registerObject, unregisterObject } from './objectRegistry'
 import { getTileGpuStreamMountId } from './TileGpuStreamContextShared'
@@ -118,13 +105,6 @@ function averageBakedLightSamples(
   ] as const
 }
 
-function useIsBuildAnimationActive(buildAnimationVersion: number) {
-  return useCallback((cellKey: string) => {
-    void buildAnimationVersion
-    return isAnimationActive(cellKey)
-  }, [buildAnimationVersion])
-}
-
 type ResolvedFloorReceiverCellInput = FloorReceiverCellInput & {
   assetUrl: string
   receiverTransform?: ContentPackModelTransform
@@ -136,7 +116,6 @@ export function DungeonRoom({
   visibility,
   derived,
   bakedLightField,
-  enableBuildAnimation = true,
   enableFloorReceiver = true,
   streamScopeKey = 'active',
   dirtyInfo = null,
@@ -144,12 +123,10 @@ export function DungeonRoom({
   visibility: PlayVisibility
   derived: FloorSceneDerivedBundle
   bakedLightField?: BakedFloorLightField | null
-  enableBuildAnimation?: boolean
   enableFloorReceiver?: boolean
   streamScopeKey?: string
   dirtyInfo?: FloorDirtyInfo | null
 }) {
-  const buildAnimationVersion = useBuildAnimationVersion()
   const tool = useDungeonStore((state) => state.tool)
   const showProjectionDebugMesh = useDungeonStore((state) => state.showProjectionDebugMesh)
   const showSurfaceProbeDebug = useDungeonStore((state) => state.showSurfaceProbeDebug)
@@ -291,10 +268,7 @@ export function DungeonRoom({
     [roomFloorMaskRuntimeByRoomId],
   )
   useFrame(() => {
-    const now = performance.now()
-    const { holdBatchStart, holdReleaseAt } = getHeldBuildBatchUniformState(now)
-    setBuildAnimationTime(now, getBuildAnimationTimeScale(), holdBatchStart, holdReleaseAt)
-    advanceBuildAnimations(now)
+    setBuildAnimationTime(performance.now())
   })
 
   return (
@@ -344,8 +318,6 @@ export function DungeonRoom({
             bakedFloorLightField={bakedFloorLightField}
             blockedFloorCellKeys={blockedFloorCellKeys}
             visibility={visibility}
-            enableBuildAnimation={enableBuildAnimation}
-            buildAnimationVersion={buildAnimationVersion}
             enableFloorReceiver={enableFloorReceiver}
             floorReceiverActive={floorReceiverActive}
             showProjectionDebugMesh={showProjectionDebugMesh}
@@ -369,8 +341,6 @@ function FloorRenderChunkRenderer({
   bakedFloorLightField,
   blockedFloorCellKeys,
   visibility,
-  enableBuildAnimation,
-  buildAnimationVersion,
   enableFloorReceiver,
   floorReceiverActive,
   showProjectionDebugMesh,
@@ -387,8 +357,6 @@ function FloorRenderChunkRenderer({
   bakedFloorLightField: BakedFloorLightField
   blockedFloorCellKeys: Set<string>
   visibility: PlayVisibility
-  enableBuildAnimation: boolean
-  buildAnimationVersion: number
   enableFloorReceiver: boolean
   floorReceiverActive: boolean
   showProjectionDebugMesh: boolean
@@ -413,14 +381,12 @@ function FloorRenderChunkRenderer({
           floorId={floorId}
           mountId={mountId}
           bakedFloorLightField={bakedFloorLightField}
-            blockedFloorCellKeys={blockedFloorCellKeys}
-            visibility={visibility}
-            enableBuildAnimation={enableBuildAnimation}
-            buildAnimationVersion={buildAnimationVersion}
-            roomFloorMaskDataByRoomId={roomFloorMaskDataByRoomId}
-            roomFloorMaskRuntimeByRoomId={roomFloorMaskRuntimeByRoomId}
-          />
-        ))}
+          blockedFloorCellKeys={blockedFloorCellKeys}
+          visibility={visibility}
+          roomFloorMaskDataByRoomId={roomFloorMaskDataByRoomId}
+          roomFloorMaskRuntimeByRoomId={roomFloorMaskRuntimeByRoomId}
+        />
+      ))}
       <FloorSurfaceRenderer
         placements={bundle.floorSurfaceEntries}
         floorId={floorId}
@@ -429,8 +395,6 @@ function FloorRenderChunkRenderer({
         bakedFloorLightField={bakedFloorLightField}
         blockedFloorCellKeys={blockedFloorCellKeys}
         visibility={visibility}
-        enableBuildAnimation={enableBuildAnimation}
-        buildAnimationVersion={buildAnimationVersion}
         roomFloorMaskDataByRoomId={roomFloorMaskDataByRoomId}
         roomFloorMaskRuntimeByRoomId={roomFloorMaskRuntimeByRoomId}
       />
@@ -444,7 +408,6 @@ function FloorRenderChunkRenderer({
           bakedLightField={bakedFloorLightField}
           paintedCells={bundle.contextPaintedCells}
           visibility={visibility}
-          enableBuildAnimation={enableBuildAnimation}
         />
       ))}
     </>
@@ -458,8 +421,6 @@ function CellGroupRenderer({
   bakedFloorLightField,
   blockedFloorCellKeys,
   visibility,
-  enableBuildAnimation,
-  buildAnimationVersion,
   roomFloorMaskDataByRoomId,
   roomFloorMaskRuntimeByRoomId,
 }: {
@@ -469,8 +430,6 @@ function CellGroupRenderer({
   bakedFloorLightField: BakedFloorLightField
   blockedFloorCellKeys: Set<string>
   visibility: PlayVisibility
-  enableBuildAnimation: boolean
-  buildAnimationVersion: number
   roomFloorMaskDataByRoomId: Record<string, RoomFloorMaskData>
   roomFloorMaskRuntimeByRoomId: Record<string, RoomFloorMaskRuntime>
 }) {
@@ -489,22 +448,16 @@ function CellGroupRenderer({
   )
   const staticEntries = useMemo<StaticTileEntry[]>(
     () => renderableCells.flatMap((cell) => {
-      void buildAnimationVersion
       const key = getCellKey(cell)
       if (blockedFloorCellKeys.has(key)) {
         return []
       }
 
-      const buildAnimation = enableBuildAnimation
-        ? getBuildAnimationState(key)
-        : null
       return [{
         key: `floor:${key}`,
         assetId: group.floorAssetId,
         position: cellToWorldPosition(cell),
         rotation: group.rotation,
-        buildAnimationDelay: buildAnimation?.delay,
-        buildAnimationStart: buildAnimation?.startedAt,
         variant: 'floor',
         variantKey: key,
         visibility: 'visible',
@@ -516,8 +469,6 @@ function CellGroupRenderer({
     [
       bakedFloorLightField,
       blockedFloorCellKeys,
-      buildAnimationVersion,
-      enableBuildAnimation,
       group.floorAssetId,
       group.rotation,
       renderableCells,
@@ -545,8 +496,6 @@ function FloorSurfaceRenderer({
   bakedFloorLightField,
   blockedFloorCellKeys,
   visibility,
-  enableBuildAnimation,
-  buildAnimationVersion,
   roomFloorMaskDataByRoomId,
   roomFloorMaskRuntimeByRoomId,
 }: {
@@ -557,13 +506,10 @@ function FloorSurfaceRenderer({
   bakedFloorLightField: BakedFloorLightField
   blockedFloorCellKeys: Set<string>
   visibility: PlayVisibility
-  enableBuildAnimation: boolean
-  buildAnimationVersion: number
   roomFloorMaskDataByRoomId: Record<string, RoomFloorMaskData>
   roomFloorMaskRuntimeByRoomId: Record<string, RoomFloorMaskRuntime>
 }) {
   const useLineOfSightPostMask = visibility.active
-  const isBuildAnimationCurrentlyActive = useIsBuildAnimationActive(buildAnimationVersion)
   const placementGroups = useMemo(
     () => Object.values(
       placements.reduce<Record<string, {
@@ -577,12 +523,6 @@ function FloorSurfaceRenderer({
           return groups
         }
 
-        const buildAnimationCellKey = placement.coveredCellKeys.find((cellKey) =>
-          enableBuildAnimation && isBuildAnimationCurrentlyActive(cellKey),
-        ) ?? placement.anchorCellKey
-        const buildAnimation = enableBuildAnimation
-          ? getBuildAnimationState(buildAnimationCellKey)
-          : null
         const roomId = placement.roomId ?? null
         const roomFloorMaskData = roomId
           ? roomFloorMaskDataByRoomId[roomId] ?? null
@@ -596,8 +536,6 @@ function FloorSurfaceRenderer({
           assetId: placement.assetId,
           position: placement.position,
           rotation: ZERO_ROTATION,
-          buildAnimationDelay: buildAnimation?.delay,
-          buildAnimationStart: buildAnimation?.startedAt,
           variant: 'floor',
           variantKey: placement.anchorCellKey,
           visibility: 'visible',
@@ -619,7 +557,7 @@ function FloorSurfaceRenderer({
         return groups
       }, {}),
     ),
-    [bakedFloorLightField, blockedFloorCellKeys, enableBuildAnimation, isBuildAnimationCurrentlyActive, placements, roomFloorMaskDataByRoomId],
+    [bakedFloorLightField, blockedFloorCellKeys, placements, roomFloorMaskDataByRoomId],
   )
 
   return (
@@ -859,52 +797,6 @@ function mergeFloorReceiverTransforms(
   }
 }
 
-function AnimatedTileGroup({
-  cellKey,
-  extraDelay = 0,
-  enabled = true,
-  children,
-}: {
-  cellKey: string
-  extraDelay?: number
-  enabled?: boolean
-  children: ReactNode
-}) {
-  const groupRef = useRef<THREE.Group>(null)
-  const lastYRef = useRef(0)
-
-  useFrame(() => {
-    const group = groupRef.current
-    if (!group) {
-      return
-    }
-
-    const now = performance.now()
-    const nextY = enabled ? getBuildYOffset(cellKey, now, extraDelay) : 0
-    if (nextY !== lastYRef.current) {
-      group.position.y = nextY
-      lastYRef.current = nextY
-    }
-  })
-
-  useLayoutEffect(() => {
-    const group = groupRef.current
-    if (!group) {
-      return
-    }
-
-    group.position.y = 0
-    lastYRef.current = 0
-
-    return () => {
-      group.position.y = 0
-      lastYRef.current = 0
-    }
-  }, [])
-
-  return <group ref={groupRef}>{children}</group>
-}
-
 function OpeningRenderer({
   opening,
   splineWallGraph,
@@ -913,7 +805,6 @@ function OpeningRenderer({
   bakedLightField,
   paintedCells,
   visibility,
-  enableBuildAnimation,
 }: {
   opening: OpeningRecord
   splineWallGraph: typeof EMPTY_SPLINE_WALL_GRAPH
@@ -922,15 +813,12 @@ function OpeningRenderer({
   bakedLightField: BakedFloorLightField
   paintedCells: PaintedCells
   visibility: PlayVisibility
-  enableBuildAnimation: boolean
 }) {
   const selection = useDungeonStore((state) => state.selection)
   const selectObject = useDungeonStore((state) => state.selectObject)
   const setOpeningProps = useDungeonStore((state) => state.setOpeningProps)
   const selected = selection === opening.id
   const useLineOfSightPostMask = visibility.active
-  const buildAnimationVersion = useBuildAnimationVersion()
-  const isBuildAnimationCurrentlyActive = useIsBuildAnimationActive(buildAnimationVersion)
   const openingTransform = getOpeningWorldTransform(splineWallGraph, openingQueryCache, opening)
   const openingRenderContext = opening.assetId
     ? getSplineWallOpeningRenderContext({
@@ -955,10 +843,6 @@ function OpeningRenderer({
     }),
     [bakedLightField, opening.id, openingSurfaceSamplePositions],
   )
-  const openingAnimationCellKey =
-    getBuildAnimationKeyFromWallKeys(openingSegmentKeys, isBuildAnimationCurrentlyActive)
-    ?? opening.wallKey.split(':').slice(0, 2).join(':')
-  const clipBelowGround = enableBuildAnimation && isBuildAnimationCurrentlyActive(openingAnimationCellKey)
 
   const groupRef = useRef<THREE.Group>(null)
   const assetGroupRef = useRef<THREE.Group>(null)
@@ -1009,21 +893,17 @@ function OpeningRenderer({
   }
 
   return (
-    <AnimatedTileGroup
-      cellKey={openingAnimationCellKey}
-      enabled={enableBuildAnimation}
-    >
-      <group ref={groupRef} position={openingTransform.position} rotation={rotation}>
-        <mesh onClick={handleClick} onPointerDown={handlePointerDown}>
-          <boxGeometry args={getOpeningHitboxSize(opening.width)} />
-          <meshBasicMaterial
-            transparent
-            opacity={0}
-            colorWrite={false}
-            depthWrite={false}
-            depthTest={false}
-          />
-        </mesh>
+    <group ref={groupRef} position={openingTransform.position} rotation={rotation}>
+      <mesh onClick={handleClick} onPointerDown={handlePointerDown}>
+        <boxGeometry args={getOpeningHitboxSize(opening.width)} />
+        <meshBasicMaterial
+          transparent
+          opacity={0}
+          colorWrite={false}
+          depthWrite={false}
+          depthTest={false}
+        />
+      </mesh>
       {opening.assetId ? (
         <group ref={assetGroupRef}>
           <ContentPackInstance
@@ -1038,7 +918,6 @@ function OpeningRenderer({
             bakedLightDirectionSecondary={interiorDirections.secondary}
             bakedLightProbeDirection={openingSurfaceLightProbe?.lightDirection}
             bakedLightDirectionalStrength={openingSurfaceLightProbe?.directionalStrength}
-            clipBelowGround={clipBelowGround}
             objectProps={getOpeningObjectProps(opening)}
             openingContext={openingRenderContext ?? undefined}
             onClick={handleClick}
@@ -1061,8 +940,7 @@ function OpeningRenderer({
           )}
         </>
       )}
-      </group>
-    </AnimatedTileGroup>
+    </group>
   )
 }
 

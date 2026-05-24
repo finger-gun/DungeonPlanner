@@ -3,7 +3,6 @@ import type { DungeonTool, RoomPaintMode, PaintedCellRecord } from '../../store/
 
 type RoomPreviewOptions = {
   hoveredCell: SnappedGridPosition | null
-  latchedPreviewCells?: GridCell[]
   paintedCells: Record<string, PaintedCellRecord>
   strokeCurrentCell: GridCell | null
   strokeMode: 'paint' | 'erase' | null
@@ -16,7 +15,6 @@ type RoomPreviewOptions = {
 
 export function getRoomPreviewCells({
   hoveredCell,
-  latchedPreviewCells = [],
   paintedCells,
   strokeCurrentCell,
   strokeMode,
@@ -41,10 +39,6 @@ export function getRoomPreviewCells({
         ? !paintedCells[getCellKey(cell)]
         : Boolean(paintedCells[getCellKey(cell)]),
     )
-  }
-
-  if (latchedPreviewCells.length > 0) {
-    return latchedPreviewCells
   }
 
   return hoveredCell ? [hoveredCell.cell] : []

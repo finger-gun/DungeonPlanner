@@ -74,6 +74,7 @@ import {
 } from '../../rendering/dungeonLightField'
 import {
   applyBakedLightToSplineWallMaterialLibrary,
+  applyBakedLightToSplineWallTopCapMaterial,
   applyBakedLightToSplineWallStyleMaterial,
 } from './splineWallBakedLight'
 import { ContentPackInstance } from './ContentPackInstance'
@@ -311,6 +312,14 @@ export function SplineWallLayer({
     () => buildSplineWallRenderSectionGroups(assemblySections),
     [assemblySections],
   )
+  const wallSectionGroups = useMemo(
+    () => renderSectionGroups.filter((group) => group.sections[0]?.layerKind !== 'structural-core'),
+    [renderSectionGroups],
+  )
+  const topCapSectionGroups = useMemo(
+    () => renderSectionGroups.filter((group) => group.sections[0]?.layerKind === 'structural-core'),
+    [renderSectionGroups],
+  )
   const openingDescriptors = useMemo(
     () => hasGraphWalls
       ? buildSplineWallOpeningDescriptors({
@@ -324,6 +333,14 @@ export function SplineWallLayer({
   const openingDescriptorsBySectionId = useMemo(
     () => buildSplineWallOpeningDescriptorMapBySectionId(openingDescriptors),
     [openingDescriptors],
+  )
+  const structuralCoreSegmentIds = useMemo(
+    () => new Set(
+      assemblySections
+        .filter((section) => section.layerKind === 'structural-core')
+        .map((section) => section.structuralSegmentId),
+    ),
+    [assemblySections],
   )
   const insertDescriptors = useMemo(
     () => buildSplineWallInsertDescriptors({
@@ -507,7 +524,7 @@ export function SplineWallLayer({
             )
           })
           : null}
-      {renderSectionGroups.map((group) => {
+      {wallSectionGroups.map((group) => {
         const section = group.sections[0]!
         const roomVisibility = visibility.active
           ? (section.roomId ? (roomVisibilityById.get(section.roomId) ?? 'hidden') : 'visible')
@@ -522,19 +539,35 @@ export function SplineWallLayer({
             group={group}
             queryCache={wallQueryCache}
             openingsBySectionId={openingDescriptorsBySectionId}
+            topCapOwnerStructuralSegmentIds={structuralCoreSegmentIds}
             bakedLightField={bakedLightField}
             selectable={tool === 'select' || (tool === 'room' && roomEditMode === 'walls')}
             onSelect={(segmentId, side) => selectObject(createSplineWallSegmentSideSelectionKey(segmentId, side))}
           />
         )
       })}
+      {topCapSectionGroups.map((group) => {
+        const section = group.sections[0]!
+        const roomVisibility = visibility.active
+          ? (section.roomId ? (roomVisibilityById.get(section.roomId) ?? 'hidden') : 'visible')
+          : 'visible'
+        if (!shouldRenderLineOfSightGeometry(roomVisibility, visibility.active)) {
+          return null
+        }
+
+        return (
+          <SplineWallTopCapGroupMesh
+            key={`${group.id}:top-cap`}
+            group={group}
+            queryCache={wallQueryCache}
+            openingsBySectionId={openingDescriptorsBySectionId}
+            bakedLightField={bakedLightField}
+          />
+        )
+      })}
       {openingDescriptors
         .filter((descriptor) =>
-          descriptor.openingMode !== 'framed'
-          && (
-            (descriptor.openingMode === 'sleeve' && descriptor.layerKind !== 'structural-core')
-            || (descriptor.openingMode === 'structural' && descriptor.layerKind === 'structural-core')
-          ))
+          shouldRenderSplineWallOpeningReveal(descriptor, structuralCoreSegmentIds))
         .map((descriptor) => {
           const section = assemblySections.find((candidate) => candidate.id === descriptor.sectionId)
           if (!section) {
@@ -669,11 +702,24 @@ type SplineWallRenderSectionGroup = {
   sections: readonly SplineWallAssemblySection[]
 }
 type SplineWallSectionSample = NonNullable<ReturnType<typeof sampleSplineWallSegment>>
+type SplineWallSectionRun = {
+  sectionIndex: number
+  section: SplineWallAssemblySection
+  bandStartHeight: number
+  bandEndHeight: number
+  bandProfile: readonly (readonly [number, number])[]
+  bandProfileUvDistances: readonly number[]
+  startSample: SplineWallSectionSample
+  endSample: SplineWallSectionSample
+  startUvDistance: number
+  endUvDistance: number
+}
 
 function SplineWallStyleSectionGroupMesh({
   group,
   queryCache,
   openingsBySectionId,
+  topCapOwnerStructuralSegmentIds,
   bakedLightField,
   selectable,
   onSelect,
@@ -681,18 +727,29 @@ function SplineWallStyleSectionGroupMesh({
   group: SplineWallRenderSectionGroup
   queryCache: SplineWallQueryCache
   openingsBySectionId: ReadonlyMap<string, readonly SplineWallOpeningDescriptor[]>
+  topCapOwnerStructuralSegmentIds: ReadonlySet<string>
   bakedLightField: BakedFloorLightField | null
   selectable: boolean
   onSelect: (segmentId: string, side: SplineWallSegmentSide) => void
 }) {
   const section = group.sections[0]!
-  const geometryKey = createSplineWallSectionGroupGeometryKey(group, openingsBySectionId, queryCache)
+  const geometryKey = createSplineWallSectionGroupGeometryKey(
+    group,
+    openingsBySectionId,
+    queryCache,
+    topCapOwnerStructuralSegmentIds,
+  )
   const geometryCacheRef = useRef<{ key: string; geometry: THREE.BufferGeometry } | null>(null)
   if (!geometryCacheRef.current || geometryCacheRef.current.key !== geometryKey) {
     geometryCacheRef.current?.geometry.dispose()
     geometryCacheRef.current = {
       key: geometryKey,
-      geometry: buildSplineWallSectionGroupGeometry(group.sections, queryCache, openingsBySectionId),
+      geometry: buildSplineWallSectionGroupGeometry(
+        group.sections,
+        queryCache,
+        openingsBySectionId,
+        topCapOwnerStructuralSegmentIds,
+      ),
     }
   }
   const geometry = geometryCacheRef.current.geometry
@@ -740,6 +797,58 @@ function SplineWallStyleSectionGroupMesh({
           event.stopPropagation()
           onSelect(hit.segmentId, selectionSide)
         } : undefined}
+      />
+      <SplineWallAutofocusProxy geometry={geometry} />
+    </>
+  )
+}
+
+function SplineWallTopCapGroupMesh({
+  group,
+  queryCache,
+  openingsBySectionId,
+  bakedLightField,
+}: {
+  group: SplineWallRenderSectionGroup
+  queryCache: SplineWallQueryCache
+  openingsBySectionId: ReadonlyMap<string, readonly SplineWallOpeningDescriptor[]>
+  bakedLightField: BakedFloorLightField | null
+}) {
+  const section = group.sections[0]!
+  const geometryKey = createSplineWallSectionGroupGeometryKey(group, openingsBySectionId, queryCache)
+  const geometryCacheRef = useRef<{ key: string; geometry: THREE.BufferGeometry } | null>(null)
+  if (!geometryCacheRef.current || geometryCacheRef.current.key !== geometryKey) {
+    geometryCacheRef.current?.geometry.dispose()
+    geometryCacheRef.current = {
+      key: geometryKey,
+      geometry: buildSplineWallTopCapGroupGeometry(group.sections, queryCache, openingsBySectionId),
+    }
+  }
+  const geometry = geometryCacheRef.current.geometry
+  const material = useMemo(() => createSplineWallTopCapMaterial(section), [section])
+
+  useEffect(() => () => geometryCacheRef.current?.geometry.dispose(), [])
+  useEffect(() => () => material.dispose(), [material])
+  useEffect(() => {
+    syncSplineWallGeometryBakedLight(geometry, bakedLightField, {
+      allowOppositeFallback: false,
+    })
+    applyBakedLightToSplineWallTopCapMaterial(material, bakedLightField)
+  }, [bakedLightField, geometry, material])
+
+  if ((geometry.getAttribute('position')?.count ?? 0) === 0) {
+    return null
+  }
+
+  return (
+    <>
+      <mesh
+        geometry={geometry}
+        material={material}
+        castShadow
+        receiveShadow
+        raycast={noRaycast}
+        renderOrder={2}
       />
       <SplineWallAutofocusProxy geometry={geometry} />
     </>
@@ -954,42 +1063,140 @@ export function buildSplineWallSectionGeometry(
   section: SplineWallAssemblySection,
   queryCache: SplineWallQueryCache,
   openings: readonly SplineWallOpeningDescriptor[],
+  topCapOwnerStructuralSegmentIds: ReadonlySet<string> | null = null,
 ) {
   return buildSplineWallSectionGroupGeometry(
     [section],
     queryCache,
     new Map([[section.id, openings]]),
+    topCapOwnerStructuralSegmentIds,
   )
+}
+
+export function buildSplineWallTopCapGroupGeometry(
+  sections: readonly SplineWallAssemblySection[],
+  queryCache: SplineWallQueryCache,
+  openingsBySectionId: ReadonlyMap<string, readonly SplineWallOpeningDescriptor[]>,
+) {
+  const structuralSections = sections.filter((section) => section.layerKind === 'structural-core')
+  if (structuralSections.length === 0) {
+    return new THREE.BufferGeometry()
+  }
+
+  const topCapProfile = getSplineWallTopCapProfile(structuralSections[0]!)
+  if (topCapProfile.points.length < 2) {
+    return new THREE.BufferGeometry()
+  }
+
+  const sampleRuns = buildSplineWallTopCapSampleRuns(structuralSections, queryCache, openingsBySectionId)
+  if (sampleRuns.length === 0) {
+    return new THREE.BufferGeometry()
+  }
+
+  const positions: number[] = []
+  const normals: number[] = []
+  const uvs: number[] = []
+  const indices: number[] = []
+  const rowSize = topCapProfile.points.length
+  let vertexOffset = 0
+
+  sampleRuns.forEach((sampleRun) => {
+    const samples = mergeSplineWallSectionLoopClosureSamples(sampleRun)
+    if (samples.length < 2) {
+      return
+    }
+
+    const sampleDistances = buildSampleUvDistances(samples, 0)
+    samples.forEach((_, sampleIndex) => {
+      topCapProfile.points.forEach((point, pointIndex) => {
+        const position = getSectionProfileStripWorldPoint(
+          structuralSections[0]!,
+          samples,
+          sampleIndex,
+          point,
+        )
+        positions.push(position[0], position[1], position[2])
+        normals.push(0, 1, 0)
+        uvs.push(sampleDistances[sampleIndex] ?? 0, topCapProfile.uvDistances[pointIndex] ?? pointIndex)
+      })
+    })
+
+    for (let sampleIndex = 0; sampleIndex < samples.length - 1; sampleIndex += 1) {
+      const baseIndex = vertexOffset + sampleIndex * rowSize
+      for (let pointIndex = 0; pointIndex < rowSize - 1; pointIndex += 1) {
+        const current = baseIndex + pointIndex
+        const next = current + rowSize
+        indices.push(
+          current,
+          current + 1,
+          next + 1,
+          current,
+          next + 1,
+          next,
+        )
+      }
+    }
+
+    vertexOffset += samples.length * rowSize
+  })
+
+  const geometry = new THREE.BufferGeometry()
+  geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3))
+  geometry.setAttribute('normal', new THREE.Float32BufferAttribute(normals, 3))
+  geometry.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2))
+  geometry.setIndex(indices)
+  geometry.computeBoundingBox()
+  geometry.computeBoundingSphere()
+  return geometry
 }
 
 export function buildSplineWallSectionGroupGeometry(
   sections: readonly SplineWallAssemblySection[],
   queryCache: SplineWallQueryCache,
   openingsBySectionId: ReadonlyMap<string, readonly SplineWallOpeningDescriptor[]>,
+  topCapOwnerStructuralSegmentIds: ReadonlySet<string> | null = null,
 ) {
   const geometry = new THREE.BufferGeometry()
   if (sections.length === 0 || sections[0]!.profile.points.length < 2) {
     return geometry
   }
 
-  if (sections.length > 1 && !hasSplineWallSectionGroupOpenings(sections, openingsBySectionId)) {
-    return buildContinuousSplineWallSectionGroupGeometry(sections, queryCache)
+  if (
+    sections.length > 1
+    && !hasSplineWallSectionGroupOpenings(sections, openingsBySectionId)
+    && shouldUseContinuousSplineWallSectionGroupGeometry(sections)
+  ) {
+    return buildContinuousSplineWallSectionGroupGeometry(
+      sections,
+      queryCache,
+      topCapOwnerStructuralSegmentIds,
+    )
   }
 
   const positions: number[] = []
   const indices: number[] = []
   const uvs: number[] = []
   const bakedLightDirections: number[] = []
+  const boundaryRunsBySectionIndex = new Map<number, { start: SplineWallSectionRun[]; end: SplineWallSectionRun[] }>()
   let vertexOffset = 0
   let sectionUvDistanceOffset = 0
 
-  sections.forEach((section) => {
+  sections.forEach((section, sectionIndex) => {
     const resolvedWallHeight = getSectionResolvedWallHeight(section)
     const profileUvDistances = buildSectionProfileUvDistances(section, resolvedWallHeight)
     const queryData = getSplineWallSegmentQueryData(queryCache, section.segmentId)
     const bands = buildSplineWallSectionHeightBands(section, openingsBySectionId.get(section.id) ?? [])
     bands.forEach((band) => {
-      const bandProfile = clipSectionProfilePointsToBand(section, band.startHeight, band.endHeight, {
+      const adjustedBandEndHeight = getSplineWallGeometryBandEndHeight(
+        section,
+        band.endHeight,
+        topCapOwnerStructuralSegmentIds,
+      )
+      if (adjustedBandEndHeight - band.startHeight <= 1e-5) {
+        return
+      }
+
+      const bandProfile = clipSectionProfilePointsToBand(section, band.startHeight, adjustedBandEndHeight, {
         hideRenderSegments: true,
       })
       const renderBandProfile = subdivideSectionProfileForDisplacement(section, bandProfile, resolvedWallHeight)
@@ -998,6 +1205,7 @@ export function buildSplineWallSectionGroupGeometry(
       }
       const bandProfileUvDistances = renderBandProfile.map((point) =>
         getSectionProfileUvV(section, point, profileUvDistances, resolvedWallHeight))
+      const bandRuns: SplineWallSectionRun[] = []
 
       band.visibleIntervals.forEach(([startRatio, endRatio]) => {
         const sectionStartRatio = getSectionSegmentRatio(section, startRatio)
@@ -1051,7 +1259,34 @@ export function buildSplineWallSectionGroupGeometry(
           }
         }
 
+        bandRuns.push({
+          sectionIndex,
+          section,
+          bandStartHeight: band.startHeight,
+          bandEndHeight: band.endHeight,
+          bandProfile: renderBandProfile,
+          bandProfileUvDistances,
+          startSample: samples[0]!,
+          endSample: samples[samples.length - 1]!,
+          startUvDistance: sampleUvDistances[0]!,
+          endUvDistance: sampleUvDistances[sampleUvDistances.length - 1]!,
+        })
         vertexOffset += samples.length * rowSize
+      })
+
+      if (bandRuns.length === 0) {
+        return
+      }
+
+      boundaryRunsBySectionIndex.set(sectionIndex, {
+        start: [
+          ...(boundaryRunsBySectionIndex.get(sectionIndex)?.start ?? []),
+          bandRuns[0]!,
+        ],
+        end: [
+          ...(boundaryRunsBySectionIndex.get(sectionIndex)?.end ?? []),
+          bandRuns[bandRuns.length - 1]!,
+        ],
       })
     })
 
@@ -1062,6 +1297,15 @@ export function buildSplineWallSectionGroupGeometry(
         )
       : section.length * GRID_SIZE
   })
+
+  appendSplineWallSectionBoundarySeams(
+    sections,
+    boundaryRunsBySectionIndex,
+    positions,
+    indices,
+    uvs,
+    bakedLightDirections,
+  )
 
   geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3))
   geometry.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2))
@@ -1075,9 +1319,45 @@ export function buildSplineWallSectionGroupGeometry(
   return geometry
 }
 
+function hasSplineWallSectionGroupOpenings(
+  sections: readonly SplineWallAssemblySection[],
+  openingsBySectionId: ReadonlyMap<string, readonly SplineWallOpeningDescriptor[]>,
+) {
+  return sections.some((section) => (openingsBySectionId.get(section.id)?.length ?? 0) > 0)
+}
+
+function shouldUseContinuousSplineWallSectionGroupGeometry(
+  sections: readonly SplineWallAssemblySection[],
+) {
+  return sections.every((section, index) => {
+    const nextIndex = index === sections.length - 1 ? 0 : index + 1
+    const nextSection = sections[nextIndex]
+    if (!nextSection || !pointsEqual2(section.end, nextSection.start)) {
+      return true
+    }
+    if (nextIndex === 0 && sections.length < 3) {
+      return true
+    }
+
+    const currentTangent = normalize2([
+      section.end[0] - section.start[0],
+      section.end[1] - section.start[1],
+    ], [0, 0])
+    const nextTangent = normalize2([
+      nextSection.end[0] - nextSection.start[0],
+      nextSection.end[1] - nextSection.start[1],
+    ], [0, 0])
+    const tangentCross = Math.abs(cross2(currentTangent, nextTangent))
+    const tangentDot = (currentTangent[0] * nextTangent[0]) + (currentTangent[1] * nextTangent[1])
+
+    return tangentCross <= 0.25 && tangentDot >= 0.95
+  })
+}
+
 function buildContinuousSplineWallSectionGroupGeometry(
   sections: readonly SplineWallAssemblySection[],
   queryCache: SplineWallQueryCache,
+  topCapOwnerStructuralSegmentIds: ReadonlySet<string> | null,
 ) {
   const geometry = new THREE.BufferGeometry()
   const section = sections[0]!
@@ -1100,7 +1380,16 @@ function buildContinuousSplineWallSectionGroupGeometry(
   const profileUvDistances = buildSectionProfileUvDistances(section, resolvedWallHeight)
   const bands = buildSplineWallSectionHeightBands(section, [])
   bands.forEach((band) => {
-    const bandProfile = clipSectionProfilePointsToBand(section, band.startHeight, band.endHeight, {
+    const adjustedBandEndHeight = getSplineWallGeometryBandEndHeight(
+      section,
+      band.endHeight,
+      topCapOwnerStructuralSegmentIds,
+    )
+    if (adjustedBandEndHeight - band.startHeight <= 1e-5) {
+      return
+    }
+
+    const bandProfile = clipSectionProfilePointsToBand(section, band.startHeight, adjustedBandEndHeight, {
       hideRenderSegments: true,
     })
     const renderBandProfile = subdivideSectionProfileForDisplacement(section, bandProfile, resolvedWallHeight)
@@ -1110,7 +1399,8 @@ function buildContinuousSplineWallSectionGroupGeometry(
     const bandProfileUvDistances = renderBandProfile.map((point) =>
       getSectionProfileUvV(section, point, profileUvDistances, resolvedWallHeight))
 
-    sampleRuns.forEach((samples) => {
+    sampleRuns.forEach((sampleRun) => {
+      const samples = mergeSplineWallSectionLoopClosureSamples(sampleRun)
       if (samples.length < 2) {
         return
       }
@@ -1163,13 +1453,6 @@ function buildContinuousSplineWallSectionGroupGeometry(
   syncBakedLightDirectionsToGeometryNormals(geometry)
   geometry.computeBoundingSphere()
   return geometry
-}
-
-function hasSplineWallSectionGroupOpenings(
-  sections: readonly SplineWallAssemblySection[],
-  openingsBySectionId: ReadonlyMap<string, readonly SplineWallOpeningDescriptor[]>,
-) {
-  return sections.some((section) => (openingsBySectionId.get(section.id)?.length ?? 0) > 0)
 }
 
 function buildContinuousSplineWallSectionSampleRuns(
@@ -1240,6 +1523,310 @@ function mergeSplineWallSectionSamples(
       previous.normal[1] + next.normal[1],
     ], previous.normal),
   }
+}
+
+function mergeSplineWallSectionLoopClosureSamples(
+  samples: readonly SplineWallSectionSample[],
+) {
+  if (samples.length < 2) {
+    return samples
+  }
+
+  const first = samples[0]!
+  const last = samples.at(-1)!
+  if (!canMergeSplineWallSectionSamples(first, last)) {
+    return samples
+  }
+
+  const mergedClosureSample = mergeSplineWallSectionSamples(first, last)
+  const mergedSamples = [...samples]
+  mergedSamples[0] = mergedClosureSample
+  mergedSamples[mergedSamples.length - 1] = mergedClosureSample
+  return mergedSamples
+}
+
+function getSplineWallTopCapProfile(section: SplineWallAssemblySection) {
+  const maxHeight = Math.max(...section.profile.points.map((point) => point[1]))
+  const points = section.profile.points.filter((point) => Math.abs(point[1] - maxHeight) <= 1e-5)
+  return {
+    points,
+    uvDistances: buildProfileUvDistances(points, getSectionResolvedWallHeight(section)),
+  }
+}
+
+function buildSplineWallTopCapSampleRuns(
+  sections: readonly SplineWallAssemblySection[],
+  queryCache: SplineWallQueryCache,
+  openingsBySectionId: ReadonlyMap<string, readonly SplineWallOpeningDescriptor[]>,
+) {
+  const runs: SplineWallSectionSample[][] = []
+  let currentRun: SplineWallSectionSample[] = []
+
+  const appendRunSamples = (samples: readonly SplineWallSectionSample[]) => {
+    if (samples.length < 2) {
+      return
+    }
+    if (currentRun.length === 0) {
+      currentRun = [...samples]
+      return
+    }
+
+    const previous = currentRun.at(-1)!
+    const next = samples[0]!
+    if (canMergeSplineWallSectionSamples(previous, next)) {
+      currentRun[currentRun.length - 1] = mergeSplineWallSectionSamples(previous, next)
+      currentRun.push(...samples.slice(1))
+      return
+    }
+
+    runs.push(currentRun)
+    currentRun = [...samples]
+  }
+
+  sections.forEach((section) => {
+    const resolvedWallHeight = getSectionResolvedWallHeight(section)
+    const topBand = buildSplineWallSectionHeightBands(
+      section,
+      openingsBySectionId.get(section.id) ?? [],
+    ).find((band) => Math.abs(band.endHeight - resolvedWallHeight) <= 1e-5)
+
+    if (!topBand || topBand.visibleIntervals.length === 0) {
+      if (currentRun.length > 0) {
+        runs.push(currentRun)
+        currentRun = []
+      }
+      return
+    }
+
+    topBand.visibleIntervals.forEach(([startRatio, endRatio]) => {
+      appendRunSamples(sampleSplineWallSectionInterval(
+        queryCache,
+        section.segmentId,
+        getSectionSegmentRatio(section, startRatio),
+        getSectionSegmentRatio(section, endRatio),
+        getSectionGeometrySampleStep(section),
+      ))
+    })
+  })
+
+  if (currentRun.length > 0) {
+    runs.push(currentRun)
+  }
+
+  return runs
+}
+
+function appendSplineWallSectionBoundarySeams(
+  sections: readonly SplineWallAssemblySection[],
+  boundaryRunsBySectionIndex: ReadonlyMap<number, { start: readonly SplineWallSectionRun[]; end: readonly SplineWallSectionRun[] }>,
+  positions: number[],
+  indices: number[],
+  uvs: number[],
+  bakedLightDirections: number[],
+) {
+  if (sections.length < 2) {
+    return
+  }
+
+  sections.forEach((section, index) => {
+    const nextIndex = index === sections.length - 1 ? 0 : index + 1
+    const nextSection = sections[nextIndex]
+    if (!nextSection) {
+      return
+    }
+
+    const closesLoop = nextIndex === 0
+    if (!pointsEqual2(section.end, nextSection.start)) {
+      return
+    }
+    if (closesLoop && sections.length < 3) {
+      return
+    }
+
+    const currentBoundaryRuns = boundaryRunsBySectionIndex.get(index)?.end ?? []
+    const nextBoundaryRuns = boundaryRunsBySectionIndex.get(nextIndex)?.start ?? []
+    currentBoundaryRuns.forEach((currentRun) => {
+      const matchingNextRun = nextBoundaryRuns.find((candidate) =>
+        Math.abs(candidate.bandStartHeight - currentRun.bandStartHeight) <= 1e-5
+        && Math.abs(candidate.bandEndHeight - currentRun.bandEndHeight) <= 1e-5)
+      if (!matchingNextRun) {
+        return
+      }
+
+      appendSplineWallSectionBoundarySeam(
+        currentRun,
+        matchingNextRun,
+        positions,
+        indices,
+        uvs,
+        bakedLightDirections,
+      )
+    })
+  })
+}
+
+function appendSplineWallSectionBoundarySeam(
+  currentRun: SplineWallSectionRun,
+  nextRun: SplineWallSectionRun,
+  positions: number[],
+  indices: number[],
+  uvs: number[],
+  bakedLightDirections: number[],
+) {
+  const currentSeamProfile = getSectionRunSeamProfile(currentRun)
+  const nextSeamProfile = getSectionRunSeamProfile(nextRun)
+  if (currentSeamProfile.length < 2 || currentSeamProfile.length !== nextSeamProfile.length) {
+    return
+  }
+  if (!pointsEqual2(currentRun.endSample.position, nextRun.startSample.position)) {
+    return
+  }
+
+  const tangentCross = Math.abs(cross2(currentRun.endSample.tangent, nextRun.startSample.tangent))
+  const tangentDot =
+    (currentRun.endSample.tangent[0] * nextRun.startSample.tangent[0])
+    + (currentRun.endSample.tangent[1] * nextRun.startSample.tangent[1])
+  if (tangentCross <= 1e-4 && tangentDot >= 0.995) {
+    return
+  }
+
+  const currentResolvedWallHeight = getSectionResolvedWallHeight(currentRun.section)
+  const nextResolvedWallHeight = getSectionResolvedWallHeight(nextRun.section)
+  const currentU = getSectionUvU(currentRun.section, currentRun.endUvDistance, currentResolvedWallHeight)
+  const nextU = getSectionUvU(nextRun.section, nextRun.startUvDistance, nextResolvedWallHeight)
+  const seamU = (currentU + nextU) / 2
+  const currentDirection = getSectionBakedLightDirection(currentRun.section, currentRun.endSample)
+  const nextDirection = getSectionBakedLightDirection(nextRun.section, nextRun.startSample)
+  const seamRows = currentSeamProfile.map(({ point, uvV }, index) => {
+    const nextProfilePoint = nextSeamProfile[index]!
+    const currentPoint = getSectionProfileWorldPoint(currentRun.section, currentRun.endSample, point)
+    const nextPoint = getSectionProfileWorldPoint(nextRun.section, nextRun.startSample, nextProfilePoint.point)
+    const seamPoint = getSectionProfileBoundarySeamWorldPoint(
+      currentRun.section,
+      currentRun.endSample.position,
+      currentRun.endSample.tangent,
+      nextRun.startSample.tangent,
+      point,
+    )
+    return {
+      currentPoint,
+      seamPoint,
+      nextPoint,
+      currentV: uvV,
+      nextV: nextProfilePoint.uvV,
+    }
+  })
+
+  if (seamRows.every((row) =>
+    Math.hypot(
+      row.currentPoint[0] - row.seamPoint[0],
+      row.currentPoint[1] - row.seamPoint[1],
+      row.currentPoint[2] - row.seamPoint[2],
+    ) <= 1e-5
+    && Math.hypot(
+      row.nextPoint[0] - row.seamPoint[0],
+      row.nextPoint[1] - row.seamPoint[1],
+      row.nextPoint[2] - row.seamPoint[2],
+    ) <= 1e-5)) {
+    return
+  }
+
+  const vertexOffset = positions.length / 3
+  seamRows.forEach((row) => {
+    positions.push(...row.currentPoint, ...row.seamPoint, ...row.nextPoint)
+    uvs.push(currentU, row.currentV, seamU, row.currentV, nextU, row.nextV)
+    bakedLightDirections.push(
+      currentDirection[0], 0, currentDirection[1],
+      currentDirection[0], 0, currentDirection[1],
+      nextDirection[0], 0, nextDirection[1],
+    )
+  })
+
+  const reverseWinding = shouldReverseSectionFaceWinding(currentRun.section)
+  for (let index = 0; index < seamRows.length - 1; index += 1) {
+    const a = vertexOffset + (index * 3)
+    const b = a + 1
+    const c = a + 2
+    const d = a + 3
+    const e = a + 4
+    const f = a + 5
+    if (reverseWinding) {
+      indices.push(a, d, b, b, d, e, b, e, c, c, e, f)
+    } else {
+      indices.push(a, b, d, b, e, d, b, c, e, c, f, e)
+    }
+  }
+
+  function getSectionRunSeamProfile(
+    run: SplineWallSectionRun,
+  ) {
+    if (run.section.layerKind !== 'structural-core') {
+      return run.bandProfile.map((point, index) => ({
+        point,
+        uvV: run.bandProfileUvDistances[index]!,
+      }))
+    }
+
+    const resolvedWallHeight = getSectionResolvedWallHeight(run.section)
+    if (Math.abs(run.bandEndHeight - resolvedWallHeight) > 1e-5) {
+      return []
+    }
+
+    const maxY = Math.max(...run.bandProfile.map((point) => point[1]))
+    return run.bandProfile
+      .map((point, index) => ({
+        point,
+        uvV: run.bandProfileUvDistances[index]!,
+      }))
+      .filter(({ point }) => Math.abs(point[1] - maxY) <= 1e-5)
+  }
+}
+
+function getSectionProfileBoundarySeamWorldPoint(
+  section: SplineWallAssemblySection,
+  position: readonly [number, number],
+  incomingTangent: readonly [number, number],
+  outgoingTangent: readonly [number, number],
+  point: readonly [number, number],
+): [number, number, number] {
+  const resolvedWallHeight = getSectionResolvedWallHeight(section)
+  const lateralOffset = getSectionProfileLateralOffset(section, point)
+  const incomingPoint = offsetSectionSamplePoint(section, position, incomingTangent, lateralOffset)
+  const outgoingPoint = offsetSectionSamplePoint(section, position, outgoingTangent, lateralOffset)
+  const intersection = intersectSectionOffsetLines(
+    incomingPoint,
+    incomingTangent,
+    outgoingPoint,
+    outgoingTangent,
+  )
+  const seamPoint = intersection
+    ? clampSectionMiterPoint(position, intersection, lateralOffset)
+    : incomingPoint
+
+  return [seamPoint[0], point[1] * resolvedWallHeight, seamPoint[1]]
+}
+
+export function shouldRenderSplineWallOpeningReveal(
+  descriptor: SplineWallOpeningDescriptor,
+  structuralCoreSegmentIds: ReadonlySet<string>,
+) {
+  if (descriptor.openingMode === 'framed') {
+    return false
+  }
+
+  if (descriptor.openingMode === 'sleeve') {
+    return descriptor.layerKind !== 'structural-core'
+  }
+
+  if (descriptor.source === 'manual' && descriptor.layerKind === 'structural-core') {
+    return false
+  }
+
+  return (descriptor.layerKind === 'structural-core' && descriptor.roomId !== null)
+    || (
+      descriptor.layerKind === 'room-face'
+      && !structuralCoreSegmentIds.has(descriptor.structuralSegmentId)
+    )
 }
 
 export function buildSplineWallSectionHeightBands(
@@ -1550,6 +2137,7 @@ function createSplineWallSectionGeometryKey(
   section: SplineWallAssemblySection,
   openings: readonly SplineWallOpeningDescriptor[],
   queryCache: SplineWallQueryCache,
+  topCapOwnerStructuralSegmentIds: ReadonlySet<string> | null = null,
 ) {
   const queryData = getSplineWallSegmentQueryData(queryCache, section.segmentId)
   return [
@@ -1568,6 +2156,7 @@ function createSplineWallSectionGeometryKey(
     ]) ?? []),
     ...section.profile.points.flatMap((point) => [point[0], point[1]]),
     ...(section.render?.hiddenProfileSegmentIndices ?? []),
+    hasSplineWallTopCapOwner(section, topCapOwnerStructuralSegmentIds) ? 'top-cap-owned' : 'no-top-cap-owner',
     ...openings.flatMap((opening) => [
       opening.id,
       opening.startRatio,
@@ -1583,9 +2172,15 @@ function createSplineWallSectionGroupGeometryKey(
   group: SplineWallRenderSectionGroup,
   openingsBySectionId: ReadonlyMap<string, readonly SplineWallOpeningDescriptor[]>,
   queryCache: SplineWallQueryCache,
+  topCapOwnerStructuralSegmentIds: ReadonlySet<string> | null = null,
 ) {
   return group.sections.map((section) =>
-    createSplineWallSectionGeometryKey(section, openingsBySectionId.get(section.id) ?? [], queryCache)).join('||')
+    createSplineWallSectionGeometryKey(
+      section,
+      openingsBySectionId.get(section.id) ?? [],
+      queryCache,
+      topCapOwnerStructuralSegmentIds,
+    )).join('||')
 }
 
 function createSplineWallOpeningRevealGeometryKey(
@@ -1614,6 +2209,30 @@ function getFallbackSectionColor(section: SplineWallAssemblySection) {
 
 function getSectionResolvedWallHeight(_section: SplineWallAssemblySection) {
   return DEFAULT_SPLINE_WALL_HEIGHT
+}
+
+function hasSplineWallTopCapOwner(
+  section: SplineWallAssemblySection,
+  topCapOwnerStructuralSegmentIds: ReadonlySet<string> | null,
+) {
+  return section.layerKind !== 'structural-core'
+    && (topCapOwnerStructuralSegmentIds?.has(section.structuralSegmentId) ?? false)
+}
+
+function getSplineWallGeometryBandEndHeight(
+  section: SplineWallAssemblySection,
+  endHeight: number,
+  topCapOwnerStructuralSegmentIds: ReadonlySet<string> | null,
+) {
+  const resolvedWallHeight = getSectionResolvedWallHeight(section)
+  if (
+    !hasSplineWallTopCapOwner(section, topCapOwnerStructuralSegmentIds)
+    || Math.abs(endHeight - resolvedWallHeight) > 1e-5
+  ) {
+    return endHeight
+  }
+
+  return endHeight
 }
 
 function clampSectionHeight(height: number, resolvedWallHeight: number) {
@@ -1903,7 +2522,7 @@ function clampSectionMiterPoint(
   ] as const
 }
 
-function buildSplineWallOpeningRevealGeometry(
+export function buildSplineWallOpeningRevealGeometry(
   section: SplineWallAssemblySection,
   descriptor: SplineWallOpeningDescriptor,
   queryCache: SplineWallQueryCache,
@@ -1928,6 +2547,18 @@ function buildSplineWallOpeningRevealGeometry(
   const indices: number[] = []
   const uvs: number[] = []
   const bakedLightDirections: number[] = []
+  appendOpeningRevealSpan(
+    positions,
+    indices,
+    uvs,
+    bakedLightDirections,
+    section,
+    descriptor,
+    queryCache,
+    startSample,
+    endSample,
+    polygon,
+  )
   appendOpeningRevealCap(positions, indices, uvs, bakedLightDirections, section, startSample, polygon, false)
   appendOpeningRevealCap(positions, indices, uvs, bakedLightDirections, section, endSample, polygon, true)
 
@@ -1975,6 +2606,88 @@ function dedupeProfilePolygonPoints(points: readonly (readonly [number, number])
     deduped.push(point)
   })
   return deduped
+}
+
+function appendOpeningRevealSpan(
+  positions: number[],
+  indices: number[],
+  uvs: number[],
+  bakedLightDirections: number[],
+  section: SplineWallAssemblySection,
+  descriptor: SplineWallOpeningDescriptor,
+  queryCache: SplineWallQueryCache,
+  startSample: NonNullable<ReturnType<typeof sampleSplineWallSegment>>,
+  endSample: NonNullable<ReturnType<typeof sampleSplineWallSegment>>,
+  polygon: readonly (readonly [number, number])[],
+) {
+  if (polygon.length < 2) {
+    return
+  }
+
+  const resolvedWallHeight = getSectionResolvedWallHeight(section)
+  const polygonUvDistances = buildProfileUvDistances([...polygon, polygon[0]!], resolvedWallHeight).slice(0, -1)
+  const startSegmentRatio = getSectionSegmentRatio(section, descriptor.startRatio)
+  const endSegmentRatio = getSectionSegmentRatio(section, descriptor.endRatio)
+  const queryData = getSplineWallSegmentQueryData(queryCache, section.segmentId)
+  const openingSpanDistance = queryData
+    ? Math.abs(
+        getSplineWallSegmentUvDistanceAtRatio(queryData, endSegmentRatio)
+        - getSplineWallSegmentUvDistanceAtRatio(queryData, startSegmentRatio),
+      )
+    : Math.hypot(
+        endSample.position[0] - startSample.position[0],
+        endSample.position[1] - startSample.position[1],
+      )
+  const openingSpanUv = getSectionUvU(section, openingSpanDistance, resolvedWallHeight)
+  const startDirection = getSectionBakedLightDirection(section, startSample)
+  const endDirection = getSectionBakedLightDirection(section, endSample)
+
+  for (let index = 0; index < polygon.length; index += 1) {
+    const nextIndex = (index + 1) % polygon.length
+    const startPoint = polygon[index]!
+    const endPoint = polygon[nextIndex]!
+    if (!shouldRenderOpeningRevealSpanEdge(section, startPoint, endPoint)) {
+      continue
+    }
+
+    const vertexOffset = positions.length / 3
+    const startWorldA = getSectionProfileWorldPoint(section, startSample, startPoint)
+    const endWorldA = getSectionProfileWorldPoint(section, endSample, startPoint)
+    const endWorldB = getSectionProfileWorldPoint(section, endSample, endPoint)
+    const startWorldB = getSectionProfileWorldPoint(section, startSample, endPoint)
+
+    positions.push(...startWorldA, ...endWorldA, ...endWorldB, ...startWorldB)
+    uvs.push(
+      0, polygonUvDistances[index] ?? 0,
+      openingSpanUv, polygonUvDistances[index] ?? 0,
+      openingSpanUv, polygonUvDistances[nextIndex] ?? polygonUvDistances[index] ?? 0,
+      0, polygonUvDistances[nextIndex] ?? polygonUvDistances[index] ?? 0,
+    )
+    bakedLightDirections.push(
+      startDirection[0], 0, startDirection[1],
+      endDirection[0], 0, endDirection[1],
+      endDirection[0], 0, endDirection[1],
+      startDirection[0], 0, startDirection[1],
+    )
+
+    if (shouldReverseSectionFaceWinding(section)) {
+      indices.push(vertexOffset, vertexOffset + 3, vertexOffset + 1, vertexOffset + 1, vertexOffset + 3, vertexOffset + 2)
+    } else {
+      indices.push(vertexOffset, vertexOffset + 1, vertexOffset + 3, vertexOffset + 1, vertexOffset + 2, vertexOffset + 3)
+    }
+  }
+}
+
+function shouldRenderOpeningRevealSpanEdge(
+  section: SplineWallAssemblySection,
+  startPoint: readonly [number, number],
+  endPoint: readonly [number, number],
+) {
+  if (section.layerKind === 'structural-core') {
+    return true
+  }
+
+  return Math.abs(startPoint[0]) > 1e-5 || Math.abs(endPoint[0]) > 1e-5
 }
 
 function appendOpeningRevealCap(
@@ -2098,6 +2811,21 @@ function createSplineWallStyleMaterial(
     applySplineWallParallaxNodes(material, materialTextures, section.material)
     applySplineWallDisplacementNodes(material, materialTextures, section.material)
   }
+  material.needsUpdate = true
+  return material
+}
+
+function createSplineWallTopCapMaterial(section: SplineWallAssemblySection) {
+  const shading = section.material.shading
+  const material = createStandardCompatibleMaterial({
+    color: shading?.topSurfaceColor ?? getFallbackSectionColor(section),
+    roughness: shading?.topSurfaceRoughness ?? shading?.roughness ?? 0.68,
+    metalness: shading?.topSurfaceMetalness ?? shading?.metalness ?? 0.04,
+    side: THREE.DoubleSide,
+    polygonOffset: true,
+    polygonOffsetFactor: -2,
+    polygonOffsetUnits: -2,
+  })
   material.needsUpdate = true
   return material
 }

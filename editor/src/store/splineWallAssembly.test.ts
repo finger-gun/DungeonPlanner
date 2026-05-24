@@ -105,7 +105,7 @@ describe('buildSplineWallAssemblySections', () => {
     expect(detail?.wallStyleId).toBe('art-deco-cobblestone')
   })
 
-  it('uses explicit structural core assignments on exposed boundaries only', () => {
+  it('uses explicit structural core assignments on shared boundaries', () => {
     const graph = buildSplineWallGraphFromPaintedCells({
       '0:0': { cell: [0, 0], layerId: 'default', roomId: 'room-a' },
       '1:0': { cell: [1, 0], layerId: 'default', roomId: 'room-b' },
@@ -137,11 +137,12 @@ describe('buildSplineWallAssemblySections', () => {
       section.structuralSegmentId === structuralSegmentId && section.layerKind === 'room-face',
     )
 
-    expect(structuralSections).toHaveLength(0)
+    expect(structuralSections).toHaveLength(1)
+    expect(structuralSections[0]?.wallStyleId).toBe('manor-plaster')
     expect(roomSections.map((section) => section.wallStyleId).sort()).toEqual(['manor-plaster', 'stone-keep'])
   })
 
-  it('omits structural core geometry for shared boundaries', () => {
+  it('emits one structural top-cap owner for shared boundaries', () => {
     const graph = buildSplineWallGraphFromPaintedCells({
       '0:0': { cell: [0, 0], layerId: 'default', roomId: 'room-a' },
       '1:0': { cell: [1, 0], layerId: 'default', roomId: 'room-b' },
@@ -164,11 +165,37 @@ describe('buildSplineWallAssemblySections', () => {
       section.structuralSegmentId === structuralSegmentId && section.layerKind === 'room-face',
     )
 
-    expect(structuralCore).toBeUndefined()
+    expect(structuralCore).toBeDefined()
+    expect(structuralCore?.roomId).toBeNull()
     expect(roomFaces).toHaveLength(2)
   })
 
-  it('does not add exterior or structural layers to graph-backed rounded shared joins', () => {
+  it('uses a room face wall style for shared top-cap owners when no core override exists', () => {
+    const graph = buildSplineWallGraphFromPaintedCells({
+      '0:0': { cell: [0, 0], layerId: 'default', roomId: 'room-a' },
+      '1:0': { cell: [1, 0], layerId: 'default', roomId: 'room-b' },
+    })
+    const analysis = analyzeSplineWallGraphBoundaries(graph)
+    const sharedSection = analysis
+      .flatMap((boundaryPath) => boundaryPath.sections)
+      .find((section) => section.faceKind === 'room-face' && section.oppositeRoomId !== null)!
+    const structuralSegmentId = getStructuralSegmentId(sharedSection.sharedSegmentIds)
+
+    const sections = buildSplineWallAssemblySections({
+      analyzedBoundaries: analysis,
+      wallStyleAssignments: {
+        [createSplineWallSegmentSideKey(sharedSection.segmentId, sharedSection.side)]: 'stone-keep',
+      },
+    })
+
+    const structuralCore = sections.find((section) =>
+      section.structuralSegmentId === structuralSegmentId && section.layerKind === 'structural-core',
+    )
+
+    expect(structuralCore?.wallStyleId).toBe('stone-keep')
+  })
+
+  it('does not add exterior side layers to graph-backed rounded shared joins', () => {
     const graph = createRoundedOverlapRoomGraph()
     const analysis = analyzeSplineWallGraphBoundaries(graph)
     const sharedSections = analysis
@@ -205,7 +232,7 @@ describe('buildSplineWallAssemblySections', () => {
     expect(sharedLayerKinds).toContain('room-face')
     expect(sharedLayerKinds).toContain('room-face-detail')
     expect(sharedLayerKinds).not.toContain('exterior-face')
-    expect(sharedLayerKinds).not.toContain('structural-core')
+    expect(sharedLayerKinds).toContain('structural-core')
   })
 
   it('keeps exterior layers on the unshared remainder of a partly shared rounded wall', () => {

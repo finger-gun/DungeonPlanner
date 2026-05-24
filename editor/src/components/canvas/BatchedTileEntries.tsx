@@ -7,7 +7,7 @@ import { useFogOfWarRuntime } from './fogOfWarHooks'
 import { useDungeonStore } from '../../store/useDungeonStore'
 import { buildChunkEntrySignature } from './BatchedTileEntriesShared'
 import { useRegisteredLightSources } from './objectSourceRegistry'
-import { getBuildYOffsetForAnimation, type BuildAnimationState } from '../../store/buildAnimations'
+import { getTileEntryYOffsetForAnimation, type TileEntryAnimationState } from './tileEntryAnimation'
 import {
   buildBatchDescriptors,
   getChunkKeyForStaticTileEntry,
@@ -298,7 +298,7 @@ function FallbackTileEntry({
   dynamicPointLightsActive: boolean
 }) {
   const groupRef = useRef<THREE.Group>(null)
-  const buildAnimation = useMemo<BuildAnimationState | null>(
+  const buildAnimation = useMemo<TileEntryAnimationState | null>(
     () => (entry.buildAnimationStart === undefined
       ? null
       : {
@@ -316,7 +316,7 @@ function FallbackTileEntry({
     }
 
     group.position.y = buildAnimation
-      ? getBuildYOffsetForAnimation(buildAnimation, performance.now())
+      ? getTileEntryYOffsetForAnimation(buildAnimation, performance.now())
       : 0
   })
 
