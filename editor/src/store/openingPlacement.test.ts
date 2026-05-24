@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { upsertSplineWallGraphRoomPath } from './splineWallGraph'
 import {
   buildSplineWallOpeningPlacement,
+  findOpeningAtSplineHit,
   getOpeningRenderContext,
   getOpeningWorldTransform,
 } from './openingPlacement'
@@ -173,5 +174,72 @@ describe('openingPlacement', () => {
       (renderContext?.spanSamples[0]?.normal[0] ?? 0)
       - (renderContext?.spanSamples.at(-1)?.normal[0] ?? 0),
     )).toBeGreaterThan(0.2)
+  })
+
+  it('finds segment-owned shared-wall openings from either room face', () => {
+    let graph = upsertSplineWallGraphRoomPath({
+      nodes: {},
+      segments: {},
+      paths: {},
+    }, {
+      roomId: 'room-a',
+      layerId: 'default',
+      nodes: [
+        { position: [0, 0], cornerMode: 'square', cornerAmount: 0 },
+        { position: [1, 0], cornerMode: 'square', cornerAmount: 0 },
+        { position: [1, 1], cornerMode: 'square', cornerAmount: 0 },
+        { position: [0, 1], cornerMode: 'square', cornerAmount: 0 },
+      ],
+    })
+    graph = upsertSplineWallGraphRoomPath(graph, {
+      roomId: 'room-b',
+      layerId: 'default',
+      nodes: [
+        { position: [1, 0], cornerMode: 'square', cornerAmount: 0 },
+        { position: [2, 0], cornerMode: 'square', cornerAmount: 0 },
+        { position: [2, 1], cornerMode: 'square', cornerAmount: 0 },
+        { position: [1, 1], cornerMode: 'square', cornerAmount: 0 },
+      ],
+    })
+
+    const sharedSegments = Object.values(graph.segments)
+      .filter((segment) => {
+        const start = graph.nodes[segment.startNodeId]?.position
+        const end = graph.nodes[segment.endNodeId]?.position
+        if (!start || !end) {
+          return false
+        }
+
+        return (
+          start[0] === 1
+          && end[0] === 1
+          && ((start[1] === 0 && end[1] === 1) || (start[1] === 1 && end[1] === 0))
+        )
+      })
+    const roomASegment = sharedSegments.find((segment) => segment.roomId === 'room-a')
+    const roomBSegment = sharedSegments.find((segment) => segment.roomId === 'room-b')
+
+    expect(roomASegment).toBeDefined()
+    expect(roomBSegment).toBeDefined()
+
+    const opening = {
+      id: 'opening-shared',
+      assetId: null,
+      wallKey: '0:0:east',
+      width: 1 as const,
+      segmentId: roomASegment!.id,
+      segmentStartRatio: 0,
+      segmentEndRatio: 1,
+      flipped: false,
+      objectProps: {},
+      layerId: 'default',
+      source: 'manual' as const,
+    }
+
+    expect(findOpeningAtSplineHit(
+      graph,
+      { [opening.id]: opening },
+      { segmentId: roomBSegment!.id, ratio: 0.5 },
+    )).toEqual(opening)
   })
 })

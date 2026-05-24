@@ -2486,6 +2486,28 @@ describe('useDungeonStore wall openings', () => {
     })
   })
 
+  it('mirrors generated shared-wall cutouts onto both room faces', () => {
+    const state = useDungeonStore.getState()
+    state.paintCells([[0, 0]])
+    state.paintCells([[1, 0]])
+
+    const [opening] = Object.values(useDungeonStore.getState().wallOpenings)
+    expect(opening).toBeDefined()
+
+    const cutoutSegments = Object.values(useDungeonStore.getState().splineWallGraph.segments)
+      .filter((segment) => segment.cutouts.some((cutout) => cutout.openingId === opening!.id))
+
+    expect(cutoutSegments).toHaveLength(2)
+    expect(cutoutSegments.map((segment) => segment.wallKey).sort()).toEqual(['0:0:east', '1:0:west'])
+    expect(cutoutSegments.every((segment) =>
+      segment.cutouts.some((cutout) => (
+        cutout.openingId === opening!.id
+        && cutout.startRatio === 0
+        && cutout.endRatio === 1
+      ))
+    )).toBe(true)
+  })
+
   it('auto-generates a centered one-wide door when two rooms share multiple wall segments', () => {
     const state = useDungeonStore.getState()
     state.paintCells([[0, 0], [0, 1], [0, 2]])

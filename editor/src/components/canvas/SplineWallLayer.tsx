@@ -109,7 +109,6 @@ const AUTOFOCUS_PROXY_MATERIAL = new THREE.MeshBasicMaterial({
   side: THREE.DoubleSide,
 })
 const SPLINE_WALL_SECTION_MAX_MITER_SCALE = 2
-const SPLINE_WALL_TOP_CAP_CLEARANCE = 1e-3
 
 type SplineNodeDragState = {
   nodeId: string
@@ -1165,6 +1164,7 @@ export function buildSplineWallSectionGroupGeometry(
   if (
     sections.length > 1
     && !hasSplineWallSectionGroupOpenings(sections, openingsBySectionId)
+    && shouldUseContinuousSplineWallSectionGroupGeometry(sections)
   ) {
     return buildContinuousSplineWallSectionGroupGeometry(
       sections,
@@ -1189,7 +1189,6 @@ export function buildSplineWallSectionGroupGeometry(
     bands.forEach((band) => {
       const adjustedBandEndHeight = getSplineWallGeometryBandEndHeight(
         section,
-        band.startHeight,
         band.endHeight,
         topCapOwnerStructuralSegmentIds,
       )
@@ -1327,6 +1326,34 @@ function hasSplineWallSectionGroupOpenings(
   return sections.some((section) => (openingsBySectionId.get(section.id)?.length ?? 0) > 0)
 }
 
+function shouldUseContinuousSplineWallSectionGroupGeometry(
+  sections: readonly SplineWallAssemblySection[],
+) {
+  return sections.every((section, index) => {
+    const nextIndex = index === sections.length - 1 ? 0 : index + 1
+    const nextSection = sections[nextIndex]
+    if (!nextSection || !pointsEqual2(section.end, nextSection.start)) {
+      return true
+    }
+    if (nextIndex === 0 && sections.length < 3) {
+      return true
+    }
+
+    const currentTangent = normalize2([
+      section.end[0] - section.start[0],
+      section.end[1] - section.start[1],
+    ], [0, 0])
+    const nextTangent = normalize2([
+      nextSection.end[0] - nextSection.start[0],
+      nextSection.end[1] - nextSection.start[1],
+    ], [0, 0])
+    const tangentCross = Math.abs(cross2(currentTangent, nextTangent))
+    const tangentDot = (currentTangent[0] * nextTangent[0]) + (currentTangent[1] * nextTangent[1])
+
+    return tangentCross <= 0.25 && tangentDot >= 0.95
+  })
+}
+
 function buildContinuousSplineWallSectionGroupGeometry(
   sections: readonly SplineWallAssemblySection[],
   queryCache: SplineWallQueryCache,
@@ -1355,7 +1382,6 @@ function buildContinuousSplineWallSectionGroupGeometry(
   bands.forEach((band) => {
     const adjustedBandEndHeight = getSplineWallGeometryBandEndHeight(
       section,
-      band.startHeight,
       band.endHeight,
       topCapOwnerStructuralSegmentIds,
     )
@@ -1792,7 +1818,11 @@ export function shouldRenderSplineWallOpeningReveal(
     return descriptor.layerKind !== 'structural-core'
   }
 
-  return descriptor.layerKind === 'structural-core'
+  if (descriptor.source === 'manual' && descriptor.layerKind === 'structural-core') {
+    return false
+  }
+
+  return (descriptor.layerKind === 'structural-core' && descriptor.roomId !== null)
     || (
       descriptor.layerKind === 'room-face'
       && !structuralCoreSegmentIds.has(descriptor.structuralSegmentId)
@@ -2191,7 +2221,6 @@ function hasSplineWallTopCapOwner(
 
 function getSplineWallGeometryBandEndHeight(
   section: SplineWallAssemblySection,
-  startHeight: number,
   endHeight: number,
   topCapOwnerStructuralSegmentIds: ReadonlySet<string> | null,
 ) {
@@ -2203,7 +2232,7 @@ function getSplineWallGeometryBandEndHeight(
     return endHeight
   }
 
-  return Math.max(startHeight, endHeight - SPLINE_WALL_TOP_CAP_CLEARANCE)
+  return endHeight
 }
 
 function clampSectionHeight(height: number, resolvedWallHeight: number) {

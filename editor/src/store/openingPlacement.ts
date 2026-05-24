@@ -73,46 +73,26 @@ export function getOpeningSpanPlacements(
   graph: SplineWallGraph,
   opening: Pick<OpeningRecord, 'assetId' | 'wallKey' | 'width' | 'segmentId' | 'segmentStartRatio' | 'segmentEndRatio'>,
 ): OpeningSpanPlacement[] {
-  if (
-    typeof opening.segmentId === 'string'
-    && typeof opening.segmentStartRatio === 'number'
-    && typeof opening.segmentEndRatio === 'number'
-  ) {
-    return [{
-      segmentId: opening.segmentId,
-      startRatio: clampRatio(Math.min(opening.segmentStartRatio, opening.segmentEndRatio)),
-      endRatio: clampRatio(Math.max(opening.segmentStartRatio, opening.segmentEndRatio)),
-    }]
+  const directPlacements = getDirectOpeningSpanPlacements(opening)
+  if (directPlacements) {
+    return directPlacements
   }
 
-  const { startRatio, endRatio } = getLegacyOpeningSpanSpec(opening.assetId, opening.width)
-  return getOpeningSegments(opening.wallKey, opening.width)
-    .flatMap((wallKey) => {
-      const directPlacements = Object.values(graph.segments)
-        .filter((segment) => segment.wallKey === wallKey)
-        .map((segment) => ({
-          segmentId: segment.id,
-          startRatio,
-          endRatio,
-        }))
-      if (directPlacements.length > 0) {
-        return directPlacements
-      }
+  return getWallKeyOpeningSpanPlacements(graph, opening.assetId, opening.wallKey, opening.width)
+}
 
-      const boundary = getWallKeyBoundary(wallKey)
-      if (!boundary) {
-        return []
-      }
+export function getOpeningOccupiedSpanPlacements(
+  graph: SplineWallGraph,
+  opening: Pick<OpeningRecord, 'assetId' | 'wallKey' | 'width' | 'segmentId' | 'segmentStartRatio' | 'segmentEndRatio'>,
+): OpeningSpanPlacement[] {
+  const directPlacements = getDirectOpeningSpanPlacements(opening)
+  if (directPlacements) {
+    return mergeOpeningSpanPlacements(
+      directPlacements.flatMap((placement) => getCoincidentOpeningSpanPlacements(graph, placement)),
+    )
+  }
 
-      return Object.values(graph.segments)
-        .flatMap((segment) => projectWallKeyOpeningOntoSplineSegment(
-          graph,
-          segment,
-          boundary,
-          startRatio,
-          endRatio,
-        ))
-    })
+  return getWallKeyOpeningSpanPlacements(graph, opening.assetId, opening.wallKey, opening.width)
 }
 
 export function buildSplineWallOpeningPlacement(
@@ -263,7 +243,7 @@ export function findOpeningAtSplineHit(
 
   return (
     Object.values(wallOpenings).find((opening) =>
-      getOpeningSpanPlacements(graph, opening).some((placement) => (
+      getOpeningOccupiedSpanPlacements(graph, opening).some((placement) => (
         placement.segmentId === hit.segmentId
         && hit.ratio >= placement.startRatio - OPENING_PLACEMENT_EPSILON
         && hit.ratio <= placement.endRatio + OPENING_PLACEMENT_EPSILON
@@ -379,8 +359,8 @@ export function doOpeningsOverlap(
   left: Pick<OpeningRecord, 'assetId' | 'wallKey' | 'width' | 'segmentId' | 'segmentStartRatio' | 'segmentEndRatio'>,
   right: Pick<OpeningRecord, 'assetId' | 'wallKey' | 'width' | 'segmentId' | 'segmentStartRatio' | 'segmentEndRatio'>,
 ) {
-  const leftPlacements = getOpeningSpanPlacements(graph, left)
-  const rightPlacements = getOpeningSpanPlacements(graph, right)
+  const leftPlacements = getOpeningOccupiedSpanPlacements(graph, left)
+  const rightPlacements = getOpeningOccupiedSpanPlacements(graph, right)
   if (leftPlacements.length === 0 || rightPlacements.length === 0) {
     const leftWallKeys = new Set(getOpeningSegments(left.wallKey, left.width))
     return getOpeningSegments(right.wallKey, right.width).some((wallKey) => leftWallKeys.has(wallKey))
@@ -478,6 +458,161 @@ function getLegacyOpeningSpanSpec(assetId: string | null, width: 1 | 2 | 3) {
     startRatio: insetRatio,
     endRatio: 1 - insetRatio,
   }
+}
+
+function getDirectOpeningSpanPlacements(
+  opening: Pick<OpeningRecord, 'segmentId' | 'segmentStartRatio' | 'segmentEndRatio'>,
+): OpeningSpanPlacement[] | null {
+  if (
+    typeof opening.segmentId !== 'string'
+    || typeof opening.segmentStartRatio !== 'number'
+    || typeof opening.segmentEndRatio !== 'number'
+  ) {
+    return null
+  }
+
+  return [{
+    segmentId: opening.segmentId,
+    startRatio: clampRatio(Math.min(opening.segmentStartRatio, opening.segmentEndRatio)),
+    endRatio: clampRatio(Math.max(opening.segmentStartRatio, opening.segmentEndRatio)),
+  }]
+}
+
+function getWallKeyOpeningSpanPlacements(
+  graph: SplineWallGraph,
+  assetId: string | null,
+  wallKey: string,
+  width: 1 | 2 | 3,
+) {
+  const { startRatio, endRatio } = getLegacyOpeningSpanSpec(assetId, width)
+  return mergeOpeningSpanPlacements(
+    getOpeningSegments(wallKey, width)
+      .flatMap((segmentWallKey) => {
+        const directPlacements = Object.values(graph.segments)
+          .filter((segment) => segment.wallKey === segmentWallKey)
+          .map((segment) => ({
+            segmentId: segment.id,
+            startRatio,
+            endRatio,
+          }))
+
+        const boundary = getWallKeyBoundary(segmentWallKey)
+        const projectedPlacements = !boundary
+          ? []
+          : Object.values(graph.segments)
+            .flatMap((segment) => projectWallKeyOpeningOntoSplineSegment(
+              graph,
+              segment,
+              boundary,
+              startRatio,
+              endRatio,
+            ))
+
+        return [
+          ...directPlacements,
+          ...projectedPlacements,
+        ]
+      }),
+  )
+}
+
+function getCoincidentOpeningSpanPlacements(
+  graph: SplineWallGraph,
+  placement: OpeningSpanPlacement,
+) {
+  const sourceSegment = graph.segments[placement.segmentId]
+  const sourceStart = graph.nodes[sourceSegment?.startNodeId ?? '']?.position
+  const sourceEnd = graph.nodes[sourceSegment?.endNodeId ?? '']?.position
+  if (!sourceSegment || !sourceStart || !sourceEnd) {
+    return [placement]
+  }
+
+  const cutoutStart = interpolatePoint(sourceStart, sourceEnd, placement.startRatio)
+  const cutoutEnd = interpolatePoint(sourceStart, sourceEnd, placement.endRatio)
+
+  return Object.values(graph.segments).flatMap((segment) => {
+    const targetStart = graph.nodes[segment.startNodeId]?.position
+    const targetEnd = graph.nodes[segment.endNodeId]?.position
+    if (!targetStart || !targetEnd) {
+      return []
+    }
+
+    const sourceDelta = [sourceEnd[0] - sourceStart[0], sourceEnd[1] - sourceStart[1]] as const
+    const targetDelta = [targetEnd[0] - targetStart[0], targetEnd[1] - targetStart[1]] as const
+    if (
+      Math.abs((sourceDelta[0] * targetDelta[1]) - (sourceDelta[1] * targetDelta[0])) > OPENING_PLACEMENT_EPSILON
+      || Math.abs((sourceDelta[0] * (targetStart[1] - sourceStart[1])) - (sourceDelta[1] * (targetStart[0] - sourceStart[0]))) > OPENING_PLACEMENT_EPSILON
+    ) {
+      return []
+    }
+
+    const targetStartRatio = projectPointOntoSegmentRatio(cutoutStart, targetStart, targetEnd)
+    const targetEndRatio = projectPointOntoSegmentRatio(cutoutEnd, targetStart, targetEnd)
+    const startRatio = Math.max(0, Math.min(targetStartRatio, targetEndRatio))
+    const endRatio = Math.min(1, Math.max(targetStartRatio, targetEndRatio))
+    if (endRatio - startRatio <= OPENING_PLACEMENT_EPSILON) {
+      return []
+    }
+
+    return [{
+      segmentId: segment.id,
+      startRatio: clampRatio(startRatio),
+      endRatio: clampRatio(endRatio),
+    }]
+  })
+}
+
+function mergeOpeningSpanPlacements(
+  placements: readonly OpeningSpanPlacement[],
+) {
+  const placementsBySegmentId = new Map<string, OpeningSpanPlacement[]>()
+  placements.forEach((placement) => {
+    const existing = placementsBySegmentId.get(placement.segmentId)
+    if (existing) {
+      existing.push(placement)
+    } else {
+      placementsBySegmentId.set(placement.segmentId, [placement])
+    }
+  })
+
+  const merged: OpeningSpanPlacement[] = []
+  placementsBySegmentId.forEach((segmentPlacements, segmentId) => {
+    const sortedPlacements = [...segmentPlacements]
+      .sort((left, right) => left.startRatio - right.startRatio)
+    let currentStart = Number.NaN
+    let currentEnd = Number.NaN
+
+    sortedPlacements.forEach((placement) => {
+      if (Number.isNaN(currentStart)) {
+        currentStart = placement.startRatio
+        currentEnd = placement.endRatio
+        return
+      }
+
+      if (placement.startRatio <= currentEnd + OPENING_PLACEMENT_EPSILON) {
+        currentEnd = Math.max(currentEnd, placement.endRatio)
+        return
+      }
+
+      merged.push({
+        segmentId,
+        startRatio: currentStart,
+        endRatio: currentEnd,
+      })
+      currentStart = placement.startRatio
+      currentEnd = placement.endRatio
+    })
+
+    if (!Number.isNaN(currentStart)) {
+      merged.push({
+        segmentId,
+        startRatio: currentStart,
+        endRatio: currentEnd,
+      })
+    }
+  })
+
+  return merged
 }
 
 function getWallKeyBoundary(wallKey: string) {

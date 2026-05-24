@@ -4,11 +4,11 @@ import type {
   ContentPackWallStyleOpeningKind,
   ContentPackWallStyleOpeningMode,
 } from '../content-packs/types'
-import { getOpeningRenderContext, getOpeningSpanPlacements, getOpeningVerticalCutoutSpec } from './openingPlacement'
+import { getOpeningOccupiedSpanPlacements, getOpeningRenderContext, getOpeningVerticalCutoutSpec } from './openingPlacement'
 import type { SplineWallAssemblySection } from './splineWallAssembly'
 import type { SplineWallGraph } from './splineWallGraph'
 import { getOpeningKind } from './openingState'
-import type { OpeningRecord } from './useDungeonStore'
+import type { OpeningRecord, OpeningSource } from './useDungeonStore'
 
 const OPENING_GEOMETRY_EPSILON = 1e-5
 
@@ -24,6 +24,7 @@ export type SplineWallOpeningDescriptor = {
   wallStyleId: string
   openingKind: ContentPackWallStyleOpeningKind
   openingMode: ContentPackWallStyleOpeningMode
+  source: OpeningSource
   compatible: boolean
   assetId: string | null
   startRatio: number
@@ -44,11 +45,12 @@ export function buildSplineWallOpeningDescriptors({
   contentPackId?: string
 }) {
   const descriptors: SplineWallOpeningDescriptor[] = []
+  const descriptorKeys = new Set<string>()
 
   Object.values(wallOpenings).forEach((opening) => {
     const openingKind = getOpeningKind(opening)
     const { bottomHeight, topHeight } = getOpeningVerticalCutoutSpec(opening)
-    const placements = getOpeningSpanPlacements(splineWallGraph, opening)
+    const placements = getOpeningOccupiedSpanPlacements(splineWallGraph, opening)
 
     placements.forEach((placement) => {
       assemblySections.forEach((section) => {
@@ -74,6 +76,18 @@ export function buildSplineWallOpeningDescriptors({
           openingKind,
           assetId: opening.assetId,
         })
+        const descriptorKey = [
+          opening.id,
+          section.id,
+          mappedRatios.startRatio.toFixed(6),
+          mappedRatios.endRatio.toFixed(6),
+          bottomHeight.toFixed(6),
+          topHeight?.toFixed(6) ?? 'top',
+        ].join(':')
+        if (descriptorKeys.has(descriptorKey)) {
+          return
+        }
+        descriptorKeys.add(descriptorKey)
 
         descriptors.push({
           id: `${opening.id}:${section.id}:${placement.segmentId}:${mappedRatios.startRatio}:${mappedRatios.endRatio}`,
@@ -87,6 +101,7 @@ export function buildSplineWallOpeningDescriptors({
           wallStyleId: section.wallStyleId,
           openingKind,
           openingMode: resolution.openingMode,
+          source: opening.source ?? 'manual',
           compatible: resolution.compatible,
           assetId: opening.assetId,
           startRatio: mappedRatios.startRatio,

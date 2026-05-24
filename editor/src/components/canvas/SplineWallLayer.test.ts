@@ -497,6 +497,42 @@ describe('buildSplineWallSectionHeightBands', () => {
     )
   })
 
+  it('keeps hard corner joins on the seam-preserving render path', () => {
+    const graph = upsertSplineWallGraphRoomPath(createEmptySplineWallGraph(), {
+      roomId: 'room-a',
+      layerId: 'default',
+      nodes: [
+        { position: [0, 0], cornerMode: 'square', cornerAmount: 0 },
+        { position: [2, 0], cornerMode: 'square', cornerAmount: 0 },
+        { position: [2, 2], cornerMode: 'square', cornerAmount: 0 },
+        { position: [0, 2], cornerMode: 'square', cornerAmount: 0 },
+      ],
+      closed: true,
+    })
+    const analysis = analyzeSplineWallGraphBoundaries(graph)
+    const roomFaceSections = analysis
+      .flatMap((boundaryPath) => boundaryPath.sections)
+      .filter((section) => section.faceKind === 'room-face')
+    const assemblySections = buildSplineWallAssemblySections({
+      analyzedBoundaries: analysis,
+      wallStyleAssignments: Object.fromEntries(
+        roomFaceSections.map((section) => [
+          createSplineWallSegmentSideKey(section.segmentId, section.side),
+          'art-deco-cobblestone',
+        ]),
+      ),
+    }).filter((section) => section.layerKind === 'room-face')
+    const sections = assemblySections.slice(0, 2)
+    const queryCache = createSplineWallQueryCache(graph)
+    const firstGeometry = buildSplineWallSectionGeometry(sections[0]!, queryCache, [])
+    const secondGeometry = buildSplineWallSectionGeometry(sections[1]!, queryCache, [])
+    const geometry = buildSplineWallSectionGroupGeometry(sections, queryCache, new Map())
+
+    expect(geometry.getAttribute('position').count).toBeGreaterThan(
+      firstGeometry.getAttribute('position').count + secondGeometry.getAttribute('position').count,
+    )
+  })
+
   it('closes grouped exterior corners with mitered offset intersections', () => {
     const graph = upsertSplineWallGraphRoomPath(createEmptySplineWallGraph(), {
       roomId: 'room-a',
@@ -656,7 +692,7 @@ describe('buildSplineWallSectionHeightBands', () => {
     expect(getMaxTopHitsInRegion(geometry, [3.6, 4.15], [3.6, 4.15], 0.05)).toBe(1)
   })
 
-  it('keeps non-structural wall faces slightly below the structural top cap owner', () => {
+  it('keeps non-structural wall faces flush with the structural top cap owner', () => {
     const graph = upsertSplineWallGraphRoomPath(createEmptySplineWallGraph(), {
       roomId: 'room-a',
       layerId: 'default',
@@ -702,10 +738,8 @@ describe('buildSplineWallSectionHeightBands', () => {
       new Map(),
     )
 
-    expect(getMaxPositionY(roomFaceGeometry)).toBeLessThan(DEFAULT_SPLINE_WALL_HEIGHT)
-    expect(getMaxPositionY(roomFaceGeometry)).toBeGreaterThan(DEFAULT_SPLINE_WALL_HEIGHT - 0.01)
-    expect(getMaxPositionY(exteriorFaceGeometry)).toBeLessThan(DEFAULT_SPLINE_WALL_HEIGHT)
-    expect(getMaxPositionY(exteriorFaceGeometry)).toBeGreaterThan(DEFAULT_SPLINE_WALL_HEIGHT - 0.01)
+    expect(getMaxPositionY(roomFaceGeometry)).toBeCloseTo(DEFAULT_SPLINE_WALL_HEIGHT, 5)
+    expect(getMaxPositionY(exteriorFaceGeometry)).toBeCloseTo(DEFAULT_SPLINE_WALL_HEIGHT, 5)
     expect(getMinPositionY(topCapGeometry)).toBeCloseTo(DEFAULT_SPLINE_WALL_HEIGHT, 5)
   })
 
@@ -1226,6 +1260,51 @@ describe('resolveSplineWallBakedLightSamplePosition', () => {
         new Set(),
       )).toBe(true)
     })
+
+    it('does not render structural reveal geometry for shared top-cap-only core sections', () => {
+      expect(shouldRenderSplineWallOpeningReveal(
+        createTestOpeningDescriptor(
+          {
+            id: 'shared-structural',
+            segmentId: 'segment-a',
+            structuralSegmentId: 'shared-structural',
+            layerKind: 'structural-core',
+            roomId: null,
+            side: null,
+            wallStyleId: 'stone-keep',
+          },
+          {
+            startRatio: 0,
+            endRatio: 1,
+            topHeight: DEFAULT_SPLINE_WALL_HEIGHT,
+          },
+        ),
+        new Set(['shared-structural']),
+      )).toBe(false)
+    })
+
+    it('does not render structural reveal geometry for manually placed openings', () => {
+      expect(shouldRenderSplineWallOpeningReveal(
+        createTestOpeningDescriptor(
+          {
+            id: 'perimeter-structural',
+            segmentId: 'segment-a',
+            structuralSegmentId: 'segment-a',
+            layerKind: 'structural-core',
+            roomId: 'room-a',
+            side: null,
+            wallStyleId: 'stone-keep',
+          },
+          {
+            source: 'manual',
+            startRatio: 0.25,
+            endRatio: 0.75,
+            topHeight: DEFAULT_SPLINE_WALL_HEIGHT,
+          },
+        ),
+        new Set(['segment-a']),
+      )).toBe(false)
+    })
   })
 
   it('falls back to the opposite side when a perimeter-wall normal points outside the floor', () => {
@@ -1291,10 +1370,12 @@ function createTestOpeningDescriptor(
     wallStyleId: string
   },
   {
+    source = 'generated',
     startRatio,
     endRatio,
     topHeight,
   }: {
+    source?: SplineWallOpeningDescriptor['source']
     startRatio: number
     endRatio: number
     topHeight: number
@@ -1312,6 +1393,7 @@ function createTestOpeningDescriptor(
     wallStyleId: section.wallStyleId,
     openingKind: 'door',
     openingMode: 'structural',
+    source,
     compatible: true,
     assetId: 'core.opening_door_custom',
     startRatio,

@@ -149,14 +149,9 @@ export function buildSplineWallAssemblySections({
         section,
         wallCoreAssignments,
         resolvedRoomFaceStyleId: wallStyleId,
-        defaultWallStyleId,
       })
       const structuralStyle = getContentPackWallStyleById(contentPackId, structuralWallStyleId)
       if (!structuralStyle) {
-        return
-      }
-
-      if (section.oppositeRoomId) {
         return
       }
 
@@ -209,19 +204,17 @@ function resolveStructuralWallStyleId({
   section,
   wallCoreAssignments,
   resolvedRoomFaceStyleId,
-  defaultWallStyleId,
 }: {
   section: AnalyzedSplineWallBoundarySection
   wallCoreAssignments: Readonly<Record<string, string>>
   resolvedRoomFaceStyleId: string
-  defaultWallStyleId: string
 }) {
   const structuralSegmentId = getSectionStructuralSegmentId(section)
   if (wallCoreAssignments[structuralSegmentId]) {
     return wallCoreAssignments[structuralSegmentId]!
   }
 
-  return section.oppositeRoomId ? defaultWallStyleId : resolvedRoomFaceStyleId
+  return resolvedRoomFaceStyleId
 }
 
 function getSectionLayer(
