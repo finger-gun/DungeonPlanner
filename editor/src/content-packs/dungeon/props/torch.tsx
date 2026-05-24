@@ -35,9 +35,6 @@ function DungeonTorchVariant({ objectProps, ...props }: ContentPackComponentProp
   )
 }
 
-useGLTF.preload(unlitAssetUrl)
-useGLTF.preload(litAssetUrl)
-
 export const dungeonTorchAsset = createDungeonAsset({
   id: 'dungeon.props_torch',
   slug: 'dungeon-props-torch',

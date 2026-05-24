@@ -2,7 +2,7 @@ import { useMemo, type JSX } from 'react'
 import * as THREE from 'three'
 import { cloneSceneWithNodeMaterials } from '../../../rendering/nodeMaterialUtils'
 import { useGLTF } from '../../../rendering/useGLTF'
-import { OUTDOOR_TERRAIN_STYLES, type OutdoorTerrainStyle } from '../../../store/outdoorTerrainStyles'
+import type { OutdoorTerrainStyle } from '../../../store/outdoorTerrainStyles'
 import { resolveKayKitModelAssetUrl } from '../shared/createKayKitAsset'
 
 export type SteppedOutdoorTerrainAssetKey =
@@ -128,12 +128,6 @@ export function applyTerrainShadowSettings(root: THREE.Object3D) {
   })
 
   return root
-}
-
-for (const terrainStyle of OUTDOOR_TERRAIN_STYLES) {
-  for (const assetKey of Object.keys(STEPPED_OUTDOOR_TERRAIN_ASSETS) as SteppedOutdoorTerrainAssetKey[]) {
-    useGLTF.preload(resolveSteppedOutdoorTerrainAssetUrl(assetKey, terrainStyle))
-  }
 }
 
 export function SteppedOutdoorTerrainAsset({

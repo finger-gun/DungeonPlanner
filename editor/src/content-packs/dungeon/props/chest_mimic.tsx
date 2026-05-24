@@ -151,8 +151,6 @@ export function getMimicAttackPose(elapsed: number): MimicAttackPose {
   }
 }
 
-useGLTF.preload(assetUrl)
-
 export const dungeonChestMimicAsset = createDungeonAsset({
   id: 'dungeon.props_chest_mimic',
   slug: 'dungeon-props-chest-mimic',

@@ -64,8 +64,6 @@ export function createDungeonWallAsset(definition: DungeonWallAssetDefinition): 
   const wallRotationYOffset = definition.wallRotationYOffset ?? 0
   const Component = definition.Component ?? createStaticDungeonWallVariant(assetUrl, cornerAssetUrl, wallRotationYOffset)
 
-  preloadDungeonWallAssets(assetUrl, cornerAssetUrl)
-
   return {
     id: definition.id,
     slug: definition.slug,
@@ -103,11 +101,6 @@ export function resolveDungeonWallAssetResources(definition: Pick<DungeonWallAss
     cornerAssetUrl: modelUrls[`../../../assets/models/dungeon/${definition.cornerModelName ?? 'wall_corner'}.glb`],
     thumbnailUrl: thumbnailUrls[`../../../assets/models/dungeon/${definition.thumbnailName ?? definition.modelName}.png`],
   }
-}
-
-export function preloadDungeonWallAssets(assetUrl: string, cornerAssetUrl: string) {
-  useGLTF.preload(assetUrl)
-  useGLTF.preload(cornerAssetUrl)
 }
 
 function createStaticDungeonWallVariant(

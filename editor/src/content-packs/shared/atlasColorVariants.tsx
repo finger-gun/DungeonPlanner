@@ -67,8 +67,6 @@ export function createAtlasColorVariantModelComponent({
   defaultVariantId: string
   grid: { columns: number; rows: number }
 }) {
-  useGLTF.preload(assetUrl)
-
   function AtlasColorVariantModel(props: ContentPackComponentProps) {
     const selectedVariant = resolveAtlasColorSwatchVariant(
       props.objectProps?.[propKey],

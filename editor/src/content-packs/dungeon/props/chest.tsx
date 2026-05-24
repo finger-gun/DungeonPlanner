@@ -100,8 +100,6 @@ function createChestSceneSetup(sourceScene: THREE.Object3D, targetCell: AtlasCel
   return { baseScene, lid, pivotOffsetY, pivotOffsetZ }
 }
 
-useGLTF.preload(assetUrl)
-
 export const dungeonChestAsset = createDungeonAsset({
   id: 'dungeon.props_chest',
   slug: 'dungeon-props-chest',
