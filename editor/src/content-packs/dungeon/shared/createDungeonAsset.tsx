@@ -143,7 +143,6 @@ function createStaticModelComponent(assetUrl: string, transform?: DungeonTransfo
     )
   }
 
-  useGLTF.preload(assetUrl)
   return DungeonModel
 }
 

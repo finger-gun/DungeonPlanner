@@ -339,7 +339,3 @@ function normalizeDoorCustomVector3(
 
   return [vector[0] / length, vector[1] / length, vector[2] / length]
 }
-
-if (assetUrl) {
-  useGLTF.preload(assetUrl)
-}

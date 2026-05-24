@@ -76,8 +76,6 @@ function createChestSceneSetup(sourceScene: THREE.Object3D): ChestSceneSetup {
   return { baseScene, lid, pivotOffsetY, pivotOffsetZ }
 }
 
-useGLTF.preload(assetUrl)
-
 export const dungeonChestLargeGoldAsset = createDungeonAsset({
   id: 'dungeon.props_chest_large_gold',
   slug: 'dungeon-props-chest-large-gold',
