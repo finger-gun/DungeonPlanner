@@ -763,6 +763,7 @@ function serializeCurrentDungeonState(state: DungeonState) {
     floors: floorsWithCurrent,
     floorOrder: state.floorOrder,
     activeFloorId: state.activeFloorId,
+    generatedCharacters: state.generatedCharacters,
   })
 }
 
@@ -5302,6 +5303,9 @@ export const useDungeonStore = create<DungeonState>()(
     const terrainType = parsed.outdoorTerrainType ?? 'mixed'
     const terrainProfiles = normalizeOutdoorTerrainProfiles(parsed.outdoorTerrainProfiles)
     const terrainProfile = getOutdoorTerrainProfile(terrainType, terrainProfiles)
+    const generatedCharacters = normalizeGeneratedCharacters(
+      parsed.generatedCharacters ?? get().generatedCharacters,
+    )
       queueFloorDirtyHint({
         floorId: activeFloorId,
         domains: ALL_FLOOR_DIRTY_DOMAINS,
@@ -5323,7 +5327,7 @@ export const useDungeonStore = create<DungeonState>()(
         outdoorTerrainSculptRadius: DEFAULT_OUTDOOR_TERRAIN_SCULPT_RADIUS,
         outdoorTerrainStyleBrush: parsed.defaultOutdoorTerrainStyle ?? DEFAULT_OUTDOOR_TERRAIN_STYLE,
         dungeonName: parsed.name ?? current.dungeonName,
-        generatedCharacters: normalizeGeneratedCharacters(current.generatedCharacters),
+        generatedCharacters,
         characterSheet: { open: false, assetId: null },
         assetBrowser: createDefaultAssetBrowserState(),
          isPaintingStrokeActive: false,
@@ -5348,6 +5352,7 @@ export const useDungeonStore = create<DungeonState>()(
       floorOrder,
       activeFloorId,
     }))
+    syncGeneratedCharacterAssets(generatedCharacters)
     return true
   },
   })},

@@ -1,8 +1,10 @@
 import { afterEach, describe, expect, it } from 'vitest'
+import { getContentPackAssetById } from '../content-packs/registry'
 import { syncGeneratedCharacterAssets } from '../content-packs/runtimeRegistry'
 import { serializeDungeon, deserializeDungeon } from './serialization'
 import type { SerializableState } from './serialization'
 import type { FloorRecord } from './useDungeonStore'
+import type { GeneratedCharacterRecord } from '../generated-characters/types'
 import { DEFAULT_POST_PROCESSING_SETTINGS } from '../postprocessing/tiltShiftMath'
 import { DEFAULT_OUTDOOR_TERRAIN_STYLE } from './outdoorTerrainStyles'
 import { createEmptySplineWallGraph, upsertSplineWallGraphRoomPath } from './splineWallGraph'
@@ -78,6 +80,30 @@ function baseState(): SerializableState {
     floors: { [groundId]: makeFloor(groundId, 'Ground Floor', 0) },
     floorOrder: [groundId],
     activeFloorId: groundId,
+  }
+}
+
+function generatedRangerRecord(): GeneratedCharacterRecord {
+  return {
+    assetId: 'generated.player.test',
+    storageId: 'storage-test',
+    name: 'Generated Ranger',
+    kind: 'player',
+    prompt: 'A ranger on white background',
+    model: 'x/z-image-turbo',
+    size: 'M',
+    originalImageUrl: 'data:image/png;base64,abc',
+    processedImageUrl: 'data:image/png;base64,abc',
+    alphaMaskUrl: 'data:image/png;base64,def',
+    thumbnailUrl: 'data:image/png;base64,abc',
+    width: 300,
+    height: 600,
+    packId: null,
+    packName: null,
+    packDescription: null,
+    packScope: null,
+    createdAt: '2026-04-16T00:00:00.000Z',
+    updatedAt: '2026-04-16T00:00:00.000Z',
   }
 }
 
@@ -466,31 +492,10 @@ describe('serializeDungeon / deserializeDungeon roundtrip', () => {
   })
 
   it('preserves player objects', () => {
-    syncGeneratedCharacterAssets({
-      'generated.player.test': {
-        assetId: 'generated.player.test',
-        storageId: 'storage-test',
-        name: 'Generated Ranger',
-        kind: 'player',
-        prompt: 'A ranger on white background',
-        model: 'x/z-image-turbo',
-        size: 'M',
-        originalImageUrl: 'data:image/png;base64,abc',
-        processedImageUrl: 'data:image/png;base64,abc',
-        alphaMaskUrl: 'data:image/png;base64,def',
-        thumbnailUrl: 'data:image/png;base64,abc',
-        width: 300,
-        height: 600,
-        packId: null,
-        packName: null,
-        packDescription: null,
-        packScope: null,
-        createdAt: '2026-04-16T00:00:00.000Z',
-        updatedAt: '2026-04-16T00:00:00.000Z',
-      },
-    })
-
     const state = baseState()
+    state.generatedCharacters = {
+      'generated.player.test': generatedRangerRecord(),
+    }
     state.floors!['floor-1'].snapshot.placedObjects['obj-player'] = {
       id: 'obj-player',
       type: 'player',
@@ -503,10 +508,19 @@ describe('serializeDungeon / deserializeDungeon roundtrip', () => {
       layerId: 'default',
     }
 
+    syncGeneratedCharacterAssets({})
     const result = deserializeDungeon(serializeDungeon(state))
     expect(result).not.toBeNull()
+    expect(result!.generatedCharacters?.['generated.player.test']).toMatchObject({
+      name: 'Generated Ranger',
+      processedImageUrl: 'data:image/png;base64,abc',
+    })
     const objects = result!.placedObjects ?? result!.floors?.['floor-1']?.snapshot?.placedObjects
     expect(objects?.['obj-player']).toMatchObject({ assetId: 'generated.player.test', type: 'player' })
+    expect(getContentPackAssetById('generated.player.test')).toMatchObject({
+      id: 'generated.player.test',
+      category: 'player',
+    })
   })
 
   it('preserves wall openings with flipped flag', () => {

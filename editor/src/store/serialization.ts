@@ -37,6 +37,11 @@ import type {
   PaintedCells,
   Room,
 } from './useDungeonStore'
+import {
+  normalizeGeneratedCharacterRecord,
+  type GeneratedCharacterRecord,
+} from '../generated-characters/types'
+import { syncGeneratedCharacterAssets } from '../content-packs/runtimeRegistry'
 import type { GridCell } from '../hooks/useSnapToGrid'
 import { getCellKey } from '../hooks/useSnapToGrid'
 import { OUTDOOR_TERRAIN_LEVEL_HEIGHT } from './outdoorTerrain'
@@ -53,7 +58,7 @@ import {
 import { createSplineWallQueryCache } from './splineWallQueries'
 import { wallKeyToWorldPosition } from './wallSegments'
 
-const CURRENT_VERSION = 24
+const CURRENT_VERSION = 25
 const ROOM_SET_CONTENT_PACK_ID = 'dungeon'
 const FALLBACK_ROOM_SET_ID = 'dungeon'
 const WALL_MATERIAL_SET_CONTENT_PACK_ID = 'dungeon'
@@ -181,6 +186,7 @@ type SerializedFloor = {
 export type DungeonFile = {
   version: number
   name: string
+  generatedCharacters?: Record<string, GeneratedCharacterRecord>
   mapMode?: MapMode
   outdoorTimeOfDay?: number
   defaultOutdoorTerrainStyle?: OutdoorTerrainStyle
@@ -255,6 +261,7 @@ export type SerializableState = {
   floors?: Record<string, FloorRecord>
   floorOrder?: string[]
   activeFloorId?: string
+  generatedCharacters?: Record<string, GeneratedCharacterRecord>
 }
 
 // ── Helpers: floor snapshot → serialized floor ────────────────────────────────
@@ -431,6 +438,7 @@ export function serializeDungeon(state: SerializableState): string {
   const file: DungeonFile = {
     version: CURRENT_VERSION,
     name: state.name ?? 'My Dungeon',
+    generatedCharacters: normalizeGeneratedCharactersForSerialization(state.generatedCharacters),
     mapMode: state.mapMode ?? 'indoor',
     outdoorTimeOfDay: typeof state.outdoorTimeOfDay === 'number' ? state.outdoorTimeOfDay : 0.5,
     outdoorTerrainProfiles: state.outdoorTerrainProfiles,
@@ -1238,8 +1246,14 @@ function parseFile(raw: Record<string, unknown>): SerializableState | null {
       }
     }
 
+    const generatedCharacters = parseGeneratedCharacters(raw.generatedCharacters)
+    if (generatedCharacters) {
+      syncGeneratedCharacterAssets(generatedCharacters)
+    }
+
     const parsedState: SerializableState = {
       name: typeof raw.name === 'string' ? raw.name : 'My Dungeon',
+      ...(generatedCharacters ? { generatedCharacters } : {}),
       mapMode: raw.mapMode === 'outdoor' ? 'outdoor' : 'indoor',
       outdoorTimeOfDay:
         typeof raw.outdoorTimeOfDay === 'number'
@@ -1331,6 +1345,37 @@ function parseOutdoorTerrainProfiles(value: unknown): Partial<Record<OutdoorTerr
     rocks: parseProfile(value.rocks),
     'dead-forest': parseProfile(value['dead-forest']),
   }
+}
+
+function parseGeneratedCharacters(value: unknown): Record<string, GeneratedCharacterRecord> | undefined {
+  if (!isObject(value)) {
+    return undefined
+  }
+
+  return Object.fromEntries(
+    Object.entries(value).flatMap(([assetId, record]) => {
+      if (typeof assetId !== 'string' || !isObject(record)) {
+        return []
+      }
+
+      return [[assetId, normalizeGeneratedCharacterRecord(assetId, record)]]
+    }),
+  )
+}
+
+function normalizeGeneratedCharactersForSerialization(
+  characters: Record<string, GeneratedCharacterRecord> | undefined,
+) {
+  if (!characters) {
+    return {}
+  }
+
+  return Object.fromEntries(
+    Object.entries(characters).map(([assetId, record]) => [
+      assetId,
+      normalizeGeneratedCharacterRecord(assetId, record),
+    ]),
+  )
 }
 
 function getDefaultRoomSetId() {

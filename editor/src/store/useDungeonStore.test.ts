@@ -1325,6 +1325,38 @@ describe('useDungeonStore history', () => {
     expect(useDungeonStore.getState().generatedCharacters[assetId!]).toBeTruthy()
   })
 
+  it('loads generated character records from saved dungeon JSON before restoring placed players', () => {
+    useDungeonStore.getState().paintCells([[0, 0]])
+    const assetId = createTestGeneratedCharacter('Generated Save Ranger')
+    const placedId = useDungeonStore.getState().placeObject({
+      type: 'player',
+      assetId,
+      position: [1, 0, 1],
+      rotation: [0, 0, 0],
+      props: { connector: 'FLOOR', direction: null },
+      cell: [0, 0],
+      cellKey: '0:0:floor',
+    })
+    const serialized = useDungeonStore.getState().exportDungeonJson()
+
+    useDungeonStore.getState().reset()
+    Object.keys(useDungeonStore.getState().generatedCharacters).forEach((existingAssetId) => {
+      useDungeonStore.getState().removeGeneratedCharacter(existingAssetId)
+    })
+    expect(getContentPackAssetById(assetId!)).toBeNull()
+
+    expect(useDungeonStore.getState().loadDungeon(serialized)).toBe(true)
+    expect(useDungeonStore.getState().generatedCharacters[assetId!]?.name).toBe('Generated Save Ranger')
+    expect(useDungeonStore.getState().placedObjects[placedId!]).toMatchObject({
+      type: 'player',
+      assetId,
+    })
+    expect(getContentPackAssetById(assetId!)).toMatchObject({
+      id: assetId,
+      category: 'player',
+    })
+  })
+
   it('clears explored cells without changing painted cells', () => {
     const state = useDungeonStore.getState()
     state.paintCells([[0, 0], [1, 0]])
