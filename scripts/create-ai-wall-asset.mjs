@@ -7,6 +7,7 @@ import {
   buildAiWallStyleRecipe,
   buildWallMaterialSetSource,
   buildWallStyleMaterialSource,
+  createHeightfieldAoMap,
   parseBooleanFlag,
   slugifyWallAssetId,
   toTitleCase,
@@ -122,7 +123,7 @@ async function createTextureMaps({ imagePath, depthPath, assetDir, size, normalS
     .png()
     .toFile(path.join(assetDir, 'wall_normal.png'))
 
-  const aoData = createAoMap(heightData)
+  const aoData = createHeightfieldAoMap(heightData, info.width, info.height)
   await sharp(aoData, { raw: { width: info.width, height: info.height, channels: 1 } })
     .png()
     .toFile(path.join(assetDir, 'wall_ao.png'))
@@ -158,14 +159,6 @@ function createNormalMap(heightData, width, height, strength) {
     }
   }
 
-  return output
-}
-
-function createAoMap(heightData) {
-  const output = Buffer.alloc(heightData.length)
-  for (let index = 0; index < heightData.length; index += 1) {
-    output[index] = clampByte(180 + heightData[index] * 0.25)
-  }
   return output
 }
 

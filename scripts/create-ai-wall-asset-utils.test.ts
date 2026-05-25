@@ -3,6 +3,7 @@ import {
   buildAiWallStyleRecipe,
   buildWallMaterialSetSource,
   buildWallStyleMaterialSource,
+  createHeightfieldAoMap,
   deriveWallTextureNameFromPrompt,
   parseBooleanFlag,
   slugifyWallAssetId,
@@ -82,5 +83,64 @@ describe('create-ai-wall-asset utilities', () => {
         'seamless 2D texture map of flat volcanic wall, black basalt blocks, lava cracks, no background',
       ),
     ).toBe('Volcanic Black Basalt Blocks Lava Cracks')
+  })
+
+  it('keeps flat height fields fully unoccluded', () => {
+    const heightData = Buffer.alloc(25, 128)
+    const ao = createHeightfieldAoMap(heightData, 5, 5)
+
+    expect([...ao]).toEqual(Array.from({ length: 25 }, () => 255))
+  })
+
+  it('darkens recessed texels surrounded by higher height values', () => {
+    const heightData = Buffer.alloc(25, 220)
+    heightData[12] = 24
+
+    const ao = createHeightfieldAoMap(heightData, 5, 5, {
+      directions: 8,
+      radii: [1, 2],
+      strength: 4,
+    })
+
+    expect(ao[12]).toBeLessThan(ao[0])
+    expect(ao[12]).toBeLessThan(180)
+  })
+
+  it('leaves raised texels brighter than nearby cavities', () => {
+    const heightData = Buffer.alloc(25, 40)
+    heightData[12] = 240
+
+    const ao = createHeightfieldAoMap(heightData, 5, 5, {
+      directions: 8,
+      radii: [1, 2],
+      strength: 4,
+    })
+
+    expect(ao[12]).toBeGreaterThan(240)
+    expect(ao[7]).toBeLessThan(ao[12])
+  })
+
+  it('samples across horizontal texture seams by default', () => {
+    const heightData = Buffer.from([
+      40, 40, 40, 40, 240,
+      40, 40, 40, 40, 240,
+      40, 40, 40, 40, 240,
+      40, 40, 40, 40, 240,
+      40, 40, 40, 40, 240,
+    ])
+
+    const wrappedAo = createHeightfieldAoMap(heightData, 5, 5, {
+      directions: 8,
+      radii: [1],
+      strength: 2,
+    })
+    const clampedAo = createHeightfieldAoMap(heightData, 5, 5, {
+      directions: 8,
+      radii: [1],
+      strength: 2,
+      wrapX: false,
+    })
+
+    expect(wrappedAo[0]).toBeLessThan(clampedAo[0])
   })
 })

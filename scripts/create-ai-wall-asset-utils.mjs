@@ -118,6 +118,77 @@ export function parseBooleanFlag(value, fallback = false) {
   throw new Error(`Expected a boolean value, got "${value}"`)
 }
 
+export function createHeightfieldAoMap(heightData, width, height, options = {}) {
+  if (!heightData || heightData.length !== width * height) {
+    throw new Error('Height data length must match width * height')
+  }
+
+  const directions = options.directions ?? 16
+  const radii = options.radii ?? buildAoSampleRadii(width, height)
+  const strength = options.strength ?? 3.6
+  const heightScale = options.heightScale ?? 1
+  const distanceBias = options.distanceBias ?? 0.018
+  const minValue = options.minValue ?? 72
+  const wrapX = options.wrapX ?? true
+  const wrapY = options.wrapY ?? false
+  const output = Buffer.alloc(heightData.length)
+
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 1) {
+      const center = sampleHeight01(heightData, width, height, x, y, wrapX, wrapY)
+      let occlusion = 0
+      let sampleCount = 0
+
+      for (let directionIndex = 0; directionIndex < directions; directionIndex += 1) {
+        const angle = (directionIndex / directions) * Math.PI * 2
+        const dirX = Math.cos(angle)
+        const dirY = Math.sin(angle)
+        let horizon = 0
+
+        for (const radius of radii) {
+          const sampleX = x + Math.round(dirX * radius)
+          const sampleY = y + Math.round(dirY * radius)
+          const neighbor = sampleHeight01(heightData, width, height, sampleX, sampleY, wrapX, wrapY)
+          const rise = (neighbor - center) * heightScale - radius * distanceBias
+          horizon = Math.max(horizon, rise / Math.max(1, radius))
+          sampleCount += 1
+        }
+
+        occlusion += Math.max(0, horizon)
+      }
+
+      const normalizedOcclusion = Math.min(1, (occlusion / Math.max(1, sampleCount)) * strength * directions)
+      output[y * width + x] = clampByte(255 - normalizedOcclusion * (255 - minValue))
+    }
+  }
+
+  return output
+}
+
+function buildAoSampleRadii(width, height) {
+  const maxRadius = Math.max(1, Math.floor(Math.min(width, height) / 18))
+  const candidates = [1, 2, 4, 8, 12, 16, 24, 32]
+  return candidates.filter((radius) => radius <= maxRadius || radius === 1)
+}
+
+function sampleHeight01(data, width, height, x, y, wrapX, wrapY) {
+  const sampleX = wrapX ? wrapCoordinate(x, width) : clampCoordinate(x, width)
+  const sampleY = wrapY ? wrapCoordinate(y, height) : clampCoordinate(y, height)
+  return data[sampleY * width + sampleX] / 255
+}
+
+function wrapCoordinate(value, size) {
+  return ((value % size) + size) % size
+}
+
+function clampCoordinate(value, size) {
+  return Math.max(0, Math.min(size - 1, value))
+}
+
+function clampByte(value) {
+  return Math.max(0, Math.min(255, Math.round(value)))
+}
+
 function findPositivePromptInComfyGraph(graph) {
   const nodes = Array.isArray(graph?.nodes) ? graph.nodes : Object.values(graph ?? {})
   for (const node of nodes) {
