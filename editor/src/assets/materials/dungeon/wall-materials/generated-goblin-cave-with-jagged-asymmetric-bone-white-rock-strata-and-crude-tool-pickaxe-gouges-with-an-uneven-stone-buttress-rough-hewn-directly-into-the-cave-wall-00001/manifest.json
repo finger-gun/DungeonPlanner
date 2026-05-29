@@ -1,0 +1,14 @@
+{
+  "id": "generated-goblin-cave-with-jagged-asymmetric-bone-white-rock-strata-and-crude-tool-pickaxe-gouges-with-an-uneven-stone-buttress-rough-hewn-directly-into-the-cave-wall-00001",
+  "name": "Goblin Cave With Jagged Asymmetric Bone White Rock Strata And Crude Tool Pickaxe Gouges, With An Uneven Stone Buttress Rough Hewn Directly Into The Cave Wall 00001",
+  "sourceImage": "/Volumes/output/Goblin Cave with jagged asymmetric Bone White rock strata and crude tool pickaxe gouges, with an uneven stone buttress rough-hewn directly into the cave wall-main_00001_.png",
+  "sourceDepth": "/Volumes/output/Goblin Cave with jagged asymmetric Bone White rock strata and crude tool pickaxe gouges, with an uneven stone buttress rough-hewn directly into the cave wall-depth_00001_.png",
+  "size": 1024,
+  "normalStrength": 4,
+  "parallaxScale": 0.12,
+  "parallaxSteps": 16,
+  "bumpScale": 0.16,
+  "parallaxInvert": true,
+  "textureFormat": "ktx2",
+  "heightMean": 0.4407
+}

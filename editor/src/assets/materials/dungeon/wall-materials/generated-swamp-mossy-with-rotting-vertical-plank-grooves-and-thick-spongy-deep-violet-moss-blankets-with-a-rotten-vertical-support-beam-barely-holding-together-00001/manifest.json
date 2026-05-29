@@ -1,0 +1,14 @@
+{
+  "id": "generated-swamp-mossy-with-rotting-vertical-plank-grooves-and-thick-spongy-deep-violet-moss-blankets-with-a-rotten-vertical-support-beam-barely-holding-together-00001",
+  "name": "Swamp Mossy With Rotting Vertical Plank Grooves And Thick Spongy Deep Violet Moss Blankets, With A Rotten Vertical Support Beam Barely Holding Together 00001",
+  "sourceImage": "/Volumes/output/Swamp Mossy with rotting vertical plank grooves and thick spongy Deep Violet moss blankets, with a rotten vertical support beam barely holding together-main_00001_.png",
+  "sourceDepth": "/Volumes/output/Swamp Mossy with rotting vertical plank grooves and thick spongy Deep Violet moss blankets, with a rotten vertical support beam barely holding together-depth_00001_.png",
+  "size": 1024,
+  "normalStrength": 4,
+  "parallaxScale": 0.12,
+  "parallaxSteps": 16,
+  "bumpScale": 0.16,
+  "parallaxInvert": true,
+  "textureFormat": "ktx2",
+  "heightMean": 0.4061
+}

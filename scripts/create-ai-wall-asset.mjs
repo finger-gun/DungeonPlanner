@@ -1,5 +1,6 @@
 #!/usr/bin/env node
-import { mkdir, readFile, stat, writeFile } from 'node:fs/promises'
+import { spawn } from 'node:child_process'
+import { mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import sharp from 'sharp'
@@ -8,6 +9,7 @@ import {
   buildWallMaterialSetSource,
   buildWallStyleMaterialSource,
   createHeightfieldAoMap,
+  createPackedOrmHeightMap,
   parseBooleanFlag,
   slugifyWallAssetId,
   toTitleCase,
@@ -45,6 +47,8 @@ async function main(rawOptions) {
   const bumpScale = readPositiveNumber(rawOptions['bump-scale'] ?? 0.08, 'bump-scale')
   const parallaxInvert = parseBooleanFlag(rawOptions['parallax-invert'], false)
   const force = parseBooleanFlag(rawOptions.force, false)
+  const skipRegenerate = parseBooleanFlag(rawOptions['skip-regenerate'], false)
+  const textureFormat = parseTextureFormat(rawOptions['texture-format'] ?? 'ktx2')
 
   await assertReadable(imagePath, '--image')
   await assertReadable(depthPath, '--depth')
@@ -63,6 +67,7 @@ async function main(rawOptions) {
     assetDir,
     size,
     normalStrength,
+    textureFormat,
   })
 
   await writeFile(
@@ -79,6 +84,7 @@ async function main(rawOptions) {
         parallaxSteps,
         bumpScale,
         parallaxInvert,
+        textureFormat,
         heightMean: calculateMean(heightBuffer),
       },
       null,
@@ -86,9 +92,11 @@ async function main(rawOptions) {
     )}\n`,
   )
 
-  await writeGeneratedModules({ id, name, parallaxScale, parallaxSteps, parallaxInvert, bumpScale })
-  await upsertWallStyleRecipe({ id, name, force })
-  await regenerateWallStyles()
+  await writeGeneratedModules({ id, name, textureFormat, parallaxScale, parallaxSteps, parallaxInvert, bumpScale })
+  await upsertWallStyleRecipe({ id, name, textureFormat, force })
+  if (!skipRegenerate) {
+    await regenerateWallStyles()
+  }
 
   console.log(`Created AI wall asset "${name}" (${id})`)
   console.log(`  Textures: ${path.relative(repoRoot, assetDir)}`)
@@ -97,11 +105,24 @@ async function main(rawOptions) {
   console.log('  Wall style recipe registered and generated.')
 }
 
-async function createTextureMaps({ imagePath, depthPath, assetDir, size, normalStrength }) {
+async function createTextureMaps({ imagePath, depthPath, assetDir, size, normalStrength, textureFormat }) {
+  const albedoPngPath = path.join(assetDir, 'wall_albedo.png')
+  const normalPngPath = path.join(assetDir, 'wall_normal.png')
+  const aoPngPath = path.join(assetDir, 'wall_ao.png')
+  const heightPngPath = path.join(assetDir, 'wall_height.png')
+  const displacementPngPath = path.join(assetDir, 'wall_displacement.png')
+  const roughnessPngPath = path.join(assetDir, 'wall_roughness.png')
+  const packedOrmHeightPngPath = path.join(assetDir, 'wall_ormh.png')
+
   await sharp(imagePath)
     .resize(size, size, { fit: 'cover', position: 'center' })
     .png()
-    .toFile(path.join(assetDir, 'wall_albedo.png'))
+    .toFile(albedoPngPath)
+
+  await sharp(albedoPngPath)
+    .resize(256, 256, { fit: 'cover', position: 'center' })
+    .webp({ quality: 78 })
+    .toFile(path.join(assetDir, 'preview.webp'))
 
   const { data: heightData, info } = await sharp(depthPath)
     .resize(size, size, { fit: 'cover', position: 'center' })
@@ -112,28 +133,114 @@ async function createTextureMaps({ imagePath, depthPath, assetDir, size, normalS
 
   await sharp(heightData, { raw: { width: info.width, height: info.height, channels: 1 } })
     .png()
-    .toFile(path.join(assetDir, 'wall_height.png'))
+    .toFile(heightPngPath)
 
   await sharp(heightData, { raw: { width: info.width, height: info.height, channels: 1 } })
     .png()
-    .toFile(path.join(assetDir, 'wall_displacement.png'))
+    .toFile(displacementPngPath)
 
   const normalData = createNormalMap(heightData, info.width, info.height, normalStrength)
   await sharp(normalData, { raw: { width: info.width, height: info.height, channels: 3 } })
     .png()
-    .toFile(path.join(assetDir, 'wall_normal.png'))
+    .toFile(normalPngPath)
 
   const aoData = createHeightfieldAoMap(heightData, info.width, info.height)
   await sharp(aoData, { raw: { width: info.width, height: info.height, channels: 1 } })
     .png()
-    .toFile(path.join(assetDir, 'wall_ao.png'))
+    .toFile(aoPngPath)
 
   const roughnessData = Buffer.alloc(info.width * info.height, 220)
   await sharp(roughnessData, { raw: { width: info.width, height: info.height, channels: 1 } })
     .png()
-    .toFile(path.join(assetDir, 'wall_roughness.png'))
+    .toFile(roughnessPngPath)
+
+  const packedOrmHeightData = createPackedOrmHeightMap({
+    aoData,
+    roughnessData,
+    heightData,
+    width: info.width,
+    height: info.height,
+  })
+  await sharp(packedOrmHeightData, { raw: { width: info.width, height: info.height, channels: 3 } })
+    .png()
+    .toFile(packedOrmHeightPngPath)
+
+  if (textureFormat === 'ktx2' || textureFormat === 'both') {
+    await createCompressedTextureMaps({
+      assetDir,
+      albedoPngPath,
+      normalPngPath,
+      packedOrmHeightPngPath,
+    })
+  }
+
+  if (textureFormat === 'ktx2') {
+    await Promise.all([
+      rm(albedoPngPath, { force: true }),
+      rm(normalPngPath, { force: true }),
+      rm(aoPngPath, { force: true }),
+      rm(heightPngPath, { force: true }),
+      rm(displacementPngPath, { force: true }),
+      rm(roughnessPngPath, { force: true }),
+      rm(packedOrmHeightPngPath, { force: true }),
+    ])
+  }
 
   return heightData
+}
+
+async function createCompressedTextureMaps({ assetDir, albedoPngPath, normalPngPath, packedOrmHeightPngPath }) {
+  await runToktx([
+    '--t2',
+    '--encode', 'etc1s',
+    '--clevel', '3',
+    '--qlevel', '160',
+    '--genmipmap',
+    '--assign_oetf', 'srgb',
+    path.join(assetDir, 'wall_albedo.ktx2'),
+    albedoPngPath,
+  ])
+  await runToktx([
+    '--t2',
+    '--encode', 'uastc',
+    '--uastc_quality', '2',
+    '--uastc_rdo_l', '0.75',
+    '--zcmp', '10',
+    '--genmipmap',
+    '--assign_oetf', 'linear',
+    path.join(assetDir, 'wall_normal.ktx2'),
+    normalPngPath,
+  ])
+  await runToktx([
+    '--t2',
+    '--encode', 'uastc',
+    '--uastc_quality', '2',
+    '--uastc_rdo_l', '1.25',
+    '--zcmp', '10',
+    '--genmipmap',
+    '--assign_oetf', 'linear',
+    path.join(assetDir, 'wall_ormh.ktx2'),
+    packedOrmHeightPngPath,
+  ])
+}
+
+async function runToktx(args) {
+  await new Promise((resolve, reject) => {
+    const child = spawn('toktx', args, {
+      cwd: repoRoot,
+      stdio: 'inherit',
+    })
+    child.on('error', (error) => {
+      reject(new Error(`Failed to run toktx. Install KTX-Software and ensure "toktx" is on PATH. ${error.message}`))
+    })
+    child.on('close', (code) => {
+      if (code === 0) {
+        resolve()
+      } else {
+        reject(new Error(`toktx exited with code ${code}`))
+      }
+    })
+  })
 }
 
 function createNormalMap(heightData, width, height, strength) {
@@ -168,7 +275,7 @@ function sampleHeight(data, width, height, x, y) {
   return data[clampedY * width + wrappedX]
 }
 
-async function writeGeneratedModules({ id, name, parallaxScale, parallaxSteps, parallaxInvert, bumpScale }) {
+async function writeGeneratedModules({ id, name, textureFormat, parallaxScale, parallaxSteps, parallaxInvert, bumpScale }) {
   const materialSetDir = path.join(repoRoot, 'editor/src/content-packs/dungeon/generated/wallMaterialSets')
   const wallStyleMaterialDir = path.join(repoRoot, 'editor/src/content-packs/dungeon/generated/wallStyleMaterials')
   await mkdir(materialSetDir, { recursive: true })
@@ -176,18 +283,18 @@ async function writeGeneratedModules({ id, name, parallaxScale, parallaxSteps, p
 
   await writeFile(
     path.join(materialSetDir, `${id}.ts`),
-    buildWallMaterialSetSource({ id, name, parallaxScale, parallaxSteps, parallaxInvert, bumpScale }),
+    buildWallMaterialSetSource({ id, name, textureFormat, parallaxScale, parallaxSteps, parallaxInvert, bumpScale }),
   )
   await writeFile(
     path.join(wallStyleMaterialDir, `${id}.ts`),
-    buildWallStyleMaterialSource({ id, parallaxScale, parallaxSteps, parallaxInvert, bumpScale }),
+    buildWallStyleMaterialSource({ id, textureFormat, parallaxScale, parallaxSteps, parallaxInvert, bumpScale }),
   )
 }
 
-async function upsertWallStyleRecipe({ id, name, force }) {
+async function upsertWallStyleRecipe({ id, name, textureFormat, force }) {
   const recipePath = path.join(repoRoot, 'editor/src/content-packs/dungeon/wallStyleRecipes.json')
   const recipes = JSON.parse(await readFile(recipePath, 'utf8'))
-  const recipe = buildAiWallStyleRecipe({ id, name })
+  const recipe = buildAiWallStyleRecipe({ id, name, textureFormat })
   const existingIndex = recipes.findIndex((candidate) => candidate.id === id)
 
   if (existingIndex >= 0) {
@@ -323,6 +430,15 @@ function readPositiveNumber(value, name) {
   return parsed
 }
 
+function parseTextureFormat(value) {
+  const normalized = String(value).trim().toLowerCase()
+  if (normalized === 'png' || normalized === 'ktx2' || normalized === 'both') {
+    return normalized
+  }
+
+  throw new Error('--texture-format must be one of: ktx2, png, both')
+}
+
 function calculateMean(buffer) {
   let total = 0
   for (const value of buffer) {
@@ -352,6 +468,8 @@ Options:
   --parallax-scale <value>   Runtime parallax amount. Default: 0.055.
   --parallax-steps <count>   Runtime parallax steps. Default: 10.
   --parallax-invert <bool>   Invert sampled height in shader. Default: false.
+  --texture-format <format>  Output format: ktx2, png, or both. Default: ktx2.
+  --skip-regenerate <bool>   Skip wall style index regeneration. Used by batch import.
   --force                    Overwrite generated files and recipe with the same id.
 `)
 }

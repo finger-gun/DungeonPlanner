@@ -1,0 +1,14 @@
+{
+  "id": "generated-forge-soot-with-heavily-charred-deep-violet-oak-grain-and-thick-layered-carbon-crusts-with-a-heavy-riveted-iron-ventilation-plate-frame-flush-with-the-wall-00001",
+  "name": "Forge Soot With Heavily Charred Deep Violet Oak Grain And Thick Layered Carbon Crusts, With A Heavy Riveted Iron Ventilation Plate Frame Flush With The Wall 00001",
+  "sourceImage": "/Volumes/output/Forge Soot with heavily charred Deep Violet oak grain and thick layered carbon crusts, with a heavy riveted iron ventilation plate frame flush with the wall-main_00001_.png",
+  "sourceDepth": "/Volumes/output/Forge Soot with heavily charred Deep Violet oak grain and thick layered carbon crusts, with a heavy riveted iron ventilation plate frame flush with the wall-depth_00001_.png",
+  "size": 1024,
+  "normalStrength": 4,
+  "parallaxScale": 0.12,
+  "parallaxSteps": 16,
+  "bumpScale": 0.16,
+  "parallaxInvert": true,
+  "textureFormat": "ktx2",
+  "heightMean": 0.3046
+}

@@ -1,0 +1,14 @@
+{
+  "id": "generated-dwarf-brick-with-heavy-geometric-chisel-marks-and-deep-recessed-charcoal-black-mortar-with-an-integrated-flat-pillar-decorated-with-geometric-dwarven-runes-00001",
+  "name": "Dwarf Brick With Heavy Geometric Chisel Marks And Deep Recessed Charcoal Black Mortar, With An Integrated Flat Pillar Decorated With Geometric Dwarven Runes 00001",
+  "sourceImage": "/Volumes/output/Dwarf Brick with heavy geometric chisel marks and deep recessed Charcoal Black mortar, with an integrated flat pillar decorated with geometric dwarven runes-main_00001_.png",
+  "sourceDepth": "/Volumes/output/Dwarf Brick with heavy geometric chisel marks and deep recessed Charcoal Black mortar, with an integrated flat pillar decorated with geometric dwarven runes-depth_00001_.png",
+  "size": 1024,
+  "normalStrength": 4,
+  "parallaxScale": 0.12,
+  "parallaxSteps": 16,
+  "bumpScale": 0.16,
+  "parallaxInvert": true,
+  "textureFormat": "ktx2",
+  "heightMean": 0.3329
+}

@@ -223,6 +223,7 @@ export type ContentPackWallMaterialTextures = {
   normalUrl?: string
   aoUrl?: string
   heightUrl?: string
+  packedOrmHeightUrl?: string
   displacementUrl?: string
   roughnessUrl?: string
   metallicUrl?: string
@@ -248,6 +249,7 @@ export type ContentPackWallMaterialShading = {
 export type ContentPackWallStyleMaterialUv = {
   verticalMode?: 'distance' | 'fit-height'
   verticalWrap?: 'repeat' | 'clamp'
+  flipV?: boolean
   flipVOnExterior?: boolean
 }
 
@@ -258,6 +260,15 @@ export type ContentPackWallMaterialSet = {
   textures: ContentPackWallMaterialTextures
   shading?: ContentPackWallMaterialShading
   uv?: ContentPackWallStyleMaterialUv
+}
+
+export type ContentPackWallStyleBrowserMetadata = {
+  family: string
+  variant?: string
+  colorway?: string
+  swatchColor?: string
+  tags?: readonly string[]
+  source?: 'built-in' | 'generated' | 'imported'
 }
 
 export type ContentPackWallStyleProfilePoint = readonly [number, number]
@@ -317,6 +328,7 @@ export type ContentPackWallStyle = {
   id: string
   name: string
   previewImageUrl?: string
+  browser?: ContentPackWallStyleBrowserMetadata
   structuralCore: ContentPackWallStyleLayer
   roomFace: ContentPackWallStyleLayer
   roomFaceDetails?: readonly ContentPackWallStyleLayer[]

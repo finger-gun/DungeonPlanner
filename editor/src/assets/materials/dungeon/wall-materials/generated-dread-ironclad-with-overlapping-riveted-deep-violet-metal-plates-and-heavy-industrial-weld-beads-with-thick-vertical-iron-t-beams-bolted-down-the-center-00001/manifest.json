@@ -1,0 +1,14 @@
+{
+  "id": "generated-dread-ironclad-with-overlapping-riveted-deep-violet-metal-plates-and-heavy-industrial-weld-beads-with-thick-vertical-iron-t-beams-bolted-down-the-center-00001",
+  "name": "Dread Ironclad With Overlapping Riveted Deep Violet Metal Plates And Heavy Industrial Weld Beads, With Thick Vertical Iron T Beams Bolted Down The Center 00001",
+  "sourceImage": "/Volumes/output/Dread Ironclad with overlapping riveted Deep Violet metal plates and heavy industrial weld beads, with thick vertical iron t-beams bolted down the center-main_00001_.png",
+  "sourceDepth": "/Volumes/output/Dread Ironclad with overlapping riveted Deep Violet metal plates and heavy industrial weld beads, with thick vertical iron t-beams bolted down the center-depth_00001_.png",
+  "size": 1024,
+  "normalStrength": 4,
+  "parallaxScale": 0.12,
+  "parallaxSteps": 16,
+  "bumpScale": 0.16,
+  "parallaxInvert": true,
+  "textureFormat": "ktx2",
+  "heightMean": 0.1725
+}

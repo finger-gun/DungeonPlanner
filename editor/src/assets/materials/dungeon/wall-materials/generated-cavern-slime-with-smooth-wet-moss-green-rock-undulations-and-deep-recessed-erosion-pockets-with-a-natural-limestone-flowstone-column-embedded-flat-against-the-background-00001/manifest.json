@@ -1,0 +1,14 @@
+{
+  "id": "generated-cavern-slime-with-smooth-wet-moss-green-rock-undulations-and-deep-recessed-erosion-pockets-with-a-natural-limestone-flowstone-column-embedded-flat-against-the-background-00001",
+  "name": "Cavern Slime With Smooth Wet Moss Green Rock Undulations And Deep Recessed Erosion Pockets, With A Natural Limestone Flowstone Column Embedded Flat Against The Background 00001",
+  "sourceImage": "/Volumes/output/Cavern Slime with smooth wet Moss Green rock undulations and deep recessed erosion pockets, with a natural limestone flowstone column embedded flat against the background-main_00001_.png",
+  "sourceDepth": "/Volumes/output/Cavern Slime with smooth wet Moss Green rock undulations and deep recessed erosion pockets, with a natural limestone flowstone column embedded flat against the background-depth_00001_.png",
+  "size": 1024,
+  "normalStrength": 4,
+  "parallaxScale": 0.12,
+  "parallaxSteps": 16,
+  "bumpScale": 0.16,
+  "parallaxInvert": true,
+  "textureFormat": "ktx2",
+  "heightMean": 0.2953
+}

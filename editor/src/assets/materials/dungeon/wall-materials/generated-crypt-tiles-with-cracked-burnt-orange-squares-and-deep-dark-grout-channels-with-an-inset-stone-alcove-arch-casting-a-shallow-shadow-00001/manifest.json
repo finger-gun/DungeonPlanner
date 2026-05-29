@@ -1,0 +1,14 @@
+{
+  "id": "generated-crypt-tiles-with-cracked-burnt-orange-squares-and-deep-dark-grout-channels-with-an-inset-stone-alcove-arch-casting-a-shallow-shadow-00001",
+  "name": "Crypt Tiles With Cracked Burnt Orange Squares And Deep Dark Grout Channels, With An Inset Stone Alcove Arch Casting A Shallow Shadow 00001",
+  "sourceImage": "/Volumes/output/Crypt Tiles with cracked Burnt Orange squares and deep dark-grout channels, with an inset stone alcove arch casting a shallow shadow-main_00001_.png",
+  "sourceDepth": "/Volumes/output/Crypt Tiles with cracked Burnt Orange squares and deep dark-grout channels, with an inset stone alcove arch casting a shallow shadow-depth_00001_.png",
+  "size": 1024,
+  "normalStrength": 4,
+  "parallaxScale": 0.12,
+  "parallaxSteps": 16,
+  "bumpScale": 0.16,
+  "parallaxInvert": true,
+  "textureFormat": "ktx2",
+  "heightMean": 0.3014
+}

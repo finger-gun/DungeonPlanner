@@ -136,7 +136,7 @@ export default defineConfig({
   define: {
     __PROJECT_ROOT__: JSON.stringify(editorDir),
   },
-  assetsInclude: ['**/*.glb', '**/*.gltf', '**/*.bin'],
+  assetsInclude: ['**/*.glb', '**/*.gltf', '**/*.bin', '**/*.ktx2'],
   plugins: [
     generatedCharacterDevFallback(),
     react({

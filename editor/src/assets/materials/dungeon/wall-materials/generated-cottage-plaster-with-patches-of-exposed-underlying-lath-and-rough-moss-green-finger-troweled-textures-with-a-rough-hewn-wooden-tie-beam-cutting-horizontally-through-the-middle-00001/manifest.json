@@ -1,0 +1,14 @@
+{
+  "id": "generated-cottage-plaster-with-patches-of-exposed-underlying-lath-and-rough-moss-green-finger-troweled-textures-with-a-rough-hewn-wooden-tie-beam-cutting-horizontally-through-the-middle-00001",
+  "name": "Cottage Plaster With Patches Of Exposed Underlying Lath And Rough Moss Green Finger Troweled Textures, With A Rough Hewn Wooden Tie Beam Cutting Horizontally Through The Middle 00001",
+  "sourceImage": "/Volumes/output/Cottage Plaster with patches of exposed underlying lath and rough Moss Green finger-troweled textures, with a rough-hewn wooden tie-beam cutting horizontally through the middle-main_00001_.png",
+  "sourceDepth": "/Volumes/output/Cottage Plaster with patches of exposed underlying lath and rough Moss Green finger-troweled textures, with a rough-hewn wooden tie-beam cutting horizontally through the middle-depth_00001_.png",
+  "size": 1024,
+  "normalStrength": 4,
+  "parallaxScale": 0.12,
+  "parallaxSteps": 16,
+  "bumpScale": 0.16,
+  "parallaxInvert": true,
+  "textureFormat": "ktx2",
+  "heightMean": 0.281
+}

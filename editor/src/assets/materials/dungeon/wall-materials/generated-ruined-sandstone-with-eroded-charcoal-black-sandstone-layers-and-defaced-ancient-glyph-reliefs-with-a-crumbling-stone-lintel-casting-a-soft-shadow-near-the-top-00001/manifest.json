@@ -1,0 +1,14 @@
+{
+  "id": "generated-ruined-sandstone-with-eroded-charcoal-black-sandstone-layers-and-defaced-ancient-glyph-reliefs-with-a-crumbling-stone-lintel-casting-a-soft-shadow-near-the-top-00001",
+  "name": "Ruined Sandstone With Eroded Charcoal Black Sandstone Layers And Defaced Ancient Glyph Reliefs, With A Crumbling Stone Lintel Casting A Soft Shadow Near The Top 00001",
+  "sourceImage": "/Volumes/output/Ruined Sandstone with eroded Charcoal Black sandstone layers and defaced ancient glyph reliefs, with a crumbling stone lintel casting a soft shadow near the top-main_00001_.png",
+  "sourceDepth": "/Volumes/output/Ruined Sandstone with eroded Charcoal Black sandstone layers and defaced ancient glyph reliefs, with a crumbling stone lintel casting a soft shadow near the top-depth_00001_.png",
+  "size": 1024,
+  "normalStrength": 4,
+  "parallaxScale": 0.12,
+  "parallaxSteps": 16,
+  "bumpScale": 0.16,
+  "parallaxInvert": true,
+  "textureFormat": "ktx2",
+  "heightMean": 0.2948
+}

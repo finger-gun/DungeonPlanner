@@ -1,0 +1,14 @@
+{
+  "id": "generated-grove-wood-with-living-interlocking-charcoal-black-bark-ridges-and-smooth-polished-burls-with-an-interwoven-lattice-of-living-roots-forming-a-natural-structural-border-00001",
+  "name": "Grove Wood With Living Interlocking Charcoal Black Bark Ridges And Smooth Polished Burls, With An Interwoven Lattice Of Living Roots Forming A Natural Structural Border 00001",
+  "sourceImage": "/Volumes/output/Grove Wood with living interlocking Charcoal Black bark ridges and smooth polished burls, with an interwoven lattice of living roots forming a natural structural border-main_00001_.png",
+  "sourceDepth": "/Volumes/output/Grove Wood with living interlocking Charcoal Black bark ridges and smooth polished burls, with an interwoven lattice of living roots forming a natural structural border-depth_00001_.png",
+  "size": 1024,
+  "normalStrength": 4,
+  "parallaxScale": 0.12,
+  "parallaxSteps": 16,
+  "bumpScale": 0.16,
+  "parallaxInvert": true,
+  "textureFormat": "ktx2",
+  "heightMean": 0.3237
+}

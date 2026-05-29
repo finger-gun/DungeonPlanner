@@ -1,0 +1,14 @@
+{
+  "id": "generated-fort-palisade-with-split-vertical-rust-brown-log-textures-and-thick-iron-binding-bands-with-a-massive-horizontal-wooden-cross-brace-securing-the-logs-together-00001",
+  "name": "Fort Palisade With Split Vertical Rust Brown Log Textures And Thick Iron Binding Bands, With A Massive Horizontal Wooden Cross Brace Securing The Logs Together 00001",
+  "sourceImage": "/Volumes/output/Fort Palisade with split vertical Rust Brown log textures and thick iron binding bands, with a massive horizontal wooden cross-brace securing the logs together-main_00001_.png",
+  "sourceDepth": "/Volumes/output/Fort Palisade with split vertical Rust Brown log textures and thick iron binding bands, with a massive horizontal wooden cross-brace securing the logs together-depth_00001_.png",
+  "size": 1024,
+  "normalStrength": 4,
+  "parallaxScale": 0.12,
+  "parallaxSteps": 16,
+  "bumpScale": 0.16,
+  "parallaxInvert": true,
+  "textureFormat": "ktx2",
+  "heightMean": 0.1528
+}

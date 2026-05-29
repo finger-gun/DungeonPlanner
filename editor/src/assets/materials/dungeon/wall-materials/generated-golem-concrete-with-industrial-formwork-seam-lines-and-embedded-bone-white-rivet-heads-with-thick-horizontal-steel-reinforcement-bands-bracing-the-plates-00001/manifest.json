@@ -1,0 +1,14 @@
+{
+  "id": "generated-golem-concrete-with-industrial-formwork-seam-lines-and-embedded-bone-white-rivet-heads-with-thick-horizontal-steel-reinforcement-bands-bracing-the-plates-00001",
+  "name": "Golem Concrete With Industrial Formwork Seam Lines And Embedded Bone White Rivet Heads, With Thick Horizontal Steel Reinforcement Bands Bracing The Plates 00001",
+  "sourceImage": "/Volumes/output/Golem Concrete with industrial formwork seam lines and embedded Bone White rivet heads, with thick horizontal steel reinforcement bands bracing the plates-main_00001_.png",
+  "sourceDepth": "/Volumes/output/Golem Concrete with industrial formwork seam lines and embedded Bone White rivet heads, with thick horizontal steel reinforcement bands bracing the plates-depth_00001_.png",
+  "size": 1024,
+  "normalStrength": 4,
+  "parallaxScale": 0.12,
+  "parallaxSteps": 16,
+  "bumpScale": 0.16,
+  "parallaxInvert": true,
+  "textureFormat": "ktx2",
+  "heightMean": 0.3072
+}

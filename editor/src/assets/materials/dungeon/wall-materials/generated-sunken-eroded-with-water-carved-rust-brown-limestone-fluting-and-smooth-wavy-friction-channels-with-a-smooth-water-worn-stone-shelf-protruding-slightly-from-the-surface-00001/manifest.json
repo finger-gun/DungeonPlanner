@@ -1,0 +1,14 @@
+{
+  "id": "generated-sunken-eroded-with-water-carved-rust-brown-limestone-fluting-and-smooth-wavy-friction-channels-with-a-smooth-water-worn-stone-shelf-protruding-slightly-from-the-surface-00001",
+  "name": "Sunken Eroded With Water Carved Rust Brown Limestone Fluting And Smooth Wavy Friction Channels, With A Smooth Water Worn Stone Shelf Protruding Slightly From The Surface 00001",
+  "sourceImage": "/Volumes/output/Sunken Eroded with water-carved Rust Brown limestone fluting and smooth wavy friction channels, with a smooth water-worn stone shelf protruding slightly from the surface-main_00001_.png",
+  "sourceDepth": "/Volumes/output/Sunken Eroded with water-carved Rust Brown limestone fluting and smooth wavy friction channels, with a smooth water-worn stone shelf protruding slightly from the surface-depth_00001_.png",
+  "size": 1024,
+  "normalStrength": 4,
+  "parallaxScale": 0.12,
+  "parallaxSteps": 16,
+  "bumpScale": 0.16,
+  "parallaxInvert": true,
+  "textureFormat": "ktx2",
+  "heightMean": 0.1363
+}

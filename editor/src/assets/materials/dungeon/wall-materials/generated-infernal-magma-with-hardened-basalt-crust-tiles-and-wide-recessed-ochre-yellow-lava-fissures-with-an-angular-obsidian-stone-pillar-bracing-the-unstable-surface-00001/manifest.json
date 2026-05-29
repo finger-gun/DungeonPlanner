@@ -1,0 +1,14 @@
+{
+  "id": "generated-infernal-magma-with-hardened-basalt-crust-tiles-and-wide-recessed-ochre-yellow-lava-fissures-with-an-angular-obsidian-stone-pillar-bracing-the-unstable-surface-00001",
+  "name": "Infernal Magma With Hardened Basalt Crust Tiles And Wide Recessed Ochre Yellow Lava Fissures, With An Angular Obsidian Stone Pillar Bracing The Unstable Surface 00001",
+  "sourceImage": "/Volumes/output/Infernal Magma with hardened basalt crust tiles and wide recessed Ochre Yellow lava fissures, with an angular obsidian stone pillar bracing the unstable surface-main_00001_.png",
+  "sourceDepth": "/Volumes/output/Infernal Magma with hardened basalt crust tiles and wide recessed Ochre Yellow lava fissures, with an angular obsidian stone pillar bracing the unstable surface-depth_00001_.png",
+  "size": 1024,
+  "normalStrength": 4,
+  "parallaxScale": 0.12,
+  "parallaxSteps": 16,
+  "bumpScale": 0.16,
+  "parallaxInvert": true,
+  "textureFormat": "ktx2",
+  "heightMean": 0.1421
+}

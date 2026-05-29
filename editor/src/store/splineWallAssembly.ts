@@ -3,6 +3,11 @@ import {
   getContentPackWallStyleById,
   getDefaultContentPackWallStyleId,
 } from '../content-packs/registry'
+import {
+  getDefaultExteriorWallStyleId,
+  getDefaultInteriorWallStyleId,
+  getDefaultWallStyleId,
+} from './defaultWallStyles'
 import type {
   ContentPackWallStyleLayer,
   ContentPackWallStyleLayerRender,
@@ -91,7 +96,9 @@ export function buildSplineWallAssemblySections({
   rooms?: Readonly<Record<string, Room>>
   contentPackId?: string
 }): SplineWallAssemblySection[] {
-  const defaultWallStyleId = getDefaultContentPackWallStyleId(contentPackId)
+  const defaultWallStyleId = contentPackId === 'dungeon'
+    ? getDefaultWallStyleId()
+    : getDefaultContentPackWallStyleId(contentPackId)
   if (!defaultWallStyleId) {
     return []
   }
@@ -197,7 +204,17 @@ function resolveFaceWallStyleId(
 
   const roomSetId = section.roomId ? rooms[section.roomId]?.roomSetId : null
   const roomSetWallStyleId = getContentPackRoomSetById(contentPackId, roomSetId)?.wallStyleId
-  return roomSetWallStyleId ?? defaultWallStyleId
+  if (roomSetWallStyleId) {
+    return roomSetWallStyleId
+  }
+
+  if (contentPackId !== 'dungeon') {
+    return defaultWallStyleId
+  }
+
+  return section.faceKind === 'room-face'
+    ? getDefaultInteriorWallStyleId()
+    : getDefaultExteriorWallStyleId()
 }
 
 function resolveStructuralWallStyleId({

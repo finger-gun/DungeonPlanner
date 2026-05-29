@@ -82,6 +82,23 @@ describe('RoomToolPanel', () => {
     expect(useDungeonStore.getState().activeExteriorWallStyleId).toBe('ai-gothic')
   })
 
+  it('filters generated wall styles by search and material category', () => {
+    render(<RoomToolPanel />)
+
+    expect(screen.getByRole('button', { name: 'Interior Wall: Castle Stone' })).toBeInTheDocument()
+
+    fireEvent.change(screen.getByLabelText('Interior Wall search'), { target: { value: 'marble' } })
+
+    expect(screen.getByRole('button', { name: 'Interior Wall: Palace Marble' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Interior Wall: Castle Stone' })).not.toBeInTheDocument()
+
+    fireEvent.change(screen.getByLabelText('Interior Wall search'), { target: { value: '' } })
+    fireEvent.click(screen.getAllByRole('button', { name: 'Wood' })[0])
+
+    expect(screen.getByRole('button', { name: 'Interior Wall: Elven Wood' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Interior Wall: Palace Marble' })).not.toBeInTheDocument()
+  })
+
   it('applies interior and exterior wall styles to the selected room', () => {
     const state = useDungeonStore.getState()
     state.setActiveInteriorWallStyleId('rocky-cave')

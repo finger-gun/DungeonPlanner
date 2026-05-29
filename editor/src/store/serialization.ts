@@ -10,10 +10,14 @@ import {
   getDefaultAssetIdByCategory,
   getDefaultContentPackRoomSetId,
   getDefaultContentPackWallMaterialSetId,
-  getDefaultContentPackWallStyleId,
   getContentPackWallStyleById,
 } from '../content-packs/registry'
 import { sanitizePersistedAssetReferences } from './assetReferences'
+import {
+  getDefaultExteriorWallStyleId,
+  getDefaultInteriorWallStyleId,
+  getDefaultWallStyleId,
+} from './defaultWallStyles'
 import { buildSplineWallOpeningPlacement } from './openingPlacement'
 import {
   DEFAULT_POST_PROCESSING_SETTINGS,
@@ -1157,13 +1161,9 @@ function parseFloorData(raw: Record<string, unknown>): {
     activeWallMaterialSetId:
       typeof raw.activeWallMaterialSetId === 'string' ? raw.activeWallMaterialSetId : getDefaultWallMaterialSetId(),
     activeInteriorWallStyleId:
-      sanitizeWallStyleId(raw.activeInteriorWallStyleId, getDefaultWallStyleIdForRoomSet(
-        typeof raw.activeRoomSetId === 'string' ? raw.activeRoomSetId : getDefaultRoomSetId(),
-      )),
+      sanitizeWallStyleId(raw.activeInteriorWallStyleId, getDefaultInteriorWallStyleId()),
     activeExteriorWallStyleId:
-      sanitizeWallStyleId(raw.activeExteriorWallStyleId, getDefaultWallStyleIdForRoomSet(
-        typeof raw.activeRoomSetId === 'string' ? raw.activeRoomSetId : getDefaultRoomSetId(),
-      )),
+      sanitizeWallStyleId(raw.activeExteriorWallStyleId, getDefaultExteriorWallStyleId()),
   }
 }
 
@@ -1384,10 +1384,6 @@ function getDefaultRoomSetId() {
 
 function getDefaultWallMaterialSetId() {
   return getDefaultContentPackWallMaterialSetId(WALL_MATERIAL_SET_CONTENT_PACK_ID) ?? FALLBACK_WALL_MATERIAL_SET_ID
-}
-
-function getDefaultWallStyleId() {
-  return getDefaultContentPackWallStyleId(ROOM_SET_CONTENT_PACK_ID) ?? 'dungeon-stone'
 }
 
 function getDefaultWallStyleIdForRoomSet(roomSetId: string) {

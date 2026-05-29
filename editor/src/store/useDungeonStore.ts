@@ -6,7 +6,6 @@ import {
   getDefaultContentPackRoomSetId,
   getDefaultContentPackWallMaterialSetId,
   getDefaultAssetIdByCategory,
-  getDefaultContentPackWallStyleId,
   getContentPackWallStyleById,
 } from '../content-packs/registry'
 import { getCellKey, type GridCell } from '../hooks/useSnapToGrid'
@@ -20,6 +19,10 @@ import {
 } from '../generated-characters/types'
 import { serializeDungeon, deserializeDungeon } from './serialization'
 import { sanitizePersistedAssetReferences } from './assetReferences'
+import {
+  getDefaultExteriorWallStyleId,
+  getDefaultInteriorWallStyleId,
+} from './defaultWallStyles'
 import { getOpeningSegments } from './openingSegments'
 import { buildSplineWallOpeningPlacement, doOpeningsOverlap } from './openingPlacement'
 import { buildSplineWallGraphFromPaintedCells } from './splineWalls'
@@ -556,8 +559,6 @@ const ROOM_SET_CONTENT_PACK_ID = 'dungeon'
 const FALLBACK_ROOM_SET_ID = 'dungeon'
 const WALL_MATERIAL_SET_CONTENT_PACK_ID = 'dungeon'
 const FALLBACK_WALL_MATERIAL_SET_ID = 'kaykit-stone'
-const WALL_STYLE_CONTENT_PACK_ID = 'dungeon'
-const FALLBACK_WALL_STYLE_ID = 'dungeon-stone'
 const SURROUNDING_FOREST_TAG = 'surrounding-forest'
 const DEFAULT_OUTDOOR_TERRAIN_PROFILES: Record<OutdoorTerrainType, OutdoorTerrainProfile> = {
   mixed: { density: 'medium', overpaintRegenerate: false },
@@ -599,10 +600,6 @@ function getDefaultRoomSetId() {
 
 function getDefaultWallMaterialSetId() {
   return getDefaultContentPackWallMaterialSetId(WALL_MATERIAL_SET_CONTENT_PACK_ID) ?? FALLBACK_WALL_MATERIAL_SET_ID
-}
-
-function getDefaultWallStyleId() {
-  return getDefaultContentPackWallStyleId(WALL_STYLE_CONTENT_PACK_ID) ?? FALLBACK_WALL_STYLE_ID
 }
 
 function cloneSnapshot(snapshot: DungeonSnapshot): DungeonSnapshot {
@@ -997,8 +994,8 @@ function createEmptySnapshot(): DungeonSnapshot {
     tool: 'select',
     activeRoomSetId: getDefaultRoomSetId(),
     activeWallMaterialSetId: getDefaultWallMaterialSetId(),
-    activeInteriorWallStyleId: getDefaultWallStyleId(),
-    activeExteriorWallStyleId: getDefaultWallStyleId(),
+    activeInteriorWallStyleId: getDefaultInteriorWallStyleId(),
+    activeExteriorWallStyleId: getDefaultExteriorWallStyleId(),
     selectedAssetIds: {
       floor: getDefaultAssetIdByCategory('floor'),
       wall: getDefaultAssetIdByCategory('wall'),
@@ -5421,8 +5418,8 @@ export const useDungeonStore = create<DungeonState>()(
         state.future = normalizeHistoryEntries(state.future)
         state.wallStyleAssignments = state.wallStyleAssignments ?? {}
         state.wallCoreAssignments = state.wallCoreAssignments ?? {}
-        state.activeInteriorWallStyleId = state.activeInteriorWallStyleId ?? getDefaultWallStyleId()
-        state.activeExteriorWallStyleId = state.activeExteriorWallStyleId ?? getDefaultWallStyleId()
+        state.activeInteriorWallStyleId = state.activeInteriorWallStyleId ?? getDefaultInteriorWallStyleId()
+        state.activeExteriorWallStyleId = state.activeExteriorWallStyleId ?? getDefaultExteriorWallStyleId()
         state.innerWalls = state.innerWalls ?? {}
         state.splineWallGraph = syncOpeningCutoutsIntoSplineWallGraph(
           cloneSplineWallGraph(state.splineWallGraph),
@@ -5435,8 +5432,8 @@ export const useDungeonStore = create<DungeonState>()(
         Object.values(state.floors ?? {}).forEach((floor) => {
           floor.snapshot.wallStyleAssignments = floor.snapshot.wallStyleAssignments ?? {}
           floor.snapshot.wallCoreAssignments = floor.snapshot.wallCoreAssignments ?? {}
-          floor.snapshot.activeInteriorWallStyleId = floor.snapshot.activeInteriorWallStyleId ?? getDefaultWallStyleId()
-          floor.snapshot.activeExteriorWallStyleId = floor.snapshot.activeExteriorWallStyleId ?? getDefaultWallStyleId()
+          floor.snapshot.activeInteriorWallStyleId = floor.snapshot.activeInteriorWallStyleId ?? getDefaultInteriorWallStyleId()
+          floor.snapshot.activeExteriorWallStyleId = floor.snapshot.activeExteriorWallStyleId ?? getDefaultExteriorWallStyleId()
           floor.snapshot.innerWalls = floor.snapshot.innerWalls ?? {}
           floor.snapshot.splineWallGraph = syncOpeningCutoutsIntoSplineWallGraph(
             cloneSplineWallGraph(floor.snapshot.splineWallGraph),

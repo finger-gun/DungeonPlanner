@@ -53,6 +53,7 @@ import {
 import { useHasContinuousRenderRequests } from '../../rendering/renderActivity'
 import { pruneFloorLightComputeBridge } from '../../rendering/gpu'
 import { shouldEnableActiveFloorPostProcessing } from './webgpuPostProcessingMode'
+import { getSceneOverviewFloorY } from './floorOverviewLayout'
 
 const WebGPUPostProcessing = lazy(() =>
   import('./WebGPUPostProcessing').then((module) => ({
@@ -66,7 +67,6 @@ const FireParticleSystem = lazy(() =>
   })),
 )
 
-const SCENE_OVERVIEW_FLOOR_HEIGHT_UNIT = 3
 const LIGHT_RIG_SHADOWS_ENABLED = true
 const PLAYER_ANIMATION_MS = {
   pickup: 520,
@@ -449,7 +449,7 @@ function SceneOverviewContent() {
         </Suspense>
       )}
       {floorEntries.map((entry) => (
-        <group key={entry.id} position={[0, entry.level * SCENE_OVERVIEW_FLOOR_HEIGHT_UNIT, 0]}>
+        <group key={entry.id} position={[0, getSceneOverviewFloorY(entry.level), 0]}>
           <DungeonRoom
             derived={entry.derived}
             bakedLightField={entry.bakedLightField}

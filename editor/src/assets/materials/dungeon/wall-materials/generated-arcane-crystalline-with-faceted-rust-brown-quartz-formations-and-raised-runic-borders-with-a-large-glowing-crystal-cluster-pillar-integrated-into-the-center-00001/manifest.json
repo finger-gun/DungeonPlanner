@@ -1,0 +1,14 @@
+{
+  "id": "generated-arcane-crystalline-with-faceted-rust-brown-quartz-formations-and-raised-runic-borders-with-a-large-glowing-crystal-cluster-pillar-integrated-into-the-center-00001",
+  "name": "Arcane Crystalline With Faceted Rust Brown Quartz Formations And Raised Runic Borders, With A Large Glowing Crystal Cluster Pillar Integrated Into The Center 00001",
+  "sourceImage": "/Volumes/output/Arcane Crystalline with faceted Rust Brown quartz formations and raised runic borders, with a large glowing crystal cluster pillar integrated into the center-main_00001_.png",
+  "sourceDepth": "/Volumes/output/Arcane Crystalline with faceted Rust Brown quartz formations and raised runic borders, with a large glowing crystal cluster pillar integrated into the center-depth_00001_.png",
+  "size": 1024,
+  "normalStrength": 4,
+  "parallaxScale": 0.12,
+  "parallaxSteps": 16,
+  "bumpScale": 0.16,
+  "parallaxInvert": true,
+  "textureFormat": "ktx2",
+  "heightMean": 0.2267
+}

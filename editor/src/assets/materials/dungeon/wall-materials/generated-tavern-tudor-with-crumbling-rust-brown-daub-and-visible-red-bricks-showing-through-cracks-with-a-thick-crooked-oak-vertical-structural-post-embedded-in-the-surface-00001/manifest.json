@@ -1,0 +1,14 @@
+{
+  "id": "generated-tavern-tudor-with-crumbling-rust-brown-daub-and-visible-red-bricks-showing-through-cracks-with-a-thick-crooked-oak-vertical-structural-post-embedded-in-the-surface-00001",
+  "name": "Tavern Tudor With Crumbling Rust Brown Daub And Visible Red Bricks Showing Through Cracks, With A Thick Crooked Oak Vertical Structural Post Embedded In The Surface 00001",
+  "sourceImage": "/Volumes/output/Tavern Tudor with crumbling Rust Brown daub and visible red bricks showing through cracks, with a thick crooked oak vertical structural post embedded in the surface-main_00001_.png",
+  "sourceDepth": "/Volumes/output/Tavern Tudor with crumbling Rust Brown daub and visible red bricks showing through cracks, with a thick crooked oak vertical structural post embedded in the surface-depth_00001_.png",
+  "size": 1024,
+  "normalStrength": 4,
+  "parallaxScale": 0.12,
+  "parallaxSteps": 16,
+  "bumpScale": 0.16,
+  "parallaxInvert": true,
+  "textureFormat": "ktx2",
+  "heightMean": 0.2542
+}

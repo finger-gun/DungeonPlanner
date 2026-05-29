@@ -1,0 +1,14 @@
+{
+  "id": "generated-volcanic-obsidian-with-glassy-conchoidal-fractures-and-sharp-stepped-bone-white-rock-edges-with-a-heavy-interlocking-basalt-column-structure-framing-the-side-00001",
+  "name": "Volcanic Obsidian With Glassy Conchoidal Fractures And Sharp Stepped Bone White Rock Edges, With A Heavy Interlocking Basalt Column Structure Framing The Side 00001",
+  "sourceImage": "/Volumes/output/Volcanic Obsidian with glassy conchoidal fractures and sharp stepped Bone White rock edges, with a heavy interlocking basalt column structure framing the side-main_00001_.png",
+  "sourceDepth": "/Volumes/output/Volcanic Obsidian with glassy conchoidal fractures and sharp stepped Bone White rock edges, with a heavy interlocking basalt column structure framing the side-depth_00001_.png",
+  "size": 1024,
+  "normalStrength": 4,
+  "parallaxScale": 0.12,
+  "parallaxSteps": 16,
+  "bumpScale": 0.16,
+  "parallaxInvert": true,
+  "textureFormat": "ktx2",
+  "heightMean": 0.3006
+}

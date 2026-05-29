@@ -1,0 +1,14 @@
+{
+  "id": "generated-glacier-ice-with-translucent-packed-bone-white-frost-steps-and-deep-internal-fracture-lines-with-a-thick-structural-ice-pillar-projecting-slightly-from-the-wall-sheet-00001",
+  "name": "Glacier Ice With Translucent Packed Bone White Frost Steps And Deep Internal Fracture Lines, With A Thick Structural Ice Pillar Projecting Slightly From The Wall Sheet 00001",
+  "sourceImage": "/Volumes/output/Glacier Ice with translucent packed Bone White frost steps and deep internal fracture lines, with a thick structural ice pillar projecting slightly from the wall sheet-main_00001_.png",
+  "sourceDepth": "/Volumes/output/Glacier Ice with translucent packed Bone White frost steps and deep internal fracture lines, with a thick structural ice pillar projecting slightly from the wall sheet-depth_00001_.png",
+  "size": 1024,
+  "normalStrength": 4,
+  "parallaxScale": 0.12,
+  "parallaxSteps": 16,
+  "bumpScale": 0.16,
+  "parallaxInvert": true,
+  "textureFormat": "ktx2",
+  "heightMean": 0.2829
+}

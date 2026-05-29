@@ -5,7 +5,9 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import {
   deriveWallTextureNameFromPrompt,
+  deriveWallTextureNameFromFilename,
   extractComfyPositivePrompt,
+  pairTextureDepthFilename,
   parseBooleanFlag,
   slugifyWallAssetId,
 } from './create-ai-wall-asset-utils.mjs'
@@ -30,6 +32,8 @@ async function main(rawOptions) {
   const texturePrefix = rawOptions['texture-prefix'] ?? 'wall-texture-'
   const depthPrefix = rawOptions['depth-prefix'] ?? 'wall-depth-'
   const depthSuffix = rawOptions['depth-suffix']
+  const textureToken = rawOptions['texture-token']
+  const depthToken = rawOptions['depth-token']
   const idPrefix = rawOptions['id-prefix'] ?? 'interior'
   const force = parseBooleanFlag(rawOptions.force, false)
   const parallaxInvert = parseBooleanFlag(rawOptions['parallax-invert'], true)
@@ -37,11 +41,18 @@ async function main(rawOptions) {
   const parallaxSteps = rawOptions['parallax-steps'] ?? '16'
   const bumpScale = rawOptions['bump-scale'] ?? '0.16'
   const normalStrength = rawOptions['normal-strength'] ?? '4'
+  const textureFormat = rawOptions['texture-format'] ?? 'ktx2'
 
   const entries = await readdir(dir)
   const textureFiles = entries
     .filter((entry) => {
-      if (!entry.startsWith(texturePrefix) || !entry.toLowerCase().endsWith('.png')) {
+      if (!entry.toLowerCase().endsWith('.png')) {
+        return false
+      }
+      if (textureToken) {
+        return entry.includes(textureToken)
+      }
+      if (!entry.startsWith(texturePrefix)) {
         return false
       }
       return !depthSuffix || !entry.endsWith(depthSuffix)
@@ -55,8 +66,16 @@ async function main(rawOptions) {
   const skipped = []
   const jobs = []
   for (const textureFile of textureFiles) {
-    const suffix = textureFile.slice(texturePrefix.length)
-    const depthFile = depthSuffix ? `${textureFile}${depthSuffix}` : `${depthPrefix}${suffix}`
+    const suffix = textureToken
+      ? (textureFile.match(/(\d+)_?\.png$/i)?.[1] ?? '')
+      : textureFile.slice(texturePrefix.length).replace(/\.png$/i, '')
+    const depthFile = pairTextureDepthFilename(textureFile, {
+      textureToken,
+      depthToken,
+      depthSuffix,
+      texturePrefix,
+      depthPrefix,
+    })
     const imagePath = path.join(dir, textureFile)
     const depthPath = path.join(dir, depthFile)
     if (!(await isFile(depthPath))) {
@@ -65,10 +84,12 @@ async function main(rawOptions) {
     }
 
     const prompt = extractComfyPositivePrompt(await readFile(imagePath))
-    const baseName = deriveWallTextureNameFromPrompt(prompt)
-    const sequence = suffix.replace(/\.png$/i, '').replace(/[^0-9a-z]+/gi, '')
-    const name = `${baseName} ${sequence}`
-    const id = slugifyWallAssetId(`${idPrefix}-${baseName}-${sequence}`)
+    const baseName = prompt
+      ? deriveWallTextureNameFromPrompt(prompt)
+      : deriveWallTextureNameFromFilename(textureFile, textureToken)
+    const sequence = suffix.replace(/[^0-9a-z]+/gi, '')
+    const name = sequence ? `${baseName} ${sequence}` : baseName
+    const id = slugifyWallAssetId(sequence ? `${idPrefix}-${baseName}-${sequence}` : `${idPrefix}-${baseName}`)
 
     jobs.push({ id, name, imagePath, depthPath })
   }
@@ -93,9 +114,12 @@ async function main(rawOptions) {
       parallaxSteps,
       bumpScale,
       normalStrength,
+      textureFormat,
     })
     imported.push(`${job.name} (${job.id})`)
   }
+
+  await regenerateWallStyles()
 
   console.log(`Imported ${imported.length} AI wall assets from ${dir}`)
   if (skipped.length > 0) {
@@ -164,6 +188,7 @@ async function runCreateWallAsset({
   parallaxSteps,
   bumpScale,
   normalStrength,
+  textureFormat,
 }) {
   const args = [
     'scripts/create-ai-wall-asset.mjs',
@@ -177,6 +202,8 @@ async function runCreateWallAsset({
     depthPath,
     '--normal-strength',
     normalStrength,
+    '--texture-format',
+    textureFormat,
     '--bump-scale',
     bumpScale,
     '--parallax-scale',
@@ -185,6 +212,8 @@ async function runCreateWallAsset({
     parallaxSteps,
     '--parallax-invert',
     String(parallaxInvert),
+    '--skip-regenerate',
+    'true',
   ]
   if (force) {
     args.push('--force')
@@ -201,6 +230,23 @@ async function runCreateWallAsset({
         resolve()
       } else {
         reject(new Error(`create-ai-wall-asset exited with code ${code}`))
+      }
+    })
+  })
+}
+
+async function regenerateWallStyles() {
+  await new Promise((resolve, reject) => {
+    const child = spawn(process.execPath, ['scripts/generate-wall-styles.mjs'], {
+      cwd: repoRoot,
+      stdio: 'inherit',
+    })
+    child.on('error', reject)
+    child.on('close', (code) => {
+      if (code === 0) {
+        resolve()
+      } else {
+        reject(new Error(`generate-wall-styles exited with code ${code}`))
       }
     })
   })
@@ -267,12 +313,15 @@ Options:
   --texture-prefix <prefix>  Source texture prefix. Default: wall-texture-
   --depth-prefix <prefix>    Source depth prefix. Default: wall-depth-
   --depth-suffix <suffix>    Pair depth as texture filename plus suffix.
+  --texture-token <token>    Pair by replacing this token in texture filenames.
+  --depth-token <token>      Replacement token for depth filenames.
   --id-prefix <prefix>       Prefix for generated content ids. Default: interior.
   --normal-strength <value>  Normal-map strength. Default: 4.
   --bump-scale <value>       Height-map bump amount. Default: 0.16.
   --parallax-scale <value>   Runtime parallax amount. Default: 0.12.
   --parallax-steps <count>   Runtime parallax steps. Default: 16.
   --parallax-invert <bool>   Invert sampled height in shader. Default: true.
+  --texture-format <format>  Output format: ktx2, png, or both. Default: ktx2.
   --force                    Overwrite generated outputs with the same ids.
 `)
 }

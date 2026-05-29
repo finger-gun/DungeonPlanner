@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from 'react'
 import { useThree, type ThreeEvent } from '@react-three/fiber'
-import { useTexture } from '@react-three/drei'
 import * as THREE from 'three'
 import { getContentPackRoomSetById } from '../../content-packs/registry'
 import { getCellKey, GRID_SIZE } from '../../hooks/useSnapToGrid'
@@ -33,6 +32,7 @@ import {
   getSplineWallSegmentQueryData,
   sampleSplineWallSegment,
   type SplineWallQueryCache,
+  type SplineWallSegmentQueryData,
 } from '../../store/splineWallQueries'
 import {
   deriveSplineWallAssemblyData,
@@ -57,6 +57,10 @@ import {
 } from '../../store/useDungeonStore'
 import { shouldRenderLineOfSightGeometry } from './losRendering'
 import { getRoomVisibilityState, type PlayVisibility, type PlayVisibilityState } from './playVisibility'
+import type {
+  AnalyzedSplineWallBoundaryAnchor,
+  AnalyzedSplineWallBoundaryPath,
+} from '../../store/splineWallStyleAnalysis'
 import {
   applySplineWallDisplacementNodes,
   applySplineWallParallaxNodes,
@@ -65,6 +69,7 @@ import {
   type SplineWallMaterialPreset,
   type SplineWallPbrTextures,
   useSplineWallMaterialLibrary,
+  useWallMaterialTextureMap,
 } from './splineWallMaterial'
 import { useRegisteredLightSources } from './objectSourceRegistry'
 import {
@@ -109,6 +114,13 @@ const AUTOFOCUS_PROXY_MATERIAL = new THREE.MeshBasicMaterial({
   side: THREE.DoubleSide,
 })
 const SPLINE_WALL_SECTION_MAX_MITER_SCALE = 2
+const SPLINE_WALL_TRIM_HEIGHT = DEFAULT_SPLINE_WALL_HEIGHT + 0.015
+const SPLINE_WALL_TRIM_Y = SPLINE_WALL_TRIM_HEIGHT / 2
+const SPLINE_WALL_CORNER_PILLAR_SIZE = GRID_SIZE * 0.22
+const SPLINE_WALL_CORNER_PILLAR_SURFACE_INSET = SPLINE_WALL_CORNER_PILLAR_SIZE * 0.15
+const SPLINE_WALL_TEXTURE_SEAM_TRIM_WIDTH = GRID_SIZE * 0.055
+const SPLINE_WALL_TEXTURE_SEAM_TRIM_DEPTH = GRID_SIZE * 0.045
+const SPLINE_WALL_TEXTURE_SEAM_TRIM_EDGE_MARGIN = GRID_SIZE * 0.18
 
 type SplineNodeDragState = {
   nodeId: string
@@ -348,6 +360,17 @@ export function SplineWallLayer({
       assemblySections: assemblySections.filter((section) => section.layerKind !== 'structural-core'),
     }),
     [analyzedBoundaries, assemblySections],
+  )
+  const proceduralTrimDescriptors = useMemo(
+    () => hasGraphWalls
+      ? buildSplineWallProceduralTrimDescriptors({
+          analyzedBoundaries,
+          assemblySections,
+          openingDescriptors,
+          queryCache: wallQueryCache,
+        })
+      : [],
+    [analyzedBoundaries, assemblySections, hasGraphWalls, openingDescriptors, wallQueryCache],
   )
   const selectedWallSection = useMemo(
     () => parseSplineWallSegmentSideSelectionKey(selection),
@@ -604,6 +627,19 @@ export function SplineWallLayer({
             descriptor={descriptor}
             queryCache={wallQueryCache}
             bakedLightField={bakedLightField}
+          />
+        )
+      })}
+      {proceduralTrimDescriptors.map((descriptor) => {
+        const roomVisibility = getSplineWallProceduralTrimVisibility(descriptor, roomVisibilityById, visibility.active)
+        if (!shouldRenderLineOfSightGeometry(roomVisibility, visibility.active)) {
+          return null
+        }
+
+        return (
+          <SplineWallProceduralTrim
+            key={descriptor.id}
+            descriptor={descriptor}
           />
         )
       })}
@@ -961,6 +997,189 @@ function SplineWallSemanticInsert({
   )
 }
 
+export type SplineWallProceduralTrimDescriptor = {
+  id: string
+  kind: 'corner-pillar' | 'texture-seam-pillar'
+  roomIds: readonly string[]
+  section: SplineWallAssemblySection
+  position: readonly [number, number]
+  normal: readonly [number, number]
+}
+
+function SplineWallProceduralTrim({
+  descriptor,
+}: {
+  descriptor: SplineWallProceduralTrimDescriptor
+}) {
+  const textures = useSplineWallStyleTextures(descriptor.section.material)
+  const material = useMemo(() => createSplineWallStyleMaterial(descriptor.section, textures, {
+    polygonOffsetFactor: -3,
+    polygonOffsetUnits: -3,
+    disableParallax: true,
+  }), [descriptor.section, textures])
+  const geometry = useMemo(() => createSplineWallTrimBoxGeometry(
+    descriptor.kind === 'corner-pillar' ? SPLINE_WALL_CORNER_PILLAR_SIZE : SPLINE_WALL_TEXTURE_SEAM_TRIM_WIDTH,
+    SPLINE_WALL_TRIM_HEIGHT,
+    descriptor.kind === 'corner-pillar' ? SPLINE_WALL_CORNER_PILLAR_SIZE : SPLINE_WALL_TEXTURE_SEAM_TRIM_DEPTH,
+    descriptor.section,
+    { uvMode: descriptor.kind === 'corner-pillar' ? 'corner-edge-wrap' : 'default' },
+  ), [descriptor.kind, descriptor.section])
+  useEffect(() => () => material.dispose(), [material])
+  useEffect(() => () => geometry.dispose(), [geometry])
+
+  if (descriptor.kind === 'corner-pillar') {
+    return (
+      <mesh
+        position={[descriptor.position[0], SPLINE_WALL_TRIM_Y, descriptor.position[1]]}
+        castShadow
+        receiveShadow
+        raycast={noRaycast}
+        renderOrder={3}
+        material={material}
+        geometry={geometry}
+      />
+    )
+  }
+
+  const normal = descriptor.normal ?? [0, 1]
+  const offset = SPLINE_WALL_TEXTURE_SEAM_TRIM_DEPTH * 0.5
+  const rotationY = Math.atan2(normal[0], normal[1])
+  return (
+    <mesh
+      position={[
+        descriptor.position[0] + (normal[0] * offset),
+        SPLINE_WALL_TRIM_Y,
+        descriptor.position[1] + (normal[1] * offset),
+      ]}
+      rotation={[0, rotationY, 0]}
+      castShadow
+      receiveShadow
+      raycast={noRaycast}
+      renderOrder={3}
+      material={material}
+      geometry={geometry}
+    />
+  )
+}
+
+function getSplineWallProceduralTrimVisibility(
+  descriptor: SplineWallProceduralTrimDescriptor,
+  roomVisibilityById: ReadonlyMap<string, PlayVisibilityState>,
+  visibilityActive: boolean,
+): PlayVisibilityState {
+  if (!visibilityActive || descriptor.roomIds.length === 0) {
+    return 'visible'
+  }
+
+  if (descriptor.roomIds.some((roomId) => roomVisibilityById.get(roomId) === 'visible')) {
+    return 'visible'
+  }
+
+  if (descriptor.roomIds.some((roomId) => roomVisibilityById.get(roomId) === 'explored')) {
+    return 'explored'
+  }
+
+  return 'hidden'
+}
+
+export function createSplineWallTrimBoxGeometry(
+  width: number,
+  height: number,
+  depth: number,
+  section: SplineWallAssemblySection,
+  options: {
+    uvMode?: 'default' | 'corner-edge-wrap'
+  } = {},
+) {
+  const geometry = new THREE.BoxGeometry(width, height, depth)
+  applySplineWallTrimBoxUvs(geometry, width, height, depth, section, options)
+  return geometry
+}
+
+function applySplineWallTrimBoxUvs(
+  geometry: THREE.BufferGeometry,
+  width: number,
+  height: number,
+  depth: number,
+  section: SplineWallAssemblySection,
+  options: {
+    uvMode?: 'default' | 'corner-edge-wrap'
+  },
+) {
+  const uvAttribute = geometry.getAttribute('uv')
+  if (!uvAttribute || uvAttribute.count < 24) {
+    return
+  }
+
+  const resolvedWallHeight = getSectionResolvedWallHeight(section)
+  const verticalSpan = section.material.uv?.verticalMode === 'fit-height'
+    ? 1
+    : height
+  const faceUvSpans: Array<readonly [number, number]> = [
+    [depth, height],
+    [depth, height],
+    [width, depth],
+    [width, depth],
+    [width, height],
+    [width, height],
+  ].map(([faceWidth, faceHeight]) => [
+    getSectionUvU(section, faceWidth, resolvedWallHeight),
+    faceHeight === height ? verticalSpan : faceHeight,
+  ] as const)
+
+  faceUvSpans.forEach(([uSpan, vSpan], faceIndex) => {
+    const vertexOffset = faceIndex * 4
+    const uRange = getTrimBoxFaceUvRange(section, faceIndex, uSpan, options.uvMode ?? 'default')
+    setTrimBoxFaceUv(
+      uvAttribute,
+      vertexOffset,
+      uRange[0],
+      uRange[1],
+      vSpan,
+      shouldFlipSectionUvV(section),
+    )
+  })
+
+  uvAttribute.needsUpdate = true
+}
+
+function setTrimBoxFaceUv(
+  uvAttribute: THREE.BufferAttribute | THREE.InterleavedBufferAttribute,
+  vertexOffset: number,
+  minU: number,
+  maxU: number,
+  vSpan: number,
+  flipV = false,
+) {
+  const minV = 0
+  const maxV = vSpan
+  uvAttribute.setXY(vertexOffset, minU, flipV ? minV : maxV)
+  uvAttribute.setXY(vertexOffset + 1, maxU, flipV ? minV : maxV)
+  uvAttribute.setXY(vertexOffset + 2, minU, flipV ? maxV : minV)
+  uvAttribute.setXY(vertexOffset + 3, maxU, flipV ? maxV : minV)
+}
+
+function getTrimBoxFaceUvRange(
+  section: SplineWallAssemblySection,
+  faceIndex: number,
+  uSpan: number,
+  uvMode: 'default' | 'corner-edge-wrap',
+): readonly [number, number] {
+  if (uvMode !== 'corner-edge-wrap' || section.material.uv?.verticalMode !== 'fit-height') {
+    return [0, uSpan]
+  }
+
+  if (isRightTextureEdgeTrimBoxFace(faceIndex)) {
+    return [Math.max(0, 1 - uSpan), 1]
+  }
+
+  return [0, uSpan]
+}
+
+function isRightTextureEdgeTrimBoxFace(faceIndex: number) {
+  return faceIndex === 0 || faceIndex === 5
+}
+
 function SplineWallStyleHandles({
   sections,
   queryCache,
@@ -1031,6 +1250,360 @@ export function buildSplineWallRenderSectionGroups(
     id,
     sections: groupSections,
   }))
+}
+
+export function buildSplineWallProceduralTrimDescriptors({
+  analyzedBoundaries,
+  assemblySections,
+  openingDescriptors = [],
+  queryCache,
+}: {
+  analyzedBoundaries: readonly AnalyzedSplineWallBoundaryPath[]
+  assemblySections: readonly SplineWallAssemblySection[]
+  openingDescriptors?: readonly SplineWallOpeningDescriptor[]
+  queryCache: SplineWallQueryCache
+}): SplineWallProceduralTrimDescriptor[] {
+  const descriptors = new Map<string, SplineWallProceduralTrimDescriptor>()
+  const addDescriptor = (
+    descriptor: Omit<SplineWallProceduralTrimDescriptor, 'id' | 'roomIds'>,
+    roomIds: readonly string[],
+  ) => {
+    const key = [
+      'corner',
+      descriptor.section.layerKind,
+      createTrimPositionKey(descriptor.position),
+      createTrimNormalKey(descriptor.normal),
+    ].join(':')
+    const existing = descriptors.get(key)
+    descriptors.set(key, {
+      ...descriptor,
+      id: key,
+      roomIds: mergeTrimRoomIds(existing?.roomIds ?? [], roomIds),
+    })
+  }
+
+  analyzedBoundaries.forEach((boundary) => {
+    boundary.anchors.forEach((anchor) => {
+      if (anchor.kind !== 'convex-corner' && anchor.kind !== 'concave-corner') {
+        return
+      }
+
+      const corner = buildSplineWallCornerPillarDescriptor(anchor, boundary, assemblySections, queryCache)
+      if (!corner) {
+        return
+      }
+
+      addDescriptor(corner, corner.section.roomId ? [corner.section.roomId] : [])
+    })
+  })
+
+  buildSplineWallOpeningEndpointTrimDescriptors({
+    openingDescriptors,
+    assemblySections,
+    queryCache,
+  }).forEach((descriptor) => {
+    addDescriptor(descriptor, descriptor.section.roomId ? [descriptor.section.roomId] : [])
+  })
+
+  buildSplineWallRenderSectionGroups(
+    assemblySections.filter((section) =>
+      section.side && (section.layerKind === 'room-face' || section.layerKind === 'exterior-face')),
+  ).forEach((group) => {
+    let sectionUvDistanceOffset = 0
+
+    group.sections.forEach((section) => {
+      if (!section.side) {
+        return
+      }
+
+      const interval = getSectionTextureSeamInterval(section)
+      if (interval <= 1e-5) {
+        return
+      }
+
+      const segmentData = getSplineWallSegmentQueryData(queryCache, section.segmentId)
+      if (!segmentData) {
+        return
+      }
+
+      const sectionStartDistance = getSplineWallSegmentUvDistanceAtRatio(segmentData, section.startRatio)
+      const sectionEndDistance = getSplineWallSegmentUvDistanceAtRatio(segmentData, section.endRatio)
+      const startDistance = sectionUvDistanceOffset + sectionStartDistance
+      const endDistance = sectionUvDistanceOffset + sectionEndDistance
+      const minDistance = Math.min(startDistance, endDistance)
+      const maxDistance = Math.max(startDistance, endDistance)
+      if (maxDistance - minDistance <= SPLINE_WALL_TEXTURE_SEAM_TRIM_EDGE_MARGIN * 2) {
+        sectionUvDistanceOffset += Math.abs(sectionEndDistance - sectionStartDistance)
+        return
+      }
+
+      const firstSeamDistance = Math.ceil((minDistance + SPLINE_WALL_TEXTURE_SEAM_TRIM_EDGE_MARGIN) / interval) * interval
+      for (
+        let seamDistance = firstSeamDistance;
+        seamDistance <= maxDistance - SPLINE_WALL_TEXTURE_SEAM_TRIM_EDGE_MARGIN + 1e-5;
+        seamDistance += interval
+      ) {
+        const segmentDistance = seamDistance - sectionUvDistanceOffset
+        const ratio = getSplineWallSegmentRatioAtUvDistance(segmentData, segmentDistance)
+        const sample = sampleSplineWallSegment(queryCache, section.segmentId, ratio)
+        if (!sample) {
+          continue
+        }
+
+        const normal = getSectionSideNormal(section.side, sample.normal)
+        const surfacePosition = getSectionSurfaceTrimPosition(section, sample, normal)
+        const key = [
+          'texture-seam',
+          group.id,
+          section.segmentId,
+          section.side,
+          createTrimPositionKey(surfacePosition),
+          createTrimNormalKey(normal),
+        ].join(':')
+        descriptors.set(key, {
+          id: key,
+          kind: 'texture-seam-pillar',
+          roomIds: section.roomId ? [section.roomId] : [],
+          section,
+          position: surfacePosition,
+          normal,
+        })
+      }
+
+      sectionUvDistanceOffset += Math.abs(sectionEndDistance - sectionStartDistance)
+    })
+  })
+
+  return [...descriptors.values()]
+}
+
+function buildSplineWallOpeningEndpointTrimDescriptors({
+  openingDescriptors,
+  assemblySections,
+  queryCache,
+}: {
+  openingDescriptors: readonly SplineWallOpeningDescriptor[]
+  assemblySections: readonly SplineWallAssemblySection[]
+  queryCache: SplineWallQueryCache
+}) {
+  const sectionsById = new Map(assemblySections.map((section) => [section.id, section]))
+  return openingDescriptors.flatMap((opening) => {
+    if (opening.openingKind !== 'passage' || opening.layerKind !== 'room-face') {
+      return []
+    }
+
+    const section = sectionsById.get(opening.sectionId)
+    if (!section?.side) {
+      return []
+    }
+
+    return [opening.startRatio, opening.endRatio].flatMap((ratio) => {
+      const descriptor = buildSplineWallOpeningEndpointTrimDescriptor(section, ratio, queryCache)
+      return descriptor ? [descriptor] : []
+    })
+  })
+}
+
+function buildSplineWallOpeningEndpointTrimDescriptor(
+  section: SplineWallAssemblySection,
+  ratio: number,
+  queryCache: SplineWallQueryCache,
+): Omit<SplineWallProceduralTrimDescriptor, 'id' | 'roomIds'> | null {
+  if (!section.side) {
+    return null
+  }
+
+  const segmentRatio = mapSectionLocalRatioToSegmentRatio(section, ratio)
+  if (segmentRatio <= 1e-5 || segmentRatio >= 1 - 1e-5) {
+    return null
+  }
+
+  const sample = sampleSplineWallSegment(queryCache, section.segmentId, segmentRatio)
+  if (!sample) {
+    return null
+  }
+
+  const normal = getSectionSideNormal(section.side, sample.normal)
+  const surfacePosition = getSectionSurfaceTrimPosition(section, sample, normal)
+  return {
+    kind: 'corner-pillar',
+    section,
+    position: [
+      surfacePosition[0] - (normal[0] * SPLINE_WALL_CORNER_PILLAR_SURFACE_INSET),
+      surfacePosition[1] - (normal[1] * SPLINE_WALL_CORNER_PILLAR_SURFACE_INSET),
+    ],
+    normal,
+  }
+}
+
+function mapSectionLocalRatioToSegmentRatio(
+  section: SplineWallAssemblySection,
+  localRatio: number,
+) {
+  const clampedLocalRatio = Math.min(1, Math.max(0, localRatio))
+  return section.startRatio + ((section.endRatio - section.startRatio) * clampedLocalRatio)
+}
+
+function getSectionSurfaceTrimPosition(
+  section: SplineWallAssemblySection,
+  sample: SplineWallSectionSample,
+  normal: readonly [number, number],
+): readonly [number, number] {
+  const lateralOffset = getSectionOuterLateralOffset(section)
+  return [
+    sample.position[0] + (normal[0] * lateralOffset),
+    sample.position[1] + (normal[1] * lateralOffset),
+  ]
+}
+
+function buildSplineWallCornerPillarDescriptor(
+  anchor: AnalyzedSplineWallBoundaryAnchor,
+  boundary: AnalyzedSplineWallBoundaryPath,
+  assemblySections: readonly SplineWallAssemblySection[],
+  queryCache: SplineWallQueryCache,
+): Omit<SplineWallProceduralTrimDescriptor, 'id' | 'roomIds'> | null {
+  const ownerLayerKind = anchor.kind === 'convex-corner' ? 'exterior-face' : 'room-face'
+  const adjacentSections = assemblySections.filter((section) =>
+    section.pathId === boundary.pathId
+    && section.layerKind === ownerLayerKind
+    && section.side
+    && (pointsEqual2(section.start, anchor.position) || pointsEqual2(section.end, anchor.position)))
+
+  const section = adjacentSections[0]
+  if (!section?.side) {
+    return null
+  }
+
+  const lateralOffset = getSectionOuterLateralOffset(section)
+  const sideSamples = adjacentSections
+    .map((candidate) => getCornerSectionSideSample(candidate, anchor.position, queryCache))
+    .filter((entry): entry is NonNullable<ReturnType<typeof getCornerSectionSideSample>> => Boolean(entry))
+  if (sideSamples.length < 2) {
+    return null
+  }
+
+  const normal = normalize2(
+    sideSamples.reduce<[number, number]>((sum, entry) => [
+      sum[0] + entry.normal[0],
+      sum[1] + entry.normal[1],
+    ], [0, 0]),
+    sideSamples[0]!.normal,
+  )
+  const surfacePosition = getCornerPillarSurfacePosition(anchor.position, sideSamples, lateralOffset)
+  const position = [
+    surfacePosition[0] - (normal[0] * SPLINE_WALL_CORNER_PILLAR_SURFACE_INSET),
+    surfacePosition[1] - (normal[1] * SPLINE_WALL_CORNER_PILLAR_SURFACE_INSET),
+  ] as const
+
+  return {
+    kind: 'corner-pillar',
+    section,
+    position,
+    normal,
+  }
+}
+
+function getCornerSectionSideSample(
+  section: SplineWallAssemblySection,
+  anchorPosition: readonly [number, number],
+  queryCache: SplineWallQueryCache,
+) {
+  if (!section.side) {
+    return null
+  }
+
+  const ratio = pointsEqual2(section.end, anchorPosition) ? section.endRatio : section.startRatio
+  const sample = sampleSplineWallSegment(queryCache, section.segmentId, ratio)
+  if (!sample) {
+    return null
+  }
+
+  return {
+    section,
+    sample,
+    normal: getSectionSideNormal(section.side, sample.normal),
+  }
+}
+
+function getCornerPillarSurfacePosition(
+  anchorPosition: readonly [number, number],
+  sideSamples: readonly NonNullable<ReturnType<typeof getCornerSectionSideSample>>[],
+  lateralOffset: number,
+): readonly [number, number] {
+  const [first, second] = sideSamples
+  if (first && second) {
+    const firstPoint = [
+      first.sample.position[0] + (first.normal[0] * lateralOffset),
+      first.sample.position[1] + (first.normal[1] * lateralOffset),
+    ] as const
+    const secondPoint = [
+      second.sample.position[0] + (second.normal[0] * lateralOffset),
+      second.sample.position[1] + (second.normal[1] * lateralOffset),
+    ] as const
+    const intersection = intersectSectionOffsetLines(
+      firstPoint,
+      first.sample.tangent,
+      secondPoint,
+      second.sample.tangent,
+    )
+    if (intersection) {
+      return intersection
+    }
+  }
+
+  const normal = sideSamples[0]?.normal ?? [0, 1]
+  return [
+    anchorPosition[0] + (normal[0] * lateralOffset),
+    anchorPosition[1] + (normal[1] * lateralOffset),
+  ]
+}
+
+function getSectionOuterLateralOffset(section: SplineWallAssemblySection) {
+  return Math.max(
+    ...section.profile.points.map((point) => Math.abs(point[0])),
+    SPLINE_WALL_TEXTURE_SEAM_TRIM_DEPTH,
+  )
+}
+
+function getSectionTextureSeamInterval(section: SplineWallAssemblySection) {
+  return section.material.uv?.verticalMode === 'fit-height'
+    ? getSectionResolvedWallHeight(section)
+    : GRID_SIZE
+}
+
+function getSplineWallSegmentRatioAtUvDistance(
+  segmentData: SplineWallSegmentQueryData,
+  targetDistance: number,
+) {
+  const clampedDistance = Math.min(segmentData.totalLength, Math.max(0, targetDistance))
+  let distance = 0
+  for (const edge of segmentData.edges) {
+    const nextDistance = distance + edge.length
+    if (clampedDistance <= nextDistance + 1e-5) {
+      const localRatio = edge.length <= 1e-5
+        ? 0
+        : Math.min(1, Math.max(0, (clampedDistance - distance) / edge.length))
+      return edge.startRatio + ((edge.endRatio - edge.startRatio) * localRatio)
+    }
+    distance = nextDistance
+  }
+
+  return 1
+}
+
+function mergeTrimRoomIds(
+  existingRoomIds: readonly string[],
+  nextRoomIds: readonly string[],
+) {
+  return [...new Set([...existingRoomIds, ...nextRoomIds])]
+}
+
+function createTrimPositionKey(position: readonly [number, number]) {
+  return `${position[0].toFixed(4)}:${position[1].toFixed(4)}`
+}
+
+function createTrimNormalKey(normal: readonly [number, number]) {
+  return `${normal[0].toFixed(3)}:${normal[1].toFixed(3)}`
 }
 
 function getSplineWallRenderSectionGroupKey(section: SplineWallAssemblySection) {
@@ -2728,15 +3301,18 @@ function shouldReverseSectionFaceWinding(section: SplineWallAssemblySection) {
 
 function useSplineWallStyleTextures(material: SplineWallAssemblySection['material']): SplineWallPbrTextures {
   const textureUrlMap = useMemo(() => buildSplineWallTextureUrlMap(material), [material])
-  const loadedTextures = useTexture(textureUrlMap) as Record<string, THREE.Texture>
+  const loadedTextures = useWallMaterialTextureMap(textureUrlMap)
   const textures = useMemo<SplineWallPbrTextures>(() => ({
     albedo: loadedTextures.albedo,
     normal: loadedTextures.normal ?? null,
-    ao: loadedTextures.ao ?? null,
-    height: loadedTextures.height ?? null,
+    ao: loadedTextures.ao ?? loadedTextures.packedOrmHeight ?? null,
+    height: loadedTextures.height ?? loadedTextures.packedOrmHeight ?? null,
     displacement: loadedTextures.displacement ?? null,
-    roughness: loadedTextures.roughness ?? null,
+    roughness: loadedTextures.roughness ?? loadedTextures.packedOrmHeight ?? null,
     metallic: loadedTextures.metallic ?? null,
+    aoChannel: loadedTextures.ao ? 'r' : 'r',
+    heightChannel: loadedTextures.height ? 'r' : loadedTextures.packedOrmHeight ? 'b' : 'r',
+    roughnessChannel: loadedTextures.roughness ? 'g' : loadedTextures.packedOrmHeight ? 'g' : 'g',
   }), [loadedTextures])
 
   useEffect(() => {
@@ -2771,6 +3347,7 @@ function buildSplineWallTextureUrlMap(material: SplineWallAssemblySection['mater
     ...(material.textures.normalUrl ? { normal: material.textures.normalUrl } : {}),
     ...(material.textures.aoUrl ? { ao: material.textures.aoUrl } : {}),
     ...(material.textures.heightUrl ? { height: material.textures.heightUrl } : {}),
+    ...(material.textures.packedOrmHeightUrl ? { packedOrmHeight: material.textures.packedOrmHeightUrl } : {}),
     ...(material.textures.displacementUrl ? { displacement: material.textures.displacementUrl } : {}),
     ...(material.textures.roughnessUrl ? { roughness: material.textures.roughnessUrl } : {}),
     ...(material.textures.metallicUrl ? { metallic: material.textures.metallicUrl } : {}),
@@ -2783,9 +3360,11 @@ function createSplineWallStyleMaterial(
   {
     polygonOffsetFactor,
     polygonOffsetUnits,
+    disableParallax = false,
   }: {
     polygonOffsetFactor: number
     polygonOffsetUnits: number
+    disableParallax?: boolean
   },
 ) {
   const shading = section.material.shading
@@ -2808,7 +3387,9 @@ function createSplineWallStyleMaterial(
     polygonOffsetUnits,
   })
   if (materialTextures) {
-    applySplineWallParallaxNodes(material, materialTextures, section.material)
+    if (!disableParallax) {
+      applySplineWallParallaxNodes(material, materialTextures, section.material)
+    }
     applySplineWallDisplacementNodes(material, materialTextures, section.material)
   }
   material.needsUpdate = true
@@ -3016,9 +3597,14 @@ function getSectionProfileUvV(
     v = getProfileUvDistanceAtPoint(section.profile.points, sourceDistances, point, resolvedWallHeight)
   }
 
-  return section.layerKind === 'exterior-face' && section.material.uv?.flipVOnExterior
-    ? 1 - v
-    : v
+  const shouldFlip =
+    shouldFlipSectionUvV(section)
+    !== (section.layerKind === 'exterior-face' && section.material.uv?.flipVOnExterior === true)
+  return shouldFlip ? 1 - v : v
+}
+
+function shouldFlipSectionUvV(section: SplineWallAssemblySection) {
+  return section.material.uv?.flipV === true
 }
 
 function getSectionUvU(
