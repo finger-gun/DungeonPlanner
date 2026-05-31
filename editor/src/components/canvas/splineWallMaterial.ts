@@ -257,14 +257,10 @@ function createParallaxOcclusionUv(
   })()
 }
 
-type TextureChannelSample = {
-  r: ReturnType<typeof float>
-  g: ReturnType<typeof float>
-  b: ReturnType<typeof float>
-  a: ReturnType<typeof float>
-}
-
-function sampleTextureChannel(sample: TextureChannelSample, channel: TextureChannel) {
+function sampleTextureChannel<TSample extends Record<TextureChannel, unknown>>(
+  sample: TSample,
+  channel: TextureChannel,
+): TSample[TextureChannel] {
   switch (channel) {
     case 'g':
       return sample.g
