@@ -1,5 +1,6 @@
 import { defineConfig } from 'vitest/config'
 import react from '@vitejs/plugin-react'
+import { createDefaultVitestReporters } from '../test-utils/vitestReporter'
 
 // https://vite.dev/config/
 export default defineConfig({
@@ -25,5 +26,6 @@ export default defineConfig({
       '**/.{idea,git,cache,output,temp}/**',
       'convex/_generated/**',
     ],
+    reporters: createDefaultVitestReporters(),
   },
 })

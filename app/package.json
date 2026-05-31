@@ -10,7 +10,7 @@
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "preview": "node ../scripts/run-vite-package.mjs . preview",
-    "test": "vitest run",
+    "test": "node ../scripts/run-vitest-package.mjs . run",
     "convex:dev": "convex dev",
     "convex:codegen": "convex dev --once",
     "convex:self-hosted:up": "docker compose -f convex/self-hosted/docker-compose.yml up -d",
@@ -20,9 +20,9 @@
     "seed:dev": "convex run seed:seedDevAccounts"
   },
   "dependencies": {
-    "@dungeonplanner/shared": "workspace:*",
     "@auth/core": "0.37.0",
     "@convex-dev/auth": "^0.0.91",
+    "@dungeonplanner/shared": "workspace:*",
     "convex": "^1.36.1",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
@@ -30,22 +30,23 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.39.4",
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.2",
+    "@testing-library/user-event": "^14.6.1",
     "@types/node": "^24.12.2",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^6.0.1",
-    "@testing-library/jest-dom": "^6.9.1",
-    "@testing-library/react": "^16.3.2",
-    "@testing-library/user-event": "^14.6.1",
     "eslint": "^9.39.4",
     "eslint-plugin-react-hooks": "^7.0.1",
     "eslint-plugin-react-refresh": "^0.5.2",
     "globals": "^17.4.0",
-    "jsdom": "^29.0.2",
     "jose": "^6.2.2",
+    "jsdom": "^29.0.2",
     "typescript": "~6.0.2",
     "typescript-eslint": "^8.58.0",
     "vite": "^8.0.4",
-    "vitest": "^4.1.3"
+    "vitest": "^4.1.3",
+    "vitest-ai-reporter": "^0.0.3"
   }
 }
