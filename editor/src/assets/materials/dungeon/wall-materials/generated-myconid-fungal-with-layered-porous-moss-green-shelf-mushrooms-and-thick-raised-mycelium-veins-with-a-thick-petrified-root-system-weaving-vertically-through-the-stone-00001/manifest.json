@@ -1,0 +1,14 @@
+{
+  "id": "generated-myconid-fungal-with-layered-porous-moss-green-shelf-mushrooms-and-thick-raised-mycelium-veins-with-a-thick-petrified-root-system-weaving-vertically-through-the-stone-00001",
+  "name": "Myconid Fungal With Layered Porous Moss Green Shelf Mushrooms And Thick Raised Mycelium Veins, With A Thick Petrified Root System Weaving Vertically Through The Stone 00001",
+  "sourceImage": "/Volumes/output/Myconid Fungal with layered porous Moss Green shelf mushrooms and thick raised mycelium veins, with a thick petrified root system weaving vertically through the stone-main_00001_.png",
+  "sourceDepth": "/Volumes/output/Myconid Fungal with layered porous Moss Green shelf mushrooms and thick raised mycelium veins, with a thick petrified root system weaving vertically through the stone-depth_00001_.png",
+  "size": 1024,
+  "normalStrength": 4,
+  "parallaxScale": 0.12,
+  "parallaxSteps": 16,
+  "bumpScale": 0.16,
+  "parallaxInvert": true,
+  "textureFormat": "ktx2",
+  "heightMean": 0.3794
+}

@@ -32,6 +32,9 @@ importers:
       vitest:
         specifier: ^4.1.3
         version: 4.1.4(@types/node@24.12.2)(jsdom@29.0.2)(vite@8.0.8(@types/node@24.12.2)(esbuild@0.27.7)(jiti@2.6.1)(tsx@4.21.0))
+      vitest-ai-reporter:
+        specifier: ^0.0.3
+        version: 0.0.3(vitest@4.1.4(@types/node@24.12.2)(jsdom@29.0.2)(vite@8.0.8(@types/node@24.12.2)(esbuild@0.27.7)(jiti@2.6.1)(tsx@4.21.0)))
 
   app:
     dependencies:
@@ -111,6 +114,9 @@ importers:
       vitest:
         specifier: ^4.1.3
         version: 4.1.4(@types/node@24.12.2)(jsdom@29.0.2)(vite@8.0.8(@types/node@24.12.2)(esbuild@0.27.7)(jiti@2.6.1)(tsx@4.21.0))
+      vitest-ai-reporter:
+        specifier: ^0.0.3
+        version: 0.0.3(vitest@4.1.4(@types/node@24.12.2)(jsdom@29.0.2)(vite@8.0.8(@types/node@24.12.2)(esbuild@0.27.7)(jiti@2.6.1)(tsx@4.21.0)))
 
   editor:
     dependencies:
@@ -205,6 +211,9 @@ importers:
       vitest:
         specifier: ^4.1.3
         version: 4.1.4(@types/node@24.12.2)(jsdom@29.0.2)(vite@8.0.8(@types/node@24.12.2)(esbuild@0.27.7)(jiti@2.6.1)(tsx@4.21.0))
+      vitest-ai-reporter:
+        specifier: ^0.0.3
+        version: 0.0.3(vitest@4.1.4(@types/node@24.12.2)(jsdom@29.0.2)(vite@8.0.8(@types/node@24.12.2)(esbuild@0.27.7)(jiti@2.6.1)(tsx@4.21.0)))
 
   server:
     dependencies:
@@ -3800,6 +3809,11 @@ packages:
         optional: true
       yaml:
         optional: true
+
+  vitest-ai-reporter@0.0.3:
+    resolution: {integrity: sha512-tRadfbfI9UnQQnMn28D3bi70h+p4nciKvhtNHzcP/g+NkBGvKcLd8zMbe90t36M8prBCXzpYm4ezWS9Om+wpbQ==}
+    peerDependencies:
+      vitest: '>=1.0.0'
 
   vitest@4.1.4:
     resolution: {integrity: sha512-tFuJqTxKb8AvfyqMfnavXdzfy3h3sWZRWwfluGbkeR7n0HUev+FmNgZ8SDrRBTVrVCjgH5cA21qGbCffMNtWvg==}
@@ -7479,6 +7493,10 @@ snapshots:
       fsevents: 2.3.3
       jiti: 2.6.1
       tsx: 4.21.0
+
+  vitest-ai-reporter@0.0.3(vitest@4.1.4(@types/node@24.12.2)(jsdom@29.0.2)(vite@8.0.8(@types/node@24.12.2)(esbuild@0.27.7)(jiti@2.6.1)(tsx@4.21.0))):
+    dependencies:
+      vitest: 4.1.4(@types/node@24.12.2)(jsdom@29.0.2)(vite@8.0.8(@types/node@24.12.2)(esbuild@0.27.7)(jiti@2.6.1)(tsx@4.21.0))
 
   vitest@4.1.4(@types/node@24.12.2)(jsdom@29.0.2)(vite@8.0.8(@types/node@24.12.2)(esbuild@0.27.7)(jiti@2.6.1)(tsx@4.21.0)):
     dependencies:

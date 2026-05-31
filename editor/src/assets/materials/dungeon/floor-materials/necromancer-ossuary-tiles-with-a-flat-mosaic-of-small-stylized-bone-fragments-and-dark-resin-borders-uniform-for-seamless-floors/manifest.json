@@ -1,0 +1,12 @@
+{
+  "id": "necromancer-ossuary-tiles-with-a-flat-mosaic-of-small-stylized-bone-fragments-and-dark-resin-borders-uniform-for-seamless-floors",
+  "name": "Necromancer Ossuary Tiles With A Flat Mosaic Of Small Stylized Bone Fragments And Dark Resin Borders, Uniform For Seamless Floors",
+  "sourceImage": "/Volumes/output/Necromancer Ossuary Tiles with a flat mosaic of small stylized bone fragments and dark  resin borders, uniform for seamless floors-main_00001_.png",
+  "sourceDepth": "/Volumes/output/Necromancer Ossuary Tiles with a flat mosaic of small stylized bone fragments and dark  resin borders, uniform for seamless floors-depth_00001_.png",
+  "size": 1024,
+  "normalStrength": 2.5,
+  "bumpScale": 0.12,
+  "roughness": 0.92,
+  "metalness": 0.02,
+  "textureFormat": "ktx2"
+}

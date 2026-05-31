@@ -1,0 +1,12 @@
+{
+  "id": "jungle-ruins-stonework-with-flat-rectangular-sandstone-blocks-and-thin-soil-crevices-designed-to-prevent-pattern-looping",
+  "name": "Jungle Ruins Stonework With Flat Rectangular Sandstone Blocks And Thin Soil Crevices, Designed To Prevent Pattern Looping",
+  "sourceImage": "/Volumes/output/Jungle Ruins Stonework with flat rectangular sandstone blocks and thin  soil crevices, designed to prevent pattern looping-main_00001_.png",
+  "sourceDepth": "/Volumes/output/Jungle Ruins Stonework with flat rectangular sandstone blocks and thin  soil crevices, designed to prevent pattern looping-depth_00001_.png",
+  "size": 1024,
+  "normalStrength": 2.5,
+  "bumpScale": 0.12,
+  "roughness": 0.92,
+  "metalness": 0.02,
+  "textureFormat": "ktx2"
+}

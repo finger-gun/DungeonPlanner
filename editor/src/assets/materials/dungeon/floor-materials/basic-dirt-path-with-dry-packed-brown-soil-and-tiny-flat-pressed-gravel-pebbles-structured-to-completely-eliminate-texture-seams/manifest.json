@@ -1,0 +1,12 @@
+{
+  "id": "basic-dirt-path-with-dry-packed-brown-soil-and-tiny-flat-pressed-gravel-pebbles-structured-to-completely-eliminate-texture-seams",
+  "name": "Basic Dirt Path With Dry Packed Brown Soil And Tiny Flat Pressed Gravel Pebbles, Structured To Completely Eliminate Texture Seams",
+  "sourceImage": "/Volumes/output/Basic Dirt Path with dry packed brown soil and tiny flat-pressed  gravel pebbles, structured to completely eliminate texture seams-main_00001_.png",
+  "sourceDepth": "/Volumes/output/Basic Dirt Path with dry packed brown soil and tiny flat-pressed  gravel pebbles, structured to completely eliminate texture seams-depth_00001_.png",
+  "size": 1024,
+  "normalStrength": 2.5,
+  "bumpScale": 0.12,
+  "roughness": 0.92,
+  "metalness": 0.02,
+  "textureFormat": "ktx2"
+}

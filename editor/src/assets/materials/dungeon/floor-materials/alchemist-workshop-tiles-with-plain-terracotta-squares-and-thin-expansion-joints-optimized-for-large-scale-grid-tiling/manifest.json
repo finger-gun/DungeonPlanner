@@ -1,0 +1,12 @@
+{
+  "id": "alchemist-workshop-tiles-with-plain-terracotta-squares-and-thin-expansion-joints-optimized-for-large-scale-grid-tiling",
+  "name": "Alchemist Workshop Tiles With Plain Terracotta Squares And Thin Expansion Joints, Optimized For Large Scale Grid Tiling",
+  "sourceImage": "/Volumes/output/Alchemist Workshop Tiles with plain terracotta squares and thin  expansion joints, optimized for large-scale grid tiling-main_00001_.png",
+  "sourceDepth": "/Volumes/output/Alchemist Workshop Tiles with plain terracotta squares and thin  expansion joints, optimized for large-scale grid tiling-depth_00001_.png",
+  "size": 1024,
+  "normalStrength": 2.5,
+  "bumpScale": 0.12,
+  "roughness": 0.92,
+  "metalness": 0.02,
+  "textureFormat": "ktx2"
+}

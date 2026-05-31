@@ -1,0 +1,14 @@
+{
+  "id": "generated-ossuary-catacomb-with-crumbling-brickwork-framework-and-embedded-stylized-crimson-red-skull-shapes-with-a-low-hanging-brick-archway-integrated-into-the-upper-tile-edge-00001",
+  "name": "Ossuary Catacomb With Crumbling Brickwork Framework And Embedded Stylized Crimson Red Skull Shapes, With A Low Hanging Brick Archway Integrated Into The Upper Tile Edge 00001",
+  "sourceImage": "/Volumes/output/Ossuary Catacomb with crumbling brickwork framework and embedded stylized Crimson Red skull shapes, with a low-hanging brick archway integrated into the upper tile edge-main_00001_.png",
+  "sourceDepth": "/Volumes/output/Ossuary Catacomb with crumbling brickwork framework and embedded stylized Crimson Red skull shapes, with a low-hanging brick archway integrated into the upper tile edge-depth_00001_.png",
+  "size": 1024,
+  "normalStrength": 4,
+  "parallaxScale": 0.12,
+  "parallaxSteps": 16,
+  "bumpScale": 0.16,
+  "parallaxInvert": true,
+  "textureFormat": "ktx2",
+  "heightMean": 0.4054
+}

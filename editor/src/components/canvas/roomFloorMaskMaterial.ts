@@ -5,6 +5,7 @@ import type { RoomFloorMaskRuntime } from './roomFloorMaskRuntime'
 
 type RoomFloorMaskAwareMaterial = THREE.Material & {
   alphaTest?: number
+  alphaTestNode?: unknown
   isNodeMaterial?: boolean
   needsUpdate?: boolean
   opacityNode?: unknown
@@ -31,7 +32,9 @@ export function applyRoomFloorMaskToMaterial(
     const currentOpacityNode = floorMaterial.opacityNode ?? null
     const appliedOpacityNode = floorMaterial.userData.roomFloorMaskAppliedOpacityNode ?? null
     const currentAlphaTest = floorMaterial.alphaTest ?? 0
+    const currentAlphaTestNode = floorMaterial.alphaTestNode ?? null
     const appliedAlphaTest = floorMaterial.userData.roomFloorMaskAppliedAlphaTest as number | undefined
+    const appliedAlphaTestNode = floorMaterial.userData.roomFloorMaskAppliedAlphaTestNode ?? null
 
     if (
       !Object.prototype.hasOwnProperty.call(floorMaterial.userData, 'roomFloorMaskBaseOpacityNode')
@@ -45,6 +48,12 @@ export function applyRoomFloorMaskToMaterial(
       || currentAlphaTest !== appliedAlphaTest
     ) {
       floorMaterial.userData.roomFloorMaskBaseAlphaTest = currentAlphaTest
+    }
+    if (
+      !Object.prototype.hasOwnProperty.call(floorMaterial.userData, 'roomFloorMaskBaseAlphaTestNode')
+      || currentAlphaTestNode !== appliedAlphaTestNode
+    ) {
+      floorMaterial.userData.roomFloorMaskBaseAlphaTestNode = currentAlphaTestNode
     }
 
     if (runtime) {
@@ -62,6 +71,8 @@ export function applyRoomFloorMaskToMaterial(
       )).r
       const visibilityMask = inBounds.select(sampledMask, float(0))
       const baseOpacityNode = (floorMaterial.userData.roomFloorMaskBaseOpacityNode ?? materialOpacity) as any
+      const baseAlphaTestNode = (floorMaterial.userData.roomFloorMaskBaseAlphaTestNode
+        ?? float(floorMaterial.userData.roomFloorMaskBaseAlphaTest as number ?? 0)) as any
 
       const maskedOpacityNode = baseOpacityNode.mul(visibilityMask)
       floorMaterial.opacityNode = maskedOpacityNode
@@ -69,8 +80,10 @@ export function applyRoomFloorMaskToMaterial(
         floorMaterial.userData.roomFloorMaskBaseAlphaTest as number ?? 0,
         0.5,
       )
+      floorMaterial.alphaTestNode = baseAlphaTestNode.max(float(0.5))
       floorMaterial.userData.roomFloorMaskAppliedOpacityNode = maskedOpacityNode
       floorMaterial.userData.roomFloorMaskAppliedAlphaTest = floorMaterial.alphaTest
+      floorMaterial.userData.roomFloorMaskAppliedAlphaTestNode = floorMaterial.alphaTestNode
     } else {
       if (currentOpacityNode === appliedOpacityNode) {
         floorMaterial.opacityNode = floorMaterial.userData.roomFloorMaskBaseOpacityNode ?? null
@@ -78,8 +91,12 @@ export function applyRoomFloorMaskToMaterial(
       if (currentAlphaTest === appliedAlphaTest) {
         floorMaterial.alphaTest = floorMaterial.userData.roomFloorMaskBaseAlphaTest as number ?? 0
       }
+      if (currentAlphaTestNode === appliedAlphaTestNode) {
+        floorMaterial.alphaTestNode = floorMaterial.userData.roomFloorMaskBaseAlphaTestNode ?? null
+      }
       floorMaterial.userData.roomFloorMaskAppliedOpacityNode = null
       floorMaterial.userData.roomFloorMaskAppliedAlphaTest = null
+      floorMaterial.userData.roomFloorMaskAppliedAlphaTestNode = null
     }
 
     floorMaterial.userData.roomFloorMaskSignature = nextSignature

@@ -147,19 +147,21 @@ export function createDungeonStoreEditorUiActions({
         const roomSet = getContentPackRoomSetById(ROOM_SET_CONTENT_PACK_ID, roomSetId)
         const openingAssetId = roomSet?.openingAssetId
         const openingAsset = openingAssetId ? getContentPackAssetById(openingAssetId) : null
+        const roomSetFloorAssetId = roomSet?.floor.kind === 'single'
+          ? roomSet.floor.assetId
+          : roomSet?.floor.assetIds[0] ?? current.selectedAssetIds.floor
 
         return {
           ...current,
           activeRoomSetId: roomSetId,
           activeWallMaterialSetId: roomSet?.wallMaterialSetId ?? current.activeWallMaterialSetId,
+          selectedAssetIds: {
+            ...current.selectedAssetIds,
+            floor: roomSetFloorAssetId,
+            ...(openingAssetId ? { opening: openingAssetId } : {}),
+          },
           activeInteriorWallStyleId: roomSet?.wallStyleId ?? current.activeInteriorWallStyleId,
           activeExteriorWallStyleId: roomSet?.wallStyleId ?? current.activeExteriorWallStyleId,
-          selectedAssetIds: openingAssetId
-            ? {
-                ...current.selectedAssetIds,
-                opening: openingAssetId,
-              }
-            : current.selectedAssetIds,
           assetBrowser: openingAsset
             ? {
                 category: getAssetBrowserCategory(openingAsset),

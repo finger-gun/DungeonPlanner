@@ -1,0 +1,14 @@
+{
+  "id": "generated-abyssal-coral-with-calcified-tube-worm-ridges-and-porous-rust-brown-barnacle-texture-clusters-with-a-thick-petrified-driftwood-support-beam-encrusted-in-the-surface-00001",
+  "name": "Abyssal Coral With Calcified Tube Worm Ridges And Porous Rust Brown Barnacle Texture Clusters, With A Thick Petrified Driftwood Support Beam Encrusted In The Surface 00001",
+  "sourceImage": "/Volumes/output/Abyssal Coral with calcified tube-worm ridges and porous Rust Brown barnacle texture clusters, with a thick petrified driftwood support beam encrusted in the surface-main_00001_.png",
+  "sourceDepth": "/Volumes/output/Abyssal Coral with calcified tube-worm ridges and porous Rust Brown barnacle texture clusters, with a thick petrified driftwood support beam encrusted in the surface-depth_00001_.png",
+  "size": 1024,
+  "normalStrength": 4,
+  "parallaxScale": 0.12,
+  "parallaxSteps": 16,
+  "bumpScale": 0.16,
+  "parallaxInvert": true,
+  "textureFormat": "ktx2",
+  "heightMean": 0.2538
+}

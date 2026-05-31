@@ -1,0 +1,12 @@
+{
+  "id": "gothic-cathedral-marble-with-simple-alternating-diamond-slabs-and-light-mineral-veins-aligned-for-natural-floor-tiling",
+  "name": "Gothic Cathedral Marble With Simple Alternating Diamond Slabs And Light Mineral Veins, Aligned For Natural Floor Tiling",
+  "sourceImage": "/Volumes/output/Gothic Cathedral Marble with simple alternating diamond slabs and light  mineral veins, aligned for natural floor tiling-main_00001_.png",
+  "sourceDepth": "/Volumes/output/Gothic Cathedral Marble with simple alternating diamond slabs and light  mineral veins, aligned for natural floor tiling-depth_00001_.png",
+  "size": 1024,
+  "normalStrength": 2.5,
+  "bumpScale": 0.12,
+  "roughness": 0.92,
+  "metalness": 0.02,
+  "textureFormat": "ktx2"
+}

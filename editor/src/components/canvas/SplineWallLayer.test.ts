@@ -7,11 +7,13 @@ import {
   buildSplineWallSectionHeightBands,
   buildSplineWallTopCapGroupGeometry,
   buildSplineWallOpeningRevealGeometry,
+  buildSplineWallProceduralTrimDescriptors,
   resolveSplineWallBakedLightSample,
   resolveSplineWallBakedLightSamplePosition,
+  createSplineWallTrimBoxGeometry,
   shouldRenderSplineWallOpeningReveal,
 } from './SplineWallLayer'
-import { buildSplineWallAssemblySections } from '../../store/splineWallAssembly'
+import { buildSplineWallAssemblySections, type SplineWallAssemblySection } from '../../store/splineWallAssembly'
 import { buildSplineWallOpeningDescriptors, type SplineWallOpeningDescriptor } from '../../store/splineWallOpenings'
 import { createEmptySplineWallGraph, upsertSplineWallGraphRoomPath } from '../../store/splineWallGraph'
 import { buildSplineWallOpeningPlacement } from '../../store/openingPlacement'
@@ -807,8 +809,8 @@ describe('buildSplineWallSectionHeightBands', () => {
       candidate.segmentId === exteriorFace.segmentId && candidate.layerKind === 'exterior-face',
     )!
     const opening = createTestOpeningDescriptor(section, {
-      startRatio: 0.25,
-      endRatio: 0.75,
+      startRatio: 0,
+      endRatio: 1,
       topHeight: DEFAULT_SPLINE_WALL_HEIGHT * 0.55,
     })
 
@@ -817,7 +819,10 @@ describe('buildSplineWallSectionHeightBands', () => {
 
     expect(getMaxUvV(after)).toBeCloseTo(getMaxUvV(before), 5)
     expect(getMaxUvV(after)).toBeCloseTo(1, 5)
-    expect(getMaxUvUAtHeight(after, 0)).toBeCloseTo(getMaxUvUAtHeight(before, 0), 5)
+    expect(getMaxUvUAtHeight(after, DEFAULT_SPLINE_WALL_HEIGHT)).toBeCloseTo(
+      getMaxUvUAtHeight(before, DEFAULT_SPLINE_WALL_HEIGHT),
+      5,
+    )
   })
 
   it('builds reveal span geometry that closes a full-height shared corridor opening', () => {
@@ -1124,10 +1129,15 @@ describe('buildSplineWallSectionHeightBands', () => {
     const wallpaperHeights = Array.from({ length: positions.count }, (_, index) => positions.getY(index))
     const detailHeights = Array.from({ length: detailPositions.count }, (_, index) => detailPositions.getY(index))
 
-    expect(section.material.textures.albedoUrl).toContain('modern-brick1_albedo.png')
-    expect(section.material.textures.normalUrl).toContain('modern-brick1_normal-ogl.png')
-    expect(section.material.textures.aoUrl).toContain('modern-brick1_ao.png')
-    expect(section.material.textures.heightUrl).toContain('modern-brick1_height.png')
+    expect(section.material.textures.albedoUrl).toContain(
+      'generated-dwarf-brick-with-heavy-geometric-chisel-marks-and-deep-recessed-bone-white-mortar-with-an-integrated-flat-pillar-decorated-with-geometric-dwarven-runes-00001/wall_albedo.ktx2',
+    )
+    expect(section.material.textures.normalUrl).toContain(
+      'generated-dwarf-brick-with-heavy-geometric-chisel-marks-and-deep-recessed-bone-white-mortar-with-an-integrated-flat-pillar-decorated-with-geometric-dwarven-runes-00001/wall_normal.ktx2',
+    )
+    expect(section.material.textures.packedOrmHeightUrl).toContain(
+      'generated-dwarf-brick-with-heavy-geometric-chisel-marks-and-deep-recessed-bone-white-mortar-with-an-integrated-flat-pillar-decorated-with-geometric-dwarven-runes-00001/wall_ormh.ktx2',
+    )
     expect(Math.min(...lateralOffsets)).toBeCloseTo(0.181, 5)
     expect(Math.max(...lateralOffsets)).toBeCloseTo(0.181, 5)
     expect(Math.min(...wallpaperHeights)).toBeCloseTo(DEFAULT_SPLINE_WALL_HEIGHT * 0.48, 5)
@@ -1220,6 +1230,328 @@ describe('buildSplineWallSectionHeightBands', () => {
 
     expect(positions.count).toBeGreaterThan(0)
     expect(intrudingVertices).toHaveLength(0)
+  })
+})
+
+describe('buildSplineWallProceduralTrimDescriptors', () => {
+  it('creates corner pillars from room boundary corner anchors', () => {
+    const graph = upsertSplineWallGraphRoomPath(createEmptySplineWallGraph(), {
+      roomId: 'room-a',
+      layerId: 'default',
+      nodes: [
+        { position: [0, 0], cornerMode: 'square', cornerAmount: 0 },
+        { position: [2, 0], cornerMode: 'square', cornerAmount: 0 },
+        { position: [2, 2], cornerMode: 'square', cornerAmount: 0 },
+        { position: [0, 2], cornerMode: 'square', cornerAmount: 0 },
+      ],
+      closed: true,
+    })
+    const analysis = analyzeSplineWallGraphBoundaries(graph)
+    const assemblySections = buildSplineWallAssemblySections({
+      analyzedBoundaries: analysis,
+      wallStyleAssignments: {},
+    })
+
+    const descriptors = buildSplineWallProceduralTrimDescriptors({
+      analyzedBoundaries: analysis,
+      assemblySections,
+      queryCache: createSplineWallQueryCache(graph),
+    })
+
+    const cornerPillars = descriptors.filter((descriptor) => descriptor.kind === 'corner-pillar')
+
+    expect(cornerPillars).toHaveLength(4)
+    expect(cornerPillars.every((descriptor) => descriptor.section.layerKind === 'exterior-face')).toBe(true)
+    expect(cornerPillars.some((descriptor) =>
+      Math.abs(descriptor.position[0]) > 1e-5 || Math.abs(descriptor.position[1]) > 1e-5,
+    )).toBe(true)
+  })
+
+  it('uses the room-facing side for concave corner pillars', () => {
+    const graph = upsertSplineWallGraphRoomPath(createEmptySplineWallGraph(), {
+      roomId: 'room-a',
+      layerId: 'default',
+      nodes: [
+        { position: [0, 0], cornerMode: 'square', cornerAmount: 0 },
+        { position: [3, 0], cornerMode: 'square', cornerAmount: 0 },
+        { position: [3, 3], cornerMode: 'square', cornerAmount: 0 },
+        { position: [2, 3], cornerMode: 'square', cornerAmount: 0 },
+        { position: [2, 1], cornerMode: 'square', cornerAmount: 0 },
+        { position: [0, 1], cornerMode: 'square', cornerAmount: 0 },
+      ],
+      closed: true,
+    })
+    const analysis = analyzeSplineWallGraphBoundaries(graph)
+    const assemblySections = buildSplineWallAssemblySections({
+      analyzedBoundaries: analysis,
+      wallStyleAssignments: {},
+    })
+
+    const descriptors = buildSplineWallProceduralTrimDescriptors({
+      analyzedBoundaries: analysis,
+      assemblySections,
+      queryCache: createSplineWallQueryCache(graph),
+    })
+    const concavePillars = descriptors.filter((descriptor) =>
+      descriptor.kind === 'corner-pillar' && descriptor.section.layerKind === 'room-face')
+
+    expect(concavePillars.length).toBeGreaterThan(0)
+  })
+
+  it('does not create one-sided corner pillars at shared-wall T junctions', () => {
+    let graph = createEmptySplineWallGraph()
+    graph = upsertSplineWallGraphRoomPath(graph, {
+      roomId: 'room-a',
+      layerId: 'default',
+      nodes: [
+        { position: [0, 0], cornerMode: 'square', cornerAmount: 0 },
+        { position: [4, 0], cornerMode: 'square', cornerAmount: 0 },
+        { position: [4, 2], cornerMode: 'square', cornerAmount: 0 },
+        { position: [0, 2], cornerMode: 'square', cornerAmount: 0 },
+      ],
+      closed: true,
+    })
+    graph = upsertSplineWallGraphRoomPath(graph, {
+      roomId: 'room-b',
+      layerId: 'default',
+      nodes: [
+        { position: [1, 2], cornerMode: 'square', cornerAmount: 0 },
+        { position: [3, 2], cornerMode: 'square', cornerAmount: 0 },
+        { position: [3, 4], cornerMode: 'square', cornerAmount: 0 },
+        { position: [1, 4], cornerMode: 'square', cornerAmount: 0 },
+      ],
+      closed: true,
+    })
+    const analysis = analyzeSplineWallGraphBoundaries(graph)
+    const assemblySections = buildSplineWallAssemblySections({
+      analyzedBoundaries: analysis,
+      wallStyleAssignments: {},
+    })
+
+    const descriptors = buildSplineWallProceduralTrimDescriptors({
+      analyzedBoundaries: analysis,
+      assemblySections,
+      queryCache: createSplineWallQueryCache(graph),
+    })
+    const cornerPillars = descriptors.filter((descriptor) => descriptor.kind === 'corner-pillar')
+    const tJunctionPillars = cornerPillars.filter((descriptor) =>
+      Math.min(
+        Math.hypot(descriptor.position[0] - 1, descriptor.position[1] - 2),
+        Math.hypot(descriptor.position[0] - 3, descriptor.position[1] - 2),
+      ) < 0.5)
+
+    expect(tJunctionPillars).toHaveLength(0)
+  })
+
+  it('creates room-owned pillars only at mid-wall passage corners', () => {
+    let graph = upsertSplineWallGraphRoomPath(createEmptySplineWallGraph(), {
+      roomId: 'room',
+      layerId: 'default',
+      nodes: buildRoomDraftSplineNodes(createRoomDraftFromStroke([0, 0], [2, 0])),
+      closed: true,
+    })
+    graph = upsertSplineWallGraphRoomPath(graph, {
+      roomId: 'corridor',
+      layerId: 'default',
+      nodes: buildRoomDraftSplineNodes(createRoomDraftFromStroke([1, -1], [1, -1])),
+      closed: true,
+    })
+
+    const analysis = analyzeSplineWallGraphBoundaries(graph)
+    const assemblySections = buildSplineWallAssemblySections({
+      analyzedBoundaries: analysis,
+      wallStyleAssignments: {},
+    })
+    const queryCache = createSplineWallQueryCache(graph)
+    const passageSections = ['room', 'corridor'].map((roomId) =>
+      assemblySections.find((section) =>
+        section.layerKind === 'room-face'
+        && section.roomId === roomId
+        && section.side !== null
+        && section.startRatio === 0
+        && section.endRatio === 1))
+      .filter((section): section is SplineWallAssemblySection => Boolean(section))
+    expect(passageSections).toHaveLength(2)
+    const roomPassageSection: SplineWallAssemblySection = {
+      ...passageSections[0]!,
+      id: `${passageSections[0]!.id}:mid-wall-passage`,
+      startRatio: 0.25,
+      endRatio: 0.75,
+    }
+    const corridorPassageSection = passageSections[1]!
+    const openingDescriptors: SplineWallOpeningDescriptor[] = [roomPassageSection, corridorPassageSection].map((section) => ({
+      id: `passage:${section.id}`,
+      openingId: 'passage',
+      sectionId: section.id,
+      segmentId: section.segmentId,
+      structuralSegmentId: section.structuralSegmentId,
+      layerKind: section.layerKind,
+      roomId: section.roomId,
+      side: section.side,
+      wallStyleId: section.wallStyleId,
+      openingKind: 'passage',
+      openingMode: 'structural',
+      source: 'generated',
+      compatible: true,
+      assetId: null,
+      startRatio: 0,
+      endRatio: 1,
+      bottomHeight: 0,
+      topHeight: null,
+    }))
+
+    const descriptors = buildSplineWallProceduralTrimDescriptors({
+      analyzedBoundaries: analysis,
+      assemblySections: [...assemblySections, roomPassageSection],
+      openingDescriptors,
+      queryCache,
+    })
+    const passagePillars = descriptors.filter((descriptor) =>
+      descriptor.kind === 'corner-pillar'
+      && descriptor.section.layerKind === 'room-face'
+      && openingDescriptors.some((opening) => opening.sectionId === descriptor.section.id))
+    expect(passagePillars).toHaveLength(2)
+    expect(new Set(passagePillars.map((descriptor) => descriptor.section.roomId))).toEqual(new Set(['room']))
+    expect(passagePillars.every((descriptor) => descriptor.section.id === roomPassageSection.id)).toBe(true)
+  })
+
+  it('places thin seam pillars at repeated texture seams away from corners', () => {
+    const graph = upsertSplineWallGraphRoomPath(createEmptySplineWallGraph(), {
+      roomId: 'room-a',
+      layerId: 'default',
+      nodes: [
+        { position: [0, 0], cornerMode: 'square', cornerAmount: 0 },
+        { position: [4, 0], cornerMode: 'square', cornerAmount: 0 },
+        { position: [4, 2], cornerMode: 'square', cornerAmount: 0 },
+        { position: [0, 2], cornerMode: 'square', cornerAmount: 0 },
+      ],
+      closed: true,
+    })
+    const analysis = analyzeSplineWallGraphBoundaries(graph)
+    const assemblySections = buildSplineWallAssemblySections({
+      analyzedBoundaries: analysis,
+      wallStyleAssignments: {},
+    })
+
+    const descriptors = buildSplineWallProceduralTrimDescriptors({
+      analyzedBoundaries: analysis,
+      assemblySections,
+      queryCache: createSplineWallQueryCache(graph),
+    })
+    const seamPillars = descriptors.filter((descriptor) => descriptor.kind === 'texture-seam-pillar')
+
+    expect(seamPillars.length).toBeGreaterThan(0)
+    expect(seamPillars.some((descriptor) => Math.abs(descriptor.position[0] - GRID_SIZE) < 1e-5)).toBe(true)
+    expect(seamPillars.every((descriptor) => descriptor.normal)).toBe(true)
+  })
+
+  it('scales procedural pillar UVs by physical face size instead of stretching the full texture', () => {
+    const graph = upsertSplineWallGraphRoomPath(createEmptySplineWallGraph(), {
+      roomId: 'room-a',
+      layerId: 'default',
+      nodes: [
+        { position: [0, 0], cornerMode: 'square', cornerAmount: 0 },
+        { position: [4, 0], cornerMode: 'square', cornerAmount: 0 },
+        { position: [4, 2], cornerMode: 'square', cornerAmount: 0 },
+        { position: [0, 2], cornerMode: 'square', cornerAmount: 0 },
+      ],
+      closed: true,
+    })
+    const analysis = analyzeSplineWallGraphBoundaries(graph)
+    const section = buildSplineWallAssemblySections({
+      analyzedBoundaries: analysis,
+      wallStyleAssignments: {},
+    }).find((candidate) => candidate.layerKind === 'room-face')!
+
+    const geometry = createSplineWallTrimBoxGeometry(0.1, DEFAULT_SPLINE_WALL_HEIGHT, 0.05, section)
+    const uv = geometry.getAttribute('uv')!
+
+    expect(uv.getX(1)).toBeCloseTo(0.05)
+    expect(uv.getX(21)).toBeCloseTo(0.1)
+    expect(uv.getY(0)).toBeCloseTo(DEFAULT_SPLINE_WALL_HEIGHT)
+
+    geometry.dispose()
+  })
+
+  it('flips procedural pillar UVs when the owning material requests vertical flip', () => {
+    const graph = upsertSplineWallGraphRoomPath(createEmptySplineWallGraph(), {
+      roomId: 'room-a',
+      layerId: 'default',
+      nodes: [
+        { position: [0, 0], cornerMode: 'square', cornerAmount: 0 },
+        { position: [4, 0], cornerMode: 'square', cornerAmount: 0 },
+        { position: [4, 2], cornerMode: 'square', cornerAmount: 0 },
+        { position: [0, 2], cornerMode: 'square', cornerAmount: 0 },
+      ],
+      closed: true,
+    })
+    const analysis = analyzeSplineWallGraphBoundaries(graph)
+    const section = buildSplineWallAssemblySections({
+      analyzedBoundaries: analysis,
+      wallStyleAssignments: {},
+    }).find((candidate) => candidate.layerKind === 'room-face')!
+    section.material = {
+      ...section.material,
+      uv: {
+        ...section.material.uv,
+        flipV: true,
+      },
+    }
+
+    const geometry = createSplineWallTrimBoxGeometry(0.1, DEFAULT_SPLINE_WALL_HEIGHT, 0.05, section)
+    const uv = geometry.getAttribute('uv')!
+    const expectedVerticalSpan = section.material.uv?.verticalMode === 'fit-height'
+      ? 1
+      : DEFAULT_SPLINE_WALL_HEIGHT
+
+    expect(uv.getY(0)).toBeCloseTo(0)
+    expect(uv.getY(2)).toBeCloseTo(expectedVerticalSpan)
+
+    geometry.dispose()
+  })
+
+  it('uses opposite horizontal texture edges on wrapped corner pillar faces', () => {
+    const graph = upsertSplineWallGraphRoomPath(createEmptySplineWallGraph(), {
+      roomId: 'room-a',
+      layerId: 'default',
+      nodes: [
+        { position: [0, 0], cornerMode: 'square', cornerAmount: 0 },
+        { position: [4, 0], cornerMode: 'square', cornerAmount: 0 },
+        { position: [4, 2], cornerMode: 'square', cornerAmount: 0 },
+        { position: [0, 2], cornerMode: 'square', cornerAmount: 0 },
+      ],
+      closed: true,
+    })
+    const analysis = analyzeSplineWallGraphBoundaries(graph)
+    const section = buildSplineWallAssemblySections({
+      analyzedBoundaries: analysis,
+      wallStyleAssignments: {},
+    }).find((candidate) => candidate.layerKind === 'room-face')!
+    section.material = {
+      ...section.material,
+      uv: {
+        ...section.material.uv,
+        verticalMode: 'fit-height',
+      },
+    }
+
+    const geometry = createSplineWallTrimBoxGeometry(
+      0.1,
+      DEFAULT_SPLINE_WALL_HEIGHT,
+      0.05,
+      section,
+      { uvMode: 'corner-edge-wrap' },
+    )
+    const uv = geometry.getAttribute('uv')!
+
+    expect(uv.getX(0)).toBeCloseTo(0.975)
+    expect(uv.getX(1)).toBeCloseTo(1)
+    expect(uv.getX(4)).toBeCloseTo(0)
+    expect(uv.getX(5)).toBeCloseTo(0.025)
+    expect(uv.getX(20)).toBeCloseTo(0.95)
+    expect(uv.getX(21)).toBeCloseTo(1)
+
+    geometry.dispose()
   })
 })
 

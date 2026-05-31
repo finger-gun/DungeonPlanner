@@ -1,0 +1,14 @@
+{
+  "id": "generated-bastion-reinforced-with-interlocking-stone-blocks-and-heavy-protruding-bone-white-braces-with-a-central-vertical-iron-plated-structural-pillar-00001",
+  "name": "Bastion Reinforced With Interlocking Stone Blocks And Heavy Protruding Bone White Braces, With A Central Vertical Iron Plated Structural Pillar 00001",
+  "sourceImage": "/Volumes/output/Bastion Reinforced with interlocking stone blocks and heavy protruding Bone White braces, with a central vertical iron-plated structural pillar-main_00001_.png",
+  "sourceDepth": "/Volumes/output/Bastion Reinforced with interlocking stone blocks and heavy protruding Bone White braces, with a central vertical iron-plated structural pillar-depth_00001_.png",
+  "size": 1024,
+  "normalStrength": 4,
+  "parallaxScale": 0.12,
+  "parallaxSteps": 16,
+  "bumpScale": 0.16,
+  "parallaxInvert": true,
+  "textureFormat": "ktx2",
+  "heightMean": 0.2302
+}

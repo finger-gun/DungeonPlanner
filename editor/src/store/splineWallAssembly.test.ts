@@ -15,6 +15,10 @@ import {
 } from './splineWallAssembly'
 import { analyzeSplineWallGraphBoundaries } from './splineWallStyleAnalysis'
 import { createSplineWallSegmentSideKey } from './wallStyleAssignments'
+import {
+  DEFAULT_EXTERIOR_WALL_STYLE_ID,
+  DEFAULT_INTERIOR_WALL_STYLE_ID,
+} from './defaultWallStyles'
 
 describe('buildSplineWallAssemblySections', () => {
   it('builds exposed room, exterior, and structural sections from analyzed boundaries', () => {
@@ -76,7 +80,38 @@ describe('buildSplineWallAssemblySections', () => {
 
     expect(roomFace?.wallStyleId).toBe('rocky-cave')
     expect(structuralCore?.wallStyleId).toBe('rocky-cave')
-    expect(roomFace?.material.textures.albedoUrl).toContain('Rough-rockface1_Base_Color.png')
+    expect(roomFace?.material.textures.albedoUrl).toContain(
+      'generated-goblin-cave-with-jagged-asymmetric-slate-grey-rock-strata-and-crude-tool-pickaxe-gouges-with-an-uneven-stone-buttress-rough-hewn-directly-into-the-cave-wall-00001/wall_albedo.ktx2',
+    )
+  })
+
+  it('falls back to default interior and exterior wall styles without segment overrides or room-set styles', () => {
+    const graph = buildSplineWallGraphFromPaintedCells({
+      '0:0': { cell: [0, 0], layerId: 'default', roomId: 'room-a' },
+    })
+    const analysis = analyzeSplineWallGraphBoundaries(graph)
+
+    const sections = buildSplineWallAssemblySections({
+      analyzedBoundaries: analysis,
+      wallStyleAssignments: {},
+      rooms: {
+        'room-a': {
+          id: 'room-a',
+          name: 'Plain Room',
+          layerId: 'default',
+          roomSetId: 'missing-room-set',
+          wallMaterialSetId: 'kaykit-stone',
+          floorAssetId: null,
+          wallAssetId: null,
+        },
+      },
+    })
+
+    const roomFace = sections.find((section) => section.layerKind === 'room-face')
+    const exteriorFace = sections.find((section) => section.layerKind === 'exterior-face')
+
+    expect(roomFace?.wallStyleId).toBe(DEFAULT_INTERIOR_WALL_STYLE_ID)
+    expect(exteriorFace?.wallStyleId).toBe(DEFAULT_EXTERIOR_WALL_STYLE_ID)
   })
 
   it('emits room face detail sections for layered wall styles', () => {

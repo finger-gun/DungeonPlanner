@@ -1,0 +1,14 @@
+{
+  "id": "generated-manor-wainscoting-with-raised-rectangular-cobalt-blue-panels-and-ornate-crown-molding-bevels-with-a-heavy-dark-oak-chair-rail-dividing-the-upper-and-lower-sections-00001",
+  "name": "Manor Wainscoting With Raised Rectangular Cobalt Blue Panels And Ornate Crown Molding Bevels, With A Heavy Dark Oak Chair Rail Dividing The Upper And Lower Sections 00001",
+  "sourceImage": "/Volumes/output/Manor Wainscoting with raised rectangular Cobalt Blue panels and ornate crown molding bevels, with a heavy dark oak chair rail dividing the upper and lower sections-main_00001_.png",
+  "sourceDepth": "/Volumes/output/Manor Wainscoting with raised rectangular Cobalt Blue panels and ornate crown molding bevels, with a heavy dark oak chair rail dividing the upper and lower sections-depth_00001_.png",
+  "size": 1024,
+  "normalStrength": 4,
+  "parallaxScale": 0.12,
+  "parallaxSteps": 16,
+  "bumpScale": 0.16,
+  "parallaxInvert": true,
+  "textureFormat": "ktx2",
+  "heightMean": 0.3872
+}

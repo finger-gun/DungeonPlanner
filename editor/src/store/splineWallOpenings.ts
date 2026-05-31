@@ -1,4 +1,4 @@
-import { getContentPackWallStyleById } from '../content-packs/registry'
+import { getContentPackAssetById, getContentPackWallStyleById } from '../content-packs/registry'
 import type {
   ContentPackOpeningContext,
   ContentPackWallStyleOpeningKind,
@@ -173,15 +173,18 @@ function resolveSectionOpeningMode({
 }): { openingMode: ContentPackWallStyleOpeningMode; compatible: boolean } {
   const style = getContentPackWallStyleById(contentPackId, section.wallStyleId)
   const rules = style?.openingRules
+  const assetExists = assetId === null || Boolean(getContentPackAssetById(assetId))
   if (!rules) {
     return {
       openingMode: 'structural' satisfies ContentPackWallStyleOpeningMode,
-      compatible: true,
+      compatible: assetExists,
     }
   }
 
   const kindCompatible = !rules.supportedKinds || rules.supportedKinds.includes(openingKind)
-  const assetCompatible = assetId === null || !rules.compatibleAssetIds || rules.compatibleAssetIds.includes(assetId)
+  const assetCompatible =
+    assetExists
+    && (assetId === null || !rules.compatibleAssetIds || rules.compatibleAssetIds.includes(assetId))
   const compatible = kindCompatible && assetCompatible
   const openingMode = compatible
     ? (rules.supportedModes.includes(rules.defaultMode) ? rules.defaultMode : (rules.supportedModes[0] ?? 'structural'))

@@ -15,6 +15,10 @@ import { analyzeSplineWallGraphBoundaries } from './splineWallStyleAnalysis'
 import { useDungeonStore } from './useDungeonStore'
 import { getOpeningSegments } from './openingSegments'
 import { createSplineWallSegmentSideKey } from './wallStyleAssignments'
+import {
+  DEFAULT_EXTERIOR_WALL_STYLE_ID,
+  DEFAULT_INTERIOR_WALL_STYLE_ID,
+} from './defaultWallStyles'
 
 const TEST_IMAGE_DATA_URL =
   'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4////fwAJ+wP9KobjigAAAABJRU5ErkJggg=='
@@ -133,6 +137,32 @@ describe('useDungeonStore history', () => {
     state.redo()
     state = useDungeonStore.getState()
     expect(Object.keys(state.paintedCells)).toHaveLength(2)
+  })
+
+  it('uses Keep Bone White interior and Keep Slate Grey exterior wall styles by default', () => {
+    const state = useDungeonStore.getState()
+
+    expect(state.activeInteriorWallStyleId).toBe(DEFAULT_INTERIOR_WALL_STYLE_ID)
+    expect(state.activeExteriorWallStyleId).toBe(DEFAULT_EXTERIOR_WALL_STYLE_ID)
+  })
+
+  it('applies Keep Bone White interior and Keep Slate Grey exterior styles to newly created rooms by default', () => {
+    useDungeonStore.getState().paintCells([[0, 0]])
+
+    const state = useDungeonStore.getState()
+    const roomId = state.paintedCells['0:0']?.roomId
+    expect(roomId).toBeTruthy()
+
+    const sections = analyzeSplineWallGraphBoundaries(state.splineWallGraph).flatMap((path) => path.sections)
+    const roomFace = sections.find((section) => section.roomId === roomId && section.faceKind === 'room-face')!
+    const exteriorFace = sections.find((section) => section.roomId === roomId && section.faceKind === 'exterior-face')!
+
+    expect(state.wallStyleAssignments[createSplineWallSegmentSideKey(roomFace.segmentId, roomFace.side!)]).toBe(
+      DEFAULT_INTERIOR_WALL_STYLE_ID,
+    )
+    expect(state.wallStyleAssignments[createSplineWallSegmentSideKey(exteriorFace.segmentId, exteriorFace.side!)]).toBe(
+      DEFAULT_EXTERIOR_WALL_STYLE_ID,
+    )
   })
 
   it('seeds spline wall graphs from painted rooms and supports undoable node edits', () => {
@@ -743,10 +773,12 @@ describe('useDungeonStore history', () => {
     expect(roomId).toBeTruthy()
     expect(useDungeonStore.getState().rooms[roomId!]?.roomSetId).toBe('cave')
     expect(useDungeonStore.getState().rooms[roomId!]?.wallMaterialSetId).toBe('rough-rockface-1-pbr-material')
+    expect(useDungeonStore.getState().rooms[roomId!]?.floorAssetId).toBe('dungeon.floor_ancient-catacomb')
 
     const manualRoomId = useDungeonStore.getState().createRoom('Manual Room')
     expect(useDungeonStore.getState().rooms[manualRoomId]?.roomSetId).toBe('cave')
     expect(useDungeonStore.getState().rooms[manualRoomId]?.wallMaterialSetId).toBe('rough-rockface-1-pbr-material')
+    expect(useDungeonStore.getState().rooms[manualRoomId]?.floorAssetId).toBe('dungeon.floor_ancient-catacomb')
   })
 
   it('keeps pixelation disabled by default and allows toggling it', () => {

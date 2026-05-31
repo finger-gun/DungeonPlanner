@@ -13,7 +13,7 @@ export const dungeonRoomSets: ContentPackRoomSet[] = [
     wallMaterialSetId: 'kaykit-stone',
     floor: {
       kind: 'single',
-      assetId: 'dungeon.floor_floor_tile_small',
+      assetId: 'dungeon.floor_standard-living-room',
     },
   },
   {
@@ -25,14 +25,8 @@ export const dungeonRoomSets: ContentPackRoomSet[] = [
     wallStyleId: 'rocky-cave',
     wallMaterialSetId: 'rough-rockface-1-pbr-material',
     floor: {
-      kind: 'randomized',
-      assetIds: [
-        'dungeon.floor_floor_dirt_small_A',
-        'dungeon.floor_floor_dirt_small_B',
-        'dungeon.floor_floor_dirt_small_C',
-        'dungeon.floor_floor_dirt_small_D',
-      ],
-      randomQuarterTurns: true,
+      kind: 'single',
+      assetId: 'dungeon.floor_ancient-catacomb',
     },
   },
   {
@@ -45,7 +39,7 @@ export const dungeonRoomSets: ContentPackRoomSet[] = [
     wallMaterialSetId: 'ai-gothic-depth-wall',
     floor: {
       kind: 'single',
-      assetId: 'dungeon.floor_floor_tile_small',
+      assetId: 'dungeon.floor_ancient-catacomb',
     },
   },
 ]

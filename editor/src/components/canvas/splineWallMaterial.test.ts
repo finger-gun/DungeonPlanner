@@ -6,17 +6,10 @@ import {
   createSplineWallMaterial,
   createSplineWallTopMaterial,
   resolveActiveSplineWallMaterialSet,
+  type SplineWallPbrTextures,
 } from './splineWallMaterial'
 
-function createTextures(overrides: Partial<{
-  albedo: THREE.Texture
-  normal: THREE.Texture | null
-  ao: THREE.Texture | null
-  height: THREE.Texture | null
-  displacement: THREE.Texture | null
-  roughness: THREE.Texture | null
-  metallic: THREE.Texture | null
-}> = {}) {
+function createTextures(overrides: Partial<SplineWallPbrTextures> = {}): SplineWallPbrTextures {
   return {
     albedo: new THREE.Texture(),
     normal: new THREE.Texture(),
@@ -25,6 +18,9 @@ function createTextures(overrides: Partial<{
     displacement: new THREE.Texture(),
     roughness: new THREE.Texture(),
     metallic: new THREE.Texture(),
+    aoChannel: 'r',
+    heightChannel: 'r',
+    roughnessChannel: 'g',
     ...overrides,
   }
 }
@@ -65,6 +61,22 @@ describe('splineWallMaterial', () => {
     expect(material.metalnessMap).toBe(textures.metallic)
     expect(material.color.getHexString()).toBe('ffffff')
     expect(material.side).toBe(THREE.DoubleSide)
+  })
+
+  it('does not use packed ORMH height maps as legacy bump maps', () => {
+    const packedMap = new THREE.Texture()
+    const textures = createTextures({
+      ao: packedMap,
+      height: packedMap,
+      roughness: packedMap,
+      heightChannel: 'b',
+    })
+
+    const material = createSplineWallMaterial('dungeon', textures) as THREE.MeshStandardMaterial
+
+    expect(material.aoMap).toBe(packedMap)
+    expect(material.roughnessMap).toBe(packedMap)
+    expect(material.bumpMap).toBeNull()
   })
 
   it('applies authored wall-set tint and scalar shading overrides', () => {
@@ -125,6 +137,8 @@ describe('splineWallMaterial', () => {
       scale: 0.055,
       steps: 10,
       inverted: true,
+      edgeFade: false,
+      edgePadding: 0,
     })
     expect(material.colorNode).toBeDefined()
     expect(material.normalNode).toBeDefined()
@@ -132,6 +146,31 @@ describe('splineWallMaterial', () => {
     expect(material.normalMap).toBeNull()
     expect(material.bumpMap).toBeNull()
     expect(material.roughnessMap).toBeNull()
+  })
+
+  it('marks clamped vertical wall parallax for edge fade and padding', () => {
+    const textures = createTextures()
+    const wallMaterialSet: ContentPackWallMaterialSet = {
+      id: 'ai-gothic-depth-wall',
+      name: 'AI Gothic Depth Wall',
+      textures: {
+        albedoUrl: '/wall_albedo.png',
+        heightUrl: '/wall_height.png',
+      },
+      shading: {
+        parallaxScale: 0.055,
+      },
+      uv: {
+        verticalWrap: 'clamp',
+      },
+    }
+
+    const material = createSplineWallMaterial('dungeon', textures, wallMaterialSet)
+
+    expect(material.userData.splineWallParallax).toMatchObject({
+      edgeFade: true,
+      edgePadding: 0.015,
+    })
   })
 
   it('enables true vertex displacement for authored height-map wall sets', () => {

@@ -6,7 +6,12 @@ import tseslint from 'typescript-eslint'
 import { defineConfig, globalIgnores } from 'eslint/config'
 
 export default defineConfig([
-  globalIgnores(['dist', 'playwright-report', 'test-results']),
+  globalIgnores([
+    'dist',
+    'playwright-report',
+    'test-results',
+    'src/content-packs/dungeon/generated/wallStyles.ts',
+  ]),
   {
     files: ['**/*.{ts,tsx}'],
     extends: [

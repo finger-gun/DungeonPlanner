@@ -22,6 +22,7 @@ describe('roomFloorMaskMaterial', () => {
   it('applies a world-space opacity mask to node-compatible floor materials', () => {
     const material = createStandardCompatibleMaterial({}) as THREE.Material & {
       alphaTest: number
+      alphaTestNode?: unknown
       opacityNode?: unknown
       userData: Record<string, unknown>
     }
@@ -31,6 +32,7 @@ describe('roomFloorMaskMaterial', () => {
 
     expect(material.opacityNode).toBeTruthy()
     expect(material.alphaTest).toBe(0.5)
+    expect(material.alphaTestNode).toBeTruthy()
     expect(material.userData.roomFloorMaskSignature).toBe(runtime.signature)
   })
 
@@ -47,14 +49,17 @@ describe('roomFloorMaskMaterial', () => {
   it('restores the original opacity configuration when masking is disabled', () => {
     const material = createStandardCompatibleMaterial({}) as THREE.Material & {
       alphaTest: number
+      alphaTestNode?: unknown
       userData: Record<string, unknown>
     }
     const baseAlphaTest = material.alphaTest
+    const baseAlphaTestNode = material.alphaTestNode ?? null
 
     applyRoomFloorMaskToMaterial(material, createMaskRuntime())
     applyRoomFloorMaskToMaterial(material, null)
 
     expect(material.alphaTest).toBe(baseAlphaTest)
+    expect(material.alphaTestNode).toBe(baseAlphaTestNode)
     expect(material.userData.roomFloorMaskSignature).toBe('off')
   })
 })

@@ -54,6 +54,9 @@ describe('RoomToolPanel', () => {
     expect(screen.queryByText('Room Style')).not.toBeInTheDocument()
     expect(screen.getByText('Interior Wall')).toBeInTheDocument()
     expect(screen.getByText('Exterior Wall')).toBeInTheDocument()
+    expect(screen.getByText('Floor')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Floor: Ancient Catacomb' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Floor: Standard Living Room' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Interior Wall: Rocky Cave' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Exterior Wall: AI Gothic' })).toBeInTheDocument()
     expect(screen.getByTestId('Interior Wall-rocky-cave-preview')).toHaveAttribute('src', expect.any(String))
@@ -80,6 +83,45 @@ describe('RoomToolPanel', () => {
 
     expect(useDungeonStore.getState().activeInteriorWallStyleId).toBe('rocky-cave')
     expect(useDungeonStore.getState().activeExteriorWallStyleId).toBe('ai-gothic')
+  })
+
+  it('lets textured floor styles be picked for new rooms and the selected room', () => {
+    render(<RoomToolPanel />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Floor: Ancient Catacomb' }))
+    expect(useDungeonStore.getState().selectedAssetIds.floor).toBe('dungeon.floor_ancient-catacomb')
+
+    cleanup()
+    useDungeonStore.getState().reset()
+    const state = useDungeonStore.getState()
+    const draft = createRoomDraftFromStroke([0, 0], [1, 1])
+    const roomId = state.commitDraftRoom({
+      cells: buildRoomDraftCells(draft),
+      splineNodes: buildRoomDraftSplineNodes(draft),
+    })
+
+    state.selectRoom(roomId)
+    render(<RoomToolPanel />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Floor: Standard Living Room' }))
+    expect(useDungeonStore.getState().rooms[roomId!]?.floorAssetId).toBe('dungeon.floor_standard-living-room')
+  })
+
+  it('filters generated wall styles by search and material category', () => {
+    render(<RoomToolPanel />)
+
+    expect(screen.getByRole('button', { name: 'Interior Wall: Castle Stone' })).toBeInTheDocument()
+
+    fireEvent.change(screen.getByLabelText('Interior Wall search'), { target: { value: 'marble' } })
+
+    expect(screen.getByRole('button', { name: 'Interior Wall: Palace Marble' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Interior Wall: Castle Stone' })).not.toBeInTheDocument()
+
+    fireEvent.change(screen.getByLabelText('Interior Wall search'), { target: { value: '' } })
+    fireEvent.click(screen.getAllByRole('button', { name: 'Wood' })[0])
+
+    expect(screen.getByRole('button', { name: 'Interior Wall: Elven Wood' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Interior Wall: Palace Marble' })).not.toBeInTheDocument()
   })
 
   it('applies interior and exterior wall styles to the selected room', () => {

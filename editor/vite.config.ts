@@ -5,6 +5,7 @@ import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import path from 'path'
 import type { Plugin } from 'vite'
+import { createDefaultVitestReporters } from '../test-utils/vitestReporter'
 import {
   GeneratedCharacterRequestError,
   handleGeneratedCharacterImageRequest,
@@ -136,7 +137,7 @@ export default defineConfig({
   define: {
     __PROJECT_ROOT__: JSON.stringify(editorDir),
   },
-  assetsInclude: ['**/*.glb', '**/*.gltf', '**/*.bin'],
+  assetsInclude: ['**/*.glb', '**/*.gltf', '**/*.bin', '**/*.ktx2'],
   plugins: [
     generatedCharacterDevFallback(),
     react({
@@ -208,5 +209,6 @@ export default defineConfig({
       '**/.{idea,git,cache,output,temp}/**',
       'tests/e2e/**',
     ],
+    reporters: createDefaultVitestReporters(),
   },
 })

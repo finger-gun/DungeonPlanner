@@ -1,7 +1,6 @@
 import { defaultAssetForCategory, type ContentPack } from '../types'
 import { dungeonStairsAsset } from './openings/stairs/stairs'
 import { dungeonTorchAsset } from './props/torch'
-import { dungeonFloorTileSmallAsset } from './tiles/floors/floor_tile_small'
 import { dungeonWallAsset } from './tiles/walls/wall'
 import { dungeonFloorAssets } from './tiles/floors'
 import { dungeonDoorWall1Asset } from './openings/door_wall_1'
@@ -12,6 +11,8 @@ import { dungeonPropAssets } from './props'
 import { dungeonRoomSets } from './roomSets'
 import { dungeonWallMaterialSets } from './wallMaterialSets'
 import { dungeonWallStyles } from './wallStyles'
+
+const defaultDungeonFloorAsset = dungeonFloorAssets.find((asset) => asset.id === 'dungeon.floor_standard-living-room') ?? dungeonFloorAssets[0]
 
 export const dungeonContentPack: ContentPack = {
   id: 'dungeon',
@@ -28,7 +29,7 @@ export const dungeonContentPack: ContentPack = {
   wallMaterialSets: dungeonWallMaterialSets,
   wallStyles: dungeonWallStyles,
   defaultAssets: {
-    floor: defaultAssetForCategory('floor', dungeonFloorTileSmallAsset),
+    floor: defaultAssetForCategory('floor', defaultDungeonFloorAsset!),
     wall: defaultAssetForCategory('wall', dungeonWallAsset),
     opening: defaultAssetForCategory('opening', dungeonStairsAsset),
     prop: defaultAssetForCategory('prop', dungeonTorchAsset),

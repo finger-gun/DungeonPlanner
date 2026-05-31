@@ -1,0 +1,14 @@
+{
+  "id": "generated-castle-stone-with-massive-ashlar-masonry-blocks-and-weathered-burnt-orange-bevel-edges-with-a-heavy-stone-corbel-protruding-near-the-top-edge-00001",
+  "name": "Castle Stone With Massive Ashlar Masonry Blocks And Weathered Burnt Orange Bevel Edges, With A Heavy Stone Corbel Protruding Near The Top Edge 00001",
+  "sourceImage": "/Volumes/output/Castle Stone with massive ashlar masonry blocks and weathered Burnt Orange bevel edges, with a heavy stone corbel protruding near the top edge-main_00001_.png",
+  "sourceDepth": "/Volumes/output/Castle Stone with massive ashlar masonry blocks and weathered Burnt Orange bevel edges, with a heavy stone corbel protruding near the top edge-depth_00001_.png",
+  "size": 1024,
+  "normalStrength": 4,
+  "parallaxScale": 0.12,
+  "parallaxSteps": 16,
+  "bumpScale": 0.16,
+  "parallaxInvert": true,
+  "textureFormat": "ktx2",
+  "heightMean": 0.1034
+}

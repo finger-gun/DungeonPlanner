@@ -57,7 +57,7 @@ describe('floorSurfaceLayout', () => {
     expect(createFloorSurfacePlacement('0:0', 'dungeon.floor_floor_tile_grate')?.coveredCellKeys).toEqual(['0:0', '1:0'])
   })
 
-  it('resolves cave room floors deterministically with quarter-turn variation', () => {
+  it('resolves cave room floors deterministically with the room-set floor texture', () => {
     const paintedCells = createPaintedCells([
       [0, 0], [1, 0], [0, 1], [1, 1],
     ])
@@ -92,15 +92,10 @@ describe('floorSurfaceLayout', () => {
     expect(firstPlan.effectiveAssetIdsByCellKey).toEqual(secondPlan.effectiveAssetIdsByCellKey)
     expect(firstPlan.effectiveRotationsByCellKey).toEqual(secondPlan.effectiveRotationsByCellKey)
     Object.values(firstPlan.effectiveAssetIdsByCellKey).forEach((assetId) => {
-      expect([
-        'dungeon.floor_floor_dirt_small_A',
-        'dungeon.floor_floor_dirt_small_B',
-        'dungeon.floor_floor_dirt_small_C',
-        'dungeon.floor_floor_dirt_small_D',
-      ]).toContain(assetId)
+      expect(assetId).toBe('dungeon.floor_ancient-catacomb')
     })
     Object.values(firstPlan.effectiveRotationsByCellKey).forEach((rotation) => {
-      expect([Math.PI / 2, Math.PI, (Math.PI * 3) / 2]).toContain(rotation[1])
+      expect(rotation).toEqual([0, 0, 0])
     })
   })
 
@@ -136,7 +131,7 @@ describe('floorSurfaceLayout', () => {
     })
   })
 
-  it('avoids obvious diagonal repetition in cave floor variation', () => {
+  it('keeps cave room texture floors deterministic without synthetic tile variation', () => {
     const paintedCells = createPaintedCells(
       Array.from({ length: 6 }, (_, z) =>
         Array.from({ length: 6 }, (_, x) => [x, z] as [number, number]),
@@ -171,8 +166,8 @@ describe('floorSurfaceLayout', () => {
       `${plan.effectiveAssetIdsByCellKey[`${index}:${index}`]}@${plan.effectiveRotationsByCellKey[`${index}:${index}`]?.[1]}`,
     )
 
-    expect(new Set(signatures).size).toBeGreaterThan(4)
-    expect(new Set(diagonalSignatures).size).toBeGreaterThan(2)
+    expect(new Set(signatures)).toEqual(new Set(['dungeon.floor_ancient-catacomb@0']))
+    expect(new Set(diagonalSignatures)).toEqual(new Set(['dungeon.floor_ancient-catacomb@0']))
   })
 
   it('plans graph-backed room floors from spline-covered cells beyond painted ownership', () => {

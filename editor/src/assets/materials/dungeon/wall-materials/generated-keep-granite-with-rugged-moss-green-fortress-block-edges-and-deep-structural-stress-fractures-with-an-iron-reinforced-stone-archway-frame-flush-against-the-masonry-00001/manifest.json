@@ -1,0 +1,14 @@
+{
+  "id": "generated-keep-granite-with-rugged-moss-green-fortress-block-edges-and-deep-structural-stress-fractures-with-an-iron-reinforced-stone-archway-frame-flush-against-the-masonry-00001",
+  "name": "Keep Granite With Rugged Moss Green Fortress Block Edges And Deep Structural Stress Fractures, With An Iron Reinforced Stone Archway Frame Flush Against The Masonry 00001",
+  "sourceImage": "/Volumes/output/Keep Granite with rugged Moss Green fortress-block edges and deep structural stress fractures, with an iron-reinforced stone archway frame flush against the masonry-main_00001_.png",
+  "sourceDepth": "/Volumes/output/Keep Granite with rugged Moss Green fortress-block edges and deep structural stress fractures, with an iron-reinforced stone archway frame flush against the masonry-depth_00001_.png",
+  "size": 1024,
+  "normalStrength": 4,
+  "parallaxScale": 0.12,
+  "parallaxSteps": 16,
+  "bumpScale": 0.16,
+  "parallaxInvert": true,
+  "textureFormat": "ktx2",
+  "heightMean": 0.4444
+}

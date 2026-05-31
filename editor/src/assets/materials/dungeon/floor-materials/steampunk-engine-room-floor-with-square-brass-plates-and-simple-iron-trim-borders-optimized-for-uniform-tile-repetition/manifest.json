@@ -1,0 +1,12 @@
+{
+  "id": "steampunk-engine-room-floor-with-square-brass-plates-and-simple-iron-trim-borders-optimized-for-uniform-tile-repetition",
+  "name": "Steampunk Engine Room Floor With Square Brass Plates And Simple Iron Trim Borders, Optimized For Uniform Tile Repetition",
+  "sourceImage": "/Volumes/output/Steampunk Engine Room Floor with square brass plates and simple  iron trim borders, optimized for uniform tile repetition-main_00001_.png",
+  "sourceDepth": "/Volumes/output/Steampunk Engine Room Floor with square brass plates and simple  iron trim borders, optimized for uniform tile repetition-depth_00001_.png",
+  "size": 1024,
+  "normalStrength": 2.5,
+  "bumpScale": 0.12,
+  "roughness": 0.92,
+  "metalness": 0.02,
+  "textureFormat": "ktx2"
+}

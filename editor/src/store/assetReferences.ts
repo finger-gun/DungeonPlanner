@@ -6,10 +6,14 @@ import {
   getContentPackWallMaterialSetById,
   getDefaultContentPackWallMaterialSetId,
   getContentPackWallStyleById,
-  getDefaultContentPackWallStyleId,
 } from '../content-packs/registry'
 import type { ContentPackCategory } from '../content-packs/types'
 import type { DungeonObjectRecord, FloorRecord, OpeningRecord, Room, SelectedAssetIds } from './useDungeonStore'
+import {
+  getDefaultExteriorWallStyleId,
+  getDefaultInteriorWallStyleId,
+  getDefaultWallStyleId,
+} from './defaultWallStyles'
 
 type SnapshotAssetState = {
   selectedAssetIds?: SelectedAssetIds
@@ -64,20 +68,26 @@ export function sanitizeSnapshotAssetReferences<T extends SnapshotAssetState>(sn
         }),
     ...(typeof snapshot.activeInteriorWallStyleId === 'string'
       ? {
-          activeInteriorWallStyleId: sanitizeActiveWallStyleId(snapshot.activeInteriorWallStyleId),
+          activeInteriorWallStyleId: sanitizeActiveWallStyleId(
+            snapshot.activeInteriorWallStyleId,
+            getDefaultInteriorWallStyleId(),
+          ),
         }
       : {
           activeInteriorWallStyleId: sanitizeActiveWallStyleId(
-            getDefaultContentPackWallStyleId('dungeon') ?? 'dungeon-stone',
+            getDefaultInteriorWallStyleId(),
           ),
         }),
     ...(typeof snapshot.activeExteriorWallStyleId === 'string'
       ? {
-          activeExteriorWallStyleId: sanitizeActiveWallStyleId(snapshot.activeExteriorWallStyleId),
+          activeExteriorWallStyleId: sanitizeActiveWallStyleId(
+            snapshot.activeExteriorWallStyleId,
+            getDefaultExteriorWallStyleId(),
+          ),
         }
       : {
           activeExteriorWallStyleId: sanitizeActiveWallStyleId(
-            getDefaultContentPackWallStyleId('dungeon') ?? 'dungeon-stone',
+            getDefaultExteriorWallStyleId(),
           ),
         }),
     rooms: Object.fromEntries(
@@ -179,10 +189,10 @@ function sanitizeActiveWallMaterialSetId(wallMaterialSetId: string) {
     : (getDefaultContentPackWallMaterialSetId('dungeon') ?? 'kaykit-stone')
 }
 
-function sanitizeActiveWallStyleId(wallStyleId: string) {
+function sanitizeActiveWallStyleId(wallStyleId: string, fallback = getDefaultWallStyleId()) {
   return isValidWallStyleId(wallStyleId)
     ? wallStyleId
-    : (getDefaultContentPackWallStyleId('dungeon') ?? 'dungeon-stone')
+    : fallback
 }
 
 function sanitizeRoomWallMaterialSetId(wallMaterialSetId: string | null | undefined) {
