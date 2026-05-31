@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef } from 'react'
 import { useLoader, useThree } from '@react-three/fiber'
 import * as THREE from 'three'
 import { KTX2Loader } from 'three/examples/jsm/loaders/KTX2Loader.js'
@@ -130,6 +130,10 @@ function createGeneratedFloorMaterialComponent(
   definition: GeneratedFloorMaterialDefinition,
 ) {
   function GeneratedFloorMaterial(props: ContentPackComponentProps) {
+    const tintColor = definition.shading?.tintColor ?? '#ffffff'
+    const bumpScale = definition.shading?.bumpScale ?? 0.12
+    const roughness = definition.shading?.roughness ?? 0.94
+    const metalness = definition.shading?.metalness ?? 0.02
     const textures = useFloorTextureMap({
       albedo: definition.textures.albedoPath,
       ...(definition.textures.normalPath ? { normal: definition.textures.normalPath } : {}),
@@ -144,41 +148,38 @@ function createGeneratedFloorMaterialComponent(
     }, [])
     const heightTexture = textures.height ?? textures.packedOrmHeight ?? null
     const roughnessTexture = textures.roughness ?? textures.packedOrmHeight ?? null
-    const material = useMemo(
-      () => createStandardCompatibleMaterial({
-        color: definition.shading?.tintColor ?? '#ffffff',
-        bumpScale: definition.shading?.bumpScale ?? 0.12,
-        roughness: definition.shading?.roughness ?? 0.94,
-        metalness: definition.shading?.metalness ?? 0.02,
+    const materialRef = useRef<CompatibleNodeMaterial | null>(null)
+    if (!materialRef.current) {
+      materialRef.current = createStandardCompatibleMaterial({
+        color: tintColor,
+        bumpScale,
+        roughness,
+        metalness,
         side: THREE.DoubleSide,
-      }) as CompatibleNodeMaterial,
-      [
-        definition.shading?.metalness,
-        definition.shading?.roughness,
-        definition.shading?.tintColor,
-      ],
-    )
+      }) as CompatibleNodeMaterial
+    }
+    const material = materialRef.current
 
     useLayoutEffect(() => {
-      material.color.set(definition.shading?.tintColor ?? '#ffffff')
+      material.color.set(tintColor)
       material.map = textures.albedo
       material.normalMap = textures.normal ?? null
       material.bumpMap = heightTexture
-      material.bumpScale = heightTexture ? (definition.shading?.bumpScale ?? 0.12) : 0
+      material.bumpScale = heightTexture ? bumpScale : 0
       material.roughnessMap = roughnessTexture
-      material.roughness = roughnessTexture ? 1 : (definition.shading?.roughness ?? 0.94)
-      material.metalness = definition.shading?.metalness ?? 0.02
+      material.roughness = roughnessTexture ? 1 : roughness
+      material.metalness = metalness
       applyRoomFloorMaskToMaterial(material, props.roomFloorMaskRuntime ?? null)
       material.needsUpdate = true
     }, [
-      definition.shading?.bumpScale,
-      definition.shading?.metalness,
-      definition.shading?.roughness,
-      definition.shading?.tintColor,
+      bumpScale,
       heightTexture,
+      metalness,
       material,
       props.roomFloorMaskRuntime,
+      roughness,
       roughnessTexture,
+      tintColor,
       textures.albedo,
       textures.normal,
     ])
