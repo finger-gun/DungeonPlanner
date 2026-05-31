@@ -294,10 +294,6 @@ function clampByte(value) {
   return Math.max(0, Math.min(255, Math.round(value)))
 }
 
-function escapeRegExp(value) {
-  return String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-}
-
 function findPositivePromptInComfyGraph(graph) {
   const nodes = Array.isArray(graph?.nodes) ? graph.nodes : Object.values(graph ?? {})
   for (const node of nodes) {
