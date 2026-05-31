@@ -1,0 +1,12 @@
+{
+  "id": "sunken-ship-decking-with-uniform-horizontal-pine-planks-and-flush-iron-nail-heads-balanced-to-hide-texture-seams",
+  "name": "Sunken Ship Decking With Uniform Horizontal Pine Planks And Flush Iron Nail Heads, Balanced To Hide Texture Seams",
+  "sourceImage": "/Volumes/output/Sunken Ship Decking with uniform horizontal pine planks and flush  iron nail heads, balanced to hide texture seams-main_00001_.png",
+  "sourceDepth": "/Volumes/output/Sunken Ship Decking with uniform horizontal pine planks and flush  iron nail heads, balanced to hide texture seams-depth_00001_.png",
+  "size": 1024,
+  "normalStrength": 2.5,
+  "bumpScale": 0.12,
+  "roughness": 0.92,
+  "metalness": 0.02,
+  "textureFormat": "ktx2"
+}

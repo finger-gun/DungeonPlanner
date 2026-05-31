@@ -1,0 +1,12 @@
+{
+  "id": "damp-cave-ground-with-flat-packed-grey-earth-and-smooth-weathered-rock-undulations-textured-evenly-with-fine-dirt-crevices",
+  "name": "Damp Cave Ground With Flat Packed Grey Earth And Smooth Weathered Rock Undulations, Textured Evenly With Fine Dirt Crevices",
+  "sourceImage": "/Volumes/output/Damp Cave Ground with flat-packed grey earth and smooth weathered rock undulations, textured evenly with fine  dirt crevices-main_00001_.png",
+  "sourceDepth": "/Volumes/output/Damp Cave Ground with flat-packed grey earth and smooth weathered rock undulations, textured evenly with fine  dirt crevices-depth_00001_.png",
+  "size": 1024,
+  "normalStrength": 2.5,
+  "bumpScale": 0.12,
+  "roughness": 0.92,
+  "metalness": 0.02,
+  "textureFormat": "ktx2"
+}

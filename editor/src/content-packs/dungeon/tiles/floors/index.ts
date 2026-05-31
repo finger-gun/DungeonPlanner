@@ -1,4 +1,5 @@
 import type { ContentPackAsset } from '../../../types'
+import { dungeonGeneratedFloorAssets } from '../../floorMaterials'
 import { dungeonFloorDirtLargeAsset } from "./floor_dirt_large"
 import { dungeonFloorDirtLargeRockyAsset } from "./floor_dirt_large_rocky"
 import { dungeonFloorDirtSmallAAsset } from "./floor_dirt_small_A"
@@ -29,6 +30,7 @@ import { dungeonFloorWoodSmallAsset } from "./floor_wood_small"
 import { dungeonFloorWoodSmallDarkAsset } from "./floor_wood_small_dark"
 
 export const dungeonFloorAssets: ContentPackAsset[] = [
+  ...dungeonGeneratedFloorAssets,
   dungeonFloorDirtLargeAsset,
   dungeonFloorDirtLargeRockyAsset,
   dungeonFloorDirtSmallAAsset,

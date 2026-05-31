@@ -1,5 +1,6 @@
 import type { ComponentType } from 'react'
 import type { JSX } from 'react'
+import type { RoomFloorMaskRuntime } from '../components/canvas/roomFloorMaskRuntime'
 
 export type ContentPackCategory = 'floor' | 'wall' | 'prop' | 'opening' | 'player'
 export type ContentPackOpeningSpanSample = {
@@ -21,6 +22,7 @@ export type ContentPackComponentProps = JSX.IntrinsicElements['group'] & {
   poseSelected?: boolean
   playerAnimationState?: 'default' | 'selected' | 'pickup' | 'holding' | 'release'
   openingContext?: ContentPackOpeningContext
+  roomFloorMaskRuntime?: RoomFloorMaskRuntime | null
 }
 export type ContentPackModelTransform = {
   position?: readonly [number, number, number]
@@ -186,6 +188,8 @@ export type ContentPackAssetMetadata = {
   browserTags?: string[]
   /** Optional per-prop atlas-backed color variants exposed as named swatches. */
   atlasColorVariants?: AtlasColorVariantsConfig
+  /** How this floor should render in the scene. */
+  floorRenderMode?: 'model' | 'textured-surface'
 }
 
 export type ContentPackAsset = {

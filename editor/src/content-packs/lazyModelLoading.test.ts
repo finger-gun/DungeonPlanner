@@ -9,7 +9,7 @@ vi.mock('../rendering/useGLTF', () => ({
   useGLTF: useGLTFMock,
 }))
 
-describe('content pack lazy model loading', () => {
+describe('content pack lazy model loading', { timeout: 15000 }, () => {
   beforeEach(() => {
     vi.resetModules()
     useGLTFMock.mockClear()

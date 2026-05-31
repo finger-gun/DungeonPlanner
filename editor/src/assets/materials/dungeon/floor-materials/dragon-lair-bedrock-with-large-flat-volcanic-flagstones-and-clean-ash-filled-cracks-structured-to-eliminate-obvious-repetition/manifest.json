@@ -1,0 +1,12 @@
+{
+  "id": "dragon-lair-bedrock-with-large-flat-volcanic-flagstones-and-clean-ash-filled-cracks-structured-to-eliminate-obvious-repetition",
+  "name": "Dragon Lair Bedrock With Large Flat Volcanic Flagstones And Clean Ash Filled Cracks, Structured To Eliminate Obvious Repetition",
+  "sourceImage": "/Volumes/output/Dragon Lair Bedrock with large flat volcanic flagstones and clean  ash-filled cracks, structured to eliminate obvious repetition-main_00001_.png",
+  "sourceDepth": "/Volumes/output/Dragon Lair Bedrock with large flat volcanic flagstones and clean  ash-filled cracks, structured to eliminate obvious repetition-depth_00001_.png",
+  "size": 1024,
+  "normalStrength": 2.5,
+  "bumpScale": 0.12,
+  "roughness": 0.92,
+  "metalness": 0.02,
+  "textureFormat": "ktx2"
+}

@@ -272,6 +272,7 @@ export function ContentPackInstance({
             poseSelected,
             playerAnimationState,
             openingContext,
+            useRoomFloorMask && variant === 'floor' ? roomFloorMaskRuntime : null,
           )}
           receiveShadow={receiveShadow}
           castShadow={castShadow}
@@ -344,6 +345,7 @@ function getComponentProps(
   poseSelected?: boolean,
   playerAnimationState?: 'default' | 'selected' | 'pickup' | 'holding' | 'release',
   openingContext?: ContentPackComponentProps['openingContext'],
+  roomFloorMaskRuntime?: ContentPackComponentProps['roomFloorMaskRuntime'],
 ): ContentPackComponentProps {
   return {
     ...(variantKey ? { variantKey } : {}),
@@ -351,6 +353,7 @@ function getComponentProps(
     ...(poseSelected ? { poseSelected } : {}),
     ...(playerAnimationState ? { playerAnimationState } : {}),
     ...(openingContext ? { openingContext } : {}),
+    ...(roomFloorMaskRuntime !== undefined ? { roomFloorMaskRuntime } : {}),
   }
 }
 

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Check, Search } from 'lucide-react'
-import { getContentPackWallStyles } from '../../content-packs/registry'
+import { getContentPackAssetsByCategory, getContentPackWallStyles } from '../../content-packs/registry'
+import type { ContentPackAsset } from '../../content-packs/types'
 import {
   useDungeonStore,
   type OutdoorBrushMode,
@@ -67,6 +68,7 @@ export function RoomToolPanel() {
   const roomEditMode = useDungeonStore((state) => state.roomEditMode)
   const roomPaintMode = useDungeonStore((state) => state.roomPaintMode)
   const selectedRoomId = useDungeonStore((state) => state.selectedRoomId)
+  const activeFloorAssetId = useDungeonStore((state) => state.selectedAssetIds.floor)
   const activeInteriorWallStyleId = useDungeonStore((state) => state.activeInteriorWallStyleId)
   const activeExteriorWallStyleId = useDungeonStore((state) => state.activeExteriorWallStyleId)
   const outdoorTerrainDensity = useDungeonStore((state) => state.outdoorTerrainDensity)
@@ -79,6 +81,8 @@ export function RoomToolPanel() {
   const setRoomEditMode = useDungeonStore((state) => state.setRoomEditMode)
   const setActiveInteriorWallStyleId = useDungeonStore((state) => state.setActiveInteriorWallStyleId)
   const setActiveExteriorWallStyleId = useDungeonStore((state) => state.setActiveExteriorWallStyleId)
+  const setSelectedAsset = useDungeonStore((state) => state.setSelectedAsset)
+  const setRoomFloorAsset = useDungeonStore((state) => state.setRoomFloorAsset)
   const setRoomBoundaryWallStyle = useDungeonStore((state) => state.setRoomBoundaryWallStyle)
   const setOutdoorTerrainDensity = useDungeonStore((state) => state.setOutdoorTerrainDensity)
   const setOutdoorTerrainType = useDungeonStore((state) => state.setOutdoorTerrainType)
@@ -89,6 +93,12 @@ export function RoomToolPanel() {
   const setOutdoorTerrainStyleBrush = useDungeonStore((state) => state.setOutdoorTerrainStyleBrush)
   const wallStyles = useMemo(
     () => getContentPackWallStyles(ROOM_SET_CONTENT_PACK_ID).map(buildWallStylePreview),
+    [],
+  )
+  const floorStyles = useMemo(
+    () => getContentPackAssetsByCategory('floor')
+      .filter((asset) => asset.metadata?.floorRenderMode === 'textured-surface')
+      .sort((left, right) => left.name.localeCompare(right.name)),
     [],
   )
   const showWallStylePicker = mapMode !== 'outdoor' && (roomEditMode === 'rooms' || roomEditMode === 'walls')
@@ -104,6 +114,12 @@ export function RoomToolPanel() {
       setRoomBoundaryWallStyle(selectedRoomId, 'exterior-face', wallStyleId)
     }
   }, [selectedRoomId, setActiveExteriorWallStyleId, setRoomBoundaryWallStyle])
+  const handleSelectFloorStyle = useCallback((assetId: string) => {
+    setSelectedAsset('floor', assetId)
+    if (selectedRoomId) {
+      setRoomFloorAsset(selectedRoomId, assetId)
+    }
+  }, [selectedRoomId, setRoomFloorAsset, setSelectedAsset])
 
   useEffect(() => {
     if (roomEditMode === 'floor-variants') {
@@ -321,8 +337,11 @@ export function RoomToolPanel() {
               {showWallStylePicker ? (
                 <WallStyleControls
                   wallStyles={wallStyles}
+                  floorStyles={floorStyles}
+                  activeFloorAssetId={activeFloorAssetId}
                   activeInteriorWallStyleId={activeInteriorWallStyleId}
                   activeExteriorWallStyleId={activeExteriorWallStyleId}
+                  onSelectFloorStyle={handleSelectFloorStyle}
                   onSelectInteriorWallStyle={handleSelectInteriorWallStyle}
                   onSelectExteriorWallStyle={handleSelectExteriorWallStyle}
                   selectedRoomActive={Boolean(selectedRoomId)}
@@ -340,8 +359,11 @@ export function RoomToolPanel() {
           {showWallStylePicker ? (
             <WallStyleControls
               wallStyles={wallStyles}
+              floorStyles={floorStyles}
+              activeFloorAssetId={activeFloorAssetId}
               activeInteriorWallStyleId={activeInteriorWallStyleId}
               activeExteriorWallStyleId={activeExteriorWallStyleId}
+              onSelectFloorStyle={handleSelectFloorStyle}
               onSelectInteriorWallStyle={handleSelectInteriorWallStyle}
               onSelectExteriorWallStyle={handleSelectExteriorWallStyle}
               selectedRoomActive={Boolean(selectedRoomId)}
@@ -362,15 +384,21 @@ export function RoomToolPanel() {
 
 function WallStyleControls({
   wallStyles,
+  floorStyles,
+  activeFloorAssetId,
   activeInteriorWallStyleId,
   activeExteriorWallStyleId,
+  onSelectFloorStyle,
   onSelectInteriorWallStyle,
   onSelectExteriorWallStyle,
   selectedRoomActive,
 }: {
   wallStyles: Array<ReturnType<typeof buildWallStylePreview>>
+  floorStyles: Array<ContentPackAsset>
+  activeFloorAssetId: string | null
   activeInteriorWallStyleId: string
   activeExteriorWallStyleId: string
+  onSelectFloorStyle: (assetId: string) => void
   onSelectInteriorWallStyle: (wallStyleId: string) => void
   onSelectExteriorWallStyle: (wallStyleId: string) => void
   selectedRoomActive: boolean
@@ -392,6 +420,70 @@ function WallStyleControls({
         activeWallStyleId={activeExteriorWallStyleId}
         onSelect={onSelectExteriorWallStyle}
       />
+      <FloorStylePicker
+        floorStyles={floorStyles}
+        activeFloorAssetId={activeFloorAssetId}
+        onSelect={onSelectFloorStyle}
+      />
+    </div>
+  )
+}
+
+function FloorStylePicker({
+  floorStyles,
+  activeFloorAssetId,
+  onSelect,
+}: {
+  floorStyles: Array<ContentPackAsset>
+  activeFloorAssetId: string | null
+  onSelect: (assetId: string) => void
+}) {
+  if (floorStyles.length === 0) {
+    return null
+  }
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-xs font-semibold uppercase tracking-[0.2em] text-stone-500">Floor</p>
+        <span className="text-[0.65rem] font-medium text-stone-600">{floorStyles.length}</span>
+      </div>
+      <div className="grid grid-cols-2 gap-1.5">
+        {floorStyles.map((floorStyle) => {
+          const active = floorStyle.id === activeFloorAssetId
+          return (
+            <button
+              key={floorStyle.id}
+              type="button"
+              aria-label={`Floor: ${floorStyle.name}`}
+              onClick={() => onSelect(floorStyle.id)}
+              className={`grid grid-cols-[2.75rem_minmax(0,1fr)_1rem] items-center gap-2 rounded-lg border px-2 py-1.5 text-left transition ${
+                active
+                  ? 'border-amber-300/40 bg-amber-400/10 text-amber-100'
+                  : 'border-stone-800 bg-stone-950/60 text-stone-300 hover:border-stone-700 hover:text-stone-100'
+              }`}
+            >
+              <span className="block h-9 w-11 overflow-hidden rounded border border-stone-700/80 bg-stone-900">
+                {floorStyle.thumbnailUrl ? (
+                  <img
+                    src={floorStyle.thumbnailUrl}
+                    alt=""
+                    loading="lazy"
+                    className="h-full w-full object-cover"
+                    draggable={false}
+                  />
+                ) : null}
+              </span>
+              <span className="min-w-0">
+                <span className="block truncate text-xs font-medium">{floorStyle.name}</span>
+              </span>
+              <span className="flex items-center justify-center text-amber-200">
+                {active ? <Check aria-hidden="true" size={14} strokeWidth={2.25} /> : null}
+              </span>
+            </button>
+          )
+        })}
+      </div>
     </div>
   )
 }

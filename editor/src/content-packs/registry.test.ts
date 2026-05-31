@@ -96,7 +96,8 @@ describe('content pack registry', () => {
       wallStyleId: 'rocky-cave',
       wallMaterialSetId: 'rough-rockface-1-pbr-material',
       floor: {
-        kind: 'randomized',
+        kind: 'single',
+        assetId: 'dungeon.floor_ancient-catacomb',
       },
     })
     expect(getContentPackRoomSetById('dungeon', 'ai-gothic')).toMatchObject({
@@ -116,7 +117,7 @@ describe('content pack registry', () => {
         albedoUrl: expect.any(String),
       },
       shading: {
-        tintColor: '#ffffff',
+        tintColor: '#cfd6df',
         roughness: 0.45,
         metalness: 0,
       },
@@ -127,19 +128,22 @@ describe('content pack registry', () => {
       textures: {
         albedoUrl: expect.any(String),
         normalUrl: expect.any(String),
-        aoUrl: expect.any(String),
-        heightUrl: expect.any(String),
+        packedOrmHeightUrl: expect.any(String),
       },
     })
     expect(getContentPackWallMaterialSetById('dungeon', 'ai-gothic-depth-wall')).toMatchObject({
       id: 'ai-gothic-depth-wall',
       name: 'AI Gothic Depth Wall',
       textures: {
-        albedoUrl: expect.stringContaining('ai-gothic-depth-wall/wall_albedo.png'),
-        normalUrl: expect.stringContaining('ai-gothic-depth-wall/wall_normal.png'),
-        aoUrl: expect.stringContaining('ai-gothic-depth-wall/wall_ao.png'),
-        heightUrl: expect.stringContaining('ai-gothic-depth-wall/wall_height.png'),
-        roughnessUrl: expect.stringContaining('ai-gothic-depth-wall/wall_roughness.png'),
+        albedoUrl: expect.stringContaining(
+          'generated-keep-granite-with-rugged-slate-grey-fortress-block-edges-and-deep-structural-stress-fractures-with-an-iron-reinforced-stone-archway-frame-flush-against-the-masonry-00001/wall_albedo.ktx2',
+        ),
+        normalUrl: expect.stringContaining(
+          'generated-keep-granite-with-rugged-slate-grey-fortress-block-edges-and-deep-structural-stress-fractures-with-an-iron-reinforced-stone-archway-frame-flush-against-the-masonry-00001/wall_normal.ktx2',
+        ),
+        packedOrmHeightUrl: expect.stringContaining(
+          'generated-keep-granite-with-rugged-slate-grey-fortress-block-edges-and-deep-structural-stress-fractures-with-an-iron-reinforced-stone-archway-frame-flush-against-the-masonry-00001/wall_ormh.ktx2',
+        ),
       },
       shading: {
         parallaxScale: 0.055,
@@ -157,8 +161,7 @@ describe('content pack registry', () => {
       textures: {
         albedoUrl: expect.any(String),
         normalUrl: expect.any(String),
-        aoUrl: expect.any(String),
-        heightUrl: expect.any(String),
+        packedOrmHeightUrl: expect.any(String),
       },
     })
     expect(getContentPackWallMaterialSetById('dungeon', 'modern-brick1')).toMatchObject({
@@ -167,8 +170,7 @@ describe('content pack registry', () => {
       textures: {
         albedoUrl: expect.any(String),
         normalUrl: expect.any(String),
-        aoUrl: expect.any(String),
-        heightUrl: expect.any(String),
+        packedOrmHeightUrl: expect.any(String),
       },
     })
     expect(getContentPackWallMaterialSetById('dungeon', 'tavern-wood-planks')).toMatchObject({
@@ -177,8 +179,7 @@ describe('content pack registry', () => {
       textures: {
         albedoUrl: expect.any(String),
         normalUrl: expect.any(String),
-        aoUrl: expect.any(String),
-        heightUrl: expect.any(String),
+        packedOrmHeightUrl: expect.any(String),
       },
     })
   })
@@ -197,7 +198,9 @@ describe('content pack registry', () => {
         },
         material: {
           textures: {
-            albedoUrl: expect.stringContaining('kaykit-stone/wall_albedo.png'),
+            albedoUrl: expect.stringContaining(
+              'generated-castle-stone-with-massive-ashlar-masonry-blocks-and-weathered-bone-white-bevel-edges-with-a-heavy-stone-corbel-protruding-near-the-top-edge-00001/wall_albedo.ktx2',
+            ),
           },
           shading: {
             tintColor: '#cfd6df',
@@ -230,10 +233,15 @@ describe('content pack registry', () => {
       roomFace: {
         material: {
           textures: {
-            albedoUrl: expect.stringContaining('Rough-rockface1_Base_Color.png'),
-            normalUrl: expect.stringContaining('Rough-rockface1_Normal.png'),
-            aoUrl: expect.stringContaining('Rough-rockface1_Ambient_Occlusion.png'),
-            heightUrl: expect.stringContaining('Rough-rockface1_Height.png'),
+            albedoUrl: expect.stringContaining(
+              'generated-goblin-cave-with-jagged-asymmetric-slate-grey-rock-strata-and-crude-tool-pickaxe-gouges-with-an-uneven-stone-buttress-rough-hewn-directly-into-the-cave-wall-00001/wall_albedo.ktx2',
+            ),
+            normalUrl: expect.stringContaining(
+              'generated-goblin-cave-with-jagged-asymmetric-slate-grey-rock-strata-and-crude-tool-pickaxe-gouges-with-an-uneven-stone-buttress-rough-hewn-directly-into-the-cave-wall-00001/wall_normal.ktx2',
+            ),
+            packedOrmHeightUrl: expect.stringContaining(
+              'generated-goblin-cave-with-jagged-asymmetric-slate-grey-rock-strata-and-crude-tool-pickaxe-gouges-with-an-uneven-stone-buttress-rough-hewn-directly-into-the-cave-wall-00001/wall_ormh.ktx2',
+            ),
           },
         },
       },
@@ -261,9 +269,15 @@ describe('content pack registry', () => {
         },
         material: {
           textures: {
-            albedoUrl: expect.stringContaining('ai-gothic-depth-wall/wall_albedo.png'),
-            normalUrl: expect.stringContaining('ai-gothic-depth-wall/wall_normal.png'),
-            heightUrl: expect.stringContaining('ai-gothic-depth-wall/wall_height.png'),
+            albedoUrl: expect.stringContaining(
+              'generated-keep-granite-with-rugged-slate-grey-fortress-block-edges-and-deep-structural-stress-fractures-with-an-iron-reinforced-stone-archway-frame-flush-against-the-masonry-00001/wall_albedo.ktx2',
+            ),
+            normalUrl: expect.stringContaining(
+              'generated-keep-granite-with-rugged-slate-grey-fortress-block-edges-and-deep-structural-stress-fractures-with-an-iron-reinforced-stone-archway-frame-flush-against-the-masonry-00001/wall_normal.ktx2',
+            ),
+            packedOrmHeightUrl: expect.stringContaining(
+              'generated-keep-granite-with-rugged-slate-grey-fortress-block-edges-and-deep-structural-stress-fractures-with-an-iron-reinforced-stone-archway-frame-flush-against-the-masonry-00001/wall_ormh.ktx2',
+            ),
           },
           shading: {
             parallaxScale: 0.055,
@@ -753,7 +767,7 @@ describe('content pack registry', () => {
   })
 
   it('resolves dungeon defaults from actual imported assets', () => {
-    expect(getDefaultAssetIdByCategory('floor')).toBe('dungeon.floor_floor_tile_small')
+    expect(getDefaultAssetIdByCategory('floor')).toBe('dungeon.floor_standard-living-room')
     expect(getDefaultAssetIdByCategory('wall')).toBe('dungeon.wall_wall')
     expect(getDefaultAssetIdByCategory('opening')).toBe('dungeon.stairs_stairs')
     expect(getDefaultAssetIdByCategory('prop')).toBe('dungeon.props_torch')

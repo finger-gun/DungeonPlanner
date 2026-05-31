@@ -7,10 +7,10 @@ const WALL_STYLE_CONTENT_PACK_ID = 'dungeon'
 const FALLBACK_WALL_STYLE_ID = 'dungeon-stone'
 
 export const DEFAULT_INTERIOR_WALL_STYLE_ID =
-  'generated-keep-granite-with-rugged-bone-white-fortress-block-edges-and-deep-structural-stress-fractures-with-an-iron-reinforced-stone-archway-frame-flush-against-the-masonry-00001'
+  'dungeon-stone'
 
 export const DEFAULT_EXTERIOR_WALL_STYLE_ID =
-  'generated-keep-granite-with-rugged-slate-grey-fortress-block-edges-and-deep-structural-stress-fractures-with-an-iron-reinforced-stone-archway-frame-flush-against-the-masonry-00001'
+  'dungeon-stone'
 
 export function getDefaultWallStyleId() {
   return getDefaultInteriorWallStyleId()

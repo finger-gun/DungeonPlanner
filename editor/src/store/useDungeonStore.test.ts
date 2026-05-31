@@ -773,10 +773,12 @@ describe('useDungeonStore history', () => {
     expect(roomId).toBeTruthy()
     expect(useDungeonStore.getState().rooms[roomId!]?.roomSetId).toBe('cave')
     expect(useDungeonStore.getState().rooms[roomId!]?.wallMaterialSetId).toBe('rough-rockface-1-pbr-material')
+    expect(useDungeonStore.getState().rooms[roomId!]?.floorAssetId).toBe('dungeon.floor_ancient-catacomb')
 
     const manualRoomId = useDungeonStore.getState().createRoom('Manual Room')
     expect(useDungeonStore.getState().rooms[manualRoomId]?.roomSetId).toBe('cave')
     expect(useDungeonStore.getState().rooms[manualRoomId]?.wallMaterialSetId).toBe('rough-rockface-1-pbr-material')
+    expect(useDungeonStore.getState().rooms[manualRoomId]?.floorAssetId).toBe('dungeon.floor_ancient-catacomb')
   })
 
   it('keeps pixelation disabled by default and allows toggling it', () => {

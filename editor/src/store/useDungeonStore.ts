@@ -2444,7 +2444,7 @@ export const useDungeonStore = create<DungeonState>()(
         layerId: current.activeLayerId,
         roomSetId: current.activeRoomSetId,
         wallMaterialSetId: current.activeWallMaterialSetId,
-        floorAssetId: null,
+        floorAssetId: current.selectedAssetIds.floor,
         wallAssetId: null,
         geometrySource: 'paint',
       }
@@ -2539,7 +2539,7 @@ export const useDungeonStore = create<DungeonState>()(
         layerId: current.activeLayerId,
         roomSetId: current.activeRoomSetId,
         wallMaterialSetId: current.activeWallMaterialSetId,
-        floorAssetId: null,
+        floorAssetId: current.selectedAssetIds.floor,
         wallAssetId: null,
         geometrySource: 'spline',
       }
@@ -4606,7 +4606,7 @@ export const useDungeonStore = create<DungeonState>()(
             layerId: current.activeLayerId,
             roomSetId: current.activeRoomSetId,
             wallMaterialSetId: current.activeWallMaterialSetId,
-            floorAssetId: null,
+            floorAssetId: current.selectedAssetIds.floor,
             wallAssetId: null,
           },
         },

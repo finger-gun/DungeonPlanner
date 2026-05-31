@@ -1,0 +1,12 @@
+{
+  "id": "glacial-citadel-ice-with-uniform-packed-ice-blocks-and-subtle-fracture-lines-smooth-and-seamless-across-massive-areas",
+  "name": "Glacial Citadel Ice With Uniform Packed Ice Blocks And Subtle Fracture Lines, Smooth And Seamless Across Massive Areas",
+  "sourceImage": "/Volumes/output/Glacial Citadel Ice with uniform packed ice blocks and subtle  fracture lines, smooth and seamless across massive areas-main_00001_.png",
+  "sourceDepth": "/Volumes/output/Glacial Citadel Ice with uniform packed ice blocks and subtle  fracture lines, smooth and seamless across massive areas-depth_00001_.png",
+  "size": 1024,
+  "normalStrength": 2.5,
+  "bumpScale": 0.12,
+  "roughness": 0.92,
+  "metalness": 0.02,
+  "textureFormat": "ktx2"
+}

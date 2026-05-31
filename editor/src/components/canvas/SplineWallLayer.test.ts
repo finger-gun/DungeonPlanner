@@ -819,7 +819,10 @@ describe('buildSplineWallSectionHeightBands', () => {
 
     expect(getMaxUvV(after)).toBeCloseTo(getMaxUvV(before), 5)
     expect(getMaxUvV(after)).toBeCloseTo(1, 5)
-    expect(getMaxUvUAtHeight(after, 0)).toBeCloseTo(getMaxUvUAtHeight(before, 0), 5)
+    expect(getMaxUvUAtHeight(after, DEFAULT_SPLINE_WALL_HEIGHT)).toBeCloseTo(
+      getMaxUvUAtHeight(before, DEFAULT_SPLINE_WALL_HEIGHT),
+      5,
+    )
   })
 
   it('builds reveal span geometry that closes a full-height shared corridor opening', () => {
@@ -1126,10 +1129,15 @@ describe('buildSplineWallSectionHeightBands', () => {
     const wallpaperHeights = Array.from({ length: positions.count }, (_, index) => positions.getY(index))
     const detailHeights = Array.from({ length: detailPositions.count }, (_, index) => detailPositions.getY(index))
 
-    expect(section.material.textures.albedoUrl).toContain('modern-brick1_albedo.png')
-    expect(section.material.textures.normalUrl).toContain('modern-brick1_normal-ogl.png')
-    expect(section.material.textures.aoUrl).toContain('modern-brick1_ao.png')
-    expect(section.material.textures.heightUrl).toContain('modern-brick1_height.png')
+    expect(section.material.textures.albedoUrl).toContain(
+      'generated-dwarf-brick-with-heavy-geometric-chisel-marks-and-deep-recessed-bone-white-mortar-with-an-integrated-flat-pillar-decorated-with-geometric-dwarven-runes-00001/wall_albedo.ktx2',
+    )
+    expect(section.material.textures.normalUrl).toContain(
+      'generated-dwarf-brick-with-heavy-geometric-chisel-marks-and-deep-recessed-bone-white-mortar-with-an-integrated-flat-pillar-decorated-with-geometric-dwarven-runes-00001/wall_normal.ktx2',
+    )
+    expect(section.material.textures.packedOrmHeightUrl).toContain(
+      'generated-dwarf-brick-with-heavy-geometric-chisel-marks-and-deep-recessed-bone-white-mortar-with-an-integrated-flat-pillar-decorated-with-geometric-dwarven-runes-00001/wall_ormh.ktx2',
+    )
     expect(Math.min(...lateralOffsets)).toBeCloseTo(0.181, 5)
     expect(Math.max(...lateralOffsets)).toBeCloseTo(0.181, 5)
     expect(Math.min(...wallpaperHeights)).toBeCloseTo(DEFAULT_SPLINE_WALL_HEIGHT * 0.48, 5)

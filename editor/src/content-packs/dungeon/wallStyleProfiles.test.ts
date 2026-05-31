@@ -49,7 +49,15 @@ describe('wallStyleProfiles', () => {
         },
         material: {
           textures: {
-            albedoUrl: expect.stringContaining('kaykit-stone/wall_albedo.png'),
+            albedoUrl: expect.stringContaining(
+              'generated-keep-granite-with-rugged-bone-white-fortress-block-edges-and-deep-structural-stress-fractures-with-an-iron-reinforced-stone-archway-frame-flush-against-the-masonry-00001/wall_albedo.ktx2',
+            ),
+            normalUrl: expect.stringContaining(
+              'generated-keep-granite-with-rugged-bone-white-fortress-block-edges-and-deep-structural-stress-fractures-with-an-iron-reinforced-stone-archway-frame-flush-against-the-masonry-00001/wall_normal.ktx2',
+            ),
+            packedOrmHeightUrl: expect.stringContaining(
+              'generated-keep-granite-with-rugged-bone-white-fortress-block-edges-and-deep-structural-stress-fractures-with-an-iron-reinforced-stone-archway-frame-flush-against-the-masonry-00001/wall_ormh.ktx2',
+            ),
           },
           shading: {
             tintColor: '#d7dde8',
@@ -61,7 +69,9 @@ describe('wallStyleProfiles', () => {
         {
           material: {
             textures: {
-              albedoUrl: expect.stringContaining('tavern-wood-planks1_albedo.png'),
+              albedoUrl: expect.stringContaining(
+                'generated-manor-wainscoting-with-raised-rectangular-rust-brown-panels-and-ornate-crown-molding-bevels-with-a-heavy-dark-oak-chair-rail-dividing-the-upper-and-lower-sections-00001/wall_albedo.ktx2',
+              ),
             },
           },
         },

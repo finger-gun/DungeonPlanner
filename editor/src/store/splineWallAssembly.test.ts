@@ -80,7 +80,9 @@ describe('buildSplineWallAssemblySections', () => {
 
     expect(roomFace?.wallStyleId).toBe('rocky-cave')
     expect(structuralCore?.wallStyleId).toBe('rocky-cave')
-    expect(roomFace?.material.textures.albedoUrl).toContain('Rough-rockface1_Base_Color.png')
+    expect(roomFace?.material.textures.albedoUrl).toContain(
+      'generated-goblin-cave-with-jagged-asymmetric-slate-grey-rock-strata-and-crude-tool-pickaxe-gouges-with-an-uneven-stone-buttress-rough-hewn-directly-into-the-cave-wall-00001/wall_albedo.ktx2',
+    )
   })
 
   it('falls back to default interior and exterior wall styles without segment overrides or room-set styles', () => {

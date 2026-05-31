@@ -221,7 +221,137 @@ const generatedWallStyleMaterials = Object.fromEntries(
   ]),
 ) as Record<string, WallStyleMaterialDefinition>
 
-const builtinDungeonWallStyleMaterials = {} as const satisfies Record<string, WallStyleMaterialDefinition>
+const builtinDungeonWallStyleMaterials = {
+  'kaykit-stone': {
+    albedoPath: '../../assets/materials/dungeon/wall-materials/generated-castle-stone-with-massive-ashlar-masonry-blocks-and-weathered-bone-white-bevel-edges-with-a-heavy-stone-corbel-protruding-near-the-top-edge-00001/wall_albedo.ktx2',
+    normalPath: '../../assets/materials/dungeon/wall-materials/generated-castle-stone-with-massive-ashlar-masonry-blocks-and-weathered-bone-white-bevel-edges-with-a-heavy-stone-corbel-protruding-near-the-top-edge-00001/wall_normal.ktx2',
+    packedOrmHeightPath: '../../assets/materials/dungeon/wall-materials/generated-castle-stone-with-massive-ashlar-masonry-blocks-and-weathered-bone-white-bevel-edges-with-a-heavy-stone-corbel-protruding-near-the-top-edge-00001/wall_ormh.ktx2',
+    shading: {
+      tintColor: '#cfd6df',
+      roughness: 0.45,
+      metalness: 0,
+    },
+  },
+  'keep-core-blue': {
+    albedoPath: '../../assets/materials/dungeon/wall-materials/generated-keep-granite-with-rugged-bone-white-fortress-block-edges-and-deep-structural-stress-fractures-with-an-iron-reinforced-stone-archway-frame-flush-against-the-masonry-00001/wall_albedo.ktx2',
+    normalPath: '../../assets/materials/dungeon/wall-materials/generated-keep-granite-with-rugged-bone-white-fortress-block-edges-and-deep-structural-stress-fractures-with-an-iron-reinforced-stone-archway-frame-flush-against-the-masonry-00001/wall_normal.ktx2',
+    packedOrmHeightPath: '../../assets/materials/dungeon/wall-materials/generated-keep-granite-with-rugged-bone-white-fortress-block-edges-and-deep-structural-stress-fractures-with-an-iron-reinforced-stone-archway-frame-flush-against-the-masonry-00001/wall_ormh.ktx2',
+    shading: {
+      tintColor: '#d7dde8',
+      topSurfaceColor: '#2f3442',
+      roughness: 0.45,
+      metalness: 0,
+    },
+  },
+  'keep-room-stone': {
+    albedoPath: '../../assets/materials/dungeon/wall-materials/generated-castle-stone-with-massive-ashlar-masonry-blocks-and-weathered-bone-white-bevel-edges-with-a-heavy-stone-corbel-protruding-near-the-top-edge-00001/wall_albedo.ktx2',
+    normalPath: '../../assets/materials/dungeon/wall-materials/generated-castle-stone-with-massive-ashlar-masonry-blocks-and-weathered-bone-white-bevel-edges-with-a-heavy-stone-corbel-protruding-near-the-top-edge-00001/wall_normal.ktx2',
+    packedOrmHeightPath: '../../assets/materials/dungeon/wall-materials/generated-castle-stone-with-massive-ashlar-masonry-blocks-and-weathered-bone-white-bevel-edges-with-a-heavy-stone-corbel-protruding-near-the-top-edge-00001/wall_ormh.ktx2',
+    shading: {
+      tintColor: '#cfd6df',
+      roughness: 0.45,
+      metalness: 0,
+    },
+  },
+  'tavern-wood-base': {
+    albedoPath: '../../assets/materials/dungeon/wall-materials/generated-manor-wainscoting-with-raised-rectangular-rust-brown-panels-and-ornate-crown-molding-bevels-with-a-heavy-dark-oak-chair-rail-dividing-the-upper-and-lower-sections-00001/wall_albedo.ktx2',
+    normalPath: '../../assets/materials/dungeon/wall-materials/generated-manor-wainscoting-with-raised-rectangular-rust-brown-panels-and-ornate-crown-molding-bevels-with-a-heavy-dark-oak-chair-rail-dividing-the-upper-and-lower-sections-00001/wall_normal.ktx2',
+    packedOrmHeightPath: '../../assets/materials/dungeon/wall-materials/generated-manor-wainscoting-with-raised-rectangular-rust-brown-panels-and-ornate-crown-molding-bevels-with-a-heavy-dark-oak-chair-rail-dividing-the-upper-and-lower-sections-00001/wall_ormh.ktx2',
+    shading: {
+      roughness: 0.58,
+      metalness: 0.02,
+    },
+  },
+  'wedged-cobblestone-exterior': {
+    albedoPath: '../../assets/materials/dungeon/wall-materials/generated-castle-stone-with-massive-ashlar-masonry-blocks-and-weathered-slate-grey-bevel-edges-with-a-heavy-stone-corbel-protruding-near-the-top-edge-00001/wall_albedo.ktx2',
+    normalPath: '../../assets/materials/dungeon/wall-materials/generated-castle-stone-with-massive-ashlar-masonry-blocks-and-weathered-slate-grey-bevel-edges-with-a-heavy-stone-corbel-protruding-near-the-top-edge-00001/wall_normal.ktx2',
+    packedOrmHeightPath: '../../assets/materials/dungeon/wall-materials/generated-castle-stone-with-massive-ashlar-masonry-blocks-and-weathered-slate-grey-bevel-edges-with-a-heavy-stone-corbel-protruding-near-the-top-edge-00001/wall_ormh.ktx2',
+    shading: {
+      roughness: 0.5,
+      metalness: 0,
+    },
+  },
+  'wedged-cobblestone': {
+    albedoPath: '../../assets/materials/dungeon/wall-materials/generated-castle-stone-with-massive-ashlar-masonry-blocks-and-weathered-slate-grey-bevel-edges-with-a-heavy-stone-corbel-protruding-near-the-top-edge-00001/wall_albedo.ktx2',
+    normalPath: '../../assets/materials/dungeon/wall-materials/generated-castle-stone-with-massive-ashlar-masonry-blocks-and-weathered-slate-grey-bevel-edges-with-a-heavy-stone-corbel-protruding-near-the-top-edge-00001/wall_normal.ktx2',
+    packedOrmHeightPath: '../../assets/materials/dungeon/wall-materials/generated-castle-stone-with-massive-ashlar-masonry-blocks-and-weathered-slate-grey-bevel-edges-with-a-heavy-stone-corbel-protruding-near-the-top-edge-00001/wall_ormh.ktx2',
+    shading: {
+      roughness: 0.5,
+      metalness: 0,
+    },
+  },
+  'rough-rockface-1-pbr-material': {
+    albedoPath: '../../assets/materials/dungeon/wall-materials/generated-goblin-cave-with-jagged-asymmetric-slate-grey-rock-strata-and-crude-tool-pickaxe-gouges-with-an-uneven-stone-buttress-rough-hewn-directly-into-the-cave-wall-00001/wall_albedo.ktx2',
+    normalPath: '../../assets/materials/dungeon/wall-materials/generated-goblin-cave-with-jagged-asymmetric-slate-grey-rock-strata-and-crude-tool-pickaxe-gouges-with-an-uneven-stone-buttress-rough-hewn-directly-into-the-cave-wall-00001/wall_normal.ktx2',
+    packedOrmHeightPath: '../../assets/materials/dungeon/wall-materials/generated-goblin-cave-with-jagged-asymmetric-slate-grey-rock-strata-and-crude-tool-pickaxe-gouges-with-an-uneven-stone-buttress-rough-hewn-directly-into-the-cave-wall-00001/wall_ormh.ktx2',
+    shading: {
+      roughness: 0.82,
+      metalness: 0,
+    },
+  },
+  'ai-gothic-depth-wall': {
+    albedoPath: '../../assets/materials/dungeon/wall-materials/generated-keep-granite-with-rugged-slate-grey-fortress-block-edges-and-deep-structural-stress-fractures-with-an-iron-reinforced-stone-archway-frame-flush-against-the-masonry-00001/wall_albedo.ktx2',
+    normalPath: '../../assets/materials/dungeon/wall-materials/generated-keep-granite-with-rugged-slate-grey-fortress-block-edges-and-deep-structural-stress-fractures-with-an-iron-reinforced-stone-archway-frame-flush-against-the-masonry-00001/wall_normal.ktx2',
+    packedOrmHeightPath: '../../assets/materials/dungeon/wall-materials/generated-keep-granite-with-rugged-slate-grey-fortress-block-edges-and-deep-structural-stress-fractures-with-an-iron-reinforced-stone-archway-frame-flush-against-the-masonry-00001/wall_ormh.ktx2',
+    shading: {
+      parallaxScale: 0.055,
+      parallaxSteps: 10,
+      parallaxInvert: true,
+      roughness: 0.42,
+      metalness: 0,
+    },
+    uv: {
+      verticalMode: 'fit-height',
+      verticalWrap: 'clamp',
+    },
+  },
+  'classy-art-deco-wallpaper': {
+    albedoPath: '../../assets/materials/dungeon/wall-materials/generated-palace-marble-with-polished-decorative-relief-borders-and-intricate-charcoal-black-hieroglyph-patterns-with-a-flat-marble-pilaster-flanking-the-side-of-the-texture-00001/wall_albedo.ktx2',
+    normalPath: '../../assets/materials/dungeon/wall-materials/generated-palace-marble-with-polished-decorative-relief-borders-and-intricate-charcoal-black-hieroglyph-patterns-with-a-flat-marble-pilaster-flanking-the-side-of-the-texture-00001/wall_normal.ktx2',
+    packedOrmHeightPath: '../../assets/materials/dungeon/wall-materials/generated-palace-marble-with-polished-decorative-relief-borders-and-intricate-charcoal-black-hieroglyph-patterns-with-a-flat-marble-pilaster-flanking-the-side-of-the-texture-00001/wall_ormh.ktx2',
+    shading: {
+      roughness: 0.4,
+      metalness: 0.04,
+    },
+  },
+  'modern-brick1': {
+    albedoPath: '../../assets/materials/dungeon/wall-materials/generated-dwarf-brick-with-heavy-geometric-chisel-marks-and-deep-recessed-bone-white-mortar-with-an-integrated-flat-pillar-decorated-with-geometric-dwarven-runes-00001/wall_albedo.ktx2',
+    normalPath: '../../assets/materials/dungeon/wall-materials/generated-dwarf-brick-with-heavy-geometric-chisel-marks-and-deep-recessed-bone-white-mortar-with-an-integrated-flat-pillar-decorated-with-geometric-dwarven-runes-00001/wall_normal.ktx2',
+    packedOrmHeightPath: '../../assets/materials/dungeon/wall-materials/generated-dwarf-brick-with-heavy-geometric-chisel-marks-and-deep-recessed-bone-white-mortar-with-an-integrated-flat-pillar-decorated-with-geometric-dwarven-runes-00001/wall_ormh.ktx2',
+    shading: {
+      tintColor: '#dddddd',
+      roughness: 0.2,
+      metalness: 0.2,
+    },
+    uv: {
+      verticalMode: 'fit-height',
+      verticalWrap: 'clamp',
+    },
+  },
+  'modern-brick1-core': {
+    albedoPath: '../../assets/materials/dungeon/wall-materials/generated-dwarf-brick-with-heavy-geometric-chisel-marks-and-deep-recessed-bone-white-mortar-with-an-integrated-flat-pillar-decorated-with-geometric-dwarven-runes-00001/wall_albedo.ktx2',
+    normalPath: '../../assets/materials/dungeon/wall-materials/generated-dwarf-brick-with-heavy-geometric-chisel-marks-and-deep-recessed-bone-white-mortar-with-an-integrated-flat-pillar-decorated-with-geometric-dwarven-runes-00001/wall_normal.ktx2',
+    packedOrmHeightPath: '../../assets/materials/dungeon/wall-materials/generated-dwarf-brick-with-heavy-geometric-chisel-marks-and-deep-recessed-bone-white-mortar-with-an-integrated-flat-pillar-decorated-with-geometric-dwarven-runes-00001/wall_ormh.ktx2',
+    shading: {
+      tintColor: '#ffffff',
+      roughness: 0.45,
+      metalness: 0,
+    },
+    uv: {
+      verticalMode: 'fit-height',
+      verticalWrap: 'clamp',
+    },
+  },
+  'tavern-wood-planks': {
+    albedoPath: '../../assets/materials/dungeon/wall-materials/generated-manor-wainscoting-with-raised-rectangular-rust-brown-panels-and-ornate-crown-molding-bevels-with-a-heavy-dark-oak-chair-rail-dividing-the-upper-and-lower-sections-00001/wall_albedo.ktx2',
+    normalPath: '../../assets/materials/dungeon/wall-materials/generated-manor-wainscoting-with-raised-rectangular-rust-brown-panels-and-ornate-crown-molding-bevels-with-a-heavy-dark-oak-chair-rail-dividing-the-upper-and-lower-sections-00001/wall_normal.ktx2',
+    packedOrmHeightPath: '../../assets/materials/dungeon/wall-materials/generated-manor-wainscoting-with-raised-rectangular-rust-brown-panels-and-ornate-crown-molding-bevels-with-a-heavy-dark-oak-chair-rail-dividing-the-upper-and-lower-sections-00001/wall_ormh.ktx2',
+    shading: {
+      roughness: 0.62,
+      metalness: 0.02,
+    },
+  },
+} as const satisfies Record<string, WallStyleMaterialDefinition>
 
 export const dungeonWallStyleMaterials: Record<string, WallStyleMaterialDefinition> = {
   ...builtinDungeonWallStyleMaterials,

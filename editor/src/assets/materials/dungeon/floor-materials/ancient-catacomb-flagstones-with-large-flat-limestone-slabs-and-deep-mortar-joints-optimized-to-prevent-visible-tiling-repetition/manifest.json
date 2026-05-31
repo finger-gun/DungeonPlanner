@@ -1,0 +1,12 @@
+{
+  "id": "ancient-catacomb-flagstones-with-large-flat-limestone-slabs-and-deep-mortar-joints-optimized-to-prevent-visible-tiling-repetition",
+  "name": "Ancient Catacomb Flagstones With Large Flat Limestone Slabs And Deep Mortar Joints, Optimized To Prevent Visible Tiling Repetition",
+  "sourceImage": "/Volumes/output/Ancient Catacomb Flagstones with large flat limestone slabs and deep  mortar joints, optimized to prevent visible tiling repetition-main_00001_.png",
+  "sourceDepth": "/Volumes/output/Ancient Catacomb Flagstones with large flat limestone slabs and deep  mortar joints, optimized to prevent visible tiling repetition-depth_00001_.png",
+  "size": 1024,
+  "normalStrength": 2.5,
+  "bumpScale": 0.12,
+  "roughness": 0.92,
+  "metalness": 0.02,
+  "textureFormat": "ktx2"
+}
