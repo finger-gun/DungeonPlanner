@@ -1,6 +1,14 @@
 import type { ContentPackWallMaterialSet } from '../types'
 import { dungeonWallStyleMaterials } from './wallStyleProfiles'
 
+const wallMaterialAssetUrls = import.meta.glob(
+  '../../assets/materials/dungeon/wall-materials/**/*.{png,jpg,jpeg,webp,avif,ktx2}',
+  {
+    eager: true,
+    import: 'default',
+  },
+) as Record<string, string>
+
 const generatedWallMaterialSetModules = import.meta.glob('./generated/wallMaterialSets/*.ts', {
   eager: true,
 }) as Record<string, { wallMaterialSet: ContentPackWallMaterialSet }>
@@ -8,6 +16,15 @@ const generatedWallMaterialSetModules = import.meta.glob('./generated/wallMateri
 const generatedWallMaterialSets = Object.values(generatedWallMaterialSetModules)
   .map((module) => module.wallMaterialSet)
   .sort((left, right) => left.name.localeCompare(right.name))
+
+function resolveAssetUrl(relativePath: string) {
+  const assetUrl = wallMaterialAssetUrls[relativePath]
+  if (!assetUrl) {
+    throw new Error(`Unknown dungeon wall material asset "${relativePath}"`)
+  }
+
+  return assetUrl
+}
 
 function createBuiltinWallMaterialSet(
   id: string,
@@ -22,14 +39,14 @@ function createBuiltinWallMaterialSet(
     id,
     name,
     textures: {
-      albedoUrl: definition.albedoPath,
-      ...(definition.normalPath ? { normalUrl: definition.normalPath } : {}),
-      ...(definition.aoPath ? { aoUrl: definition.aoPath } : {}),
-      ...(definition.heightPath ? { heightUrl: definition.heightPath } : {}),
-      ...(definition.packedOrmHeightPath ? { packedOrmHeightUrl: definition.packedOrmHeightPath } : {}),
-      ...(definition.displacementPath ? { displacementUrl: definition.displacementPath } : {}),
-      ...(definition.roughnessPath ? { roughnessUrl: definition.roughnessPath } : {}),
-      ...(definition.metallicPath ? { metallicUrl: definition.metallicPath } : {}),
+      albedoUrl: resolveAssetUrl(definition.albedoPath),
+      ...(definition.normalPath ? { normalUrl: resolveAssetUrl(definition.normalPath) } : {}),
+      ...(definition.aoPath ? { aoUrl: resolveAssetUrl(definition.aoPath) } : {}),
+      ...(definition.heightPath ? { heightUrl: resolveAssetUrl(definition.heightPath) } : {}),
+      ...(definition.packedOrmHeightPath ? { packedOrmHeightUrl: resolveAssetUrl(definition.packedOrmHeightPath) } : {}),
+      ...(definition.displacementPath ? { displacementUrl: resolveAssetUrl(definition.displacementPath) } : {}),
+      ...(definition.roughnessPath ? { roughnessUrl: resolveAssetUrl(definition.roughnessPath) } : {}),
+      ...(definition.metallicPath ? { metallicUrl: resolveAssetUrl(definition.metallicPath) } : {}),
     },
     ...(definition.shading ? { shading: definition.shading } : {}),
     ...(definition.uv ? { uv: definition.uv } : {}),

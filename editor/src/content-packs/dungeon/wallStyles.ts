@@ -8,6 +8,8 @@ const builtinWallStyleRecipes = [
   {
     id: 'dungeon-stone',
     name: 'Dungeon Stone',
+    previewImagePath:
+      '../../assets/materials/dungeon/wall-materials/generated-castle-stone-with-massive-ashlar-masonry-blocks-and-weathered-bone-white-bevel-edges-with-a-heavy-stone-corbel-protruding-near-the-top-edge-00001/preview.webp',
     browser: {
       family: 'Dungeon Stone',
       tags: ['stone'],
@@ -39,6 +41,8 @@ const builtinWallStyleRecipes = [
   {
     id: 'stone-keep',
     name: 'Stone Keep',
+    previewImagePath:
+      '../../assets/materials/dungeon/wall-materials/generated-keep-granite-with-rugged-bone-white-fortress-block-edges-and-deep-structural-stress-fractures-with-an-iron-reinforced-stone-archway-frame-flush-against-the-masonry-00001/preview.webp',
     browser: {
       family: 'Stone Keep',
       tags: ['stone'],
@@ -70,6 +74,8 @@ const builtinWallStyleRecipes = [
   {
     id: 'manor-plaster',
     name: 'Manor Plaster',
+    previewImagePath:
+      '../../assets/materials/dungeon/wall-materials/generated-palace-marble-with-polished-decorative-relief-borders-and-intricate-charcoal-black-hieroglyph-patterns-with-a-flat-marble-pilaster-flanking-the-side-of-the-texture-00001/preview.webp',
     browser: {
       family: 'Manor Plaster',
       tags: ['plaster', 'noble'],
@@ -101,6 +107,8 @@ const builtinWallStyleRecipes = [
   {
     id: 'rocky-cave',
     name: 'Rocky Cave',
+    previewImagePath:
+      '../../assets/materials/dungeon/wall-materials/generated-goblin-cave-with-jagged-asymmetric-slate-grey-rock-strata-and-crude-tool-pickaxe-gouges-with-an-uneven-stone-buttress-rough-hewn-directly-into-the-cave-wall-00001/preview.webp',
     browser: {
       family: 'Rocky Cave',
       tags: ['organic', 'cave'],
@@ -132,6 +140,8 @@ const builtinWallStyleRecipes = [
   {
     id: 'ai-gothic',
     name: 'AI Gothic',
+    previewImagePath:
+      '../../assets/materials/dungeon/wall-materials/generated-keep-granite-with-rugged-slate-grey-fortress-block-edges-and-deep-structural-stress-fractures-with-an-iron-reinforced-stone-archway-frame-flush-against-the-masonry-00001/preview.webp',
     browser: {
       family: 'AI Gothic',
       tags: ['stone', 'noble'],
@@ -171,6 +181,8 @@ const builtinWallStyleRecipes = [
   {
     id: 'art-deco-cobblestone',
     name: 'Art Deco Cobblestone',
+    previewImagePath:
+      '../../assets/materials/dungeon/wall-materials/generated-dwarf-brick-with-heavy-geometric-chisel-marks-and-deep-recessed-bone-white-mortar-with-an-integrated-flat-pillar-decorated-with-geometric-dwarven-runes-00001/preview.webp',
     browser: {
       family: 'Art Deco Cobblestone',
       tags: ['stone', 'noble'],

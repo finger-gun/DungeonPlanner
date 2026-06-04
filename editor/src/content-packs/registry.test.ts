@@ -110,11 +110,24 @@ describe('content pack registry', () => {
 
   it('registers authored dungeon wall material sets', () => {
     expect(getDefaultContentPackWallMaterialSetId('dungeon')).toBe('kaykit-stone')
+    const kaykitStone = getContentPackWallMaterialSetById('dungeon', 'kaykit-stone')
+
+    expect(kaykitStone?.textures.normalUrl).toBeDefined()
+    expect(kaykitStone?.textures.albedoUrl).not.toContain('../../assets/')
+    expect(kaykitStone?.textures.normalUrl).not.toContain('../../assets/')
     expect(getContentPackWallMaterialSetById('dungeon', 'kaykit-stone')).toMatchObject({
       id: 'kaykit-stone',
       name: 'KayKit Stone',
       textures: {
-        albedoUrl: expect.any(String),
+        albedoUrl: expect.stringContaining(
+          'generated-castle-stone-with-massive-ashlar-masonry-blocks-and-weathered-bone-white-bevel-edges-with-a-heavy-stone-corbel-protruding-near-the-top-edge-00001/wall_albedo.ktx2',
+        ),
+        normalUrl: expect.stringContaining(
+          'generated-castle-stone-with-massive-ashlar-masonry-blocks-and-weathered-bone-white-bevel-edges-with-a-heavy-stone-corbel-protruding-near-the-top-edge-00001/wall_normal.ktx2',
+        ),
+        packedOrmHeightUrl: expect.stringContaining(
+          'generated-castle-stone-with-massive-ashlar-masonry-blocks-and-weathered-bone-white-bevel-edges-with-a-heavy-stone-corbel-protruding-near-the-top-edge-00001/wall_ormh.ktx2',
+        ),
       },
       shading: {
         tintColor: '#cfd6df',
@@ -189,6 +202,9 @@ describe('content pack registry', () => {
     expect(getContentPackWallStyleById('dungeon', 'dungeon-stone')).toMatchObject({
       id: 'dungeon-stone',
       name: 'Dungeon Stone',
+      previewImageUrl: expect.stringContaining(
+        'generated-castle-stone-with-massive-ashlar-masonry-blocks-and-weathered-bone-white-bevel-edges-with-a-heavy-stone-corbel-protruding-near-the-top-edge-00001/preview.webp',
+      ),
       roomFace: {
         profile: {
           points: [
@@ -255,6 +271,9 @@ describe('content pack registry', () => {
     expect(getContentPackWallStyleById('dungeon', 'ai-gothic')).toMatchObject({
       id: 'ai-gothic',
       name: 'AI Gothic',
+      previewImageUrl: expect.stringContaining(
+        'generated-keep-granite-with-rugged-slate-grey-fortress-block-edges-and-deep-structural-stress-fractures-with-an-iron-reinforced-stone-archway-frame-flush-against-the-masonry-00001/preview.webp',
+      ),
       structuralCore: {
         render: {
           hiddenProfileSegmentIndices: [0, 1, 2],
